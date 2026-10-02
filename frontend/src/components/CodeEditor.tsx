@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { languageExtension } from "./codeLanguages";
 import { generateCodeTemplate, isCodeStillTemplate } from "../models/codeTemplates";
 import { buildCodePrompt } from "../models/codePrompt";
+import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
 import type { ProgramProcess } from "../models/process";
 
 interface Props {
@@ -34,30 +35,10 @@ export default function CodeEditor({ process, onClose }: Props) {
 
   const [codeRequest, setCodeRequest] = useState("");
 
-  const [copyNote, setCopyNote] = useState<string | null>(null);
-
-  const promptRef = useRef<HTMLTextAreaElement>(null);
-
   const codePrompt = useMemo(
     () => isPromptOpen ? buildCodePrompt(program, process, draft, codeRequest) : "",
     [isPromptOpen, program, process, draft, codeRequest]
   );
-
-  // The clipboard is missing on a page opened from a file, and a browser
-  // may refuse it: the prompt is then selected, for the keyboard to copy.
-  async function handleCopy() {
-    try {
-      if (!navigator.clipboard) {
-        throw new Error("no clipboard");
-      }
-      await navigator.clipboard.writeText(codePrompt);
-      setCopyNote("Copied. Paste the code of the answer into the editor.");
-    } catch {
-      promptRef.current?.focus();
-      promptRef.current?.select();
-      setCopyNote("The browser did not let the page copy: the prompt is selected, copy it with the keyboard.");
-    }
-  }
 
   return (
 
@@ -99,16 +80,7 @@ export default function CodeEditor({ process, onClose }: Props) {
             Code: {process.name} ({process.language})
           </h3>
 
-          <button
-            title="Prompt for an AI tool"
-            aria-pressed={isPromptOpen}
-            onClick={() => { setPromptOpen(open => !open); setCopyNote(null); }}
-            style={{
-              background: isPromptOpen ? "#ede7f6" : undefined,
-            }}
-          >
-            ✨ AI prompt
-          </button>
+          <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
 
         </div>
 
@@ -145,69 +117,12 @@ export default function CodeEditor({ process, onClose }: Props) {
           </div>
 
           {isPromptOpen && (
-
-            <div
-              style={{
-                flex: 1,
-                minWidth: 0,
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                fontSize: 13,
-              }}
-            >
-
-              <label htmlFor="code-request">
-                What should the code do? (optional)
-              </label>
-
-              <textarea
-                id="code-request"
-                rows={3}
-                value={codeRequest}
-                placeholder="Blank: the code that the description of the process asks for"
-                onChange={event => setCodeRequest(event.target.value)}
-                style={{ resize: "vertical", flexShrink: 0 }}
-              />
-
-              <label htmlFor="code-prompt">
-                Prompt, to copy into an AI tool of your choice
-              </label>
-
-              <textarea
-                id="code-prompt"
-                ref={promptRef}
-                readOnly
-                value={codePrompt}
-                style={{
-                  flex: 1,
-                  minHeight: 200,
-                  fontFamily: "monospace",
-                  fontSize: 12,
-                  resize: "none",
-                }}
-              />
-
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-
-                <button onClick={handleCopy}>
-                  Copy
-                </button>
-
-                <span style={{ color: "#555" }}>
-                  {copyNote ?? "Nothing is sent from here: the prompt only leaves through your copy."}
-                </span>
-
-              </div>
-
-            </div>
-
+            <CodePromptPanel
+              prompt={codePrompt}
+              request={codeRequest}
+              onRequestChange={setCodeRequest}
+              pasteHint="Paste the code of the answer into the editor."
+            />
           )}
 
         </div>

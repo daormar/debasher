@@ -6,7 +6,7 @@ import tempfile
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .. import inherited_hooks, paths
+from .. import inherited_hooks, node_reference, paths
 from ..debasher_constants import (
     RESERVED_HEREDOC_SUFFIXES,
     RESERVED_PROCESS_METHOD_SUFFIXES,
@@ -376,3 +376,27 @@ def get_inherited_hooks(request: InheritedHooksRequest) -> InheritedHooksRespons
         return InheritedHooksResponse(hooks=inherited_hooks.inherited_hooks(request.kind))
     except inherited_hooks.InheritedHooksError as exc:
         return InheritedHooksResponse(error=str(exc))
+
+
+class NodeReferenceRequest(BaseModel):
+    kind: str
+
+
+class NodeReferenceResponse(BaseModel):
+    # The reference, in Markdown, of what the code of a node of the kind
+    # uses of the runtime library; empty for a kind with no code prompt.
+    reference: str = ""
+    error: str | None = None
+
+
+@router.post("/node-reference", response_model=NodeReferenceResponse)
+def get_node_reference(request: NodeReferenceRequest) -> NodeReferenceResponse:
+    """
+    The reference of the runtime library that the code prompt of a node of
+    `kind` carries, read from the library itself: the documentation of the
+    hooks, methods and class attributes that the code of the node uses.
+    """
+    try:
+        return NodeReferenceResponse(reference=node_reference.node_reference(request.kind))
+    except node_reference.NodeReferenceError as exc:
+        return NodeReferenceResponse(error=str(exc))

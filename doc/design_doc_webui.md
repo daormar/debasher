@@ -49,10 +49,10 @@ guarantees stated along the way. "Resident programs in the web UI" designs the
 extension to resident programs, and says which parts of it are built. "Business
 tests in the web UI" describes how the web UI runs the tests of a program and
 writes a first test for a process. "A prompt for the code of a process"
-describes how the code editor helps to have an AI tool write the code of a
-process. "Editing a program from an agent: the MCP server" describes a second
-client of the backend, for AI agents, and "Future work" lists what is known to
-be missing.
+describes how the code editors help to have an AI tool write the code of a
+process or of a node. "Editing a program from an agent: the MCP server"
+describes a second client of the backend, for AI agents, and "Future work"
+lists what is known to be missing.
 
 # Glossary
 
@@ -275,9 +275,12 @@ See "A prompt for the code of a process".
 
 - **AI tool**: an application driven by a model, outside the web UI, that the
   user chooses and copies a code prompt into; an agent may serve as one.
-- **code prompt**: the text that the code editor of a process composes for an
-  AI tool, asking for the code of the process and giving what the program
-  model knows of it.
+- **code prompt**: the text that the code editor of a process, or the node
+  code editor, composes for an AI tool, asking for the code of the process or
+  of the node and giving what the program model knows of it.
+- **node code editor**: the editor of the code of a node of a resident
+  program, part by part (`NodeCodeEditor`; see "The program model of a
+  resident program").
 - **language rules**: the part of a code prompt, fixed for each language, that
   says how the engine runs the code of a process of that language.
 - **template**: the first code that the code editor gives a process, in the
@@ -289,8 +292,11 @@ See "A prompt for the code of a process".
   still a template.
 - **code request**: the text that the user writes in the prompt panel to say
   what the code should do, which the code prompt carries.
-- **prompt panel**: the part of the code editor of a process that shows the
-  code prompt and copies it.
+- **prompt panel**: the part of the code editor of a process, or of the node
+  code editor, that shows the code prompt and copies it.
+- **node reference**: the part of the code prompt of a node that documents
+  what the code of a node uses of the runtime library, read from the library
+  itself (see "The code prompt of a node").
 
 ## The MCP server
 
@@ -1653,7 +1659,7 @@ what they mostly need are class attributes. The class body never declares the
 ports of the node: the engine gives each node its ports from the options of the
 module, and stops a node whose class declares them.
 
-The editor of the code of a node makes the inheritance visible. Next to each
+The node code editor makes the inheritance visible. Next to each
 hook of a `ProgramLauncher` or a `DirectoryWatcher` it says whether the node
 runs the hook of its class (when the body is empty) or replaces it (when the
 body has code), and names the call that keeps what the class does, such as
@@ -3004,20 +3010,21 @@ not only on tests.
 
 # A prompt for the code of a process
 
-The code editor of a process helps the user to have an AI tool write the
-code. It composes a code prompt, a text that asks for the code of the process
-and gives what the program model knows of it, for the user to copy into an AI
-tool of their choice. The code comes back the way any code reaches the editor:
-the user copies it from the answer of the AI tool and pastes it into the code
-editor. The web UI calls no AI service and keeps no key: nothing leaves the
-machine through it, and the user sees the whole code prompt before sending it
-anywhere.
+The code editor of a process, and the node code editor, help the user to have an
+AI tool write the code. Each composes a code prompt, a text that asks for the
+code and gives what the program model knows of the process or the node, for the
+user to copy into an AI tool of their choice. The code comes back the way any
+code reaches the editor: the user copies it from the answer of the AI tool and
+pastes it into the code editor. The web UI calls no AI service and keeps no key:
+nothing leaves the machine through it, and the user sees the whole code prompt
+before sending it anywhere.
 
-The code prompt is offered for the code of a process of a general program. It
-is not offered for a sequential process, which has no options to describe. Nor
-is it offered, yet, for the code of the additional methods, of the options
-handler or of the preamble, or for a node of a resident program, whose code has
-parts and obligations of its own (see "Future work").
+The code prompt is offered for the code of a process of a general program, and
+for the code of a node of a resident program other than the `Supervisor`, whose
+code has parts and a contract of its own (see "The code prompt of a node"). It
+is not offered for a sequential process, which has no options to describe, nor,
+yet, for the code of the additional methods, of the options handler or of the
+preamble (see "Future work").
 
 ## What the code prompt says
 
@@ -3137,6 +3144,81 @@ marker is no longer a template, so a later change of the options does not
 write the template over it, as for code written by hand. The web UI does
 not check the code that an AI tool writes: validating the program and running
 its tests do (see "Running the tests").
+
+## The code prompt of a node
+
+The node code editor offers the same prompt panel, with the same button, for
+every node kind but the `Supervisor`, for which script generation writes all the
+code (see "The program model of a resident program"). The code prompt of a node
+follows that of a process, with three differences that come from the code of a
+node: it is made of parts, it keeps a contract with the runtime library, and it
+may inherit hooks from its class. After a title and a sentence on what a
+resident program is, it says:
+
+1. **How the code is put together.** The class of the node, named after its
+   process, the node kind it derives from, and the order in which script
+   generation assembles the parts (see "Script generation and import of a
+   resident program"); that each part is written without the indentation of
+   the class, and a hook without its `def` line, under its fixed signature;
+   that the constructor calls `super().__init__()` and gives the node state
+   its first value; that the class never declares the ports; and, for an
+   `FBPProcess`, which hooks it has to give, or, for a `ProgramLauncher` or a
+   `DirectoryWatcher`, that an empty body runs the hook of its class and a
+   body replaces it.
+2. **The runtime library.** The node reference of its node kind.
+3. **The program**, its name and description, and **the node**: its name, its
+   class, its node kind, its description, and whether it runs as several
+   tasks.
+4. **The ports and options.** Each option of the node by its sort (see "The
+   program model of a resident program"), with its description. A business
+   input names the port under which what arrives reaches `process_data` and
+   the option of the node that sends it; a business output, the call that
+   sends on it and the options that read it, or that someone outside the
+   program reads it, and, for a fanout family, its ports and the option that
+   gives their count; an external input, that someone outside the program
+   writes it; and a configuration option, the entry of `self.opts` that gives
+   its value and, for a flag, that its name goes into the class attribute
+   `FLAGS`. An input that no connection reaches yet is described as a
+   configuration option, which it is until one does.
+5. **The code to complete.** Every part, under its name: its code, or that it
+   is empty (and, for a hook that an `FBPProcess` has to give, required), and,
+   for a hook that the node inherits, the inherited code, which an empty body
+   runs and a body replaces, or that it could not be read.
+6. **The code request**, as for a process.
+7. **What the AI tool returns.** Each part that changes, whole, in a fenced
+   code block tagged `python`, under a heading with the name of the part, the
+   one that the node code editor gives it; a part that the answer leaves out
+   stays as it is. One code prompt serves both a new node, whose constructor,
+   `process_data`, `capture_node_state` and `restore_node_state` have to agree
+   on the node state, and a change to one hook, and the user pastes each block
+   into its part.
+
+**The node reference.** The contract that the code of a node keeps (a
+deterministic `process_data`, sending only from it, a complete
+`capture_node_state` and an exact `restore_node_state`) belongs to the runtime
+library, whose documentation states it. The code prompt does not restate it:
+it carries the node reference, which the backend reads from the library itself
+(`/node-reference`, `api/node_reference.py`), the installed copy first, as it
+reads the inherited hooks (see "The program model of a resident program"). The
+node reference holds, for each class from `FBPProcess` down to the class of the
+node kind, its documentation, the signature and documentation of each hook and
+method that the code of a node uses, and each class attribute with its value
+and the documentation that its `#:` comments give. The names are those that
+the page of the documentation on the classes of the nodes lists
+(`rtdocs/source/api_resident_nodes.rst`), but for `run`, which script
+generation calls, and the `Supervisor`, and a test keeps the two in step. What
+the library says of each name reaches the code prompt without a change to the
+web UI; a name that it no longer defines or documents makes the whole node
+reference unreadable. When the node reference cannot be read, the code prompt
+says so and keeps the rest.
+
+The node code editor reads the node reference when the prompt panel first
+opens. `buildNodeCodePrompt` (`frontend/src/models/nodeCodePrompt.ts`) builds
+the code prompt from the program in the store, the node, the draft of every
+part, the code request, and what was read from the library, and is pure like
+`buildCodePrompt`; both code editors show it with the same prompt panel
+(`frontend/src/components/CodePromptPanel.tsx`), and the node code editor
+names the parts as `NODE_CODE_PARTS` in `frontend/src/models/node.ts` does.
 
 # Editing a program from an agent: the MCP server
 
@@ -3384,14 +3466,10 @@ backend's own tests.
 - **The output directory of a moved program.** Deciding what a program
   loaded from a new place should do with an output directory that still
   points to the old one.
-- **A code prompt beyond the code of a process.** The code prompt for the
-  other code that the user writes: the additional methods, the code of the
-  options handler, the preamble, and the parts of a node of a resident
-  program. The code prompt of a node needs its node kind, the signature of
-  each hook, and the obligations of the contract that its code keeps (a
-  deterministic `process_data`, sending only from it, a complete
-  `capture_node_state` and an exact `restore_node_state`). The MCP server
-  could offer the code prompt too, from the same `buildCodePrompt`.
+- **A code prompt beyond the code of a process and of a node.** The code
+  prompt for the other code that the user writes: the additional methods, the
+  code of the options handler and the preamble. The MCP server could offer the
+  code prompt too, from the same `buildCodePrompt` and `buildNodeCodePrompt`.
 - **An assistant on the documentation of DeBasher.** A chat in the web UI
   that answers questions about DeBasher from its documentation (the
   documentation of the project, the design documents and the module

@@ -126,3 +126,21 @@ export async function getInheritedHooks(
 
   return response.json();
 }
+
+// The reference of the runtime library that the code prompt of a node of
+// `kind` carries, read by the backend from the library itself.
+export async function getNodeReference(
+  kind: string
+): Promise<{ reference: string; error: string | null }> {
+  const response = await fetch("/api/processes/node-reference", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response));
+  }
+
+  return response.json();
+}

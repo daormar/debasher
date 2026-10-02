@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
@@ -6,6 +6,7 @@ import { languageExtension } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 import type { NodeCode, NodeHookPart, NodeKind } from "../models/node";
 import {
+  NODE_CODE_PARTS,
   NODE_HOOKS,
   emptyNodeCode,
   inheritedHookNote,
@@ -13,7 +14,9 @@ import {
   isRequiredHook,
   nodeClassName,
 } from "../models/node";
-import { getInheritedHooks } from "../api/processApi";
+import { getInheritedHooks, getNodeReference } from "../api/processApi";
+import { buildNodeCodePrompt, offersNodeCodePrompt } from "../models/nodeCodePrompt";
+import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
 
 // The height of the parts and the editor, the same for every part, and that
 // of the inherited code of a hook, which scrolls within it.
@@ -41,7 +44,7 @@ type Part = keyof NodeCode;
  */
 export default function NodeCodeEditor({ process, onClose }: Props) {
 
-  const { setNodeCode } = useProgram();
+  const { program, setNodeCode } = useProgram();
 
   const kind: NodeKind = process.nodeKind ?? "FBPProcess";
 
@@ -71,19 +74,18 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
     return () => { current = false; };
   }, [kind]);
 
-  const parts: { part: Part; label: string; note?: string }[] = [
-    { part: "preamble", label: "Node preamble" },
-    { part: "classBody", label: "Class body" },
-    ...NODE_HOOKS.map(({ part: hook, name }) => ({
-      part: hook as Part,
-      label: name,
-      note: isRequiredHook(kind, hook)
+  const parts: { part: Part; label: string; note?: string }[] = NODE_CODE_PARTS.map(({ part: p, label }) => {
+    const hook = NODE_HOOKS.find(h => h.part === p);
+    return {
+      part: p,
+      label,
+      note: hook === undefined ? undefined : isRequiredHook(kind, hook.part)
         ? "required"
         : kind === "FBPProcess"
           ? "only to observe the outside world"
           : `overrides that of ${kind}`,
-    })),
-  ];
+    };
+  });
 
   const hook = NODE_HOOKS.find(h => h.part === part);
 
@@ -105,6 +107,40 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
     onClose();
   }
 
+  // The prompt panel, as in the code editor of a process, with the
+  // reference of the runtime library, read once the panel first opens.
+  const [isPromptOpen, setPromptOpen] = useState(false);
+
+  const [codeRequest, setCodeRequest] = useState("");
+
+  const [reference, setReference] =
+    useState<{ reference: string; error: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!isPromptOpen || reference !== null) {
+      return;
+    }
+    let current = true;
+    getNodeReference(kind)
+      .then(result => { if (current) setReference(result); })
+      .catch(err => {
+        if (current) setReference({ reference: "", error: err instanceof Error ? err.message : String(err) });
+      });
+    return () => { current = false; };
+  }, [isPromptOpen, reference, kind]);
+
+  const codePrompt = useMemo(
+    () => isPromptOpen && reference !== null
+      ? buildNodeCodePrompt(program, process, draft, codeRequest, {
+          reference: reference.reference,
+          referenceError: reference.error,
+          inherited: inherited?.hooks ?? {},
+          inheritedError: inherited?.error ?? null,
+        })
+      : "Reading the runtime library...",
+    [isPromptOpen, reference, program, process, draft, codeRequest, inherited]
+  );
+
   return (
 
     <div
@@ -121,8 +157,8 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
       <div
         style={{
-          width: "80%",
-          maxWidth: 1100,
+          width: isPromptOpen ? "95%" : "80%",
+          maxWidth: isPromptOpen ? 1700 : 1100,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -132,9 +168,24 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
         }}
       >
 
-        <h3 style={{ margin: 0 }}>
-          Node code: {process.name} ({kind})
-        </h3>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+
+          <h3 style={{ margin: 0 }}>
+            Node code: {process.name} ({kind})
+          </h3>
+
+          {offersNodeCodePrompt(kind) && (
+            <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+          )}
+
+        </div>
 
         {/* One height for every part, so that switching parts never resizes
             the window: the editor takes what the other blocks leave, and
@@ -257,6 +308,15 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
             )}
 
           </div>
+
+          {isPromptOpen && (
+            <CodePromptPanel
+              prompt={codePrompt}
+              request={codeRequest}
+              onRequestChange={setCodeRequest}
+              pasteHint="Paste the code of each part of the answer into its part."
+            />
+          )}
 
         </div>
 

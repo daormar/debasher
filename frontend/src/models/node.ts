@@ -72,6 +72,15 @@ export const NODE_HOOKS: { part: NodeHookPart; name: string; signature: string }
   { part: "observe", name: "observe", signature: "def observe(self):" },
 ];
 
+// The parts of the code of a node, in the order script generation writes
+// them, with the names that the node code editor and the code prompt of a
+// node give them.
+export const NODE_CODE_PARTS: { part: keyof NodeCode; label: string }[] = [
+  { part: "preamble", label: "Node preamble" },
+  { part: "classBody", label: "Class body" },
+  ...NODE_HOOKS.map(({ part, name }) => ({ part, label: name })),
+];
+
 export function emptyNodeCode(): NodeCode {
   return {
     preamble: "",

@@ -48,7 +48,7 @@ export function buildCodePrompt(
 }
 
 // A description as the lines of a list item, or nothing when it is blank.
-function describedAs(description: string, label = "Description"): string[] {
+export function describedAs(description: string, label = "Description"): string[] {
   const text = description.trim();
   if (text === "") {
     return [];
@@ -199,7 +199,7 @@ function connectionNotes(program: Program, process: ProgramProcess, option: Prog
 
 // One end of a connection: the option and its process, each with its
 // description, if it has one.
-function edgeEnd(program: Program, processId: string, optionId: string) {
+export function edgeEnd(program: Program, processId: string, optionId: string, noun = "process") {
   const process = program.processes.find(p => p.id === processId);
   const option = process?.options.find(o => o.id === optionId);
   if (!process || !option) {
@@ -210,7 +210,7 @@ function edgeEnd(program: Program, processId: string, optionId: string) {
   return {
     processName: process.name,
     option,
-    text: `the option \`${option.label}\` of the process \`${process.name}\``
+    text: `the option \`${option.label}\` of the ${noun} \`${process.name}\``
       + (optionDescription === "" ? "." : `: ${optionDescription}`),
     processNote: processDescription === "" ? [] : [`(\`${process.name}\`: ${processDescription})`],
   };
@@ -222,7 +222,7 @@ function oneLine(text: string): string {
 
 // A fence longer than any run of backquotes in the code, so that the code
 // cannot close it.
-function fenceFor(code: string): string {
+export function fenceFor(code: string): string {
   const longest = Math.max(2, ...[...code.matchAll(/`+/g)].map(m => m[0].length));
   return "`".repeat(longest + 1);
 }

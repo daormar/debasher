@@ -337,6 +337,13 @@ classes already implement every hook, the editor shows the code that
 the node inherits, read only, and what mostly needs setting is class
 attributes, such as ``PFILE`` for a launcher node.
 
+The "AI prompt" button of the node code editor composes a prompt as
+for a process, which also carries what the node uses of its classes,
+read from their own documentation (the rules that its hooks have to
+keep among them), and the code of every part. It asks for each part
+that changes in a block of its own, under the name of the part, so
+that each block is pasted into its part.
+
 The "Initiator" checkbox of the Inspector makes a node an initiator,
 where snapshots start; a program made of independent parts needs one
 initiator in each. The ``Supervisor`` needs no code: only its name, its
