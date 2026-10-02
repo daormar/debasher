@@ -17,6 +17,8 @@ export const httpBackend = {
   getProcessInfo: processes.getProcessInfo,
   suggestNodes: processes.suggestNodes,
   getNodeInfo: processes.getNodeInfo,
+  getNodeReference: processes.getNodeReference,
+  getInheritedHooks: processes.getInheritedHooks,
   validateProgram: execution.validateProgram,
   runTests: execution.runTests,
   checkProgramOptions: execution.checkProgramOptions,

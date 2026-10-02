@@ -277,8 +277,9 @@ See "A prompt for the code of a process".
   user chooses and copies a code prompt into; an agent may serve as one.
 - **code prompt**: the text that a code editor (the code editor of a process,
   the editors of the code of its options handler and of its additional methods,
-  or the node code editor) composes for an AI tool, asking for the code and
-  giving what the program model knows of the process or the node.
+  or the node code editor) composes for an AI tool, and that the MCP tool
+  `get_code_prompt` composes the same way, asking for the code and giving what
+  the program model knows of the process or the node.
 - **node code editor**: the editor of the code of a node of a resident
   program, part by part (`NodeCodeEditor`; see "The program model of a
   resident program").
@@ -292,7 +293,8 @@ See "A prompt for the code of a process".
   the code of the process goes; code that holds it, or no code at all, is
   still a template.
 - **code request**: the text that the user writes in the prompt panel to say
-  what the code should do, which the code prompt carries.
+  what the code should do, or that an agent gives to `get_code_prompt`, which
+  the code prompt carries.
 - **prompt panel**: the part of a code editor that shows the code prompt and
   copies it.
 - **node reference**: the part of the code prompt of a node that documents
@@ -3116,9 +3118,10 @@ A code prompt is built by a function of the program model, `buildCodePrompt`
 (`frontend/src/models/codePrompt.ts`), from the program in the store, the
 process, the draft of the code editor and the code request. It depends on
 nothing outside the program model, so that a test builds a code prompt without
-the editor, and the MCP server could offer the same one. For that reason the
-templates live in the program model (`frontend/src/models/codeTemplates.ts`),
-and the code editor imports them from there.
+the editor, and the MCP server offers the same one (see "The code prompt from
+the MCP server"). For that reason the templates live in the program model
+(`frontend/src/models/codeTemplates.ts`), and the code editor imports them from
+there.
 
 The function is pure: the same program, process, draft and code request give
 the same code prompt, and the tests compare it with what they expect. The
@@ -3344,6 +3347,21 @@ two stories. `buildMethodPrompt` (`frontend/src/models/methodPrompt.ts`) builds
 the code prompt, pure like `buildCodePrompt`, with the parts that it shares with
 the code prompts of a process and of an options handler.
 
+## The code prompt from the MCP server
+
+The MCP tool `get_code_prompt` answers with the code prompt that the button of
+the editor composes, for the code of a process or of a node, for the code of its
+options handler, or for one of its additional methods, as the call names them.
+It builds it with the same functions, from the program as it is saved, with the
+code saved for that piece as the draft and the code request of the call; for a
+node, it reads the node reference and the inherited hooks from the backend, as
+the node code editor does, and says in the code prompt what it could not read.
+It refuses what the editor does not offer: the code of a `Supervisor`, the
+options handler of a process in a mode other than `array` or `generator`, and an
+additional method of a node. An agent follows the code prompt to write that
+code, which it then saves with the MCP tools that edit a program, or hands it to
+another model; an assistant in the web UI would compose it the same way.
+
 # Editing a program from an agent: the MCP server
 
 The MCP server offers to an agent, such as Claude Code, what the editor offers
@@ -3482,9 +3500,11 @@ error.
 
 - **Reading.** `get_program` (the settings of the program, its processes, its
   sequential processes and its connections), `get_process` (one process or
-  sequential process in full, its code included) and `import_module` (import a
-  module, place its processes and derive its connection sentinels as the store
-  does on load, and save it into a new home directory).
+  sequential process in full, its code included), `get_code_prompt` (the code
+  prompt of a piece of code of a process, see "The code prompt from the MCP
+  server") and `import_module` (import a module, place its processes and derive
+  its connection sentinels as the store does on load, and save it into a new
+  home directory).
 - **The library.** `search_library` and `get_library_process`, which list and
   describe the processes, or in a resident program the nodes, that the modules
   of the preamble define, through the `processes` endpoints.
@@ -3594,8 +3614,7 @@ backend's own tests.
   that the user writes: the preamble, and the option definition function of a
   `manual` process, which is written with the API of the engine for options and
   would need a reference of it, read from the engine as the node reference is
-  read from the runtime library. The MCP server could offer the code prompt too,
-  from the same functions that build it.
+  read from the runtime library.
 - **An assistant on the documentation of DeBasher.** A chat in the web UI
   that answers questions about DeBasher from its documentation (the
   documentation of the project, the design documents and the module

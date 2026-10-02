@@ -97,6 +97,48 @@ describe("reading a program", () => {
 
 });
 
+describe("the code prompt", () => {
+  it("composes the code prompt of the code of a process, as the editor does", async () => {
+    const backend = fakeBackend([program()]);
+    const prompt = await text(backend, "get_code_prompt", { home_dir: HOME, process: "b", request: "Echo -x." });
+    expect(prompt).toContain("# Write the code of the DeBasher process `b`");
+    expect(prompt).toContain("```bash\nb() { :; }\n```");
+    expect(prompt).toContain("## What the code has to do\n\nEcho -x.");
+  });
+
+  it("composes the code prompt of an options handler, and refuses one with no code", async () => {
+    const arrayProcess = { ...process("a", ["-in"]), optionsHandler: { mode: "array" as const, arrayCode: "array=(x y)" } };
+    const backend = fakeBackend([program({ processes: [arrayProcess] })]);
+    expect(await text(backend, "get_code_prompt", { home_dir: HOME, process: "a", part: "options_handler" }))
+      .toContain("It has to build a Bash array named `array`");
+    const standard = fakeBackend([program()]);
+    await expect(call(standard, "get_code_prompt", { home_dir: HOME, process: "a", part: "options_handler" }))
+      .rejects.toThrow("only the code of an array or generator options handler has a code prompt");
+  });
+
+  it("composes the code prompt of an additional method, and refuses an unknown part", async () => {
+    const backend = fakeBackend([program()]);
+    expect(await text(backend, "get_code_prompt", { home_dir: HOME, process: "a", part: "skip" }))
+      .toContain("# Write the `skip` method of the DeBasher process `a`");
+    await expect(call(backend, "get_code_prompt", { home_dir: HOME, process: "a", part: "nope" }))
+      .rejects.toThrow('not "nope"');
+  });
+
+  it("composes the code prompt of a node with the reference and the inherited hooks of the library", async () => {
+    const node = { ...process("Launch", ["-inreq"]), language: "python" as const, nodeKind: "ProgramLauncher" as const };
+    const backend = fakeBackend([program({ programType: "resident", processes: [node] })], {
+      getNodeReference: async () => ({ reference: "### FBPProcess\n\nThe base class.", error: null }),
+      getInheritedHooks: async () => ({ hooks: { observe: "def observe(self):\n    pass" }, error: null }),
+    });
+    const prompt = await text(backend, "get_code_prompt", { home_dir: HOME, process: "Launch" });
+    expect(prompt).toContain("# Write the code of the DeBasher node `Launch`");
+    expect(prompt).toContain("### FBPProcess\n\nThe base class.");
+    expect(prompt).toContain("def observe(self):\n    pass");
+    await expect(call(backend, "get_code_prompt", { home_dir: HOME, process: "Launch", part: "post" }))
+      .rejects.toThrow("A node of a resident program has no additional methods.");
+  });
+});
+
 describe("editing a program", () => {
 
   it("connects two processes and saves the program with a new revision", async () => {

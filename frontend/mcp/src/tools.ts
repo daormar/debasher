@@ -37,6 +37,13 @@ import { describeProcess, describeProgram, describeSeqProcess, lastLines, option
 import type { Answer, EditCall } from "./editing";
 import { editProgram, loadProgram, Refusal } from "./editing";
 import * as schemas from "./schemas";
+import { buildCodePrompt } from "../../src/models/codePrompt";
+import { buildMethodPrompt } from "../../src/models/methodPrompt";
+import { buildNodeCodePrompt, offersNodeCodePrompt } from "../../src/models/nodeCodePrompt";
+import { buildOptionsHandlerPrompt } from "../../src/models/optionsHandlerPrompt";
+import { GENERATOR_SIZE_TEMPLATE } from "../../src/models/codeTemplates";
+import { emptyNodeCode } from "../../src/models/node";
+import { PROCESS_METHODS } from "../../src/models/processMethods";
 
 // The MCP tools: each a name, a description for the agent, the schema of
 // its parameters and what it does with the backend (see "The MCP tools" in
@@ -193,6 +200,61 @@ const readingTools = [
       const program = await loadProgram(backend, home_dir);
       const seqProcess = program.seqProcesses.find(candidate => candidate.name === process);
       return seqProcess ? describeSeqProcess(seqProcess) : describeProcess(program, processOf(program, process));
+    }
+  ),
+
+  tool(
+    "get_code_prompt",
+    "The code prompt that the \"AI prompt\" button of the editor composes for a piece of code of a process, from the program as it is saved: the rules of the engine for that code, the options and connections, the code so far, and the form of the answer. part is \"code\" for the code of the process (or the parts of a node), \"options_handler\" for the code of an array or generator options handler, or the name of an additional method (reset_outfiles, post, outdir_basename, skip, conda_envs, docker_imgs). Follow it to write that code, or hand it to another model.",
+    {
+      home_dir: schemas.homeDir,
+      process: schemas.processName,
+      part: z.string().min(1).default("code")
+        .describe("\"code\", \"options_handler\" or the name of an additional method."),
+      request: z.string().default("")
+        .describe("What the code should do, if the descriptions do not say it."),
+    },
+    READS,
+    async (backend, { home_dir, process: name, part, request }) => {
+      const program = await loadProgram(backend, home_dir);
+      const process = processOf(program, name);
+      if (part === "code") {
+        if (program.programType !== "resident") {
+          return buildCodePrompt(program, process, process.code, request);
+        }
+        const kind = process.nodeKind ?? "FBPProcess";
+        if (!offersNodeCodePrompt(kind)) {
+          throw new Refusal(`${name} is a Supervisor, whose code script generation writes.`);
+        }
+        const [reference, inherited] = await Promise.all([
+          backend.getNodeReference(kind).catch(err => ({ reference: "", error: String(err) })),
+          backend.getInheritedHooks(kind).catch(err => ({ hooks: {}, error: String(err) })),
+        ]);
+        return buildNodeCodePrompt(program, process, { ...emptyNodeCode(), ...process.nodeCode }, request, {
+          reference: reference.reference,
+          referenceError: reference.error,
+          inherited: inherited.hooks,
+          inheritedError: inherited.error,
+        });
+      }
+      if (part === "options_handler") {
+        const handler = process.optionsHandler;
+        if (handler.mode === "array") {
+          return buildOptionsHandlerPrompt(program, process, "array", handler.arrayCode ?? "", request);
+        }
+        if (handler.mode === "generator") {
+          return buildOptionsHandlerPrompt(program, process, "generator", handler.generatorSizeCode ?? GENERATOR_SIZE_TEMPLATE, request);
+        }
+        throw new Refusal(`${name} is in ${handler.mode} mode: only the code of an array or generator options handler has a code prompt.`);
+      }
+      const method = PROCESS_METHODS.find(m => m.name === part);
+      if (!method) {
+        throw new Refusal(`part is "code", "options_handler" or one of ${PROCESS_METHODS.map(m => m.name).join(", ")}, not "${part}".`);
+      }
+      if (program.programType === "resident") {
+        throw new Refusal("A node of a resident program has no additional methods.");
+      }
+      return buildMethodPrompt(program, process, method.key, process.additionalMethods[method.key] ?? "", request);
     }
   ),
 
