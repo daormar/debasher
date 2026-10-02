@@ -48,9 +48,11 @@ sequential processes of its module. "Guarantees and non-goals" gathers the
 guarantees stated along the way. "Resident programs in the web UI" designs the
 extension to resident programs, and says which parts of it are built. "Business
 tests in the web UI" describes how the web UI runs the tests of a program and
-writes a first test for a process. "Editing a program from an agent: the MCP
-server" describes a second client of the backend, for AI agents, and "Future
-work" lists what is known to be missing.
+writes a first test for a process. "A prompt for the code of a process"
+describes how the code editor helps to have an AI tool write the code of a
+process. "Editing a program from an agent: the MCP server" describes a second
+client of the backend, for AI agents, and "Future work" lists what is known to
+be missing.
 
 # Glossary
 
@@ -111,6 +113,9 @@ refer to it.
   such as `10` or `${idx}`, and that script generation writes as it is (see
   "Option definitions").
 - **shared directory**: as defined in the design of the engine.
+- **value descriptor**: as defined in the design of the engine: the file,
+  named by an output option with option channel `value_desc`, into which a
+  task writes a value for the processes connected to it.
 - **command line option**: as defined in the design of the engine, marked as one
   by `ProgramOption.commandLine`. It takes its value from the command line and
   nowhere else: script generation refuses an option that is both a command line
@@ -262,6 +267,29 @@ test helpers and the test runner are defined in the glossary of
   user confirms its name: a process test or a node test whose `TODO` marks the
   user fills in, and which fails until the user removes the line that makes it
   fail.
+
+## The code prompt
+
+See "A prompt for the code of a process".
+
+- **AI tool**: an application driven by a model, outside the web UI, that the
+  user chooses and copies a code prompt into; an agent may serve as one.
+- **code prompt**: the text that the code editor of a process composes for an
+  AI tool, asking for the code of the process and giving what the program
+  model knows of it.
+- **language rules**: the part of a code prompt, fixed for each language, that
+  says how the engine runs the code of a process of that language.
+- **template**: the first code that the code editor gives a process, in the
+  language of the process, which reads its options: in Bash every option, in
+  another language every option but a fanout family, which it marks with a
+  `TODO` (see "Building the code prompt").
+- **template marker**: the comment `ADD YOUR CODE HERE` of a template, where
+  the code of the process goes; code that holds it, or no code at all, is
+  still a template.
+- **code request**: the text that the user writes in the prompt panel to say
+  what the code should do, which the code prompt carries.
+- **prompt panel**: the part of the code editor of a process that shows the
+  code prompt and copies it.
 
 ## The MCP server
 
@@ -1524,6 +1552,15 @@ non-goals of a resident program".
 - **Nothing is lost when the backend restarts**, since it keeps no state (see
   "The backend keeps no state").
 
+**The code prompt (designed, not built)**
+
+- **Nothing leaves the machine through the code prompt.** The web UI calls no
+  AI service: the user copies the code prompt, and sees all of it first (see
+  "A prompt for the code of a process").
+- **Code from an AI tool is code like any other.** It reaches the program
+  only by being pasted into the code editor and saved, and "Cancel" drops it
+  (see "The prompt panel").
+
 ## Non-goals
 
 - **Security.** The web UI trusts whoever reaches it: it has no
@@ -1547,6 +1584,9 @@ non-goals of a resident program".
 - **An output directory that follows a moved program.** A program loaded
   from a new place keeps the output directory it was saved with (see "The
   home directory").
+- **Checking the code that an AI tool writes** (designed, not built). The web
+  UI treats it as code written by hand; validating the program and running its
+  tests check it (see "The prompt panel").
 
 # Resident programs in the web UI
 
@@ -2961,6 +3001,129 @@ path and content. An agent writes and fixes the tests themselves, and the files
 that they read, with the MCP tools for user files, which act on any user file,
 not only on tests.
 
+# A prompt for the code of a process
+
+*Designed, not built.* The code editor of a process helps the user to have an
+AI tool write the code. It composes a code prompt, a text that asks for the
+code of the process and gives what the program model knows of it, for the user
+to copy into an AI tool of their choice. The code comes back the way any code
+reaches the editor: the user copies it from the answer of the AI tool and
+pastes it into the code editor. The web UI calls no AI service and keeps no
+key: nothing leaves the machine through it, and the user sees the whole code
+prompt before sending it anywhere.
+
+The code prompt is offered for the code of a process of a general program. It
+is not offered for a sequential process, which has no options to describe. Nor
+is it offered, yet, for the code of the additional methods, of the options
+handler or of the preamble, or for a node of a resident program, whose code has
+parts and obligations of its own (see "Future work").
+
+## What the code prompt says
+
+A code prompt gives an AI tool what a person would need to write the code
+without seeing the editor, from the general to the particular, each part under
+a heading of its own:
+
+1. **The language rules.** How the engine runs the code of a process of the
+   language of the process. A Bash process is a function named after the
+   process, which the engine calls with the option list as its arguments, and
+   which reads an option with `read_opt_value_from_func_args` and a flag with
+   `read_flag_from_func_args`. The code of any other language is a whole
+   program, which the interpreter of the language runs with the option list as
+   its command line arguments; script generation writes it inside a Bash
+   here-document, so it may hold no line that is `EOF` alone. Then what holds
+   for every language: the value of an output option names where the process
+   writes what it produces (a file, a directory or a FIFO); a FIFO is read
+   until its end, and an output FIFO is closed once everything is written,
+   since only then does its reader see the end; and the process ends with
+   status 0 when it succeeds, and with another status when it fails.
+2. **The program.** Its name and its description.
+3. **The process.** Its name, its description and its language, and, in
+   `array` or `generator` mode, that the code runs once for each task, with
+   the option list of that task.
+4. **The options.** For each option of the process, in its order: its label,
+   direction, data type, option channel and description, whether it is
+   mandatory, a command line option or a flag, and its literal value if it has
+   one. A connected input names the process and the output option it reads
+   from, with their descriptions; a connected output names, likewise, the
+   options that read it; an unconnected FIFO says that someone outside the
+   program is at its other end. An option of a fanout family names the option
+   that gives its count. A value descriptor says how the value is written or
+   read: a Bash process writes it with `write_value_to_desc` and reads it with
+   `read_opt_value_from_func_args`, which gives the value and not the path,
+   while a process of another language writes it into the file that the option
+   names and reads it from there.
+5. **The code to complete.** The draft of the code editor: the template while
+   the code is still one, or the code that the draft holds. The template
+   already reads the options, so the code prompt asks to keep those lines, to
+   read a fanout family that a `TODO` marks, and to write the code where the
+   template marker is; without the marker, it asks to change the code as the
+   code request says and to keep the rest.
+6. **The code request.** What the user wrote in the prompt panel, or, when it
+   is blank, to write the code that the description of the process asks for.
+7. **What the AI tool returns.** The whole code (for a Bash process,
+   including the line that names its function) in a single fenced code block,
+   with nothing else inside the block. The user copies the code from the
+   answer and pastes it over the draft, so the answer has to hold all of it in
+   one piece: a single block, which the copy button that AI tools commonly
+   give each block copies whole; the whole code, not only what changed, since
+   what the answer leaves out would be lost; and, in Bash, the line that names
+   the function, without which the module would define no function for the
+   process.
+
+The code prompt is in English, whatever the language of the code request,
+like the rest of the web UI. It leaves out what does not change the code: the
+position of the process, its specifications, its additional methods and the
+code of its options handler.
+
+## Building the code prompt
+
+A code prompt is built by a function of the program model, `buildCodePrompt`
+(`frontend/src/models/codePrompt.ts`), from the program in the store, the
+process, the draft of the code editor and the code request. It depends on
+nothing outside the program model, so that a test builds a code prompt without
+the editor, and the MCP server could offer the same one. For that reason the
+templates live in the program model (`frontend/src/models/codeTemplates.ts`),
+and the code editor imports them from there.
+
+The function is pure: the same program, process, draft and code request give
+the same code prompt, and the tests compare it with what they expect. The
+language rules live in the same module as the templates, so that a change to
+how a template reads the options, or to how the engine runs the code of a
+language, is made in one place. A test checks, for each language, that the
+code prompt carries the language rules of that language and the template of
+the process.
+
+The code prompt is built from the draft and from the program in the store, not
+from the program saved on disk, so that what the user has edited and not saved,
+in the editor or elsewhere in the program, is what it describes.
+
+## The prompt panel
+
+The header of the code editor of a process carries a button with a sparkle
+icon, the mark that applications commonly give to what involves AI, and the
+tooltip "Prompt for an AI tool". It opens the prompt panel inside the code
+editor, beside the code, which stays editable. The prompt panel holds:
+
+- A field for the code request, empty when the panel opens.
+- The code prompt, read only, composed again whenever the code request or the
+  draft changes. The user changes it through the code request, or in the AI
+  tool once it is copied.
+- "Copy", which puts the code prompt on the clipboard. When the browser does
+  not offer the clipboard, as on a page opened from a file, or refuses it, the
+  panel selects the whole code prompt and says to copy it with the keyboard.
+
+The prompt panel takes nothing back. The user copies the code from the answer
+of the AI tool and pastes it into the code editor, over the draft, as any code
+is pasted: the code prompt asks for an answer that this copy brings whole (see
+"What the code prompt says"). Pasting changes the draft and nothing else.
+"Save" in the code editor hands the draft to the store, and "Cancel" drops it,
+with the code that the draft held before. Code saved without the template
+marker is no longer a template, so a later change of the options does not
+write the template over it, as for code written by hand. The web UI does
+not check the code that an AI tool writes: validating the program and running
+its tests do (see "Running the tests").
+
 # Editing a program from an agent: the MCP server
 
 The MCP server offers to an agent, such as Claude Code, what the editor offers
@@ -3207,17 +3370,14 @@ backend's own tests.
 - **The output directory of a moved program.** Deciding what a program
   loaded from a new place should do with an output directory that still
   points to the old one.
-- **A prompt for writing the code of a process.** A button on a process
-  that composes, from the program model, a prompt to copy into an AI tool of
-  the user's choice: the description of the process and of its program, its
-  node kind, its options with their direction, data type, option channel and
-  description, what reaches each connected input (the description of the
-  output it comes from), the signature of the function or hook to write, how
-  a process of its language reads its options, and, for a node of a resident
-  program, the obligations of the contract that its code has to keep (a
+- **A code prompt beyond the code of a process.** The code prompt for the
+  other code that the user writes: the additional methods, the code of the
+  options handler, the preamble, and the parts of a node of a resident
+  program. The code prompt of a node needs its node kind, the signature of
+  each hook, and the obligations of the contract that its code keeps (a
   deterministic `process_data`, sending only from it, a complete
-  `capture_node_state` and an exact `restore_node_state`). Nothing leaves the
-  machine: the user copies the prompt, and pastes the answer into the editor.
+  `capture_node_state` and an exact `restore_node_state`). The MCP server
+  could offer the code prompt too, from the same `buildCodePrompt`.
 - **An assistant on the documentation of DeBasher.** A chat in the web UI
   that answers questions about DeBasher from its documentation (the
   documentation of the project, the design documents and the module
@@ -3270,16 +3430,15 @@ backend's own tests.
   It needs the engine to accept it (see "Future work" in
   `doc/design_doc_resident.md`); the web UI would then only show the field
   again on a node.
-- **Templates of the code of a node.** A first code for the parts of a node
-  when it is added, as the templates of a general process give one
-  (`frontend/src/components/codeTemplates.ts`): a constructor that gives the
-  node state its first value, a `capture_node_state` that returns all of it
-  and a `restore_node_state` that sets it back, and a `process_data` with a
-  branch for each business input. For a node that sends to a fanout family, a
-  routing that is already deterministic, such as a counter kept in the node
-  state, since a routing that a replay may change would make the sequence
-  numbers of a channel label other messages (see "Fan-out and fan-in sized
-  from the command line" in `doc/design_doc_resident.md`).
+- **Templates of the code of a node.** A first code for the parts of a node when
+  it is added, as the template of a general process gives one: a constructor
+  that gives the node state its first value, a `capture_node_state` that returns
+  all of it and a `restore_node_state` that sets it back, and a `process_data`
+  with a branch for each business input. For a node that sends to a fanout
+  family, a routing that is already deterministic, such as a counter kept in the
+  node state, since a routing that a replay may change would make the sequence
+  numbers of a channel label other messages (see "Fan-out and fan-in sized from
+  the command line" in `doc/design_doc_resident.md`).
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.
