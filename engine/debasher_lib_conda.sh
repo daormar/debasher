@@ -91,6 +91,30 @@ debasher::conda_activate()
 conda_activate() { debasher::conda_activate "$@"; }
 
 ########
+# Creates the conda environments that the processes of the program declare
+# in their _conda_envs methods, those that do not exist yet, as a run with
+# --conda-support does before it launches anything and as debasher_test
+# --conda-support does before the tests. Needs the program to be defined
+# (DEBASHER_PROGRAM_PROCESSES). Returns 1 if an environment could not be
+# created.
+debasher::_prepare_conda_envs()
+{
+    echo "# Handling conda requirements (if any)..." >&2
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local conda_envs_funcname=$(debasher::_get_conda_envs_funcname "${processname}")
+        if debasher::_func_exists "${conda_envs_funcname}"; then
+            echo "Handling conda requirements for process ${processname}..." >&2
+            "${conda_envs_funcname}" || return 1
+        fi
+    done
+
+    echo "Handling complete" >&2
+    echo "" >&2
+}
+
+########
 debasher::_conda_env_exists()
 {
     local envname=$1

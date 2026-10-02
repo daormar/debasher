@@ -2829,7 +2829,12 @@ program as it is in the editor: a test reads the generated script, never the
 program model. The backend (`/run-tests`) then runs
 `debasher_test <home directory>` in a session of its own (`tool_sessions.py`),
 with the environment of a run of the program (its `DEBASHER_MOD_DIR`, see
-"Environment variables of a program"), and waits for it.
+"Environment variables of a program"), and waits for it. A program with conda
+or docker support in its execution options gets `--conda-support` or
+`--docker-support` too, so that the test runner prepares its Conda
+environments and Docker images before the tests, as a run would (see "The test
+runner: `debasher_test`" in `doc/design_doc_engine.md`). Creating an
+environment for the first time counts in the bounded wait below.
 
 "Run tests" is refused while there is a run in progress, by the frontend, which
 disables it, and by the backend, with the check of a save (see "The home

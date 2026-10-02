@@ -408,6 +408,12 @@ declare DEBASHER_PROGRAM_OUTDIR
 # the output directory (see debasher::_get_sched_opts_dir)
 declare DEBASHER_SCHED_OPTS_DIR
 
+# Declare variable that, when set, replaces the .conda directory of the
+# output directory, where the logs of the creation of conda environments
+# go (see debasher::_get_absolute_condadir): debasher_test, which has no
+# output directory, sets it
+declare DEBASHER_CONDA_DIR
+
 # Declare array to store file names of loaded modules
 declare -a DEBASHER_PROGRAM_MODULES
 

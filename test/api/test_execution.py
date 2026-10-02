@@ -353,6 +353,21 @@ def test_the_tests_run_the_program_as_it_is_saved_first(tmp_path, monkeypatch):
     assert persistence.load_program(program.homeDir).revision == 1
 
 
+@pytest.mark.parametrize(
+    "conda, docker, flags",
+    [(False, False, ""), (True, False, "--conda-support "), (True, True, "--conda-support --docker-support ")],
+)
+def test_the_tests_prepare_the_environments_that_a_run_would(tmp_path, monkeypatch, conda, docker, flags):
+    _fake_debasher_test(tmp_path, monkeypatch, 'echo "$*"')
+    program = _general(
+        tmp_path, executionOptions=ExecutionOptions(scheduler="BUILTIN", condaSupport=conda, dockerSupport=docker)
+    )
+
+    response = execution.run_tests(program)
+
+    assert response.output == f"{flags}{Path(program.homeDir).resolve()}\n"
+
+
 def test_a_long_test_report_keeps_its_end(tmp_path, monkeypatch):
     _fake_debasher_test(tmp_path, monkeypatch, "seq 1 20\necho summary\nexit 1")
     monkeypatch.setattr(execution.file_inspection, "MAX_INSPECT_LINES", 5)

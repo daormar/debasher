@@ -763,48 +763,6 @@ check_process_opts()
 }
 
 ########
-handle_conda_requirements()
-{
-    echo "# Handling conda requirements (if any)..." >&2
-
-    # Read information about the processes to be executed
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Process conda envs information
-        local conda_envs_funcname=$(debasher::_get_conda_envs_funcname "${processname}")
-        if debasher::_func_exists ${conda_envs_funcname}; then
-            echo "Handling conda requirements for process ${processname}..." >&2
-            ${conda_envs_funcname} || exit 1
-        fi
-    done
-
-    echo "Handling complete" >&2
-
-    echo "" >&2
-}
-
-########
-handle_docker_requirements()
-{
-    echo "# Handling docker requirements (if any)..." >&2
-
-    # Read information about the processes to be executed
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Process conda envs information
-        local docker_imgs_funcname=$(debasher::_get_docker_imgs_funcname "${processname}")
-        if debasher::_func_exists "${docker_imgs_funcname}"; then
-            echo "Handling docker requirements for process ${processname}..." >&2
-            "${docker_imgs_funcname}" || exit 1
-        fi
-    done
-
-    echo "Handling complete" >&2
-
-    echo "" >&2
-}
-
-########
 register_all_rerun_processes()
 {
     echo "# Registering all processes to rerun (if any)..." >&2
@@ -1420,11 +1378,11 @@ gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 create_mod_shared_dirs || exit 1
 
 if [ ${conda_support_given} -eq 1 ]; then
-    handle_conda_requirements || exit 1
+    debasher::_prepare_conda_envs || exit 1
 fi
 
 if [ ${docker_support_given} -eq 1 ]; then
-    handle_docker_requirements || exit 1
+    debasher::_pull_docker_imgs || exit 1
 fi
 
 # Register all processes to rerun

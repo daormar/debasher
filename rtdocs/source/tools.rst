@@ -57,7 +57,7 @@ debasher_test
 
 ::
 
-    $ debasher_test <prgdir>
+    $ debasher_test [--conda-support] [--docker-support] <prgdir>
 
 ``debasher_test`` runs the business tests of a program: tests of what
 each process does with the values of its options, run on its own
@@ -125,10 +125,14 @@ only once it has stayed the same for two observations in a row. A
 ``ProgramLauncher`` and the ``Supervisor`` cannot be tested this way.
 
 A process that activates a Conda environment runs in it in a test as
-in a run, but a test does not create the environment, as
-``debasher_exec --conda-support`` does: a test of such a process starts
-with ``debasher_skip_without_conda_env <name>``, which skips it, with
-its reason, where conda or the environment is missing.
+in a run. ``--conda-support`` and ``--docker-support`` create the Conda
+environments and pull the Docker images that the processes declare
+before the tests, as ``debasher_exec`` does before a run with the same
+options; without them, they have to exist already, and a test of such
+a process starts with ``debasher_skip_without_conda_env <name>``, which
+skips it, with its reason, where conda or the environment is missing.
+**Run tests** in the web interface passes those options when the
+program has conda or docker support.
 
 The exit status of ``debasher_test`` is 0 when every test passed, 1
 when a test failed, 2 when the tests could not be run (for instance,

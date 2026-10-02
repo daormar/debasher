@@ -869,7 +869,7 @@ const testTools = [
 
   tool(
     "run_tests",
-    "Runs the business tests of the program, the files test/*.bats and test/test_*.py of its home directory, as \"Run tests\" in the Run menu does (debasher_test), after saving the program. Refused while a run is in progress.",
+    "Runs the business tests of the program, the files test/*.bats and test/test_*.py of its home directory, as \"Run tests\" in the Run menu does (debasher_test), after saving the program; a program with conda or docker support gets its environments and images prepared first, as a run would. Refused while a run is in progress.",
     { home_dir: schemas.homeDir, lines },
     READS,
     async (backend, { home_dir, lines: count }) => {

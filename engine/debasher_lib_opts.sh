@@ -1959,7 +1959,7 @@ debasher::_get_augm_fifoname_from_absname()
 ########
 debasher::_get_absolute_condadir()
 {
-    echo "${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_CONDA_DIRNAME}"
+    echo "${DEBASHER_CONDA_DIR:-${DEBASHER_PROGRAM_OUTDIR}/${DEBASHER_CONDA_DIRNAME}}"
 }
 
 ########

@@ -194,13 +194,15 @@ check_watched_program()
 }
 
 ########
-# Runs debasher_test on the program directory `prgdir`, which passes when
-# every test passes or the program has none. The check is skipped when
-# configure did not find the tool of a kind of test that the program has.
+# Runs debasher_test on the program directory `prgdir`, with the options
+# `test_opts` if given, which passes when every test passes or the program
+# has none. The check is skipped when configure did not find the tool of a
+# kind of test that the program has.
 check_business_tests()
 {
     local tmpdir=$1
     local prgdir=$2
+    local test_opts=$3
     local name=$("${BASENAME}" "${prgdir}")
 
     local tool
@@ -217,9 +219,9 @@ check_business_tests()
         fi
     done
 
-    echo -n "## Checking the business tests of ${name} ... "
+    echo -n "## Checking the business tests of ${name}${test_opts:+ (${test_opts})} ... "
     local test_out="${tmpdir}/${name}_test.out"
-    "${debasher_bindir}/debasher_test" "${prgdir}" > "${test_out}" 2>&1
+    "${debasher_bindir}/debasher_test" ${test_opts} "${prgdir}" > "${test_out}" 2>&1
     case $? in
         0)
             echo "OK"
@@ -1167,6 +1169,23 @@ case $? in
         ((checks_skipped++))
         ;;
 esac
+
+# The test runner prepares the conda environments of a program before its
+# tests when asked to, as a run does
+if conda_is_usable; then
+    check_business_tests "${tmpdir}" "${debasher_datadir}/webui_programs/webui_conda_example" "--conda-support"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        2)
+            ((checks_skipped++))
+            ;;
+    esac
+fi
 
 if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
     ((checks_passed++))

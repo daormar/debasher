@@ -19,6 +19,29 @@
 ############################
 
 ########
+# Pulls the docker images that the processes of the program declare in
+# their _docker_imgs methods, those not present yet, as a run with
+# --docker-support does before it launches anything and as debasher_test
+# --docker-support does before the tests. Needs the program to be defined
+# (DEBASHER_PROGRAM_PROCESSES). Returns 1 if an image could not be pulled.
+debasher::_pull_docker_imgs()
+{
+    echo "# Handling docker requirements (if any)..." >&2
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local docker_imgs_funcname=$(debasher::_get_docker_imgs_funcname "${processname}")
+        if debasher::_func_exists "${docker_imgs_funcname}"; then
+            echo "Handling docker requirements for process ${processname}..." >&2
+            "${docker_imgs_funcname}" || return 1
+        fi
+    done
+
+    echo "Handling complete" >&2
+    echo "" >&2
+}
+
+########
 debasher::pull_docker_img()
 {
     local img_name=$1

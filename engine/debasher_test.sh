@@ -23,12 +23,14 @@
 print_desc()
 {
     echo "debasher_test runs the business tests of a program"
-    echo "Usage: debasher_test <prgdir>"
+    echo "Usage: debasher_test [--conda-support] [--docker-support] <prgdir>"
     echo "Notes: <prgdir> is a program directory: a directory that holds a program and its tests; the program"
     echo "       file is <prgdir>/<name>.sh, where <name> is the name that the metadata of the web UI"
     echo "       (<prgdir>/.debasher/program.json) gives, or, without that metadata, the only *.sh file at the"
     echo "       top of <prgdir>; the tests are in <prgdir>/test, the files *.bats (run with bats) and"
     echo "       test_*.py (run with pytest)"
+    echo "       --conda-support and --docker-support create the conda environments and pull the docker images"
+    echo "       of the processes before the tests, as debasher_exec does before a run"
     echo "       DEBASHER_BATS and DEBASHER_PYTEST, when set, give the bats and the pytest to run instead of"
     echo "       those that configure found"
     echo "       exit status: 0 every test passed, 1 a test failed, 2 the tests could not be run, 77 no tests"
@@ -48,6 +50,23 @@ fail_to_run()
 }
 
 ########
+
+conda_support=0
+docker_support=0
+while [ $# -gt 1 ]; do
+    case $1 in
+        --conda-support)
+            conda_support=1
+            ;;
+        --docker-support)
+            docker_support=1
+            ;;
+        *)
+            break
+            ;;
+    esac
+    shift
+done
 
 if [ "${1:-}" = "--help" ]; then
     print_desc
@@ -103,6 +122,29 @@ if [ ${#bats_files[@]} -eq 0 ] && [ ${#pytest_files[@]} -eq 0 ]; then
     exit ${NO_TESTS_STATUS}
 fi
 
+########
+# Creates the conda environments and pulls the docker images of the
+# processes of the program, as debasher_exec --conda-support and
+# --docker-support do before a run, so that a test of a process finds
+# them. The logs of conda go to a temporary directory, since there is no
+# output directory, which is removed unless creating an environment failed.
+prepare_environments()
+{
+    DEBASHER_QUIET_MODULE_LOADING=1
+    debasher::load_debasher_module "${pfile}" >&2 || fail_to_run "cannot load ${pfile}"
+    debasher::_exec_program_func_for_module "${pfile}" >&2 || fail_to_run "cannot define the program of ${pfile}"
+
+    if [ ${conda_support} -eq 1 ]; then
+        DEBASHER_CONDA_DIR=$("${MKTEMP}" -d -t debasher_test_conda.XXXXXX) || fail_to_run "cannot create a temporary directory"
+        debasher::_prepare_conda_envs \
+            || fail_to_run "cannot create the conda environments of the program (see ${DEBASHER_CONDA_DIR})"
+        "${RM}" -rf "${DEBASHER_CONDA_DIR}"
+    fi
+    if [ ${docker_support} -eq 1 ]; then
+        debasher::_pull_docker_imgs || fail_to_run "cannot pull the docker images of the program"
+    fi
+}
+
 # The test tools, checked before any test runs
 bats_tool=${DEBASHER_BATS:-${BATS}}
 pytest_tool=${DEBASHER_PYTEST:-${PYTEST}}
@@ -124,6 +166,10 @@ export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
 export DEBASHER_CONDA="${CONDA}"
 export PYTHONPATH="${debasher_pythondir}:${debasher_pkgpythondir}${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONDONTWRITEBYTECODE=1
+
+if [ ${conda_support} -eq 1 ] || [ ${docker_support} -eq 1 ]; then
+    prepare_environments
+fi
 
 cd "${prgdir}" || fail_to_run "cannot change to ${prgdir}"
 

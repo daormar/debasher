@@ -1906,18 +1906,20 @@ Two features of `debasher_exec_process` serve these tests:
 
 A process runs in the environment of the test runner. It activates its Conda
 environments and runs its Docker images itself, as in a run (see "Conda and
-Docker environments"), so that part behaves the same; what a test does not do is
-what `--conda-support` and `--docker-support` do before a run, creating the
-environments and pulling the images, so they have to exist already. A test of a
-process that needs an environment calls `debasher_skip_without_conda_env <name>`
-of the test helpers first, which skips the test, with its reason, where conda or
-the environment is missing, for example on a machine that never ran the program
-with conda support. Its `_skip`, `_post` and `_reset_outfiles` methods do not
-run. An array process is tested one task at a time, with the options of that
-task, since `_generate_opts` does not run either. A process whose work needs the
-other end of a FIFO to run at the same time, such as one of the two processes of
-a cycle that wait for each other's replies, cannot be tested on its own with a
-regular file standing in for the FIFO.
+Docker environments"), so that part behaves the same. Creating the environments
+and pulling the images, which `--conda-support` and `--docker-support` do before
+a run, is done only when the test runner is given the same options (see "The
+test runner: `debasher_test`"); otherwise they have to exist already. A test of
+a process that needs an environment calls
+`debasher_skip_without_conda_env <name>` of the test helpers first, which skips
+the test, with its reason, where conda or the environment is missing, for
+example on a machine that never ran the program with conda support. Its `_skip`,
+`_post` and `_reset_outfiles` methods do not run. An array process is tested one
+task at a time, with the options of that task, since `_generate_opts` does not
+run either. A process whose work needs the other end of a FIFO to run at the
+same time, such as one of the two processes of a cycle that wait for each
+other's replies, cannot be tested on its own with a regular file standing in for
+the FIFO.
 
 ## Testing a node with pytest
 
@@ -1932,8 +1934,8 @@ the language of the code of a node.
 
 ## The test runner: `debasher_test`
 
-`debasher_test <dir>` runs the tests of the program in the program
-directory `<dir>`:
+`debasher_test [--conda-support] [--docker-support] <dir>` runs the tests of
+the program in the program directory `<dir>`:
 
 1. It checks that `<dir>` is a program directory, and stops otherwise.
 2. It looks for test files in the test directory. When there is none, or no
@@ -1942,7 +1944,18 @@ directory `<dir>`:
    `DEBASHER_BATS_HELPERS`, and `DEBASHER_LIBEXECDIR`, where the node harness
    finds its tool, and adds the directory of the tools of the engine to `PATH`
    and the directories of its Python modules to `PYTHONPATH`.
-4. From the program directory, it runs bats on the process tests and pytest on
+4. With `--conda-support` or `--docker-support`, it loads the program and
+   creates the Conda environments, or pulls the Docker images, that its
+   processes declare, those that do not exist yet, using the functions that
+   `debasher_exec` uses with those options before a run
+   (`debasher::_prepare_conda_envs`, `debasher::_pull_docker_imgs`), so that a
+   test of a process finds them (see "Conda and Docker environments"). The logs
+   of conda go to a temporary directory, given as `DEBASHER_CONDA_DIR`, since
+   there is no output directory; it is removed once the environments exist, and
+   kept, with its path in the error, when one could not be created. An
+   environment or an image that cannot be prepared means that the tests cannot
+   run.
+5. From the program directory, it runs bats on the process tests and pytest on
    the node tests, each only when the program has tests of that kind. The bats
    and pytest that it runs are those that `configure` found, or those given in
    `DEBASHER_BATS` and `DEBASHER_PYTEST`, such as the pytest of a virtual
@@ -1979,8 +1992,10 @@ environment, skipped where the environment does not exist.
 `configure` did not find the tool of a kind of test that a program has, the
 check does not run the test runner on that program, and says that its tests are
 skipped. It also checks that the test runner finds the program of a copy of
-`webui_batch_greet` in a directory of another name, and that it refuses, with
-status 2, a directory that is not a program directory.
+`webui_batch_greet` in a directory of another name, that it prepares the Conda
+environment of `webui_conda_example` with `--conda-support` where conda is
+usable, and that it refuses, with status 2, a directory that is not a program
+directory.
 
 This checks, once DeBasher is installed, that the test runner, the test
 helpers and the node harness work as installed, which no test of `make check`
@@ -2111,11 +2126,6 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Environments prepared for the tests.** The test runner creating the Conda
-  environments and pulling the Docker images of the processes before the
-  tests, as `--conda-support` and `--docker-support` do before a run, with the
-  logs of conda in a temporary directory, and the web UI asking for it when
-  the program has conda or docker support.
 - **Choosing the tests to run.** Giving the test runner the test files, or a
   filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the

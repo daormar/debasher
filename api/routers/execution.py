@@ -577,7 +577,9 @@ def run_tests(program: Program) -> RunTestsResponse:
     Run the business tests of a program (debasher_test on its home
     directory) and wait for them, within RUN_TESTS_TIMEOUT_SECS. Saves the
     program first, so that the tests run it as it is in the editor, and is
-    therefore refused while there is a run in progress, as a save is.
+    therefore refused while there is a run in progress, as a save is. A
+    program run with conda or docker support has its environments and
+    images prepared before the tests, as a run would.
     """
     run_guard.refuse_while_running(program, "run the tests", program.homeDir)
     tool = paths.find_bin_tool("debasher_test")
@@ -585,7 +587,7 @@ def run_tests(program: Program) -> RunTestsResponse:
         raise HTTPException(status_code=500, detail="debasher_test tool not found.")
     saved = saving.save_or_refuse(program.homeDir, program)
 
-    command = [str(tool), str(saved.script_path.parent)]
+    command = [str(tool), *_environment_flags(program), str(saved.script_path.parent)]
     try:
         output, exit_code = tool_sessions.run_with_temp_output(
             command, _debasher_env(program), timeout=RUN_TESTS_TIMEOUT_SECS
@@ -596,6 +598,17 @@ def run_tests(program: Program) -> RunTestsResponse:
         outcome = "timedOut"
 
     return RunTestsResponse(outcome=outcome, output=_cap_tail_lines(output), revision=saved.revision)
+
+
+def _environment_flags(program: Program) -> list[str]:
+    """The options with which debasher_test prepares, before the tests, the
+    conda environments and docker images that a run of the program would."""
+    flags = []
+    if program.executionOptions.condaSupport:
+        flags.append("--conda-support")
+    if program.executionOptions.dockerSupport:
+        flags.append("--docker-support")
+    return flags
 
 
 class ProgramStatusResponse(BaseModel):
