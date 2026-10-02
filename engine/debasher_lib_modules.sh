@@ -347,7 +347,9 @@ debasher::load_debasher_module()
     debasher::_determine_full_module_name "$module"
     local fullmodname="${DEBASHER_RESOLVED_MODNAME}"
 
-    echo "Loading module $module (${fullmodname})..." >&2
+    if [ "${DEBASHER_QUIET_MODULE_LOADING:-0}" -ne 1 ]; then
+        echo "Loading module $module (${fullmodname})..." >&2
+    fi
 
     # Check that module file exists
     if [ -f "${fullmodname}" ]; then

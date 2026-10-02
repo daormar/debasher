@@ -415,6 +415,10 @@ declare -a DEBASHER_PROGRAM_MODULES
 # outermost first (see debasher::load_debasher_module)
 declare -a DEBASHER_MODULE_LOAD_STACK
 
+# Declare variable that, set to 1, makes debasher::load_debasher_module
+# load modules without saying so (see debasher_exec_process -q)
+DEBASHER_QUIET_MODULE_LOADING=0
+
 # Declare array to store, from the last module search, same-named
 # candidates found one level below a DEBASHER_MOD_DIR entry that were
 # rejected for not being a genuine DeBasher UI program directory (see

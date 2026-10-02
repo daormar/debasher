@@ -3,7 +3,7 @@ debasher_get_sched_out debasher_get_fifo_mirror debasher_stop		\
 debasher_status debasher_stats debasher_exec_process debasher_doc_mod	\
 debasher_proc_dataset debasher_reformat_status				\
 debasher_stop_resident debasher_reset_resident debasher_snapshot_resident	\
-debasher_inspect_resident
+debasher_inspect_resident debasher_test
 
 libexec_SCRIPTS= debasher_check_prg_files			\
 debasher_compare_opts debasher_solve_knapsack_greedy		\
@@ -25,7 +25,8 @@ debasher_lib_sched_procs debasher_lib_sched_rerun			\
 debasher_lib_sched_topo_sort debasher_lib_process_spec			\
 debasher_lib_processes debasher_lib_programs debasher_lib_modules	\
 debasher_lib_opts debasher_lib_mirror debasher_lib_conda		\
-debasher_lib_docker debasher_lib_resident_tools debasher_builtin_sched_lib
+debasher_lib_docker debasher_lib_resident_tools debasher_builtin_sched_lib \
+debasher_bats_helpers
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA)
 
@@ -52,7 +53,7 @@ debasher_launch_process.sh debasher_resolve_pfile.sh			\
 debasher_reformat_status.py						\
 debasher_solve_knapsack_greedy.py					\
 debasher_gen_knapsack_problem.py debasher_compare_opts.py		\
-debasher_gen_telegram_data.py
+debasher_gen_telegram_data.py debasher_test.sh debasher_bats_helpers.sh
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R
@@ -122,6 +123,8 @@ $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA): Makefile
 	echo "GROOVY=\"$(GROOVY)\"" >> $@
 	echo "JAVA=\"$(JAVA)\"" >> $@
 	echo "DOT=\"$(DOT)\"" >> $@
+	echo "BATS=\"$(BATS)\"" >> $@
+	echo "PYTEST=\"$(PYTEST)\"" >> $@
 	cat $< >> $@
 	chmod ugo+x $@
 
@@ -199,6 +202,12 @@ debasher_lib_docker: debasher_lib_docker.sh
 	rm -f $@
 	cat $< > $@
 	chmod ugo+x $@
+
+# Sourced into the shell of a bats test: no preamble, whose variables
+# (BASH among them) would change that shell
+debasher_bats_helpers: debasher_bats_helpers.sh
+	rm -f $@
+	cat $< > $@
 
 .py:
 	rm -f $@

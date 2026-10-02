@@ -460,6 +460,18 @@ do the entries below that refer to it.
   process; `debasher_reset_resident` removes it, so every clean start begins a
   new life.
 
+## Testing a node
+
+Node tests, business tests and the test runner are defined in the glossary of
+`doc/design_doc_engine.md`.
+
+- **node harness**: `debasher_runtime_testing`, the module of the runtime
+  library with which a node test builds a node without the engine and calls its
+  hooks (see "Testing a node without the engine").
+- **node under test**: what `load_node` of the node harness returns: a node
+  built with the options and ports that the test gives, fed with `feed`, whose
+  output `sent` gives.
+
 ## State variables, at a glance
 
 Several pieces of a node's bookkeeping go through the same three stages: a
@@ -940,9 +952,10 @@ thread), the checkpoints, and the startup sequence of `run()`, which restores
 the node and replays its log.
 
 The rest of this section starts with an overview of the class, then covers how
-a node is defined, its limits and how it observes the outside world, and ends
-with the pieces that make a node recoverable: state capture, startup, barrier
-propagation, ordered shutdown and checkpoint persistence.
+a node is defined, its limits and how it observes the outside world, then the
+pieces that make a node recoverable: state capture, startup, barrier
+propagation, ordered shutdown and checkpoint persistence. It closes with how a
+node test builds a node without the engine to check its business logic.
 
 ## Overview of the class
 
@@ -1064,7 +1077,12 @@ heredoc of a process of a resident program. The engine only checks, without
 importing anything, that the heredoc has a top-level class deriving from
 `FBPProcess` or `Supervisor` (`debasher::_classify_resident_process_role`). It
 never instantiates it: the heredoc itself creates the object, which parses the
-options of the process from `argv`, and calls `run()`.
+options of the process from `argv`, and calls `run()`. A heredoc may do so
+under `if __name__ == "__main__":`, which holds when the engine runs the
+heredoc, since `python3 -c` runs it as the main module, and the engine runs
+both forms. The node harness needs that condition: it runs the heredoc under
+another module name, to get the class without starting the node (see "Testing
+a node without the engine").
 
 A resident program has nodes only, and no sequential processes (see "Sequential
 processes" in `doc/design_doc_engine.md`): the engine refuses
@@ -1488,6 +1506,104 @@ state it had. `debasher_reset_resident` does it for the whole program (see
   messages is thus bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which
   also bounds what waits in its inbound queue, since every queued item is
   logged first.
+
+## Testing a node without the engine
+
+*Planned: designed, not built yet.*
+
+A node test (see "Business tests of a program" in `doc/design_doc_engine.md`)
+checks the business logic of a node: what it sends for what it receives, and
+that its node state brings it back to where it was. None of that needs FIFOs,
+envelopes, rounds or a `Supervisor`, so the test builds the class of the node
+in its own Python process, without the engine, and calls its hooks directly.
+The node harness, the module `debasher_runtime_testing` of the runtime
+library, does that for it. For the node `Accumulate` of the program
+`webui_running_sum`, which keeps the running sum of the numbers that arrive on
+its port `numbers` and sends each new sum on `outsum`:
+
+```python
+from debasher_runtime_testing import load_node
+
+
+def test_running_sum():
+    node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+    node.feed("numbers", 3)
+    node.feed("numbers", 4)
+    assert node.sent("outsum") == [3, 7]
+
+
+def test_restart_keeps_the_sum():
+    node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+    node.feed("numbers", 3)
+    node = node.restart()
+    node.feed("numbers", 4)
+    assert node.sent("outsum") == [7]
+```
+
+`load_node(process, opts=None, inputs=(), outputs=())` builds a node under
+test:
+
+- It takes the heredoc of `process` from the program file named by
+  `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`,
+  a tool that loads the module and prints what
+  `debasher::_get_resident_process_source` gives.
+- It parses the heredoc with Python's `ast` module and refuses one whose line
+  `<Name>().run()` is not under `if __name__ == "__main__":` (see "Defining a
+  node"). It then runs the heredoc under a module name of its own, so that the
+  class gets defined and the node does not start. Script generation of the web
+  UI writes the line under that condition, and so do the resident programs
+  that DeBasher ships.
+- It takes the one class of the heredoc that derives from a class of the
+  runtime library, as the engine requires, and refuses it when it derives from
+  `Supervisor`, `DirectoryWatcher` or `ProgramLauncher`: only a plain subclass
+  of `FBPProcess` can be tested.
+- It builds the node with its options injected, as the unit tests of the
+  runtime library do: `opts`, plus a placeholder value for each port, whose
+  FIFO is never opened. The ports are `inputs` and `outputs`, the names of
+  their options without the dash, which the harness gives the node as the
+  engine would, in `DEBASHER_PROCESS_PORTS` (see "Ports from the engine"). The
+  execdir of the node is a temporary directory.
+- It calls `initialize_runtime()`, as `run()` does before any thread starts.
+
+The test names the ports because the harness does not build the options of the
+program, which is what tells the engine which options of a process are ports.
+A test names only the ports whose traffic it checks: a control port, the port
+to the `Supervisor` and any port that the test leaves out are not ports of the
+node under test, and `send_data` on one of them fails, as it does for a port
+that a node does not have.
+
+A node under test offers:
+
+- `feed(port, packet)`: calls `process_data(port, packet)` on the calling
+  thread, marked as the brain thread is, so that `send_data` works during the
+  call and only then. The packet first makes a round trip through JSON, so that
+  the node gets what would arrive through a FIFO: a tuple arrives as a list.
+- `sent(port)`: the payloads that the node has sent on `port` since it was
+  built, decoded from the lines that `send_data` queued. The harness takes
+  each line off the outbound queue as soon as `process_data` returns, and
+  counts it as written, so the outbound backlog never fills, however many
+  packets a test feeds.
+- `restart()`: captures the node state and makes a round trip of it through
+  JSON, as a checkpoint does; builds a new node under test with the same
+  options and ports; restores the state into it and calls
+  `initialize_runtime()`, the order in which `run()` starts a relaunched node;
+  and returns the new node, whose `sent` starts empty. It raises when the new
+  node captures a node state other than the one it was restored from, since
+  recovery relies on that round trip.
+- `node`: the instance itself, for a test that looks at its attributes.
+
+In a node under test, `sleep()` returns at once, as it does while a node
+replays its input log: the pace of a node is not business logic. The node logs
+to its standard error as always, which pytest captures.
+
+The harness checks nothing of the framework: sequence numbers, rounds, the
+input log, `CLOSE`, the heartbeat and the limits of a node are left to the
+tests of the engine, and `observe()` never runs. It is part of the runtime
+library, and not of each node test, because it reaches into the internals of
+`FBPProcess`: it calls `process_data` the way the brain thread does, and it
+empties the outbound queues and the outbound backlog. A node test uses only
+the harness, so those internals can change without breaking the tests of the
+programs.
 
 # Input log
 
@@ -3787,3 +3903,11 @@ Design ideas from Future work move here once they are actually built.
   runs, observes and draws them is designed in "Resident programs in the web
   UI" of `doc/design_doc_webui.md`, and not built; the engine work that design
   relies on is listed above.
+- **The ports of a node under test from the program.** The node harness taking
+  the ports of a node from the options of the program, as the engine computes
+  them for a run, instead of from the test.
+- **The other node kinds under test.** A `DirectoryWatcher`, `observe()` and a
+  `ProgramLauncher` in the node harness.
+- **A restart of every node, with no test written for it.** The test runner
+  checking `restart()` on every node of a program; the harness would need the
+  options that the constructor of each node reads.

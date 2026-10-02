@@ -32,7 +32,7 @@ debasher_exec_process
 
 ::
 
-    $ debasher_exec_process <prgfile> <processname> [-- [<process_opts>]]
+    $ debasher_exec_process [-q] <prgfile> <processname> [-- [<process_opts>]]
 
 ``debasher_exec_process`` loads the module given by ``<prgfile>`` and
 executes a single one of its processes, ``<processname>``, directly in
@@ -45,7 +45,53 @@ mainly useful to debug a process implementation in isolation.
   it) and exits.
 
 * If ``--`` is given, everything after it is passed as the process's
-  own command line options, and the process is executed.
+  own command line options, and the process is executed. The tool
+  then exits with the exit status of the process.
+
+* ``-q`` drops the progress messages of the tool (such as the
+  ``Loading module ...`` lines), so that the standard error holds only
+  what the process and the module write, and the errors.
+
+debasher_test
+^^^^^^^^^^^^^
+
+::
+
+    $ debasher_test <prgdir>
+
+``debasher_test`` runs the business tests of a program: tests of what
+each process does with the values of its options, run on its own
+with ``debasher_exec_process``, outside any run. It applies to a
+program in a directory of its own, ``<prgdir>``, whose base name
+``<name>`` is also the name of its program file, ``<name>.sh`` (the
+layout of every program that the web UI creates). The tests are the
+files ``<prgdir>/test/*.bats``, which the tool runs with bats.
+
+A test loads the helper library whose path the tool exports as
+``DEBASHER_BATS_HELPERS``, and runs a process with
+``debasher_process <processname> [<process_opts>]``. Since no output
+directory is involved, the test gives every option the process reads,
+with the files it writes placed under the temporary directory of the
+test. For example, for a process ``greet`` that writes a greeting
+into the file given by ``-outf``::
+
+    load "${DEBASHER_BATS_HELPERS}"
+
+    @test "greet writes the greeting into its file" {
+        run debasher_process greet -text Ann -secs 0 \
+            -outf "${BATS_TEST_TMPDIR}/greeting.txt"
+        [ "${status}" -eq 0 ]
+        [ "$(cat "${BATS_TEST_TMPDIR}/greeting.txt")" = "Hello, Ann!" ]
+    }
+
+The exit status of ``debasher_test`` is 0 when every test passed, 1
+when a test failed, 2 when the tests could not be run (for instance,
+``<prgdir>`` has no program file, or bats is not installed) and 77
+when the program has no tests. ``DEBASHER_BATS`` gives the bats to run
+instead of the one found when DeBasher was configured. Running the
+tests writes nothing into ``<prgdir>``. The program
+``webui_batch_greet``, installed under
+``<prefix>/share/debasher/webui_programs``, carries an example.
 
 debasher_proc_dataset
 ^^^^^^^^^^^^^^^^^^^^^^

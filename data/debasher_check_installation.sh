@@ -111,6 +111,73 @@ check_program_file()
 }
 
 ########
+# Runs debasher_test on the program directory `prgdir`, which passes when
+# every test passes or the program has none. The check is skipped when
+# configure did not find the tool of a kind of test that the program has.
+check_business_tests()
+{
+    local tmpdir=$1
+    local prgdir=$2
+    local name=$("${BASENAME}" "${prgdir}")
+
+    local tool
+    for tool in bats pytest; do
+        local pattern="*.bats" path="${BATS}"
+        if [ "${tool}" = "pytest" ]; then
+            pattern="test_*.py"
+            path="${PYTEST}"
+        fi
+        if [ -z "${path}" ] && [ -n "$("${FIND}" "${prgdir}/test" -maxdepth 1 -name "${pattern}" 2> /dev/null)" ]; then
+            echo "## Checking the business tests of ${name} ... Skipped (${tool} not found)"
+            echo ""
+            return 2
+        fi
+    done
+
+    echo -n "## Checking the business tests of ${name} ... "
+    local test_out="${tmpdir}/${name}_test.out"
+    "${debasher_bindir}/debasher_test" "${prgdir}" > "${test_out}" 2>&1
+    case $? in
+        0)
+            echo "OK"
+            echo ""
+            return 0
+            ;;
+        77)
+            echo "OK (no tests)"
+            echo ""
+            return 0
+            ;;
+        *)
+            echo "Failed"
+            echo ""
+            return 1
+            ;;
+    esac
+}
+
+########
+# Checks that debasher_test refuses the directory `dir`, which is not a
+# program directory, with the status of tests that could not be run
+check_business_tests_refused()
+{
+    local tmpdir=$1
+    local dir=$2
+
+    echo -n "## Checking that debasher_test refuses a directory that is not a program directory ... "
+    "${debasher_bindir}/debasher_test" "${dir}" > "${tmpdir}/debasher_test_refused.out" 2>&1
+    if [ $? -eq 2 ]; then
+        echo "OK"
+        echo ""
+        return 0
+    else
+        echo "Failed"
+        echo ""
+        return 1
+    fi
+}
+
+########
 # Waits up to `seconds` for debasher_status to report every process of the
 # run in `outdir` with the status counted by `field` in its summary
 # ("inprogress" or "finished"), keeping its last output in `status_out`.
@@ -937,6 +1004,32 @@ case $? in
         ((checks_timedout++))
         ;;
 esac
+
+# Checks of the business tests of the programs built with the web UI,
+# which debasher_test runs on each program as installed
+echo "# Checks of the business tests"
+echo ""
+
+for prgdir in "${debasher_datadir}"/webui_programs/*/; do
+    check_business_tests "${tmpdir}" "${prgdir%/}"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        2)
+            ((checks_skipped++))
+            ;;
+    esac
+done
+
+if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
+    ((checks_passed++))
+else
+    ((checks_failed++))
+fi
 
 # Check execution using SLURM if available: SBATCH is the name of the tool,
 # looked for in the PATH when the program runs, as the engine does
