@@ -283,6 +283,98 @@ def test_a_tool_with_a_temporary_output_file_leaves_no_file_behind(tmp_path, mon
     assert list(tmp_path.iterdir()) == []
 
 
+def test_a_tool_that_does_not_end_in_time_is_killed_with_what_it_started(tmp_path, monkeypatch):
+    monkeypatch.setattr(tool_sessions.tempfile, "tempdir", str(tmp_path))
+    child_pid = tmp_path / "child.pid"
+    script = (
+        f"sleep 300 & echo $! > {child_pid}\n"
+        "echo started\n"
+        "wait\n"
+    )
+
+    with pytest.raises(tool_sessions.ToolTimedOut) as excinfo:
+        tool_sessions.run_with_temp_output(["sh", "-c", script], dict(os.environ), timeout=1)
+
+    assert excinfo.value.output == "started\n"
+    pid = int(child_pid.read_text())
+    deadline = time.monotonic() + 5
+    while _is_alive(pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _is_alive(pid)
+    assert [p for p in tmp_path.iterdir() if p.name.startswith("debasher_webui_")] == []
+
+
+def _is_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    # A zombie is dead too: what matters is that it no longer runs
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().split()[2] != "Z"
+    except FileNotFoundError:
+        return True
+
+
+# --- /run-tests -------------------------------------------------------------------
+
+
+def _fake_debasher_test(tmp_path, monkeypatch, body):
+    tool = tmp_path / "debasher_test"
+    tool.write_text(f"#!/bin/sh\n{body}\n")
+    tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setattr(paths, "find_bin_tool", lambda name: tool if name == "debasher_test" else None)
+    monkeypatch.setattr(execution.run_guard, "refuse_while_running", lambda *args: None)
+
+
+@pytest.mark.parametrize(
+    "exit_code, outcome",
+    [(0, "passed"), (1, "failed"), (77, "noTests"), (2, "notRun"), (127, "notRun")],
+)
+def test_the_outcome_of_the_tests_comes_from_the_exit_status(tmp_path, monkeypatch, exit_code, outcome):
+    _fake_debasher_test(tmp_path, monkeypatch, f'echo "tests of $1"\nexit {exit_code}')
+    program = _general(tmp_path)
+
+    response = execution.run_tests(program)
+
+    assert response.outcome == outcome
+    assert response.output == f"tests of {Path(program.homeDir).resolve()}\n"
+
+
+def test_the_tests_run_the_program_as_it_is_saved_first(tmp_path, monkeypatch):
+    _fake_debasher_test(tmp_path, monkeypatch, 'cat "$1/gen.sh" > /dev/null && echo saved')
+    program = _general(tmp_path)
+
+    response = execution.run_tests(program)
+
+    assert response.output == "saved\n"
+    assert response.revision == 1
+    assert persistence.load_program(program.homeDir).revision == 1
+
+
+def test_a_long_test_report_keeps_its_end(tmp_path, monkeypatch):
+    _fake_debasher_test(tmp_path, monkeypatch, "seq 1 20\necho summary\nexit 1")
+    monkeypatch.setattr(execution.file_inspection, "MAX_INSPECT_LINES", 5)
+    program = _general(tmp_path)
+
+    output = execution.run_tests(program).output
+
+    assert output.splitlines()[-5:] == ["17", "18", "19", "20", "summary"]
+    assert "showing only the last 5" in output
+
+
+def test_tests_that_do_not_end_in_time_are_reported(tmp_path, monkeypatch):
+    _fake_debasher_test(tmp_path, monkeypatch, "echo running\nsleep 300")
+    monkeypatch.setattr(execution, "RUN_TESTS_TIMEOUT_SECS", 1)
+    program = _general(tmp_path)
+
+    response = execution.run_tests(program)
+
+    assert response.outcome == "timedOut"
+    assert response.output == "running\n"
+
+
 # --- program state --------------------------------------------------------------
 
 

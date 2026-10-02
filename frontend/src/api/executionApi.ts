@@ -120,6 +120,46 @@ export async function checkLaunch(program: Program): Promise<LaunchCheckResult> 
   return response.json();
 }
 
+// What "Run tests" reports, from the exit status of debasher_test (see
+// "Running the tests" in doc/design_doc_webui.md).
+export type TestOutcome = "passed" | "failed" | "noTests" | "notRun" | "timedOut";
+
+// What each test outcome tells the user, in the editor and to an agent.
+export const TEST_OUTCOME_MESSAGES: Record<TestOutcome, string> = {
+  passed: "Every test passed.",
+  failed: "Some tests failed.",
+  noTests: 'The program has no tests: "Add test", in the context menu of a process, writes a first one.',
+  notRun: "The tests could not be run.",
+  timedOut: "The tests did not end in time, and were stopped.",
+};
+
+// What "Run tests" answers: the test outcome, the reports of bats and pytest,
+// and the revision of the program metadata saved before the tests ran.
+export interface TestRun {
+  outcome: TestOutcome;
+  output: string;
+  revision: number;
+}
+
+// "Run tests": the business tests of the program, in its home directory,
+// after saving it. Refused while there is a run in progress.
+export async function runTests(program: Program): Promise<TestRun> {
+  const response = await fetch("/api/execution/run-tests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(program),
+  });
+
+  await throwIfRevisionConflict(response);
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to run the tests (${response.status})`));
+  }
+
+  const { outcome, output, revision } = await response.json();
+  return { outcome, output, revision };
+}
+
 // "Validate program" (debasher_exec --validate): everything but launching
 // the processes, and, with the built-in scheduler, the resources of each
 // process against its limits.

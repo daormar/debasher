@@ -46,9 +46,11 @@ disk, and "Execution and observation" how it runs a program and follows it.
 "Sequential processes in the web UI" describes how a program keeps the
 sequential processes of its module. "Guarantees and non-goals" gathers the
 guarantees stated along the way. "Resident programs in the web UI" designs the
-extension to resident programs, and says which parts of it are built. "Editing
-a program from an agent: the MCP server" describes a second client of the
-backend, for AI agents, and "Future work" lists what is known to be missing.
+extension to resident programs, and says which parts of it are built. "Business
+tests in the web UI" describes how the web UI runs the tests of a program and
+writes a first test for a process. "Editing a program from an agent: the MCP
+server" describes a second client of the backend, for AI agents, and "Future
+work" lists what is known to be missing.
 
 # Glossary
 
@@ -245,6 +247,20 @@ refer to it.
   a fanout family, whose other end is an external end in the sense of the
   engine, left to someone outside the program, such as a person using "Talk to
   FIFOs".
+
+## Business tests
+
+See "Business tests in the web UI". The business tests themselves, the program
+directory, the test directory, process tests, node tests, the node harness, the
+test helpers and the test runner are defined in the glossary of
+`doc/design_doc_engine.md`.
+
+- **test outcome**: what "Run tests" reports, from the exit status of the test
+  runner, or `timedOut` when the wait runs out: `passed`, `failed`, `noTests`,
+  `notRun` or `timedOut`.
+- **test skeleton**: the file that "Add test" writes for a process: a process
+  test or a node test whose placeholders the user fills in, and which fails
+  until the user removes the line that makes it fail.
 
 ## The MCP server
 
@@ -931,7 +947,8 @@ a list so that it needs no change when the engine grows.
 
 The program files panel (`routers/program_files.py`) shows and manages the
 user files: it lists the tree, shows a text file (up to a fixed number of
-lines, and not a binary one), edits an existing file, creates a directory,
+lines, and not a binary one), edits an existing file (and, for "Add test" and
+the MCP server, creates a new one, see "Adding a test"), creates a directory,
 deletes, renames or moves an entry, and uploads files of any type, which is
 also how the script of an `ext_alias` reaches a program that was not imported.
 It keeps three guarantees:
@@ -2776,6 +2793,130 @@ too.
 - **Changing the period of the snapshots of a live program.** A new period
   applies from the next launch.
 
+# Business tests in the web UI
+
+A program can carry business tests: tests of what each of its processes does
+with the values of its options, run on its own, outside any run (see "Business
+tests of a program" in `doc/design_doc_engine.md`). The home directory of a
+program of the web UI is a program directory for the engine, whatever its name,
+since the program metadata names the generated script, so its tests are user
+files under `test/` in the home directory, which the program files panel
+shows and edits. The web UI adds two things on top: it runs the tests
+of the program and shows their result, and it writes a test skeleton for a
+process, so that a test does not start from an empty file. The MCP server
+offers both to an agent, together with the reading and writing of user files,
+so that an agent that writes a process can also write its tests.
+
+## Running the tests
+
+"Run tests", in the Run menu, runs the tests of the program in its home
+directory. Like "Validate program", it saves the program first, with its
+revision (see "Revisions of the program metadata"), so that the tests run the
+program as it is in the editor: a test reads the generated script, never the
+program model. The backend (`/run-tests`) then runs
+`debasher_test <home directory>` in a session of its own (`tool_sessions.py`),
+with the environment of a run of the program (its `DEBASHER_MOD_DIR`, see
+"Environment variables of a program"), and waits for it.
+
+"Run tests" is refused while there is a run in progress, by the frontend, which
+disables it, and by the backend, with the check of a save (see "The home
+directory"). A save is refused during a run, so a test run then could only test
+what was saved before, which may not be what the editor shows; and a program
+whose run lasts days is better tested once it is stopped than against a script
+that the run may not be running.
+
+The tests of a program are meant to be quick, so the backend waits for them
+within the request, as it does for a validation, rather than starting them in
+the background and following them. The wait is bounded: after
+`RUN_TESTS_TIMEOUT_SECS` (ten minutes) the backend kills the process group of
+`debasher_test`, which its own session makes it the leader of, so that no test
+is left running.
+
+The answer gives an outcome, from the exit status of `debasher_test`, and its
+output, the reports of bats and pytest. The output is capped to the same number
+of lines as that of a validation, but keeping its last lines, since the summary
+of a report comes at its end:
+
+- `passed` (0), every test passed;
+- `failed` (1), a test failed, or bats or pytest could not load a test file;
+- `noTests` (77), the program has no test files, with a hint that "Add test"
+  writes a first one (`add_test`, for an agent);
+- `notRun` (2, or any other status), the tests could not be run, for example
+  because bats or pytest is missing from the machine of the backend, or the
+  home directory is not a program directory that the test runner
+  understands. A backend that cannot find `debasher_test` refuses the request
+  instead;
+- `timedOut`, the wait ran out.
+
+The frontend shows them in the dialog that shows the output of a validation,
+with the outcome as its message.
+
+## Adding a test
+
+"Add test", in the context menu of a process, writes a test skeleton for that
+process into the test directory and opens it in the program files panel:
+
+- for a process of a general program, `test/<process>.bats`, a process test;
+- for a node whose node kind is `FBPProcess`, `test/test_<process>.py`, a node
+  test, with every dot of a qualified name turned into an underscore, since
+  pytest imports a test file as a module and a dot would make its name a
+  package path.
+
+It is not offered on a `Supervisor`, a `DirectoryWatcher` or a
+`ProgramLauncher`, which the node harness does not build (see "Testing a node
+without the engine" in `doc/design_doc_resident.md`). When the file already
+exists, "Add test" opens it and writes nothing, so that a test the user wrote
+is never lost. It needs a program that has been saved, since the file goes into
+its home directory, and it writes the skeleton from the program as it is in the
+editor, without saving it.
+
+A test skeleton is written from the options of the process, by a function of
+the program model (`frontend/src/models/testSkeleton.ts`), so that the MCP
+server writes the same one:
+
+- A process test loads the test helpers and runs the process with
+  `debasher_process`, giving each of its options but the flags, in the order of
+  the process, one per line: an output option a path under the temporary
+  directory of the test, named after its label, and any other input a
+  placeholder, `TODO`. A comment above the command lists the description of
+  each option, and the flags, which the user adds to the command if the test
+  needs them, since a line commented out in the middle of a command split over
+  several lines would end it there. The test then checks that the process
+  ended with status 0.
+- A node test builds the node with `load_node`, naming as its inputs the
+  business inputs and the external inputs of the node and as its outputs its
+  business outputs (see "The program model of a resident program"), and lists
+  in a comment the configuration options that `opts` could give. One test feeds
+  a placeholder packet on the first input and checks what the first output
+  sent; another restarts the node after it.
+
+A skeleton is a starting point, not a test, and it says so by failing: each of
+its tests ends with a line that fails on purpose (`false` in bats,
+`pytest.fail(...)` in pytest), with a comment telling the user to write the
+checks of the test and then remove it. A placeholder alone could not promise
+that, since a process may accept any value and end with status 0, so "Run
+tests" never reports a skeleton as a test that passes.
+
+The file is written through the program files of the backend, whose
+`/write-content` creates a file that does not exist when the request says
+`create`, with the directories above it, keeping the guarantees of the program
+files panel (see "Reserved names and user files"); without `create` it writes
+only a file that exists. After "Add test", the program files panel
+reads the tree again, since it holds no other notice of a file written outside
+it.
+
+## Business tests from the MCP server
+
+The MCP server offers the same operations as MCP tools (see "The MCP tools"):
+`run_tests`, with the outcome and the last lines of the output; `add_test`,
+which writes the same test skeleton under the same name, refuses a file that
+exists, and answers its path and content; and, for an agent to write tests
+and the files that they read, `list_program_files`, `read_program_file` and
+`write_program_file`, over the program files of the backend. The last one
+creates or replaces a user file, with the directories above it. The backend
+refuses, for the MCP server as for the panel, a reserved name, a path that
+leaves the home directory and the generated script.
+
 # Editing a program from an agent: the MCP server
 
 The MCP server offers to an agent, such as Claude Code, what the editor offers
@@ -2957,6 +3098,9 @@ error.
   on the nodes on which the canvas offers them; and `list_fifos`, `write_fifo`
   and `read_fifo`, which talk to the FIFOs that "Talk to FIFOs" offers, with
   its rules (see "Observing and talking to a live program").
+- **Business tests and user files.** `run_tests`, `add_test`,
+  `list_program_files`, `read_program_file` and `write_program_file` (see
+  "Business tests from the MCP server").
 
 The MCP tools keep the guards of the editor through the backend, not by
 repeating them: the backend refuses a second run on an output directory, the two
@@ -2988,6 +3132,12 @@ backend's own tests.
 
 # Future work
 
+- **Deleting user files from the MCP server.** An MCP tool that deletes or
+  moves a user file, as the program files panel does; an agent can write tests
+  and the files that they read, but not remove them.
+- **The result of each test.** "Run tests" shows the reports of bats and
+  pytest as text; parsing them would let the canvas mark the processes whose
+  tests fail.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what

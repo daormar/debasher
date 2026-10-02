@@ -78,16 +78,20 @@ export async function createFolder(
   return entries;
 }
 
+// Writes the content of a user file. Without `create`, only a file that
+// exists, as the panel's editor does; with it, also a new file, with the
+// directories above it, as "Add test" and the MCP server do.
 export async function writeFileContent(
   homeDir: string,
   programName: string,
   path: string,
-  content: string
+  content: string,
+  create = false
 ): Promise<FileEntry[]> {
   const response = await fetch("/api/program-files/write-content", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ homeDir, programName, path, content }),
+    body: JSON.stringify({ homeDir, programName, path, content, create }),
   });
 
   if (!response.ok) {

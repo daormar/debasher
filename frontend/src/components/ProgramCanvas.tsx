@@ -74,6 +74,9 @@ import BatchRunsModal from "./BatchRunsModal";
 import ProcessIOModal from "./ProcessIOModal";
 import FifoWatchModal from "./FifoWatchModal";
 import ProgramFilesPanel from "./ProgramFilesPanel";
+import type { OpenFileRequest } from "./ProgramFilesPanel";
+import { getFileContent, writeFileContent } from "../api/programFilesApi";
+import { offersAddTest, testFilePath, testSkeleton } from "../models/testSkeleton";
 import CanvasLegend from "./CanvasLegend";
 
 const OUTPUT_KIND_LABEL: Record<ProcessOutputKind, string> = {
@@ -384,6 +387,10 @@ export default function ProgramCanvas() {
   // Right-click "Inspect execution" menu, see ProcessContextMenu.
   const [processContextMenu, setProcessContextMenu] =
     useState<{ process: ProgramProcess; x: number; y: number } | null>(null);
+
+  // The file that the program files panel is asked to open, after "Add test"
+  const [filesPanelRequest, setFilesPanelRequest] =
+    useState<OpenFileRequest | null>(null);
 
   const [isProcessOutputPending, setProcessOutputPending] =
     useState(false);
@@ -779,6 +786,32 @@ export default function ProgramCanvas() {
 
   }
 
+  // "Add test": writes the test skeleton of the process, unless its file
+  // exists, which is never overwritten, and opens the file in the program
+  // files panel.
+  async function handleAddTest(process: ProgramProcess) {
+
+    setProcessContextMenu(null);
+
+    const title = `${process.name}: add test`;
+    if (!program.homeDir.trim()) {
+      setProcessCommandOutput({ title, output: "Save the program before adding a test." });
+      return;
+    }
+
+    const path = testFilePath(program, process);
+    try {
+      const existing = await getFileContent(program.homeDir, path);
+      if (existing.kind === "missing") {
+        await writeFileContent(program.homeDir, program.name, path, testSkeleton(program, process), true);
+      }
+      setFilesPanelRequest({ path, nonce: Date.now() });
+    } catch (err) {
+      setProcessCommandOutput({ title, output: err instanceof Error ? err.message : "Failed to add the test." });
+    }
+
+  }
+
   // The inspection actions of a node of a resident program, enabled once the
   // node has been launched, whatever the run phase.
   function residentInspectionsOf(process: ProgramProcess): ResidentInspection[] {
@@ -896,7 +929,7 @@ export default function ProgramCanvas() {
         <MiniMap />
 
         <Panel position="top-left">
-          <ProgramFilesPanel />
+          <ProgramFilesPanel openRequest={filesPanelRequest} />
         </Panel>
 
         <Panel position="top-right">
@@ -936,6 +969,11 @@ export default function ProgramCanvas() {
           onSelect={handleProcessMenuSelect}
           onClose={() => setProcessContextMenu(null)}
           nodeActions={nodeActionsOf(processContextMenu.process)}
+          onAddTest={
+            offersAddTest(program, processContextMenu.process)
+              ? () => handleAddTest(processContextMenu.process)
+              : undefined
+          }
           canvasAction={
             program.programType === "resident" &&
             processContextMenu.process.nodeKind === "Supervisor"

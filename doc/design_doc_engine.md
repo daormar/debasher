@@ -2085,10 +2085,6 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Business tests in the web UI and the MCP server.** A command of the web UI
-  that runs the tests of the program being edited and shows their results, and
-  a tool of the MCP server that does the same, so that an agent that writes a
-  process can also write its tests and run them.
 - **Conda and Docker in process tests.** Running a process test in the Conda
   environments and Docker images of the process, as a run does.
 - **Choosing the tests to run.** Giving the test runner the test files, or a

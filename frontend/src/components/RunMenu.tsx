@@ -6,7 +6,7 @@ import {
   takeSnapshot,
 } from "../api/executionApi";
 import type { RunProgramResult } from "../api/executionApi";
-import { LaunchRecordConflict } from "../api/executionApi";
+import { LaunchRecordConflict, TEST_OUTCOME_MESSAGES } from "../api/executionApi";
 import { useProgram } from "../store/ProgramContext";
 import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
@@ -25,6 +25,7 @@ const MENU_ITEMS = [
   "Set program options",
   "Check program options",
   "Validate program",
+  "Run tests",
   "Run program",
   "Get program status",
   "Stop program",
@@ -55,6 +56,7 @@ const ACTS_ON_PROGRAM = new Set<MenuItem>([
   "Set output directory",
   "Check program options",
   "Validate program",
+  "Run tests",
   "Run program",
   "Stop program",
   "Kill program",
@@ -86,12 +88,14 @@ const GENERAL_ONLY = new Set<MenuItem>([
 const REQUIRES_HOME_DIR = new Set<MenuItem>([
   "Check program options",
   "Validate program",
+  "Run tests",
   "Run program",
 ]);
 
 const PENDING_LABELS: Partial<Record<MenuItem, string>> = {
   "Check program options": "Checking...",
   "Validate program": "Validating...",
+  "Run tests": "Running tests...",
   "Run program": "Launching...",
   "Get program status": "Getting status...",
   "Stop program": "Stopping...",
@@ -113,6 +117,7 @@ export default function RunMenu() {
     startProgramRun,
     validateProgram,
     checkProgramOptions,
+    runTests,
     resetOutputDir,
     residentPhase,
     stopRun,
@@ -270,6 +275,25 @@ export default function RunMenu() {
       setActionError(
         err instanceof Error ? err.message : `Failed to ${item.toLowerCase()}.`
       );
+    } finally {
+      setPendingAction(null);
+    }
+
+  }
+
+  // "Run tests" shows the reports of the tests, with the test outcome as the
+  // message of the dialog.
+  async function handleRunTests() {
+
+    setPendingAction("Run tests");
+    setActionError(null);
+
+    try {
+      const { outcome, output } = await runTests();
+      setCommandOutput({ title: "Run tests", message: TEST_OUTCOME_MESSAGES[outcome], output });
+      setOpen(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to run the tests.");
     } finally {
       setPendingAction(null);
     }
@@ -450,6 +474,8 @@ export default function RunMenu() {
       runOutputAction(item, "Check program options", checkProgramOptions);
     } else if (item === "Validate program") {
       runOutputAction(item, "Validate program", validateProgram);
+    } else if (item === "Run tests") {
+      handleRunTests();
     } else if (item === "Run program") {
       handleRunProgram();
     } else if (item === "Get program status") {
@@ -553,6 +579,9 @@ export default function RunMenu() {
                 // Both save the generated script, which the processes of
                 // a run read again each time one starts.
                 (item === "Validate program" && isRunInProgress) ||
+                // The tests run the program as saved, and a save is refused
+                // during a run.
+                (item === "Run tests" && isRunInProgress) ||
                 (item === "Check program options" && isRunInProgress) ||
                 // Nothing else acts on the program while this tab
                 // launches, stops or kills it.

@@ -203,14 +203,20 @@ class WriteContentRequest(BaseModel):
     programName: str
     path: str
     content: str
+    # Whether a file that does not exist is created, with the directories
+    # above it, as "Add test" and the MCP server need; without it, only an
+    # existing file is written, as the panel's editor does.
+    create: bool = False
 
 
 @router.post("/write-content", response_model=FileTreeResponse)
 def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
     """
     Overwrites an existing file's content, for the panel's in-place
-    editor. Refuses the protected `<programName>.sh` and any path that
-    doesn't already name a file: this isn't a way to create one.
+    editor, or, with `create`, also creates a file that does not exist,
+    with the directories above it. Refuses the protected
+    `<programName>.sh`, and, without `create`, any path that doesn't
+    already name a file. A path that names a directory is always refused.
     """
     if not request.path:
         raise HTTPException(status_code=400, detail="path must not be empty")
@@ -226,10 +232,13 @@ def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
             status_code=400, detail="Cannot edit the program's generated script"
         )
 
-    if not target.is_file():
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail=f"{request.path!r} is a directory")
+    if not target.is_file() and not request.create:
         raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
 
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(request.content)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Could not write {request.path!r}: {e}")

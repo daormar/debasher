@@ -161,7 +161,20 @@ function FileTreeNode({ entry, depth, expanded, selectedPath, onToggle, onSelect
 
 }
 
-export default function ProgramFilesPanel() {
+// A request, from outside the panel, to open it on a file it may not know
+// of yet, such as the test skeleton that "Add test" has just written: a new
+// request each time, even for the same path, so that a second "Add test" on
+// the same process opens the file again.
+export interface OpenFileRequest {
+  path: string;
+  nonce: number;
+}
+
+interface Props {
+  openRequest?: OpenFileRequest | null;
+}
+
+export default function ProgramFilesPanel({ openRequest = null }: Props) {
 
   const { program } = useProgram();
 
@@ -228,6 +241,30 @@ export default function ProgramFilesPanel() {
     // elsewhere in the app.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // The panel holds no other notice of a file written outside it, so it
+  // reads the tree again before it shows the file, with every directory
+  // above it expanded.
+  useEffect(() => {
+    if (!openRequest) {
+      return;
+    }
+    const { path } = openRequest;
+    setOpen(true);
+    void (async () => {
+      await refresh();
+      setExpanded(current => {
+        const next = new Set(current);
+        for (let dir = parentOf(path); dir; dir = parentOf(dir)) {
+          next.add(dir);
+        }
+        return next;
+      });
+      await handleSelect({ name: nameOf(path), path, type: "file", readonly: false, children: null });
+    })();
+    // Only a new request opens a file, not a change of what the panel shows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   const selectedEntry =
     selectedPath ? findEntry(tree, selectedPath) : null;

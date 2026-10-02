@@ -11,6 +11,7 @@ import {
   runProgram,
   stopProgram,
   checkProgramOptions as requestOptionsCheck,
+  runTests as requestTests,
   validateProgram as requestValidation,
 } from "../api/executionApi";
 import type { GeneralRunTracking } from "../models/generalRun";
@@ -131,6 +132,13 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
   async function checkProgramOptions() {
     const { output } = await writeProgram(() => requestOptionsCheck(program));
     return output;
+  }
+
+  // "Run tests", which saves the program before debasher_test runs its
+  // tests; answers with the test outcome and the reports of the tests.
+  async function runTests() {
+    const { outcome, output } = await writeProgram(() => requestTests(program));
+    return { outcome, output };
   }
 
   function stopRun() {
@@ -284,6 +292,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     startProgramRun,
     validateProgram,
     checkProgramOptions,
+    runTests,
     stopRun,
     killResidentProgram,
     resetOutputDir,

@@ -410,6 +410,95 @@ describe("talking to a resident program", () => {
 
 });
 
+describe("business tests and user files", () => {
+
+  // The user files of the home directory, kept as the program files of the
+  // backend keep them, with its refusal of the generated script.
+  function withFiles(files: Record<string, string>, changes: Partial<Program> = {}) {
+    const writes: { path: string; create: boolean }[] = [];
+    const backend = fakeBackend([program(changes)], {
+      getFileContent: async (_homeDir: string, path: string) =>
+        path in files ? { kind: "file" as const, content: files[path] } : { kind: "missing" as const },
+      writeFileContent: async (_homeDir: string, programName: string, path: string, content: string, create = false) => {
+        if (path === `${programName}.sh`) {
+          throw new Error("Cannot edit the program's generated script");
+        }
+        files[path] = content;
+        writes.push({ path, create });
+        return [];
+      },
+      getFileTree: async () => [
+        { name: "p.sh", path: "p.sh", type: "file" as const, readonly: true, children: null },
+        {
+          name: "test", path: "test", type: "dir" as const, readonly: false,
+          children: [{ name: "a.bats", path: "test/a.bats", type: "file" as const, readonly: false, children: null }],
+        },
+      ],
+    });
+    return { backend, files, writes };
+  }
+
+  it("runs the tests after saving the program, and says their outcome", async () => {
+    let tested: Program | null = null;
+    const backend = fakeBackend([program()], {
+      runTests: async (sent: Program) => {
+        tested = sent;
+        return { outcome: "failed" as const, output: "not ok 1 a works\n", revision: 2 };
+      },
+    });
+
+    const answer = await text(backend, "run_tests", { home_dir: HOME });
+
+    expect(answer).toContain("Some tests failed.");
+    expect(answer).toContain("not ok 1 a works");
+    expect(tested!.homeDir).toBe(HOME);
+  });
+
+  it("writes the test skeleton of a process", async () => {
+    const { backend, files, writes } = withFiles({});
+
+    const answer = await text(backend, "add_test", { home_dir: HOME, process: "a" });
+
+    expect(writes).toEqual([{ path: "test/a.bats", create: true }]);
+    expect(files["test/a.bats"]).toContain("run debasher_process a");
+    expect(answer).toContain("Wrote test/a.bats");
+  });
+
+  it("never overwrites a test that exists", async () => {
+    const { backend, writes } = withFiles({ "test/a.bats": "mine" });
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "a" })).rejects.toThrow("test/a.bats exists");
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses a node that the node harness does not build", async () => {
+    const sup = { ...process("Sup", []), nodeKind: "Supervisor" as const };
+    const { backend } = withFiles({}, { programType: "resident", processes: [sup] });
+
+    await expect(call(backend, "add_test", { home_dir: HOME, process: "Sup" })).rejects.toThrow("node harness");
+  });
+
+  it("lists, reads and writes the user files", async () => {
+    const { backend, files } = withFiles({ "test/a.bats": "@test x {}" });
+
+    expect(await text(backend, "list_program_files", { home_dir: HOME }))
+      .toBe("p.sh (generated script, read-only)\ntest/\n  a.bats");
+    expect(await text(backend, "read_program_file", { home_dir: HOME, path: "test/a.bats" })).toBe("@test x {}");
+    await expect(call(backend, "read_program_file", { home_dir: HOME, path: "nope" })).rejects.toThrow("does not exist");
+
+    await text(backend, "write_program_file", { home_dir: HOME, path: "test/data/in.txt", content: "1 2" });
+    expect(files["test/data/in.txt"]).toBe("1 2");
+  });
+
+  it("refuses to write the generated script, as the backend does", async () => {
+    const { backend } = withFiles({});
+
+    await expect(call(backend, "write_program_file", { home_dir: HOME, path: "p.sh", content: "" }))
+      .rejects.toThrow("generated script");
+  });
+
+});
+
 describe("the MCP server", () => {
 
   async function connected(backend: Backend) {

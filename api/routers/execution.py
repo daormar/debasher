@@ -33,6 +33,9 @@ router = APIRouter(prefix="/api/execution", tags=["execution"])
 # correctly).
 ProgramState = Literal["finished", "in-progress", "unfinished"]
 
+# What "Run tests" reports (see "Running the tests" in doc/design_doc_webui.md)
+TestOutcome = Literal["passed", "failed", "noTests", "notRun", "timedOut"]
+
 _STATE_BY_EXIT_CODE: dict[int, ProgramState] = {
     0: "finished",
     run_guard.STATUS_IN_PROGRESS: "in-progress",
@@ -48,6 +51,20 @@ def _cap_lines(text: str, max_lines: int = file_inspection.MAX_INSPECT_LINES) ->
         f"Warning: output has more than {max_lines} lines, "
         f"showing only the first {max_lines}.\n\n"
     ) + "".join(lines[:max_lines])
+
+
+def _cap_tail_lines(text: str) -> str:
+    """As _cap_lines, keeping the last lines instead of the first: the
+    summary of a test report comes at its end."""
+    max_lines = file_inspection.MAX_INSPECT_LINES
+    lines = text.splitlines(keepends=True)
+    if len(lines) <= max_lines:
+        return text
+
+    return (
+        f"Warning: output has more than {max_lines} lines, "
+        f"showing only the last {max_lines}.\n\n"
+    ) + "".join(lines[-max_lines:])
 
 
 def _debasher_env(program: Program) -> dict[str, str]:
@@ -536,6 +553,49 @@ def validate_program(program: Program) -> ValidateProgramResponse:
     run_guard.refuse_while_running(program, "validate the program", program.homeDir)
     output, revision = _run_debasher_exec(program, "--validate")
     return ValidateProgramResponse(output=output, revision=revision)
+
+
+# How long /run-tests waits for the test runner: business tests are meant
+# to be quick, and a wait without end would hold the request for ever.
+RUN_TESTS_TIMEOUT_SECS = 600
+
+# The test outcome of each exit status of debasher_test; any other status
+# means that the tests could not be run.
+_TEST_OUTCOMES: dict[int, TestOutcome] = {0: "passed", 1: "failed", 77: "noTests"}
+
+
+class RunTestsResponse(BaseModel):
+    outcome: TestOutcome
+    output: str
+    # The revision of the program metadata written before running the tests.
+    revision: int
+
+
+@router.post("/run-tests", response_model=RunTestsResponse)
+def run_tests(program: Program) -> RunTestsResponse:
+    """
+    Run the business tests of a program (debasher_test on its home
+    directory) and wait for them, within RUN_TESTS_TIMEOUT_SECS. Saves the
+    program first, so that the tests run it as it is in the editor, and is
+    therefore refused while there is a run in progress, as a save is.
+    """
+    run_guard.refuse_while_running(program, "run the tests", program.homeDir)
+    tool = paths.find_bin_tool("debasher_test")
+    if tool is None:
+        raise HTTPException(status_code=500, detail="debasher_test tool not found.")
+    saved = saving.save_or_refuse(program.homeDir, program)
+
+    command = [str(tool), str(saved.script_path.parent)]
+    try:
+        output, exit_code = tool_sessions.run_with_temp_output(
+            command, _debasher_env(program), timeout=RUN_TESTS_TIMEOUT_SECS
+        )
+        outcome: TestOutcome = _TEST_OUTCOMES.get(exit_code, "notRun")
+    except tool_sessions.ToolTimedOut as timed_out:
+        output = timed_out.output
+        outcome = "timedOut"
+
+    return RunTestsResponse(outcome=outcome, output=_cap_tail_lines(output), revision=saved.revision)
 
 
 class ProgramStatusResponse(BaseModel):

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { LaunchRecordConflict } from "../../src/api/executionApi";
+import { LaunchRecordConflict, TEST_OUTCOME_MESSAGES } from "../../src/api/executionApi";
+import type { FileEntry } from "../../src/api/programFilesApi";
 import { RevisionConflict } from "../../src/api/revisionConflict";
 import { hasSupervisor } from "../../src/models/node";
 import type { InspectNodeCommand, NodeSummary } from "../../src/models/nodeState";
@@ -23,6 +24,7 @@ import {
 } from "../../src/models/residentRun";
 import type { TalkCandidate } from "../../src/models/residentTalk";
 import { entryText, talkCandidates } from "../../src/models/residentTalk";
+import { offersAddTest, testFilePath, testSkeleton } from "../../src/models/testSkeleton";
 import { createEmptyProgram, NoProgramMetadata } from "../../src/storage/programStorage";
 import type { Backend } from "./backend";
 import { describeProcess, describeProgram, describeSeqProcess, lastLines, optionLine } from "./describe";
@@ -826,10 +828,100 @@ const residentTools = [
 
 ];
 
+const filePath = z.string().min(1)
+  .describe('A path relative to the home directory of the program, such as "test/greet.bats".');
+
+// The user files of a home directory, one per line, indented by depth, a
+// directory with a final slash.
+function fileTreeLines(entries: FileEntry[], depth = 0): string[] {
+  return entries.flatMap(entry => [
+    `${"  ".repeat(depth)}${entry.name}${entry.type === "dir" ? "/" : ""}${entry.readonly ? " (generated script, read-only)" : ""}`,
+    ...fileTreeLines(entry.children ?? [], depth + 1),
+  ]);
+}
+
+const testTools = [
+
+  tool(
+    "run_tests",
+    "Runs the business tests of the program, the files test/*.bats and test/test_*.py of its home directory, as \"Run tests\" in the Run menu does (debasher_test), after saving the program. Refused while a run is in progress.",
+    { home_dir: schemas.homeDir, lines },
+    READS,
+    async (backend, { home_dir, lines: count }) => {
+      const program = await loadProgram(backend, home_dir);
+      const { outcome, output } = await savingFirst(() => backend.runTests(program));
+      // The message of the editor names its own menu, where an agent has add_test
+      const message = outcome === "noTests" ? "The program has no tests: add_test writes a first one." : TEST_OUTCOME_MESSAGES[outcome];
+      return withOutput(message, output, count ?? OUTPUT_LINES);
+    }
+  ),
+
+  tool(
+    "add_test",
+    "Writes the test skeleton of a process, as \"Add test\" does: test/<process>.bats for a process of a general program, test/test_<process>.py for a node. Fill in its placeholders and its checks, then remove the line that makes it fail. Refused when the file exists.",
+    { home_dir: schemas.homeDir, process: schemas.processName },
+    EDITS,
+    async (backend, { home_dir, process: name }) => {
+      const program = await loadProgram(backend, home_dir);
+      const process = processOf(program, name);
+      if (!offersAddTest(program, process)) {
+        throw new Refusal(`${name} is a ${process.nodeKind}: the node harness builds only an FBPProcess.`);
+      }
+      const path = testFilePath(program, process);
+      if ((await backend.getFileContent(home_dir, path)).kind !== "missing") {
+        throw new Refusal(`${path} exists: read it with read_program_file.`);
+      }
+      const content = testSkeleton(program, process);
+      await backend.writeFileContent(home_dir, program.name, path, content, true);
+      return `Wrote ${path}:\n${content}`;
+    }
+  ),
+
+  tool(
+    "list_program_files",
+    "Lists the user files of the home directory of the program, such as its tests and the data they read, with the generated script; files that DeBasher manages are not shown.",
+    { home_dir: schemas.homeDir },
+    READS,
+    async (backend, { home_dir }) => {
+      const program = await loadProgram(backend, home_dir);
+      const entries = await backend.getFileTree(home_dir, program.name);
+      return entries.length > 0 ? fileTreeLines(entries).join("\n") : "The home directory has no user files.";
+    }
+  ),
+
+  tool(
+    "read_program_file",
+    "Reads a user file of the home directory of the program.",
+    { home_dir: schemas.homeDir, path: filePath },
+    READS,
+    async (backend, { home_dir, path }) => {
+      const file = await backend.getFileContent(home_dir, path);
+      if (file.kind === "missing") {
+        throw new Refusal(`${path} does not exist.`);
+      }
+      return file.kind === "binary" ? `${path} is a binary file.` : file.content;
+    }
+  ),
+
+  tool(
+    "write_program_file",
+    "Creates or replaces a user file of the home directory of the program, with the directories above it, such as a test or the data it reads. The generated script and the files that DeBasher manages are refused.",
+    { home_dir: schemas.homeDir, path: filePath, content: z.string().describe("The whole content of the file.") },
+    EDITS,
+    async (backend, { home_dir, path, content }) => {
+      const program = await loadProgram(backend, home_dir);
+      await backend.writeFileContent(home_dir, program.name, path, content, true);
+      return `Wrote ${path}.`;
+    }
+  ),
+
+];
+
 export const TOOLS: Tool[] = [
   ...readingTools,
   ...libraryTools,
   ...editingTools,
   ...runningTools,
   ...residentTools,
+  ...testTools,
 ];

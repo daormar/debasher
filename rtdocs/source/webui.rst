@@ -253,6 +253,17 @@ The "Run" menu of the toolbar runs the program and acts on its run:
 * **Check program options** and **Validate program** run
   ``debasher_exec --check-proc-opts`` and ``debasher_exec --validate``
   (see the :ref:`exec` Section), and show what they print.
+* **Run tests** saves the program and runs its business tests, the
+  files ``test/*.bats`` and ``test/test_*.py`` of its home directory,
+  with ``debasher_test`` (see the :ref:`tools` Section), and shows
+  whether they passed and what they printed. It is not offered while a
+  run is in progress. The right-button menu of a process offers **Add
+  test**, which writes a first test for that process in ``test/`` and
+  opens it in the program files panel: a test that runs the process
+  with placeholders for its options, or, for a node of a resident
+  program, one that builds the node and feeds it a packet. Fill in the
+  placeholders and the checks, then remove the line that makes the new
+  test fail on purpose.
 * **Run program** saves the program and launches it with
   ``debasher_exec``. A program that the engine refuses is reported at
   once, with what ``debasher_exec`` printed.
