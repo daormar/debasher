@@ -3091,6 +3091,15 @@ under a heading of its own:
    names the function, without which the module would define no function for the
    process.
 
+   Before the form of the code, the code prompt asks the AI tool to ask rather
+   than guess: when something that the code depends on is missing or
+   ambiguous, such as the format of an input, it puts all its questions at
+   once before writing any code, and the user answers them in the AI tool.
+   The program model describes the processes and their connections, never
+   what the data hold, so an AI tool that had to answer with code at once
+   would make up what it does not know. Whether it asks first or not, what
+   reaches the code editor is only the code.
+
 The code prompt is in English, whatever the language of the code request,
 like the rest of the web UI. It leaves out what does not change the code: the
 position of the process, the values of its specifications, its additional
@@ -3185,13 +3194,14 @@ resident program is, it says:
    for a hook that the node inherits, the inherited code, which an empty body
    runs and a body replaces, or that it could not be read.
 6. **The code request**, as for a process.
-7. **What the AI tool returns.** Each part that changes, whole, in a fenced
-   code block tagged `python`, under a heading with the name of the part, the
-   one that the node code editor gives it; a part that the answer leaves out
-   stays as it is. One code prompt serves both a new node, whose constructor,
+7. **What the AI tool returns.** Each part that changes, whole, in a fenced code
+   block tagged `python`, under a heading with the name of the part, the one
+   that the node code editor gives it; a part that the answer leaves out stays
+   as it is. One code prompt serves both a new node, whose constructor,
    `process_data`, `capture_node_state` and `restore_node_state` have to agree
    on the node state, and a change to one hook, and the user pastes each block
-   into its part.
+   into its part. As for a process, the code prompt first asks the AI tool to
+   ask rather than guess.
 
 **The node reference.** The contract that the code of a node keeps (a
 deterministic `process_data`, sending only from it, a complete

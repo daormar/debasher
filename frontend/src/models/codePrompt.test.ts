@@ -165,6 +165,12 @@ describe("buildCodePrompt", () => {
     expect(prompt).toContain("````bash\ncount()");
   });
 
+  it("asks to ask rather than guess, before the form of the answer", () => {
+    const prompt = buildCodePrompt(program, count, "", "");
+    expect(prompt).toContain("## What to return\n\nIf something that the code depends on is missing or ambiguous");
+    expect(prompt).toContain("ask about it before writing any code, all your questions at once, instead of guessing. Otherwise, return the code as follows.\n\nReturn the whole code");
+  });
+
   it("asks for the whole code in a single block, with the function line in Bash", () => {
     expect(buildCodePrompt(program, count, "", "")).toContain("the line `count()` that names the function included, in a single fenced code block tagged `bash`");
     expect(buildCodePrompt(program, withLanguage(count, "r"), "", "")).toContain("in a single fenced code block tagged `r`, with nothing else inside the block.");

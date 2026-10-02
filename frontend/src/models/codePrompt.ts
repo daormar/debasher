@@ -243,12 +243,20 @@ function codeSection(process: ProgramProcess, code: string): string[] {
   ];
 }
 
+// What every code prompt says before the form of the answer: the program
+// model never knows what the data hold, so the AI tool asks rather than
+// guesses, and the answer is either its questions or the code.
+export const ASK_BEFORE_GUESSING =
+  "If something that the code depends on is missing or ambiguous, such as the format of an input or what each message holds, ask about it before writing any code, all your questions at once, instead of guessing. Otherwise, return the code as follows.";
+
 function returnSection(process: ProgramProcess, language: string): string[] {
   const whole = process.language === "bash"
     ? `Return the whole code of the process, the line \`${process.name}()\` that names the function included, in a single fenced code block tagged \`bash\`, with nothing else inside the block.`
     : `Return the whole code of the process in a single fenced code block tagged \`${process.language}\`, with nothing else inside the block.`;
   return [
     "## What to return",
+    "",
+    ASK_BEFORE_GUESSING,
     "",
     whole,
     `Return all of it, not only what changed: the code of the block replaces the ${language} code of the process as it is.`,

@@ -151,6 +151,12 @@ describe("buildNodeCodePrompt", () => {
     expect(buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", { ...library, inheritedError: "not found" })).not.toContain("could not be read");
   });
 
+  it("asks to ask rather than guess, before the form of the answer", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("## What to return\n\nIf something that the code depends on is missing or ambiguous");
+    expect(prompt).toContain("Otherwise, return the code as follows.\n\nReturn each part that you change");
+  });
+
   it("asks for the parts that change, each whole under its name", () => {
     const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "Reset on ext.", library);
     expect(prompt).toContain("## What the code has to do\n\nReset on ext.");

@@ -12,7 +12,7 @@ import {
   nodeOptionRole,
   superCall,
 } from "./node";
-import { describedAs, edgeEnd, fenceFor } from "./codePrompt";
+import { ASK_BEFORE_GUESSING, describedAs, edgeEnd, fenceFor } from "./codePrompt";
 
 // What the code prompt of a node takes from the runtime library, which the
 // backend reads from the library itself: the reference of what the code of
@@ -256,6 +256,8 @@ function returnSection(): string[] {
   const names = NODE_CODE_PARTS.map(({ label }) => `\`${label}\``).join(", ");
   return [
     "## What to return",
+    "",
+    ASK_BEFORE_GUESSING,
     "",
     `Return each part that you change, whole, in a fenced code block tagged \`python\`, under a heading \`### <part>\` with the name of the part: one of ${names}. Write each part as above: without the indentation of the class and, for a hook, without its \`def\` line. A part that you do not return stays as it is, so return every part that the change needs, and none that it does not.`,
   ];
