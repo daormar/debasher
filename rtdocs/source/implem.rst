@@ -890,9 +890,10 @@ missing.
 
 * ``conda_envs``: declares the Conda environments the process needs,
   using the ``define_conda_env`` function (given an environment name
-  and a ``.yml`` file). DeBasher creates the environment the first time
-  the program runs, and the process implementation can just assume it
-  already exists:
+  and a ``.yml`` file). When the program runs with ``--conda-support``,
+  DeBasher creates the environment if it does not exist yet, and the
+  process implementation, which activates it with ``conda_activate``,
+  can just assume it already exists:
 
   .. code-block:: bash
 
@@ -904,8 +905,9 @@ missing.
   (see the ``conda`` example.)
 
 * ``docker_imgs``: declares the Docker images the process needs, using
-  the ``pull_docker_img`` function. DeBasher pulls the image before the
-  process executes:
+  the ``pull_docker_img`` function. When the program runs with
+  ``--docker-support``, DeBasher pulls the image before the process
+  executes, and the process runs it with ``"${DOCKER}"``:
 
   .. code-block:: bash
 

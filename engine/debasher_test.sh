@@ -114,13 +114,14 @@ if [ ${#pytest_files[@]} -gt 0 ] && [ -z "${pytest_tool}" ]; then
 fi
 
 # What the tests need: the program file, the test helpers, the tools of
-# the engine (those of libexec for the node harness) and its Python
-# modules. Nothing is written into the program directory: pytest runs
+# the engine (those of libexec for the node harness), the conda that
+# configure found and the Python modules of the engine. Nothing is written into the program directory: pytest runs
 # without its cache and without bytecode
 export DEBASHER_TEST_PFILE="${pfile}"
 export DEBASHER_BATS_HELPERS="${debasher_pkglibdir}/debasher_bats_helpers"
 export PATH="${debasher_bindir}:${PATH}"
 export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
+export DEBASHER_CONDA="${CONDA}"
 export PYTHONPATH="${debasher_pythondir}:${debasher_pkgpythondir}${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONDONTWRITEBYTECODE=1
 

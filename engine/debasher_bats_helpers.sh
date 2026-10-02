@@ -46,3 +46,24 @@ debasher_process()
     shift
     debasher_exec_process -q "${DEBASHER_TEST_PFILE}" "${processname}" -- "$@"
 }
+
+########
+# Skips the test, with the reason, when the conda environment `env_name`
+# (a name, or an absolute path) does not exist on this machine, so that a
+# test of a process that activates it is skipped rather than failed where
+# conda or the environment is missing. The conda executable is the one
+# that the conda shell functions point to (CONDA_EXE), or else the one that
+# configure found, which debasher_test exports as DEBASHER_CONDA.
+debasher_skip_without_conda_env()
+{
+    local env_name=$1
+    local conda_exe=${CONDA_EXE:-${DEBASHER_CONDA:-}}
+
+    if [ -z "${conda_exe}" ] || [ ! -x "${conda_exe}" ]; then
+        skip "conda was not found"
+    fi
+    if ! "${conda_exe}" env list 2> /dev/null \
+            | awk -v env="${env_name}" '$1 == env || $NF == env { found = 1 } END { exit !found }'; then
+        skip "the conda environment ${env_name} does not exist"
+    fi
+}

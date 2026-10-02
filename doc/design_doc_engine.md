@@ -1637,9 +1637,26 @@ process is launched:
 
 The engine only makes sure that the environment or the image exists. Using it
 is left to the process function, which activates the environment or runs the
-container itself, as `conda activate` or `docker run` would be used by hand.
+container itself, so that one process may use several environments or images,
+each for a part of its work, or activate one for only some of its commands.
 Without the options, the methods are not called, and the process function
 finds whatever the machine already has.
+
+`conda activate` is a shell function of conda, not a program, so a process that
+called it directly would depend on how the shell that runs it was started: on a
+terminal where conda was set up, and from which the function was inherited, it
+works; under a service, a Slurm job or a shell that conda never set up, it
+fails. The engine removes that dependence without taking the activation away
+from the process: `conda_activate <name>` loads the shell functions of conda
+into the shell when it does not have them, and then activates the environment,
+after which `conda` itself (`conda deactivate`, another `conda activate`) can be
+used. It loads them from a conda executable, the one that the conda functions of
+the shell point to (`CONDA_EXE`), or else the one that `configure` found, which
+every built script holds as `CONDA`, as it holds `DOCKER`. With neither, it
+fails with an error that says so. `define_conda_env` loads them the same way
+before it looks for an environment or creates one. A process uses `"${DOCKER}"`
+to run a container, the docker that `configure` found, rather than the first one
+in the `PATH`.
 
 # The state of a run
 
@@ -1887,14 +1904,20 @@ Two features of `debasher_exec_process` serve these tests:
 - The tool exits with the status of the process function, so that a test can
   tell one failure of the process from another.
 
-A process runs in the environment of the test runner: its Conda environments
-and Docker images are not activated, and its `_skip`, `_post` and
-`_reset_outfiles` methods do not run. An array process is tested one task at a
-time, with the options of that task, since `_generate_opts` does not run
-either. A process whose work needs the other end of a FIFO to run at the same
-time, such as one of the two processes of a cycle that wait for each other's
-replies, cannot be tested on its own with a regular file standing in for the
-FIFO.
+A process runs in the environment of the test runner. It activates its Conda
+environments and runs its Docker images itself, as in a run (see "Conda and
+Docker environments"), so that part behaves the same; what a test does not do is
+what `--conda-support` and `--docker-support` do before a run, creating the
+environments and pulling the images, so they have to exist already. A test of a
+process that needs an environment calls `debasher_skip_without_conda_env <name>`
+of the test helpers first, which skips the test, with its reason, where conda or
+the environment is missing, for example on a machine that never ran the program
+with conda support. Its `_skip`, `_post` and `_reset_outfiles` methods do not
+run. An array process is tested one task at a time, with the options of that
+task, since `_generate_opts` does not run either. A process whose work needs the
+other end of a FIFO to run at the same time, such as one of the two processes of
+a cycle that wait for each other's replies, cannot be tested on its own with a
+regular file standing in for the FIFO.
 
 ## Testing a node with pytest
 
@@ -1944,19 +1967,20 @@ variables that the runner exports are set, which helps to debug one test.
 
 ## Checking an installation
 
-`make installcheck` runs `debasher_check_installation`, which runs the
-programs of `data/webui_programs` from where they were installed. Three of
-them carry a test directory, installed with them: `webui_batch_greet`, with
-process tests, `webui_running_sum`, with node tests, and `webui_watch_tally`,
-with node tests of a `DirectoryWatcher` that observes a directory and of the
-node it feeds. `debasher_check_installation`
-runs `debasher_test` on every program of `data/webui_programs` and fails on
-any status other than 0 or 77. When `configure` did not find the tool of a kind
-of test that a program has, the check does not run the test runner on that
-program, and says that its tests are skipped. It also checks that the test
-runner finds the program of a copy of `webui_batch_greet` in a directory of
-another name, and that it refuses, with status 2, a directory that is not a
-program directory.
+`make installcheck` runs `debasher_check_installation`, which runs the programs
+of `data/webui_programs` from where they were installed. Four of them carry a
+test directory, installed with them: `webui_batch_greet`, with process tests,
+`webui_running_sum`, with node tests, `webui_watch_tally`, with node tests of a
+`DirectoryWatcher` that observes a directory and of the node it feeds, and
+`webui_conda_example`, with a process test of a process that activates a conda
+environment, skipped where the environment does not exist.
+`debasher_check_installation` runs `debasher_test` on every program of
+`data/webui_programs` and fails on any status other than 0 or 77. When
+`configure` did not find the tool of a kind of test that a program has, the
+check does not run the test runner on that program, and says that its tests are
+skipped. It also checks that the test runner finds the program of a copy of
+`webui_batch_greet` in a directory of another name, and that it refuses, with
+status 2, a directory that is not a program directory.
 
 This checks, once DeBasher is installed, that the test runner, the test
 helpers and the node harness work as installed, which no test of `make check`
@@ -2087,8 +2111,11 @@ What is known to be missing from the design, or left open by it:
   process and the external scripts of aliases.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
-- **Conda and Docker in process tests.** Running a process test in the Conda
-  environments and Docker images of the process, as a run does.
+- **Environments prepared for the tests.** The test runner creating the Conda
+  environments and pulling the Docker images of the processes before the
+  tests, as `--conda-support` and `--docker-support` do before a run, with the
+  logs of conda in a temporary directory, and the web UI asking for it when
+  the program has conda or docker support.
 - **Choosing the tests to run.** Giving the test runner the test files, or a
   filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the

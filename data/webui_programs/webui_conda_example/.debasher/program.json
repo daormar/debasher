@@ -1,0 +1,95 @@
+{
+  "id": "7a6bf7fa-59a1-41a4-b4bb-7b90d74738d3",
+  "name": "webui_conda_example",
+  "programType": "general",
+  "description": "Example built with the web UI: a general program whose process activates the conda environment py27, which a run with conda support creates from py27.yml, and writes the version of its Python into a file.",
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": true,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "a46db32d-bdd9-4e58-a272-d7a801031a11",
+      "name": "python_version",
+      "description": "Activates the conda environment py27 and writes the version of its Python into a file.",
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "options": [
+        {
+          "id": "3208c9e9-447d-4cd1-b0ad-9cee538e5578",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "file with the version of the Python of py27",
+          "value": "${process_outdir}/python_version.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "python_version()\n{\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    # conda_activate loads the shell functions of conda first, if the\n    # shell that runs the process does not have them\n    conda_activate py27 || return 1\n    python --version > \"${outf}\" 2>&1 || return 1\n    conda deactivate\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": "define_conda_env py27 py27.yml",
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "seqProcesses": [],
+  "edges": []
+}

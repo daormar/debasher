@@ -124,6 +124,12 @@ directory that a ``DirectoryWatcher`` watches (given with
 only once it has stayed the same for two observations in a row. A
 ``ProgramLauncher`` and the ``Supervisor`` cannot be tested this way.
 
+A process that activates a Conda environment runs in it in a test as
+in a run, but a test does not create the environment, as
+``debasher_exec --conda-support`` does: a test of such a process starts
+with ``debasher_skip_without_conda_env <name>``, which skips it, with
+its reason, where conda or the environment is missing.
+
 The exit status of ``debasher_test`` is 0 when every test passed, 1
 when a test failed, 2 when the tests could not be run (for instance,
 ``<prgdir>`` has no program file, or bats or pytest is not installed)

@@ -16,6 +16,9 @@ webui_running_sum/.debasher/program.json			\
 webui_running_sum/test/test_accumulate.py			\
 webui_watch_tally/webui_watch_tally.sh				\
 webui_watch_tally/.debasher/program.json			\
-webui_watch_tally/test/test_watch_tally.py
+webui_watch_tally/test/test_watch_tally.py			\
+webui_conda_example/webui_conda_example.sh			\
+webui_conda_example/.debasher/program.json			\
+webui_conda_example/test/python_version.bats
 
 EXTRA_DIST = $(nobase_webuiprg_DATA)

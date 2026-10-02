@@ -25,12 +25,12 @@ print_skipped_check()
 }
 
 ########
-# Whether conda can activate an environment here, as the conda example
-# does: a conda command is not enough, conda has to be set up in the shell
-# (conda init). Tried in a subshell, which leaves this one as it was.
+# Whether a process can activate a conda environment here: configure found
+# a conda executable, from which conda_activate loads the shell functions
+# of conda, whatever this shell has.
 conda_is_usable()
 {
-    ( conda activate base && conda deactivate ) > /dev/null 2>&1
+    test -n "${CONDA}" && test -x "${CONDA}"
 }
 
 ########
@@ -927,7 +927,7 @@ if conda_is_usable; then
             ;;
     esac
 else
-    print_skipped_check "${progname}" "conda not found or not set up in the shell"
+    print_skipped_check "${progname}" "conda not found"
     ((checks_skipped++))
 fi
 
@@ -1087,6 +1087,31 @@ case $? in
         ((checks_timedout++))
         ;;
 esac
+
+# Check webui_conda_example, a general program whose process activates a
+# conda environment, which the run creates if it does not exist
+progname="webui_conda_example"
+if conda_is_usable; then
+    sched="BUILTIN"
+    bs_cpus=1
+    bs_mem=256
+    check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+else
+    print_skipped_check "${progname}" "conda not found"
+    ((checks_skipped++))
+fi
 
 # Check webui_watch_tally, a resident program with a DirectoryWatcher: a
 # text file that arrives in the watched directory is the first one counted
