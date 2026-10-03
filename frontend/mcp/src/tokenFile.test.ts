@@ -60,6 +60,13 @@ describe("the token file", () => {
     expect(source.describe()).toContain(join(dir, "debasher", "webui-8000.token"));
   });
 
+  it("gives no token of a backend that could not tell when it started", () => {
+    const dir = runtimeDir();
+    writeTokenFile(dir, "8000", { token: "tok", pid: process.pid, started: "" });
+
+    expect(tokenFromFile(new URL("http://127.0.0.1:8000"), { XDG_RUNTIME_DIR: dir }).token()).toBeNull();
+  });
+
   it("gives no token when the PID belongs to a process that started at another time", () => {
     const dir = runtimeDir();
     writeTokenFile(dir, "8000", { token: "tok", pid: process.pid, started: "Thu Jan  1 00:00:00 1970" });

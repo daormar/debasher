@@ -59,7 +59,7 @@ RUN ./reconf \
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        bash python3 python3-venv gawk graphviz \
+        bash python3 python3-venv gawk graphviz procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash debasher \
     && mkdir /data && chown debasher:debasher /data

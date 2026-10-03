@@ -3997,12 +3997,15 @@ $XDG_RUNTIME_DIR/debasher/webui-<port>.token
 ~/.debasher/run/webui-<port>.token      (where XDG_RUNTIME_DIR is unset)
 ```
 
-The runtime directory of the XDG specification fits the token: it belongs to
-one user, lives in memory and is emptied when the user's session ends; macOS has
+The runtime directory of the XDG specification fits the token: it belongs to one
+user, lives in memory and is emptied when the user's session ends; macOS has
 none, hence the fallback. The token file holds the token and the PID of the
 backend that wrote it, with the time at which that process started, as
 `ps -o lstart=` prints it in the C locale and in UTC, so that the backend and
-`debasher_mcp` read the same text whatever their environment.
+`debasher_mcp` read the same text whatever their environment. Where there is no
+`ps` (a slim container image), the backend cannot tell when it started, so it
+writes no token file and says so, and `debasher_mcp` takes no token file with an
+empty start time: the backend works, and only the MCP server cannot reach it.
 
 `debasher_webui` starts the backend through `api/serve.py` instead of running
 uvicorn itself, so that the token file follows the backend that owns the port:

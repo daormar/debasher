@@ -42,13 +42,17 @@ def process_start_time(pid: int) -> str:
     """
     When the process `pid` started, as `ps -o lstart=` prints it, which
     debasher_mcp compares with the same command: in the C locale and in UTC,
-    so that both read the same text whatever their environment.
+    so that both read the same text whatever their environment. Empty when it
+    cannot be told, as where there is no ps (a slim container image).
     """
     env = {**os.environ, "LC_ALL": "C", "TZ": "UTC"}
-    result = subprocess.run(
-        ["ps", "-o", "lstart=", "-p", str(pid)],
-        capture_output=True, text=True, env=env, check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            capture_output=True, text=True, env=env, check=False,
+        )
+    except OSError:
+        return ""
     return result.stdout.strip()
 
 
@@ -66,13 +70,13 @@ def private_dir(directory: Path) -> bool:
     return info.st_uid == os.getuid() and info.st_mode & 0o077 == 0
 
 
-def write_token_file(path: Path, token: str, pid: int) -> None:
+def write_token_file(path: Path, token: str, pid: int, started: str) -> None:
     """
     Writes the token file through a new temporary file, readable only by the
     user from the start, that then takes its name, so that a reader never sees
     half of it.
     """
-    content = json.dumps({"token": token, "pid": pid, "started": process_start_time(pid)})
+    content = json.dumps({"token": token, "pid": pid, "started": started})
     temp_path = path.with_name(f".{path.name}.{secrets.token_hex(8)}")
     fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -164,8 +168,18 @@ def main(argv: list[str]) -> int:
     held = sock.dup()
     path = token_file_path(args.port)
     try:
-        if private_dir(path.parent):
-            write_token_file(path, token, os.getpid())
+        # Without the time at which the backend started, debasher_mcp could
+        # not tell it from a process that took its PID after it died.
+        started = process_start_time(os.getpid())
+        if not started:
+            print(
+                "debasher_webui: cannot tell when this process started (is ps "
+                "installed?): no token file written, so debasher_mcp will not "
+                "find the token",
+                file=sys.stderr,
+            )
+        elif private_dir(path.parent):
+            write_token_file(path, token, os.getpid(), started)
         else:
             print(
                 f"debasher_webui: {path.parent} is not private to you: no token file "

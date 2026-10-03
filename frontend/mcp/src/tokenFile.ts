@@ -98,6 +98,11 @@ export function tokenFromFile(url: URL, env: NodeJS.ProcessEnv = process.env): T
     if (content === null || !isOwnLiveProcess(content.pid)) {
       return null;
     }
+    // A token file with no start time could not tell its backend from a
+    // process that took its PID, and neither could this side without ps.
+    if (content.started === "") {
+      return null;
+    }
     const raw = JSON.stringify(content);
     if (checked?.raw !== raw) {
       checked = { raw, started: processStartTime(content.pid) };

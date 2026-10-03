@@ -25,7 +25,7 @@ def test_the_token_file_is_private_and_holds_the_backend(tmp_path):
     assert serve.private_dir(directory)
     path = directory / "webui-8000.token"
 
-    serve.write_token_file(path, "tok", os.getpid())
+    serve.write_token_file(path, "tok", os.getpid(), serve.process_start_time(os.getpid()))
 
     assert directory.stat().st_mode & 0o777 == 0o700
     assert path.stat().st_mode & 0o777 == 0o600
@@ -46,13 +46,19 @@ def test_a_directory_open_to_others_is_not_private(tmp_path):
 
 def test_the_token_file_of_another_backend_is_not_removed(tmp_path):
     path = tmp_path / "webui-8000.token"
-    serve.write_token_file(path, "theirs", os.getpid())
+    serve.write_token_file(path, "theirs", os.getpid(), "Sat Oct  3 16:14:33 2026")
 
     serve.remove_token_file(path, "mine")
     assert path.exists()
 
     serve.remove_token_file(path, "theirs")
     assert not path.exists()
+
+
+def test_no_start_time_is_told_without_ps(monkeypatch, tmp_path):
+    monkeypatch.setenv("PATH", str(tmp_path))
+
+    assert serve.process_start_time(os.getpid()) == ""
 
 
 def test_the_token_url_names_a_host_that_a_browser_opens():
@@ -76,6 +82,9 @@ def _get(url, token=None):
             return response.status
     except urllib.error.HTTPError as err:
         return err.code
+    except urllib.error.URLError:
+        # Not listening yet.
+        return None
 
 
 def _start(port, env):
@@ -123,3 +132,30 @@ def test_a_backend_owns_its_token_file_from_bind_to_stop(tmp_path):
 
     assert f"http://127.0.0.1:{port}/#token={token}" in output
     assert not path.exists()
+
+
+def test_a_backend_without_ps_starts_with_no_token_file(tmp_path):
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(mode=0o700)
+    no_programs = tmp_path / "bin"
+    no_programs.mkdir()
+    env = {
+        **os.environ,
+        "XDG_RUNTIME_DIR": str(runtime_dir),
+        "PATH": str(no_programs),
+        "DEBASHER_WEBUI_TOKEN": "tok",
+    }
+    port = _free_port()
+
+    backend = _start(port, env)
+    try:
+        assert _wait_for(lambda: _get(f"http://127.0.0.1:{port}/api/webui/info", "tok") == 200)
+        assert not (runtime_dir / "debasher").exists()
+
+        backend.send_signal(signal.SIGTERM)
+        output, _ = backend.communicate(timeout=20)
+    finally:
+        if backend.poll() is None:
+            backend.kill()
+
+    assert "no token file written" in output
