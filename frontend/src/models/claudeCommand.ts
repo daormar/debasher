@@ -11,8 +11,11 @@ export function shellWord(word: string): string {
   return `'${word.replace(/'/g, `'\\''`)}'`;
 }
 
-export function claudeCommand(homeDir: string, url: string): string {
-  return `debasher_claude --home-dir ${shellWord(homeDir)} --url ${shellWord(url)}`;
+// The command, run through `prefix` when given, as the `docker compose exec`
+// that runs it inside the container of the backend.
+export function claudeCommand(homeDir: string, url: string, prefix: string | null = null): string {
+  const command = `debasher_claude --home-dir ${shellWord(homeDir)} --url ${shellWord(url)}`;
+  return prefix ? `${prefix} ${command}` : command;
 }
 
 // The skills of the plugin of DeBasher, which a session of Claude Code calls

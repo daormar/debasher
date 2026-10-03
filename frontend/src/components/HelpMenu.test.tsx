@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_WEBUI_INFO } from "../api/webuiApi";
+import type { WebuiInfo } from "../api/webuiApi";
 import HelpMenu from "./HelpMenu";
 import { CITATION, DOCS_LINKS, PROJECT_LINKS } from "../models/helpLinks";
 
@@ -8,9 +10,11 @@ function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Help" }));
 }
 
-// The backend of the dialog of Claude Code, which tells whether it is offered.
-function stubWebuiInfo(claudeCode: boolean) {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ claudeCode }))));
+// The backend of the dialog of Claude Code, which tells whether it is offered,
+// and how.
+function stubWebuiInfo(claudeCode: boolean, more: Partial<WebuiInfo> = {}) {
+  const info = { ...DEFAULT_WEBUI_INFO, claudeCode, ...more };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(info))));
 }
 
 // The dialog shows what it offers once the backend has answered: the tests
@@ -152,6 +156,32 @@ describe("HelpMenu", () => {
     expect(await screen.findByText(/Claude Code is not available with this web UI/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
     expect(fetch).toHaveBeenCalledWith("/api/webui/info");
+  });
+
+  it("names the backend by the URL that the backend gives", async () => {
+    stubWebuiInfo(true, { backendUrl: "http://127.0.0.1:8001" });
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    expect(await screen.findByRole("textbox", { name: "Command" })).toHaveValue(
+      "debasher_claude --home-dir /home/me/wc --url http://127.0.0.1:8001"
+    );
+  });
+
+  it("runs the command inside the container of the backend, and says how to install Claude Code there", async () => {
+    stubWebuiInfo(true, {
+      claudeCodePrefix: "docker compose exec -it debasher",
+      claudeCodeInstall: "docker compose exec -it debasher install-claude-code",
+      backendUrl: "http://127.0.0.1:8000",
+    });
+    render(<HelpMenu homeDir="/data/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    expect(await screen.findByRole("textbox", { name: "Command" })).toHaveValue(
+      "docker compose exec -it debasher debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000"
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(/in its container/);
+    expect(screen.getByText("docker compose exec -it debasher install-claude-code")).toBeInTheDocument();
   });
 
   it("gives the command when the backend cannot say whether it offers Claude Code", async () => {

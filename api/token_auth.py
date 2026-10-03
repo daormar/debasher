@@ -22,6 +22,10 @@ TOKEN_ENV_VAR = "DEBASHER_WEBUI_TOKEN"
 HOST_ENV_VAR = "DEBASHER_WEBUI_HOST"
 DEFAULT_HOST = "127.0.0.1"
 
+# The port that the backend listens on, which api/serve.py sets; unknown to a
+# backend that uvicorn starts by hand.
+PORT_ENV_VAR = "DEBASHER_WEBUI_PORT"
+
 LOOPBACK_NAMES = frozenset({"localhost", "127.0.0.1", "[::1]"})
 
 REFUSED_DETAIL = (

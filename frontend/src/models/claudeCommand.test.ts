@@ -27,4 +27,10 @@ describe("claudeCommand", () => {
     );
   });
 
+  it("runs through the prefix given", () => {
+    expect(claudeCommand("/data/wc", "http://127.0.0.1:8000", "docker compose exec -it debasher")).toBe(
+      "docker compose exec -it debasher debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000"
+    );
+  });
+
 });

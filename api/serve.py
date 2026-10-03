@@ -22,7 +22,7 @@ from pathlib import Path
 
 import uvicorn
 
-from .token_auth import HOST_ENV_VAR, TOKEN_ENV_VAR, is_every_address, url_host
+from .token_auth import HOST_ENV_VAR, PORT_ENV_VAR, TOKEN_ENV_VAR, is_every_address, url_host
 
 DEFAULT_PORT = 8000
 
@@ -156,6 +156,7 @@ def main(argv: list[str]) -> int:
     token = os.environ.get(TOKEN_ENV_VAR) or secrets.token_hex(24)
     os.environ[TOKEN_ENV_VAR] = token
     os.environ[HOST_ENV_VAR] = args.host
+    os.environ[PORT_ENV_VAR] = str(args.port)
 
     try:
         sock = bind(args.host, args.port)

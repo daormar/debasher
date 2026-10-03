@@ -3755,28 +3755,42 @@ account of Claude Code: the web UI calls no AI service, and holds no key of one.
 The web UI gives the command: "Claude Code" in the Help menu shows
 `debasher_claude` with the home directory of the program and the URL of the
 backend, for the user to copy (`components/ClaudeCodeDialog.tsx`, which builds
-it with `models/claudeCommand.ts`). The URL is the origin of the page, which the
-backend serves; under the dev server, which forwards `/api` to the backend, that
-origin reaches the API as well. The user can change the URL in the dialog. The
-command holds no token: the MCP server reads it from the token file (see "The
-token file"). The home directory and the URL are quoted for a POSIX shell when
-they hold anything that the shell would read otherwise. The command gives no
-session mode (no `--mode`): the skills are listed for the user to know them, and
-Claude Code calls one on its own when the work asks for it. A program that was
-never saved gets no command, since the MCP tools work on the program as saved,
-and one with unsaved changes gets a note that says so.
+it with `models/claudeCommand.ts`). The URL is the one that the backend gives:
+the address and the port that `debasher_webui` listens on, as seen from the
+machine where it runs (the local machine when it listens on every address),
+which is where the command runs too, whatever address the browser reached it by
+(a tunnel, the port of a container). A backend that uvicorn started by hand does
+not know its port and gives none; the URL is then the origin of the page, which
+the backend serves (under the dev server, which forwards `/api` to the backend,
+that origin reaches the API as well). The user can change the URL in the dialog.
+The command holds no token: the MCP server reads it from the token file (see
+"The token file"). The home directory and the URL are quoted for a POSIX shell
+when they hold anything that the shell would read otherwise. The command gives
+no session mode (no `--mode`): the skills are listed for the user to know them,
+and Claude Code calls one on its own when the work asks for it. A program that
+was never saved gets no command, since the MCP tools work on the program as
+saved, and one with unsaved changes gets a note that says so.
 
-The dialog gives the command only where the backend offers Claude Code: it
-asks the backend when it opens (`GET /api/webui/info`, `routers/webui.py`), and
-shows only its title and "Close" until the backend answers. A backend started
-with `DEBASHER_WEBUI_CLAUDE_CODE` set to `no` does not offer it, and the dialog
-says why instead: the backend runs in a container, whose directories are not
-those of the computer where `debasher_claude` would run, so neither the launcher
-nor the MCP tools find the program by its home directory. The Docker image of
-the web UI (`Dockerfile`) sets the variable. A backend that does not answer is
-taken to offer Claude Code, since a command that does not work there harms
+The dialog asks the backend, when it opens, how it offers Claude Code
+(`GET /api/webui/info`, `routers/webui.py`), and shows only its title and
+"Close" until the backend answers. The backend answers from its environment:
+
+- `DEBASHER_WEBUI_CLAUDE_CODE` set to `no`: it does not offer Claude Code, and
+  the dialog gives no command and says why: the directories of the backend are
+  not those of the machine where `debasher_claude` would run, so neither the
+  launcher nor the MCP tools would find the program by its home directory;
+- `DEBASHER_WEBUI_CLAUDE_CODE_PREFIX`: the command that `debasher_claude` is
+  run through, to run it where the backend runs, as the `docker compose exec`
+  of the Docker image (see "Claude Code in the Docker image");
+- `DEBASHER_WEBUI_CLAUDE_CODE_INSTALL`: the command that installs Claude Code
+  there, which the dialog says to run the first time;
+- the URL of the command (see above), from the address and the port that
+  `api/serve.py` puts in the environment of the backend.
+
+A backend that does not answer is taken to offer the command as it is, with the
+origin of the page as the URL, since a command that does not work there harms
 nothing. The tests of the backend check the answer for each value of the
-variable (`test/api/test_webui_info.py`), and those of the Help menu what the
+variables (`test/api/test_webui_info.py`), and those of the Help menu what the
 dialog shows for each answer (`components/HelpMenu.test.tsx`).
 
 ## The launcher
@@ -3861,6 +3875,39 @@ its description, which Claude Code reads to call it unasked, and how to work:
   when the user agrees.
 
 A skill leaves to another what is not its own, and says so to the user.
+
+## Claude Code in the Docker image
+
+In the Docker image of the web UI (`Dockerfile`, see `DOCKER.md`), Claude Code
+runs inside the container, next to the backend, not on the user's computer.
+There, the home directory of a program is the path that the backend saved it
+under, and `debasher_mcp` finds the token file of the backend, so neither the
+paths nor the token have to cross the boundary of the container. Claude Code
+also sees only the container and what is mounted into it, never the rest of
+the user's computer.
+
+The image installs `debasher_mcp`, `debasher_claude` and the plugin of DeBasher
+with the rest of DeBasher: the stage that builds the frontend builds the MCP
+server too, and the stage that builds DeBasher takes both in, as a release
+tarball made with `make dist-vendored` carries them, and so needs no npm. It
+runs the MCP server with the Node.js of the stage that builds it, the one it is
+built for. Claude Code itself is not in the image: each user has an account of
+their own, it updates itself, and not every user of the image wants it.
+`install-claude-code` (`docker-install-claude-code.sh`) runs its official
+installer once, which puts it under `~/.local` of the `debasher` user, first in
+the `PATH` of the image; that home directory is a volume, which keeps Claude
+Code, and the login it asks for on its first start, across restarts and rebuilds
+of the image.
+
+The image sets `DEBASHER_WEBUI_CLAUDE_CODE_PREFIX` to
+`docker compose exec -it debasher`, which the user runs in a terminal of the
+computer, in the directory of `docker-compose.yml`, and
+`DEBASHER_WEBUI_CLAUDE_CODE_INSTALL` to the same with `install-claude-code`. The
+prefix names the service of `docker-compose.yml`; without compose, the user runs
+the command through `docker exec -it` and the name of the container instead.
+The backend listens on every address of the container, so the URL of the
+command names the local machine, from inside the container, with the port of
+the container, whatever port the host maps to it.
 
 ## Building and testing debasher_claude
 
@@ -4160,13 +4207,6 @@ then succeeds in the first one.
   the token, never the program metadata; it sends the documentation, and maybe
   the program, to a service outside the machine, which the user has to know; and
   its answers are only as good as a documentation kept in step with the code.
-- **Claude Code on a backend in a container.** Starting Claude Code from the
-  user's computer on a program of a backend that runs in a container, which
-  the Docker image does not offer today (see "Claude Code on a program"). It
-  needs the home directory of the program under the same path inside and
-  outside the container, and the token of the backend on the computer, where
-  `debasher_mcp` does not find the token file of the container; the same holds
-  for a backend reached through a tunnel on another port.
 - **The documentation installed with DeBasher.** Building the documentation
   of DeBasher into HTML when the package is made, installing it, and serving it
   from the backend, so that the Help menu links to the documentation of the
