@@ -134,9 +134,11 @@ edits the selected process, and a toolbar above:
   Program`_ below), **Help** and **Close**, which goes back to the home
   screen. The Help menu links to this documentation and to the
   repository of DeBasher, each in a new tab of the browser, so that the
-  program open in the editor stays as it is, and its "How to cite
-  DeBasher" gives the reference of the article to cite, as text and as
-  BibTeX.
+  program open in the editor stays as it is. Its "Claude Code" gives the
+  command that starts Claude Code on the program (see the
+  :ref:`tools` Section, ``debasher_claude``), to run in a terminal of
+  your own, and its "How to cite DeBasher" gives the reference of the
+  article to cite, as text and as BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the

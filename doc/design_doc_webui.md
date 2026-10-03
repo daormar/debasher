@@ -1453,10 +1453,12 @@ to the repository (the source code and its issues). It also opens "How to cite
 DeBasher", a dialog with a link to the article that describes DeBasher and its
 reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
 the prompt panel when the browser refuses the clipboard (see "The prompt
-panel"). What the menu offers is data, in `models/helpLinks.ts`. Every link
-opens in a new tab of the browser, with no access back to the tab of the editor,
-so that the editor stays as it is, with any unsaved changes (see "Screens and
-the store").
+panel"), and "Claude Code", a dialog with the command that starts Claude Code on
+the program (see "Claude Code on a program"). The links and the reference are
+data, in `models/helpLinks.ts`, and the command and the skills it lists in
+`models/claudeCommand.ts`. Every link opens in a new tab of the browser, with no
+access back to the tab of the editor, so that the editor stays as it is, with
+any unsaved changes (see "Screens and the store").
 
 A link to a page of the documentation of DeBasher names a page of
 `rtdocs/source` by the name of its source, and the tests of the frontend check
@@ -3702,6 +3704,20 @@ program and the URL of the backend, and Claude Code edits the program through
 the MCP tools while the editor of the web UI follows what it saves (see
 "Revisions of the program metadata"). It uses the user's own installation and
 account of Claude Code: the web UI calls no AI service, and holds no key of one.
+
+The web UI gives the command: "Claude Code" in the Help menu shows
+`debasher_claude` with the home directory of the program and the URL of the
+backend, for the user to copy (`components/ClaudeCodeDialog.tsx`, which builds
+it with `models/claudeCommand.ts`). The URL is the origin of the page, which the
+backend serves; under the dev server, which forwards `/api` to the backend, that
+origin reaches the API as well. A page opened from a file gets the default of
+`debasher_webui` instead, and the user can change the URL in the dialog. The
+home directory and the URL are quoted for a POSIX shell when they hold anything
+that the shell would read otherwise. The command gives no session mode (no
+`--mode`): the skills are listed for the user to know them, and Claude Code
+calls one on its own when the work asks for it. A program that was never saved
+gets no command, since the MCP tools work on the program as saved, and one with
+unsaved changes gets a note that says so.
 
 ## The launcher
 

@@ -268,7 +268,10 @@ export default function Toolbar({ onClose }: Props) {
         }}
       >
 
-        <HelpMenu />
+        <HelpMenu
+          homeDir={program.homeDir}
+          unsavedChanges={unsavedChanges}
+        />
 
         <button
           onClick={() => {
