@@ -21,9 +21,9 @@
 # directory, with what DeBasher gives it: the MCP server (debasher_mcp),
 # talking to the backend of the web UI at the URL given; the permissions of
 # its tools (debasher_mcp --claude-settings); and the plugin of DeBasher, whose
-# skills help with the web UI, design a program and write the code of its
-# processes. The session starts in the home directory, with one of those
-# skills when a mode is given.
+# skills help with the web UI, design a program, write the code of its
+# processes and their tests, and review that code. The session starts in the
+# home directory, with one of those skills when a mode is given.
 
 ########
 print_desc()
@@ -45,8 +45,9 @@ usage()
     echo "                           ${DEFAULT_URL})"
     echo "--mode <string>            Skill that the session starts with: help (the"
     echo "                           web UI and DeBasher), design (the processes and"
-    echo "                           their connections) or implement (the code of"
-    echo "                           the processes and their tests); without it, the"
+    echo "                           their connections), implement (the code of the"
+    echo "                           processes and their tests) or review (feedback"
+    echo "                           on the code and the tests); without it, the"
     echo "                           session starts with none, and any of them can"
     echo "                           be called later as /debasher:<mode>"
     echo "--prompt <string>          First message of the session, given to the"
@@ -130,8 +131,8 @@ check_pars()
     fi
 
     case "${mode}" in
-        ""|"help"|"design"|"implement") ;;
-        *) echo "Error: unknown mode ${mode}: it should be help, design or implement" >&2
+        ""|"help"|"design"|"implement"|"review") ;;
+        *) echo "Error: unknown mode ${mode}: it should be help, design, implement or review" >&2
            exit 1
            ;;
     esac

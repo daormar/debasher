@@ -347,7 +347,7 @@ See "Claude Code on a program".
 - **skill**: a set of instructions of the plugin of DeBasher that Claude Code
   follows for one kind of work, called in a session as `/debasher:<name>`.
 - **session mode**: the skill that a session of `debasher_claude` starts with
-  (`--mode`): `help`, `design` or `implement`, or none.
+  (`--mode`): `help`, `design`, `implement` or `review`, or none.
 
 ## Access to the backend
 
@@ -3855,7 +3855,7 @@ ruled with no other change:
 ## The plugin of DeBasher
 
 The plugin of DeBasher (`frontend/claude/plugin`, installed in the
-`claude/plugin` directory of the package data) holds three skills and the
+`claude/plugin` directory of the package data) holds four skills and the
 reference they share, `reference/concepts.md`: a summary of DeBasher for an
 agent that works through the MCP tools (programs, processes and their code,
 options, connections, resident programs, business tests, running), which a
@@ -3870,9 +3870,19 @@ its description, which Claude Code reads to call it unasked, and how to work:
   agrees, with `apply_edits`, laid out on the canvas and validated; it writes
   no code;
 - `implement` writes the code of one process at a time from its code prompt
-  (`get_code_prompt`), fills in a business test from the skeleton of
-  `add_test`, and runs the tests until they pass; it runs the program only
-  when the user agrees.
+  (`get_code_prompt`), fills in a business test from the skeleton of `add_test`,
+  and runs the tests until they pass; it runs the program only when the user
+  agrees. It also adds tests to code that is already written, and leaves that
+  code as it is: a wrong test is fixed, and a test that fails because the code
+  is wrong is reported to the user, who decides whether the code changes. A test
+  checks every output, the edges of the input and a failure, not only that the
+  process ended;
+- `review` reads the code of the processes, their code prompts and their
+  tests, and reports findings ranked by how much they matter (what the code
+  does against its description, the options it reads and writes, how it
+  fails, FIFOs, tasks, the rules of a node, and whether its tests check
+  anything); it changes nothing, and runs neither the tests nor the program
+  unasked.
 
 A skill leaves to another what is not its own, and says so to the user.
 

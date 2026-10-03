@@ -506,7 +506,7 @@ Starting a Session
    the plugin of DeBasher.
 
 In the session, ask in your own words, in any language. The plugin of
-DeBasher has three skills, which Claude Code uses on its own when the
+DeBasher has four skills, which Claude Code uses on its own when the
 work asks for them, and which you can also call by their command:
 
 * ``/debasher:help``: questions on DeBasher and on the web interface,
@@ -517,7 +517,14 @@ work asks for them, and which you can also call by their command:
   why), and builds it, laid out on the canvas, only once you agree.
 * ``/debasher:implement``: the code of the processes and their
   business tests, one process at a time, running the tests until they
-  pass. It runs the program only when you agree.
+  pass. It runs the program only when you agree. It also adds tests to
+  code that is already written, without changing the code: if a test
+  shows that the code is wrong, it tells you, and you decide.
+* ``/debasher:review``: feedback on the code of the processes and on
+  their tests, ranked by how much it matters (whether the code does
+  what its description says, reads and writes its options, fails on bad
+  input, and whether its tests check anything), changing nothing. Ask
+  ``/debasher:implement`` to fix what you choose.
 
 An Example
 ^^^^^^^^^^

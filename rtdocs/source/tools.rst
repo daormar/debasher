@@ -517,8 +517,9 @@ MCP server (see `debasher_mcp`_) talking to the server of the web
 interface, the permissions of its tools, and the plugin of DeBasher,
 whose skills help with the web interface and DeBasher
 (``/debasher:help``), with the design of a program, its processes and
-their connections (``/debasher:design``), and with the code of the
-processes and their tests (``/debasher:implement``). The editor of the
+their connections (``/debasher:design``), with the code of the
+processes and their tests (``/debasher:implement``), and with feedback
+on that code (``/debasher:review``). The editor of the
 web interface, if the program is open there, loads what Claude Code
 saves. It uses your own installation and account of Claude Code.
 
@@ -532,8 +533,8 @@ saves. It uses your own installation and account of Claude Code.
 * ``--url <string>``: URL of the server of the web interface
   (``http://127.0.0.1:8000`` by default).
 * ``--mode <string>``: the skill the session starts with, ``help``,
-  ``design`` or ``implement``. Any of them can be called later in the
-  same session.
+  ``design``, ``implement`` or ``review``. Any of them can be called
+  later in the same session.
 * ``--prompt <string>``: the first message of the session, given to the
   skill of the mode when there is one.
 * ``--dry-run``: prints the command that starts Claude Code instead of
