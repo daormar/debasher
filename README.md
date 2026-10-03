@@ -1,9 +1,9 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)"
-            srcset="rtdocs/source/images/debasher_logo_dark.svg">
-    <img src="rtdocs/source/images/debasher_logo.svg" alt="DeBasher logo"
-         width="320">
+            srcset="rtdocs/source/images/debasher_logo_readme_dark.svg">
+    <img src="rtdocs/source/images/debasher_logo_readme.svg"
+         alt="DeBasher logo" width="400">
   </picture>
 </p>
 
