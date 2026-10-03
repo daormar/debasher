@@ -1,7 +1,9 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { httpBackend, sendRequestsTo } from "./backend";
+import { claudeSettings } from "./claudeSettings";
 import { createServer } from "./server";
+import { TOOLS } from "./tools";
 
 // debasher_mcp: the MCP server, spoken over its standard input and output
 // by the agent that starts it, a client of the backend at the URL given.
@@ -16,8 +18,11 @@ Offers the editing, running and following of DeBasher programs to an agent
 through the Model Context Protocol, over standard input and output, as a
 client of the backend of the web UI (debasher_webui), which has to be running.
 
---url <string>    URL of the backend (default: ${DEFAULT_URL})
---help            Show this help and exit`;
+--url <string>       URL of the backend (default: ${DEFAULT_URL})
+--claude-settings    Print, as JSON, the settings of Claude Code that
+                     debasher_claude passes: the permissions of the tools of
+                     this server, from what each does, and exit
+--help               Show this help and exit`;
 
 function parseArgs(argv: string[]): { url: string } {
   let url = DEFAULT_URL;
@@ -28,6 +33,10 @@ function parseArgs(argv: string[]): { url: string } {
         break;
       case "--help":
         process.stdout.write(`${USAGE}\n`);
+        process.exit(0);
+        break;
+      case "--claude-settings":
+        process.stdout.write(`${JSON.stringify(claudeSettings(TOOLS))}\n`);
         process.exit(0);
         break;
       default:

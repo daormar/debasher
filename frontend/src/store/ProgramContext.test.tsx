@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProgramProvider, useProgram } from "./ProgramContext";
+import { DISK_REVISION_POLL_INTERVAL_MS } from "./useDiskRevision";
 import { createEmptyProgram } from "../storage/programStorage";
 import type { Program } from "../models/program";
 import type { ProcessInfo, ProgramProcess } from "../models/process";
@@ -317,8 +318,8 @@ describe("saving a program", () => {
     expect(requests[0].body).toMatchObject({ outputDir: "/elsewhere", program: { homeDir: "/home/p", revision: 2 } });
   });
 
-  it("keeps the tab's program when the user declines to load it again after a conflict", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("asks the user about the revision that refused a save, keeping the tab's program meanwhile", async () => {
+    const confirm = vi.spyOn(window, "confirm");
     conflictThenLoad({ ...loadedProgram(), description: "saved elsewhere", revision: 7 });
     const { result } = renderStore(loadedProgram());
     act(() => result.current.setDescription("this tab's change"));
@@ -328,26 +329,29 @@ describe("saving a program", () => {
       await result.current.save("/home/p").catch(err => { error = err; });
     });
 
-    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).not.toHaveBeenCalled();
     expect(String(error)).toMatch(/changed on disk/);
+    expect(result.current.externalRevision).toBe(7);
     expect(result.current.program.description).toBe("this tab's change");
     expect(result.current.program.revision).toBe(2);
   });
 
-  it("loads the program again from disk when the user agrees after a conflict", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("loads the revision that refused a save when the user chooses to", async () => {
     conflictThenLoad({ ...loadedProgram(), description: "saved elsewhere", revision: 7 });
     const { result } = renderStore(loadedProgram());
     act(() => result.current.setDescription("this tab's change"));
-
-    let error: unknown = null;
     await act(async () => {
-      await result.current.save("/home/p").catch(err => { error = err; });
+      await result.current.save("/home/p").catch(() => {});
     });
 
-    expect(String(error)).toMatch(/loaded again from disk/);
+    await act(async () => {
+      await result.current.loadExternal();
+    });
+
     expect(result.current.program.description).toBe("saved elsewhere");
     expect(result.current.program.revision).toBe(7);
+    expect(result.current.externalRevision).toBeNull();
+    expect(result.current.unsavedChanges).toBe(false);
   });
 
 });
@@ -806,14 +810,13 @@ describe("the requests of a run that save the program", () => {
     expect(result.current.program.revision).toBe(5);
   });
 
-  it("offer to load the program again when a launch meets a revision conflict", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("ask the user about the revision that refused a launch", async () => {
+    const confirm = vi.spyOn(window, "confirm");
     backend({
       "/api/execution/run": () => new Response(
         JSON.stringify({ detail: { code: "revision", revision: 9, message: "The program changed on disk." } }),
         { status: 409 }
       ),
-      "/api/programs/load": () => new Response(JSON.stringify({ ...runnable(), description: "saved elsewhere", revision: 9 })),
     });
     const { result } = renderStore(runnable());
 
@@ -822,11 +825,198 @@ describe("the requests of a run that save the program", () => {
       await result.current.startProgramRun().catch(err => { error = err; });
     });
 
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(String(error)).toMatch(/loaded again from disk/);
-    expect(result.current.program.revision).toBe(9);
-    expect(result.current.program.description).toBe("saved elsewhere");
+    expect(confirm).not.toHaveBeenCalled();
+    expect(String(error)).toMatch(/changed on disk/);
+    expect(result.current.externalRevision).toBe(9);
+    expect(result.current.program.revision).toBe(2);
   });
 
 });
 
+
+describe("changes saved from elsewhere", () => {
+
+  const onDisk = (): Program => ({ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", revision: 2 });
+
+  // A backend whose program metadata is at `disk.revision`, holding
+  // `disk.program`; a save writes the next revision.
+  function backend(disk: { revision: number; program: Program }) {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push(url);
+      if (url === "/api/programs/revision") {
+        return new Response(JSON.stringify({ revision: disk.revision }));
+      }
+      if (url === "/api/programs/load") {
+        return new Response(JSON.stringify({ ...disk.program, revision: disk.revision }));
+      }
+      if (url === "/api/programs/save") {
+        const { program } = JSON.parse(String(init?.body));
+        disk.revision += 1;
+        disk.program = program;
+        return new Response(JSON.stringify({ path: "", scriptPath: "", revision: disk.revision }));
+      }
+      throw new Error(`unexpected request to ${url}`);
+    }));
+    return requests;
+  }
+
+  async function poll() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DISK_REVISION_POLL_INTERVAL_MS);
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("holds no unsaved changes once loaded or saved, and holds them after an edit", async () => {
+    backend({ revision: 2, program: onDisk() });
+    const { result } = renderStore(onDisk());
+    expect(result.current.unsavedChanges).toBe(false);
+
+    act(() => result.current.setDescription("edited"));
+    expect(result.current.unsavedChanges).toBe(true);
+
+    await act(async () => {
+      await result.current.save("/home/p");
+    });
+    expect(result.current.unsavedChanges).toBe(false);
+  });
+
+  it("keeps the changes made while a save is in flight as unsaved", async () => {
+    let finishSave: (response: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) =>
+      url === "/api/programs/save"
+        ? new Promise<Response>(resolve => { finishSave = resolve; })
+        : Promise.reject(new Error(`unexpected request to ${url}`))
+    ));
+    const { result } = renderStore(onDisk());
+    act(() => result.current.setDescription("saved"));
+
+    let saving: Promise<void> = Promise.resolve();
+    act(() => {
+      saving = result.current.save("/home/p");
+    });
+    act(() => result.current.setDescription("edited while saving"));
+    await act(async () => {
+      finishSave(new Response(JSON.stringify({ path: "", scriptPath: "", revision: 3 })));
+      await saving;
+    });
+
+    expect(result.current.unsavedChanges).toBe(true);
+  });
+
+  it("loads a revision saved elsewhere on its own when nothing is unsaved", async () => {
+    const disk = { revision: 2, program: onDisk() };
+    backend(disk);
+    const { result } = renderStore(onDisk());
+
+    disk.revision = 3;
+    disk.program = { ...onDisk(), description: "saved by an agent" };
+    await poll();
+
+    expect(result.current.program.description).toBe("saved by an agent");
+    expect(result.current.program.revision).toBe(3);
+    expect(result.current.unsavedChanges).toBe(false);
+    expect(result.current.externalRevision).toBeNull();
+    expect(result.current.diskLoads).toBe(1);
+  });
+
+  it("asks before it loses unsaved changes, about the latest revision on disk", async () => {
+    const disk = { revision: 2, program: onDisk() };
+    const requests = backend(disk);
+    const { result } = renderStore(onDisk());
+    act(() => result.current.setDescription("this tab's change"));
+
+    disk.revision = 3;
+    await poll();
+
+    expect(result.current.externalRevision).toBe(3);
+    expect(result.current.program.description).toBe("this tab's change");
+    expect(requests).not.toContain("/api/programs/load");
+
+    disk.revision = 4;
+    disk.program = { ...onDisk(), description: "saved again" };
+    await poll();
+    expect(result.current.externalRevision).toBe(4);
+
+    await act(async () => {
+      await result.current.loadExternal();
+    });
+    expect(result.current.program.description).toBe("saved again");
+    expect(result.current.externalRevision).toBeNull();
+    expect(result.current.unsavedChanges).toBe(false);
+  });
+
+  it("saves the tab over the revision on disk when the user chooses to", async () => {
+    const disk = { revision: 2, program: onDisk() };
+    backend(disk);
+    const { result } = renderStore(onDisk());
+    act(() => result.current.setDescription("this tab's change"));
+    disk.revision = 3;
+    disk.program = { ...onDisk(), description: "saved by an agent" };
+    await poll();
+
+    await act(async () => {
+      await result.current.saveOverExternal();
+    });
+
+    expect(disk.revision).toBe(4);
+    expect(disk.program.description).toBe("this tab's change");
+    expect(result.current.program.revision).toBe(4);
+    expect(result.current.externalRevision).toBeNull();
+    expect(result.current.unsavedChanges).toBe(false);
+  });
+
+  it("never takes its own save for one made elsewhere", async () => {
+    // The save has written the next revision, but its answer has not
+    // arrived: the tab still holds the revision before, and edits on.
+    let finishSave: (response: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (url === "/api/programs/revision") {
+        return Promise.resolve(new Response(JSON.stringify({ revision: 3 })));
+      }
+      if (url === "/api/programs/save") {
+        return new Promise<Response>(resolve => { finishSave = resolve; });
+      }
+      return Promise.reject(new Error(`unexpected request to ${url}`));
+    }));
+    const { result } = renderStore(onDisk());
+    act(() => result.current.setDescription("mine"));
+
+    let saving: Promise<void> = Promise.resolve();
+    act(() => {
+      saving = result.current.save("/home/p");
+    });
+    act(() => result.current.setDescription("edited while saving"));
+    await poll();
+
+    expect(result.current.externalRevision).toBeNull();
+
+    await act(async () => {
+      finishSave(new Response(JSON.stringify({ path: "", scriptPath: "", revision: 3 })));
+      await saving;
+    });
+    await poll();
+
+    expect(result.current.externalRevision).toBeNull();
+    expect(result.current.diskLoads).toBe(0);
+    expect(result.current.program.description).toBe("edited while saving");
+  });
+
+  it("asks nothing of a program that was never saved", async () => {
+    const requests = backend({ revision: 2, program: onDisk() });
+    renderStore(createEmptyProgram("p"));
+
+    await poll();
+
+    expect(requests).toEqual([]);
+  });
+
+});

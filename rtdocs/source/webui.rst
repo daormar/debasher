@@ -69,8 +69,17 @@ A program built with the web interface uses two directories:
 
 The two must be different directories. A program is saved with the
 "Save" button, and loaded again from its home directory with "Load
-program". Nothing is kept in the browser: a program that has not been
-saved is lost when its tab is closed.
+program". Nothing is kept in the browser: changes that have not been
+saved are lost when the tab is closed, and "Close", or closing or
+reloading the tab of the browser, asks first.
+
+Another tab, or an AI agent through ``debasher_mcp`` (see the
+:ref:`tools` Section), may save the same program meanwhile. The editor
+notices within a few seconds: with nothing unsaved, it loads the program
+again on its own, positions on the canvas included; with unsaved
+changes, a banner under the toolbar offers to load it, losing them, or
+to save yours over it, losing what was saved. Until you choose, saving
+is refused, so that nobody's work is overwritten without your knowing.
 
 The Home Screen
 ---------------
@@ -125,9 +134,11 @@ edits the selected process, and a toolbar above:
   Program`_ below), **Help** and **Close**, which goes back to the home
   screen. The Help menu links to this documentation and to the
   repository of DeBasher, each in a new tab of the browser, so that the
-  program open in the editor stays as it is, and its "How to cite
-  DeBasher" gives the reference of the article to cite, as text and as
-  BibTeX.
+  program open in the editor stays as it is. Its "Claude Code" gives the
+  command that starts Claude Code on the program (see the
+  :ref:`tools` Section, ``debasher_claude``), to run in a terminal of
+  your own, and its "How to cite DeBasher" gives the reference of the
+  article to cite, as text and as BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the
@@ -261,7 +272,11 @@ The "Program files" panel, in the corner of the canvas, manages the
 files of the home directory: it shows, edits, uploads, renames, moves
 and deletes them, and creates directories. It never shows the files
 that belong to the engine or to the web interface, and the generated
-script is shown read only, since every save writes it again.
+script is shown read only, since every save writes it again. While it is
+open it shows the files that someone else adds, and a file shown that
+someone else writes is read again; if it has unsaved changes, a line
+above it offers to load the file, losing them, or to save it over what
+was written.
 
 Running a General Program
 -------------------------
@@ -444,3 +459,94 @@ Like a run of a general program, a resident program lives in its
 output directory, not in the tab: it goes on running when the tab is
 closed or the server stops, and loading the program shows it again as
 it is.
+
+Working with Claude Code
+------------------------
+
+`Claude Code <https://claude.com/claude-code>`_, an AI agent that works
+in a terminal, can build, test and run a program of the web interface
+with you: it edits the program through ``debasher_mcp`` (see the
+:ref:`tools` Section), with the same rules as the editor, and the
+editor shows its changes as it saves them. It runs with your own
+installation and account of Claude Code; the web interface itself
+calls no AI service. (To have any AI tool write the code of one
+process, the "AI prompt" button of the code editors is enough.)
+
+Starting a Session
+^^^^^^^^^^^^^^^^^^
+
+1. Save the program: Claude Code works on the program as saved in its
+   home directory, and does not see changes that are not saved.
+2. Choose **Claude Code...** in the Help menu. It shows a command such
+   as::
+
+       debasher_claude --home-dir /home/me/programs/wordcount \
+                       --url http://127.0.0.1:8000
+
+   The URL is that of the web interface, which Claude Code talks to;
+   change it in the dialog if the page was opened from a file.
+3. Copy the command and run it in a terminal. Claude Code starts in
+   the home directory of the program, with the tools of DeBasher and
+   the plugin of DeBasher.
+
+In the session, ask in your own words, in any language. The plugin of
+DeBasher has three skills, which Claude Code uses on its own when the
+work asks for them, and which you can also call by their command:
+
+* ``/debasher:help``: questions on DeBasher and on the web interface,
+  answered from your program and the documentation, changing nothing.
+* ``/debasher:design``: the processes of the program, their options
+  and their connections. It asks what the program has to do, proposes
+  a design and explains it (a file or a FIFO for each connection, and
+  why), and builds it, laid out on the canvas, only once you agree.
+* ``/debasher:implement``: the code of the processes and their
+  business tests, one process at a time, running the tests until they
+  pass. It runs the program only when you agree.
+
+An Example
+^^^^^^^^^^
+
+A new, empty program ``wordcount`` is saved, and the session started
+from its dialog. Asked "I want a program that counts the words of every
+text file in an input directory and writes one total for all of them",
+Claude Code asks what it needs to know (how many files, whether it runs
+once), then proposes a single process, ``count_words``, with the input
+directory as a program option, a pattern for the names of the files,
+and an output file for the total, and explains why one process is
+enough for a few hundred small files. Once you agree, it builds the
+process, and the editor shows it on the canvas within a few seconds.
+Asked to go on, it writes the Bash code of ``count_words``, writes a
+test in ``test/count_words.bats`` with a few files of its own, and
+runs the tests until they pass; the test appears in the program files
+panel. It then asks for the input directory before validating and
+running the program.
+
+Permissions
+^^^^^^^^^^^
+
+Claude Code asks before it acts, as DeBasher sets it up:
+
+* tools that only read the program, its runs and its files run without
+  asking;
+* tools that edit, validate, test or run the program ask until you
+  tell Claude Code not to ask again for them;
+* tools that delete files or program state, or stop or restart
+  something, ask every time;
+* Claude Code may not edit by hand what DeBasher keeps in
+  ``.debasher``; the generated script ``<name>.sh`` is written again
+  by every save, so it changes the code of a process instead of the
+  script.
+
+The Editor and Claude Code Together
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The editor loads again, on its own, what Claude Code saves, as long as
+you have nothing unsaved; processes it moves are moved on the canvas
+too. If you have unsaved changes, a banner under the toolbar offers to
+load what was saved, losing yours, or to save yours over it, losing
+Claude Code's. The program files panel does the same with a file that
+it shows. Working by turns, you or Claude Code, avoids the question.
+
+From a terminal of your own, ``debasher_claude`` also takes
+``--mode`` (the skill to start with) and ``--prompt`` (the first
+message); see the :ref:`tools` Section.

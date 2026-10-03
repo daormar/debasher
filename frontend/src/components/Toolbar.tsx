@@ -34,6 +34,7 @@ export default function Toolbar({ onClose }: Props) {
     addProcess,
     mergeProgram,
     isRunInProgress,
+    unsavedChanges,
   } = useProgram();
 
   const [isPreambleOpen, setPreambleOpen] =
@@ -267,10 +268,21 @@ export default function Toolbar({ onClose }: Props) {
         }}
       >
 
-        <HelpMenu />
+        <HelpMenu
+          homeDir={program.homeDir}
+          unsavedChanges={unsavedChanges}
+        />
 
         <button
-          onClick={() => onClose(runGoesOnMessage(program, isRunInProgress))}
+          onClick={() => {
+            if (
+              unsavedChanges &&
+              !window.confirm("Close the program? The changes made since it was last saved are lost.")
+            ) {
+              return;
+            }
+            onClose(runGoesOnMessage(program, isRunInProgress));
+          }}
         >
           Close
         </button>

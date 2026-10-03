@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -210,6 +210,7 @@ export default function ProgramCanvas() {
     runEndSeen,
     processStatuses,
     residentPhase,
+    diskLoads,
   } = useProgram();
 
   const isResident = program.programType === "resident";
@@ -285,10 +286,20 @@ export default function ProgramCanvas() {
     [program]
   );
 
+  // The count of loads from the home directory that the canvas has drawn.
+  const drawnDiskLoadsRef = useRef(diskLoads);
+
   // Syncs localNodes with program on structural changes or a handle
   // flip, always preserving the position React Flow already has (so we
-  // don't overwrite it mid-drag).
+  // don't overwrite it mid-drag), except after the program was loaded
+  // again from its home directory, whose positions are those that someone
+  // else saved, a process moved included.
   useEffect(() => {
+    if (diskLoads !== drawnDiskLoadsRef.current) {
+      drawnDiskLoadsRef.current = diskLoads;
+      setLocalNodes(nodes);
+      return;
+    }
     setLocalNodes(current => {
       const currentById = new Map(
         current.map(node => [node.id, node])
@@ -308,7 +319,7 @@ export default function ProgramCanvas() {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [structuralKey, flipFingerprint]);
+  }, [structuralKey, flipFingerprint, diskLoads]);
 
   // "React Flow" edges: kept in a local copy so that selection
   // changes (needed for delete-key handling) round-trip through

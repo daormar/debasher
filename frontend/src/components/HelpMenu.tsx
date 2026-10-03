@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { DOCS_LINKS, PROJECT_LINKS } from "../models/helpLinks";
 import type { HelpLink } from "../models/helpLinks";
 import CitationDialog from "./CitationDialog";
+import ClaudeCodeDialog from "./ClaudeCodeDialog";
 import { useClickOutside } from "./useClickOutside";
 
 const ITEM_STYLE: CSSProperties = {
@@ -18,16 +19,26 @@ const ITEM_STYLE: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+interface Props {
+  // The home directory of the program, and whether it holds unsaved changes,
+  // for the command that starts Claude Code on it.
+  homeDir: string;
+  unsavedChanges: boolean;
+}
+
 // The Help menu of the toolbar: links to the documentation and to the
 // project, each opened in a new tab of the browser so that the editor, and
-// what it holds unsaved, stays as it is, and the reference of the article to
-// cite.
-export default function HelpMenu() {
+// what it holds unsaved, stays as it is, the command that starts Claude Code
+// on the program, and the reference of the article to cite.
+export default function HelpMenu({ homeDir, unsavedChanges }: Props) {
 
   const [isOpen, setOpen] =
     useState(false);
 
   const [isCitationOpen, setCitationOpen] =
+    useState(false);
+
+  const [isClaudeCodeOpen, setClaudeCodeOpen] =
     useState(false);
 
   const containerRef =
@@ -101,6 +112,17 @@ export default function HelpMenu() {
             role="menuitem"
             onClick={() => {
               closeMenu();
+              setClaudeCodeOpen(true);
+            }}
+            style={ITEM_STYLE}
+          >
+            Claude Code...
+          </button>
+
+          <button
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
               setCitationOpen(true);
             }}
             style={ITEM_STYLE}
@@ -112,6 +134,14 @@ export default function HelpMenu() {
 
         </div>
 
+      )}
+
+      {isClaudeCodeOpen && (
+        <ClaudeCodeDialog
+          homeDir={homeDir}
+          unsavedChanges={unsavedChanges}
+          onClose={() => setClaudeCodeOpen(false)}
+        />
       )}
 
       {isCitationOpen && (

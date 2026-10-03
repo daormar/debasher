@@ -1,3 +1,5 @@
+import { throwIfFileVersionConflict } from "./fileVersionConflict";
+
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
 async function errorDetail(response: Response, fallback: string): Promise<string> {
@@ -25,9 +27,11 @@ interface FileTreeResponse {
   entries: FileEntry[];
 }
 
+// A file read, with the file version of what was read (see file_version in
+// api/routers/program_files.py).
 export type FileContent =
-  | { kind: "file"; content: string }
-  | { kind: "binary" }
+  | { kind: "file"; content: string; version: string }
+  | { kind: "binary"; version: string }
   | { kind: "missing" };
 
 export async function getFileTree(homeDir: string, programName: string): Promise<FileEntry[]> {
@@ -78,6 +82,48 @@ export async function createFolder(
   return entries;
 }
 
+// The version of a file, without reading it; null when there is no file.
+export async function getFileVersion(homeDir: string, path: string): Promise<string | null> {
+  const response = await fetch("/api/program-files/version", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ homeDir, path }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to read the version of ${path}.`));
+  }
+
+  const { version } = await response.json();
+  return version;
+}
+
+interface WriteContentRequest {
+  homeDir: string;
+  programName: string;
+  path: string;
+  content: string;
+  create: boolean;
+  expectedVersion?: string;
+}
+
+async function postWriteContent(request: WriteContentRequest): Promise<{ entries: FileEntry[]; version: string | null }> {
+  const response = await fetch("/api/program-files/write-content", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+
+  await throwIfFileVersionConflict(response);
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response, `Failed to save ${request.path}.`));
+  }
+
+  const { entries, version } = await response.json();
+  return { entries, version: version ?? null };
+}
+
 // Writes the content of a user file. Without `create`, only a file that
 // exists, as the panel's editor does; with it, also a new file, with the
 // directories above it, as "Add test" and the MCP server do.
@@ -88,18 +134,22 @@ export async function writeFileContent(
   content: string,
   create = false
 ): Promise<FileEntry[]> {
-  const response = await fetch("/api/program-files/write-content", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ homeDir, programName, path, content, create }),
-  });
-
-  if (!response.ok) {
-    throw new Error(await errorDetail(response, `Failed to save ${path}.`));
-  }
-
-  const { entries }: FileTreeResponse = await response.json();
+  const { entries } = await postWriteContent({ homeDir, programName, path, content, create });
   return entries;
+}
+
+// Writes the content of a file that exists, as the panel's editor does, only
+// if it still holds `expectedVersion`, the version read; throws a
+// FileVersionConflict (see api/fileVersionConflict.ts) otherwise. Answers
+// with the tree and the version written.
+export async function saveFileContent(
+  homeDir: string,
+  programName: string,
+  path: string,
+  content: string,
+  expectedVersion: string
+): Promise<{ entries: FileEntry[]; version: string | null }> {
+  return postWriteContent({ homeDir, programName, path, content, create: false, expectedVersion });
 }
 
 export async function deleteEntry(

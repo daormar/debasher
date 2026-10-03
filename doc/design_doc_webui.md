@@ -42,18 +42,19 @@ backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, and "Execution and observation" how it runs a program and follows it.
-"Frontend state and the canvas" describes the frontend's own state and the
-Help menu of the editor, and "Sequential processes in the web UI" describes how
-a program keeps the sequential processes of its module. "Guarantees and
-non-goals" gathers the guarantees stated along the way. "Resident programs in
-the web UI" designs the extension to resident programs, and says which parts of
-it are built. "Business tests in the web UI" describes how the web UI runs the
-tests of a program and writes a first test for a process. "A prompt for the
-code of a process" describes how the code editors help to have an AI tool write
-the code of a process, of its options handler, of its additional methods or of
-a node. "Editing a program from an agent: the MCP server" describes a second
-client of the backend, for AI agents, and "Future work" lists what is known to
-be missing.
+"Frontend state and the canvas" describes the frontend's own state and the Help
+menu of the editor, and "Sequential processes in the web UI" describes how a
+program keeps the sequential processes of its module. "Guarantees and non-goals"
+gathers the guarantees stated along the way. "Resident programs in the web UI"
+designs the extension to resident programs, and says which parts of it are
+built. "Business tests in the web UI" describes how the web UI runs the tests of
+a program and writes a first test for a process. "A prompt for the code of a
+process" describes how the code editors help to have an AI tool write the code
+of a process, of its options handler, of its additional methods or of a node.
+"Editing a program from an agent: the MCP server" describes a second client of
+the backend, for AI agents, "Claude Code on a program" how DeBasher starts
+Claude Code with that server, and "Future work" lists what is known to be
+missing.
 
 # Glossary
 
@@ -166,7 +167,12 @@ refer to it.
 - **revision**: a counter in the program metadata that a save which changes it
   increments; a write into the program's own home directory that would change
   the metadata is refused when the metadata there holds another revision than
-  the one the program was loaded with (see "Revisions of the program metadata").
+  the one the write names: the one the program was loaded with, or the one on
+  disk when the user saves over it (see "Revisions of the program metadata").
+- **file version**: the modification time and the size of a user file, which a
+  write that changes the file changes; the editor of the program files panel
+  saves a file only over the version it read (see "Reserved names and user
+  files").
 - **generated script**: the module that script generation writes as `<name>.sh`
   in the home directory.
 - **reserved name**: a file or directory name that the engine or the web UI
@@ -216,6 +222,9 @@ refer to it.
 - **tab**: one browser tab with the web UI open, holding its own store.
 - **store**: the state of the frontend in a tab (`ProgramContext`): the program
   being edited and what the tab last read of its run.
+- **unsaved changes**: how the program of a tab differs from the program as it
+  was last loaded or saved, its revision and home directory apart (see
+  "Screens and the store").
 - **edit**: one change of a program as plain data (`EditOp` in
   `models/programEdits.ts`), such as adding a process or connecting two
   options; an operation of the store applies one or more edits.
@@ -323,6 +332,21 @@ See "Editing a program from an agent: the MCP server".
 - **proposal**: what an MCP tool called with `dry_run` answers: the edits it
   would apply, resolved and validated, and what they would change, with nothing
   saved.
+
+## Claude Code on a program
+
+See "Claude Code on a program".
+
+- **launcher of Claude Code**: the command, run as `debasher_claude`, that
+  starts Claude Code on one program with the MCP server, the permissions of
+  its MCP tools and the plugin of DeBasher.
+- **plugin of DeBasher**: the plugin of Claude Code that DeBasher installs,
+  which holds its skills and the reference they share
+  (`reference/concepts.md`).
+- **skill**: a set of instructions of the plugin of DeBasher that Claude Code
+  follows for one kind of work, called in a session as `/debasher:<name>`.
+- **session mode**: the skill that a session of `debasher_claude` starts with
+  (`--mode`): `help`, `design` or `implement`, or none.
 
 # Architecture
 
@@ -970,11 +994,32 @@ metadata, and replaces the metadata file whole, so that two writes arriving
 together cannot both pass the comparison (`persistence.save`).
 
 When a write is refused, the editor says that the program changed on disk since
-it was loaded, and offers to load it again. Loading it again replaces the
-program of the tab with the one on disk, and loses what was changed in the tab
-since it was loaded; declining keeps the tab as it is, and its saves into the
-home directory stay refused until the program is loaded again. The revision is a
-guard against overwriting, not a merge.
+it was loaded, and shows a banner under the toolbar with two choices. "Load it
+(lose my changes)" replaces the program of the tab with the one on disk, and
+loses what was changed in the tab since it was loaded. "Save mine over it" saves
+the program of the tab naming the revision on disk, and loses what was saved
+there since the tab loaded it; if someone saved again meanwhile, that save is
+refused in turn, and the banner stays, now for the newer revision. Until the
+user chooses, the tab goes on as it is, and its writes into the home directory
+stay refused; a tab with no unsaved changes, which loses nothing, loads the
+program again at the next reading of the revision, as below. The revision is a
+guard against overwriting without knowing, not a merge.
+
+A tab also learns of a revision saved elsewhere before it writes. While the page
+is visible and the program has a home directory, the editor reads the revision
+of the program metadata there every few seconds (`/revision`, which reads only
+the revision, polled by `store/useDiskRevision.ts`). When it is another than the
+one of the tab, a tab with no unsaved changes loads the program again on its
+own, since it loses nothing, and a tab with unsaved changes shows the same
+banner. Whether the tab holds unsaved changes is decided when the revision is
+read, from the latest program, not from the last render, so that an edit made
+meanwhile is never lost to a load that does not ask. A revision read while a
+write of the tab is in flight, or read before such a write was answered, is set
+aside, since it may be that write's own, which the tab has not taken yet; and a
+reading never starts while the one before has not been answered. A program
+loaded again keeps the selection and the view of the canvas, and the canvas
+takes the positions of its processes from it (see "Keeping the canvas in step
+with the store").
 
 ## Reserved names and user files
 
@@ -1008,6 +1053,21 @@ It keeps four guarantees:
   itself is never deleted or moved.
 - The generated script is shown, read-only: the panel never edits, deletes,
   moves or overwrites it, since the next save would regenerate it anyway.
+
+The panel also follows what someone else, such as an agent through the MCP
+server, writes into the home directory. While it is open and the page is
+visible, it reads the tree again every few seconds, and the file version of the
+file it shows (`/version`, which reads no content); when the version changed, a
+buffer that holds no edit since the file was read is read again in place, and a
+buffer with such edits shows a banner above the file that offers to load the
+file, losing them, or to save the buffer over it (only to load it, when the file
+was deleted). Its saves name the version they read (`expectedVersion` of
+`/write-content`), and a file that holds another version is refused with a
+conflict and the same banner, so that the editor never overwrites what someone
+else wrote since it read the file unless the user chooses to. The version is
+compared just before the write, with no lock, and a write that keeps both the
+size and the modification time of a file goes unseen. "Add test" and the MCP
+server name no version.
 
 ## The output directory
 
@@ -1185,18 +1245,20 @@ goes away and comes back.
 **The tab.** Nothing that happens to a tab stops a run: closing or reloading it,
 leaving the editor, or hiding the indicator of the run. Only "Stop program"
 stops it, and "Stop process" one of its processes, besides the actions that stop
-a resident program (see "Running a resident program"). The tab asks nothing when
-it is closed: the browser shows only a generic warning, which could not say that
-the run goes on, and would show it every time.
+a resident program (see "Running a resident program"). The tab asks nothing
+about the run when it is closed (it asks only when the program holds unsaved
+changes, see "Screens and the store"): the browser shows only a generic warning,
+which could not say that the run goes on, and would show it every time.
 
 Leaving the editor while there is a run in progress shows a short message, which
-blocks nothing: the run goes on in its output directory, and is followed or
-stopped by opening its program again. This is the only moment at which the web
-UI can say where the run lives. The backend keeps no record of it, and the home
-screen cannot list the runs in progress, since it does not know which output
-directories exist. A run is found again by loading its program from its home
-directory: its program metadata holds its output directory, and its run phase
-comes from the process statuses of that directory.
+blocks nothing (apart from the question about unsaved changes): the run goes on
+in its output directory, and is followed or stopped by opening its program
+again. This is the only moment at which the web UI can say where the run lives.
+The backend keeps no record of it, and the home screen cannot list the runs in
+progress, since it does not know which output directories exist. A run is found
+again by loading its program from its home directory: its program metadata holds
+its output directory, and its run phase comes from the process statuses of that
+directory.
 
 A request of the tab that is still pending when the tab goes away, to launch or
 to stop a run, goes on in the backend to its end. The tab loses the answer, and
@@ -1299,9 +1361,15 @@ that the ids an edit refers to exist and those it adds are free. Whether the
 engine accepts the name of a process is left to the backend, and what "Add
 program" brings is checked before its edit is built (`mergeRefusal`).
 
-The store keeps no history and no record of unsaved changes: there is no
-undo, and leaving the editor or closing the tab loses the changes made since
-the last save, without a warning.
+The store keeps no history, so there is no undo, but it keeps the program as
+it was last loaded or saved, and the program holds unsaved changes when it
+differs from it in anything but the revision and the home directory
+(`hasUnsavedChanges` in `models/externalChanges.ts`, which compares the two as
+the program metadata would hold them, whatever the order of the keys of an
+object). What a save keeps is the program it wrote, not the one the tab holds
+when the save is answered, since the user may have kept editing meanwhile.
+Leaving the editor with "Close", or closing or reloading the tab of the browser,
+asks first when the program holds unsaved changes.
 
 ## From the store to the canvas
 
@@ -1364,7 +1432,10 @@ when the program's structural key changes (for each process: its id, name and
 mode, and the id, label and direction of each option, and for an input, where
 its value comes from when no connection can give it) or when the set of moved
 handles changes, keeping the positions that the list already has. Refreshing
-it on every change of the store would fight with the drag.
+it on every change of the store would fight with the drag. After the program
+was loaded again from its home directory (see "Revisions of the program
+metadata"), the list takes the positions from the store instead, since they are
+those that someone else saved, a moved process included.
 
 The rule that follows is that whatever a canvas node draws from its process
 must be part of the structural key; otherwise the canvas node keeps drawing an
@@ -1382,10 +1453,12 @@ to the repository (the source code and its issues). It also opens "How to cite
 DeBasher", a dialog with a link to the article that describes DeBasher and its
 reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
 the prompt panel when the browser refuses the clipboard (see "The prompt
-panel"). What the menu offers is data, in `models/helpLinks.ts`. Every link
-opens in a new tab of the browser, with no access back to the tab of the editor:
-the store keeps no record of unsaved changes (see "Screens and the store"), so
-following a link in the same tab would lose them without a warning.
+panel"), and "Claude Code", a dialog with the command that starts Claude Code on
+the program (see "Claude Code on a program"). The links and the reference are
+data, in `models/helpLinks.ts`, and the command and the skills it lists in
+`models/claudeCommand.ts`. Every link opens in a new tab of the browser, with no
+access back to the tab of the editor, so that the editor stays as it is, with
+any unsaved changes (see "Screens and the store").
 
 A link to a page of the documentation of DeBasher names a page of
 `rtdocs/source` by the name of its source, and the tests of the frontend check
@@ -1543,9 +1616,17 @@ non-goals of a resident program".
 
 - **Two directories apart.** A program is never saved into its output
   directory, and the output directory is never set to the home directory.
-- **No save over another's.** A save into a program's own home directory never
-  overwrites what another tab or client saved there since the program was loaded
-  (see "Revisions of the program metadata").
+- **No save over another's without knowing.** A save into a program's own home
+  directory never overwrites what another tab or client saved there since the
+  program was loaded, unless the user, told so, chooses to (see "Revisions of
+  the program metadata").
+- **No write over another's file.** The editor of the program files panel never
+  overwrites a file that someone else wrote since it read it, unless the user
+  chooses to (see "Reserved names and user files").
+- **Unsaved changes are lost only when the user lets them go.** A revision saved
+  elsewhere is loaded on its own only into a tab with no unsaved changes, and
+  leaving the editor or closing its tab with unsaved changes asks first (see
+  "Revisions of the program metadata" and "Screens and the store").
 - **A program lives where it is loaded from.** Its home directory is the
   directory it was loaded from, even if it was copied or moved there (see
   "The home directory").
@@ -1604,9 +1685,10 @@ non-goals of a resident program".
   directories are not coordinated beyond two guards: a save over what another
   saved since the program was loaded is refused (see "Revisions of the program
   metadata"), and the guards based on the engine's own files (a run in progress)
-  see the other tab. Nothing merges the changes of two tabs.
-- **Keeping unsaved work.** There is no autosave, no undo and no warning
-  before unsaved changes are lost.
+  see the other tab. A tab learns of a revision that another saved, and loads
+  it or asks, but nothing merges the changes of two tabs.
+- **Keeping unsaved work.** There is no autosave and no undo: unsaved changes
+  live only in the tab.
 - **Live updates.** The web UI learns what happens in a run by polling, every
   few seconds, not by being told.
 - **Being told that a run ended, or a list of the runs in progress.** A run is
@@ -3023,7 +3105,7 @@ The file is written through the program files of the backend, whose
 `create`, with the directories above it, keeping the guarantees of the program
 files panel (see "Reserved names and user files"); without `create` it writes
 only a file that exists. After "Add test", the program files panel reads the
-tree again, since it holds no other notice of a file written outside it.
+tree again at once, without waiting for its next reading.
 
 ## Business tests from the MCP server
 
@@ -3612,6 +3694,124 @@ that keeps the program metadata in memory with the revision check of the backend
 (`frontend/mcp/src/tools.test.ts`); the revision check itself is tested in the
 backend's own tests.
 
+# Claude Code on a program
+
+`debasher_claude` starts Claude Code on one program, with what DeBasher gives
+it: the MCP server, the permissions of its MCP tools, and the plugin of
+DeBasher.
+The user runs it in a terminal of their own, with the home directory of the
+program and the URL of the backend, and Claude Code edits the program through
+the MCP tools while the editor of the web UI follows what it saves (see
+"Revisions of the program metadata"). It uses the user's own installation and
+account of Claude Code: the web UI calls no AI service, and holds no key of one.
+
+The web UI gives the command: "Claude Code" in the Help menu shows
+`debasher_claude` with the home directory of the program and the URL of the
+backend, for the user to copy (`components/ClaudeCodeDialog.tsx`, which builds
+it with `models/claudeCommand.ts`). The URL is the origin of the page, which the
+backend serves; under the dev server, which forwards `/api` to the backend, that
+origin reaches the API as well. A page opened from a file gets the default of
+`debasher_webui` instead, and the user can change the URL in the dialog. The
+home directory and the URL are quoted for a POSIX shell when they hold anything
+that the shell would read otherwise. The command gives no session mode (no
+`--mode`): the skills are listed for the user to know them, and Claude Code
+calls one on its own when the work asks for it. A program that was never saved
+gets no command, since the MCP tools work on the program as saved, and one with
+unsaved changes gets a note that says so.
+
+## The launcher
+
+```
+debasher_claude --home-dir <dir> [--url <url>] [--mode <mode>] [--prompt <text>]
+```
+
+The launcher of Claude Code checks that a program is saved in the home
+directory, and starts Claude Code there with:
+
+- the MCP server, as a server named `debasher` that runs the installed
+  `debasher_mcp` with the URL given (`--mcp-config`, as a JSON string, since the
+  URL is only known when the session starts). A server of the same name that
+  the user registered with Claude Code gives way to it for the session, and
+  the user's other servers stay;
+- the permissions of the MCP tools (`--settings`, see "The permissions of the
+  MCP tools");
+- the plugin of DeBasher, from the package data (`--plugin-dir`), whose files
+  Claude Code is allowed to read, and only to read, without asking
+  (`--allowedTools` with a rule on Read, on the real path of the plugin, since
+  Claude Code compares the paths it reads without symbolic links), for the
+  skills to read its reference;
+- a line added to the system prompt that names the home directory, which the
+  MCP tools take as `home_dir`, and the backend, and says that the editor of the
+  web UI may have the program open;
+- a first message: the skill of the session mode given, if any
+  (`/debasher:<mode>`), which takes the prompt given as its arguments, or else
+  the prompt alone. Claude Code takes a single first message; it goes after
+  `--`, so that an option of Claude Code that takes several values never takes
+  it as one of them. Every skill can be called later in the same session, so a
+  session moves from one kind of work to another without losing what it holds.
+
+What follows `--` is passed to Claude Code as it is, `DEBASHER_CLAUDE_CMD`
+names the command of Claude Code, and `--dry-run` prints the command instead of
+running it.
+
+## The permissions of the MCP tools
+
+The permissions come from the MCP server itself (`debasher_mcp
+--claude-settings`, `frontend/mcp/src/claudeSettings.ts`), from what each MCP
+tool says it does (its annotations), so that an MCP tool added to the server is
+ruled with no other change:
+
+- an MCP tool that only reads, changing nothing and running no code of the
+  program, is allowed without asking; validating the program and running its
+  tests save it and run its code, so they are not among them;
+- an MCP tool that deletes or stops something (resetting the output directory or
+  the program state, deleting a user file, stopping a program, restarting a
+  node) asks every time: an "ask" rule wins over an "allow" one, so it asks even
+  once the user chose to always allow it;
+- any other MCP tool, which edits the program or runs it, is left to Claude
+  Code, which asks until the user allows it;
+- the tools of Claude Code that edit files are denied the program metadata
+  (`Edit(**/.debasher/**)`, a rule that Claude Code applies to each of them),
+  which changes only through the MCP tools, keeping the rules of the editor
+  and the revision. A command of Bash is not covered by the rule, but Claude
+  Code asks before running one. Nothing denies editing the generated script,
+  which the next save writes again; the reference of the plugin tells Claude
+  Code to change the code of a process with `update_process` instead.
+
+## The plugin of DeBasher
+
+The plugin of DeBasher (`frontend/claude/plugin`, installed in the
+`claude/plugin` directory of the package data) holds three skills and the
+reference they share, `reference/concepts.md`: a summary of DeBasher for an
+agent that works through the MCP tools (programs, processes and their code,
+options, connections, resident programs, business tests, running), which a
+skill reads at its start, through `${CLAUDE_PLUGIN_ROOT}`, which Claude Code
+replaces with the directory of the plugin. Each skill says what it is for in
+its description, which Claude Code reads to call it unasked, and how to work:
+
+- `help` answers questions on the web UI and on DeBasher, looking at the
+  program with the tools that only read, and changes nothing;
+- `design` asks what the program has to do, proposes its processes, options
+  and connections (a file or a FIFO, and why), and builds them, once the user
+  agrees, with `apply_edits`, laid out on the canvas and validated; it writes
+  no code;
+- `implement` writes the code of one process at a time from its code prompt
+  (`get_code_prompt`), fills in a business test from the skeleton of
+  `add_test`, and runs the tests until they pass; it runs the program only
+  when the user agrees.
+
+A skill leaves to another what is not its own, and says so to the user.
+
+## Building and testing debasher_claude
+
+`debasher_claude` is built from `frontend/claude/debasher_claude.sh`, as
+`debasher_mcp` is, with the package data and command directories that configure
+sets, and installed among the commands; `make install` installs the plugin. Its
+tests (`frontend/mcp/src/debasherClaude.test.ts`) build it the same way, against
+a `debasher_mcp` and a Claude Code that write down what they are given, and
+those of the permissions (`frontend/mcp/src/claudeSettings.test.ts`) check that
+every MCP tool is ruled by what it says it does.
+
 # Future work
 
 - **The result of each test.** "Run tests" shows the reports of bats and
@@ -3620,11 +3820,13 @@ backend's own tests.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
-  the MCP server gives it. It shares the open questions of the assistant on the
-  documentation (see "An assistant on the documentation of DeBasher" below):
-  where the key of the AI service lives on a server with no authentication, and
-  that the program, and maybe its files, leave the machine for that service,
-  which the user has to know.
+  the MCP server and `debasher_claude` (see "Claude Code on a program") give it;
+  a terminal in the page that runs `debasher_claude` would come first, once the
+  backend checks who sends each request. It shares the open questions of the
+  assistant on the documentation (see "An assistant on the documentation of
+  DeBasher" below): where the key of the AI service lives on a server with no
+  authentication, and that the program, and maybe its files, leave the machine
+  for that service, which the user has to know.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.

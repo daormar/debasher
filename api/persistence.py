@@ -198,7 +198,7 @@ class RevisionConflict(Exception):
         self.revision = revision
 
 
-def _saved_revision(home_dir: str) -> int | None:
+def saved_revision(home_dir: str) -> int | None:
     """
     The revision of the program metadata in `home_dir`, 0 for metadata that
     records none or cannot be read, or None when there is no program
@@ -269,7 +269,7 @@ def save(home_dir: str, program: Program) -> SavedProgram:
     program_path = home / METADATA_DIRNAME / PROGRAM_FILENAME
 
     with _metadata_lock(home):
-        current = _saved_revision(home_dir)
+        current = saved_revision(home_dir)
 
         if current is not None and _same_metadata(program_path, program):
             revision = current

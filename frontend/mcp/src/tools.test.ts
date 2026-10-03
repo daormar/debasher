@@ -470,7 +470,7 @@ describe("business tests and user files", () => {
         return [];
       },
       getFileContent: async (_homeDir: string, path: string) =>
-        path in files ? { kind: "file" as const, content: files[path] } : { kind: "missing" as const },
+        path in files ? { kind: "file" as const, content: files[path], version: "v" } : { kind: "missing" as const },
       writeFileContent: async (_homeDir: string, programName: string, path: string, content: string, create = false) => {
         if (path === `${programName}.sh`) {
           throw new Error("Cannot edit the program's generated script");

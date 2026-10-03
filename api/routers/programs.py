@@ -24,6 +24,16 @@ class LoadProgramRequest(BaseModel):
     inputDir: str
 
 
+class ProgramRevisionRequest(BaseModel):
+    homeDir: str
+
+
+class ProgramRevisionResponse(BaseModel):
+    # The revision of the program metadata in the home directory, None when
+    # there is no program metadata there.
+    revision: int | None
+
+
 class ImportProgramRequest(BaseModel):
     scriptPath: str
     debasherModDir: str = ""
@@ -70,6 +80,20 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     return SaveProgramResponse(
         path=str(saved.program_path), scriptPath=str(saved.script_path), revision=saved.revision
     )
+
+
+@router.post("/revision", response_model=ProgramRevisionResponse)
+def get_program_revision(request: ProgramRevisionRequest) -> ProgramRevisionResponse:
+    """
+    The revision of the program metadata saved in `request.homeDir`, without
+    loading the program: what an editor polls to learn that someone else
+    saved the program since it was loaded. The metadata is replaced whole
+    when it is saved (see persistence.save), so reading it needs no lock.
+    """
+    if not request.homeDir.strip():
+        raise HTTPException(status_code=400, detail="homeDir must not be empty")
+
+    return ProgramRevisionResponse(revision=persistence.saved_revision(request.homeDir))
 
 
 @router.post("/load", response_model=Program)

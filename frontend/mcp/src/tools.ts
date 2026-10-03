@@ -81,6 +81,11 @@ function tool<Shape extends z.ZodRawShape>(
   };
 }
 
+// What a tool does, which debasher_claude also turns into the permissions of
+// Claude Code (see claudeSettings.ts). A tool that READS changes nothing and
+// runs no code of the program, so it runs without asking: a tool that saves
+// the program or runs its code (validating, testing) EDITS, even when that is
+// not its purpose. A tool that DELETES loses something or stops something.
 const READS = { readOnlyHint: true };
 const EDITS = { readOnlyHint: false, destructiveHint: false };
 const DELETES = { readOnlyHint: false, destructiveHint: true };
@@ -543,7 +548,7 @@ const runningTools = [
     "validate_program",
     "Validates the program as the Run menu does: everything but launching the processes (debasher_exec --validate), then checks the options of the program. Both save the program first.",
     { home_dir: schemas.homeDir, lines },
-    READS,
+    EDITS,
     async (backend, { home_dir, lines: count }) => {
       const program = await programWithOutputDir(backend, home_dir);
       const validation = await savingFirst(() => backend.validateProgram(program));
@@ -933,7 +938,7 @@ const testTools = [
     "run_tests",
     "Runs the business tests of the program, the files test/*.bats and test/test_*.py of its home directory, as \"Run tests\" in the Run menu does (debasher_test), after saving the program; a program with conda or docker support gets its environments and images prepared first, as a run would. Refused while a run is in progress.",
     { home_dir: schemas.homeDir, lines },
-    READS,
+    EDITS,
     async (backend, { home_dir, lines: count }) => {
       const program = await loadProgram(backend, home_dir);
       const { outcome, output } = await savingFirst(() => backend.runTests(program));

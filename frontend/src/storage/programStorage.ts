@@ -51,6 +51,23 @@ export async function saveProgram(
   return { revision };
 }
 
+// The revision of the program metadata in `homeDir`, null when there is
+// none, without loading the program.
+export async function getProgramRevision(homeDir: string): Promise<number | null> {
+  const response = await fetch("/api/programs/revision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ homeDir }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to read the revision of the program: ${await errorMessage(response)}`);
+  }
+
+  const { revision } = await response.json();
+  return revision;
+}
+
 // The directory holds no program metadata to load.
 export class NoProgramMetadata extends Error {}
 
