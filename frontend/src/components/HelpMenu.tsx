@@ -19,6 +19,10 @@ const ITEM_STYLE: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const SEPARATOR_STYLE: CSSProperties = {
+  borderTop: "1px solid #eee",
+};
+
 interface Props {
   // The home directory of the program, and whether it holds unsaved changes,
   // for the command that starts Claude Code on it.
@@ -103,21 +107,7 @@ export default function HelpMenu({ homeDir, unsavedChanges }: Props) {
 
           {DOCS_LINKS.map(renderLink)}
 
-          <div
-            role="separator"
-            style={{ borderTop: "1px solid #eee" }}
-          />
-
-          <button
-            role="menuitem"
-            onClick={() => {
-              closeMenu();
-              setClaudeCodeOpen(true);
-            }}
-            style={ITEM_STYLE}
-          >
-            Claude Code...
-          </button>
+          <div role="separator" style={SEPARATOR_STYLE} />
 
           <button
             role="menuitem"
@@ -131,6 +121,19 @@ export default function HelpMenu({ homeDir, unsavedChanges }: Props) {
           </button>
 
           {PROJECT_LINKS.map(renderLink)}
+
+          <div role="separator" style={SEPARATOR_STYLE} />
+
+          <button
+            role="menuitem"
+            onClick={() => {
+              closeMenu();
+              setClaudeCodeOpen(true);
+            }}
+            style={ITEM_STYLE}
+          >
+            Claude Code...
+          </button>
 
         </div>
 

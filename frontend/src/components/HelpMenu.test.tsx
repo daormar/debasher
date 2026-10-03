@@ -21,9 +21,9 @@ describe("HelpMenu", () => {
     openMenu();
     expect(screen.getAllByRole("menuitem").map(item => item.textContent)).toEqual([
       ...DOCS_LINKS.map(link => link.label),
-      "Claude Code...",
       "How to cite DeBasher...",
       ...PROJECT_LINKS.map(link => link.label),
+      "Claude Code...",
     ]);
   });
 
