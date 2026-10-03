@@ -257,3 +257,9 @@ footer {
 ul.partner-logos { list-style-type:none; margin-left:0; }
   ul.partner-logos li { display:inline; }
   ul.partner-logos li img { vertical-align:middle; padding-top:1em; }
+
+/* When the left margin has room for it, the wing of the logo hangs into the
+   margin and the foot of the D lines up with the text below. */
+@media screen and (min-width: 1280px) {
+  header img.logo { margin-left:-107px; }
+}
