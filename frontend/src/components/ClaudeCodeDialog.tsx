@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { backendUrl, CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
+import { DEFAULT_WEBUI_INFO, getWebuiInfo } from "../api/webuiApi";
+import type { WebuiInfo } from "../api/webuiApi";
+import { CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
 import { copyOrSelect } from "../utils/clipboard";
 
 interface Props {
@@ -13,15 +15,42 @@ interface Props {
 // "Claude Code" of the Help menu: the command that starts Claude Code on the
 // program (debasher_claude), for the user to run in a terminal of their own,
 // and the skills that the session offers. The web UI runs nothing itself.
+// The backend says what the command is run through, as the `docker compose
+// exec` that runs it inside the container of the Docker image, and how
+// Claude Code is installed there; where Claude Code cannot work on its
+// programs, the dialog gives no command and says why.
 export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: Props) {
 
-  const [url, setUrl] = useState(() => backendUrl(window.location));
+  // Null until the backend answers; a backend that cannot answer is taken
+  // to offer the command as it is, which is no harm where it does not work.
+  const [info, setInfo] = useState<WebuiInfo | null>(null);
+
+  // The URL of the backend from the machine where the command runs: the one
+  // that the backend gives, or else the origin of the page, which the
+  // backend serves (under the dev server, which forwards /api, it reaches the
+  // API too).
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    let isCurrent = true;
+    getWebuiInfo()
+      .catch(() => DEFAULT_WEBUI_INFO)
+      .then(answer => {
+        if (isCurrent) {
+          setInfo(answer);
+          setUrl(answer.backendUrl ?? window.location.origin);
+        }
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const commandRef = useRef<HTMLTextAreaElement>(null);
 
-  const command = homeDir ? claudeCommand(homeDir, url.trim()) : "";
+  const command = homeDir ? claudeCommand(homeDir, url.trim(), info?.claudeCodePrefix ?? null) : "";
 
   async function handleCopy() {
     setCopyNote(
@@ -65,7 +94,15 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
           Claude Code
         </h3>
 
-        {!homeDir ? (
+        {info === null ? null : !info.claudeCode ? (
+
+          <p style={{ margin: 0 }}>
+            Claude Code is not available with this web UI: the directories of
+            its server are not those of the machine where Claude Code would
+            work on the program.
+          </p>
+
+        ) : !homeDir ? (
 
           <p style={{ margin: 0 }}>
             Claude Code works on a program saved in its home directory: save
@@ -77,7 +114,9 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
           <>
 
             <p style={{ margin: 0 }}>
-              Run this in a terminal to work on this program with Claude Code:
+              {info.claudeCodePrefix
+                ? "Run this in a terminal to work on this program with Claude Code, which runs where this web UI runs (in its container):"
+                : "Run this in a terminal to work on this program with Claude Code:"}
             </p>
 
             <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
@@ -94,7 +133,7 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
                 ref={commandRef}
                 aria-label="Command"
                 readOnly
-                rows={2}
+                rows={info.claudeCodePrefix ? 3 : 2}
                 value={command}
                 style={{
                   flex: 1,
@@ -107,6 +146,14 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
             </div>
 
             {copyNote && <span style={{ fontSize: 13, color: "#555" }}>{copyNote}</span>}
+
+            {info.claudeCodeInstall && (
+              <p style={{ margin: 0 }}>
+                The first time, install Claude Code there
+                with <code>{info.claudeCodeInstall}</code>; on its first
+                start, it asks you to log in, once.
+              </p>
+            )}
 
             {unsavedChanges && (
               <p style={{ margin: 0, color: "#8a5300" }}>

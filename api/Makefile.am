@@ -5,12 +5,12 @@ markdown_parsing.py models.py node_reference.py node_relaunch.py option_handler_
 persistence.py program_import.py requirements.txt resident_generation.py	\
 resident_fifos.py resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
 launch_record.py program_state.py run_guard.py saving.py script_generation.py	\
-tool_sessions.py
+tool_sessions.py serve.py token_auth.py
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py		\
 routers/fs_browse.py routers/processes.py routers/program_files.py	\
-routers/programs.py
+routers/programs.py routers/webui.py
 
 bin_SCRIPTS = debasher_webui
 

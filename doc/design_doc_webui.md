@@ -53,8 +53,9 @@ process" describes how the code editors help to have an AI tool write the code
 of a process, of its options handler, of its additional methods or of a node.
 "Editing a program from an agent: the MCP server" describes a second client of
 the backend, for AI agents, "Claude Code on a program" how DeBasher starts
-Claude Code with that server, and "Future work" lists what is known to be
-missing.
+Claude Code with that server, "Access to the backend: the token" how the backend
+obeys only those who hold its token, and "Future work" lists what is known to
+be missing.
 
 # Glossary
 
@@ -348,6 +349,22 @@ See "Claude Code on a program".
 - **session mode**: the skill that a session of `debasher_claude` starts with
   (`--mode`): `help`, `design` or `implement`, or none.
 
+## Access to the backend
+
+See "Access to the backend: the token".
+
+- **token**: the random secret that `debasher_webui` draws, or is given, when
+  it starts, and without which the backend obeys no request to the API.
+- **token URL**: the address of the web UI with the token in its fragment
+  (`/#token=<token>`), which `debasher_webui` prints and the user opens once.
+- **origin**: what a browser keeps the data of a page apart by: the scheme, the
+  host and the port of its address (`http://localhost:8000`). Two ports of one
+  host are two origins.
+- **token source**: where `apiFetch` takes the token from: the local storage of
+  the browser in the editor, the token file in the MCP server.
+- **token file**: the private file, named after the port of the backend, into
+  which the backend writes its token for the MCP server to read.
+
 # Architecture
 
 The web UI has three layers. The **frontend** is a single-page React
@@ -370,13 +387,14 @@ The backend groups its endpoints in routers, by what they act on:
   left, talk to its FIFOs, and reset its output directory.
 - `program-files`: browse and manage the user files of the home directory.
 - `fs`: browse the file system from the dialogs that ask for a path.
+- `webui`: what the web UI offers that depends on where the backend runs.
 
 One server process serves both the API and the built frontend, which is a single
 self-contained `index.html`. `debasher_webui` starts it, listening only on
-`127.0.0.1` unless told otherwise. It has no authentication and runs every tool
-as the user who launched it, so whoever can reach it can run anything as that
-user. During development the Vite server serves the frontend and forwards
-`/api` to a backend started by hand.
+`127.0.0.1` unless told otherwise. It runs every tool as the user who launched
+it, so it obeys only the requests that carry its token (see "Access to the
+backend: the token"). During development the dev server of Vite serves the
+frontend and forwards `/api` to a backend started by hand.
 
 ## The backend keeps no state
 
@@ -401,8 +419,9 @@ The lasting state lives in two places only. The store of each tab holds the
 program being edited and what the tab last read of its run. The disk holds the
 rest: the home directory keeps the program metadata, the generated script and
 the user files, and the output directory keeps what the engine writes during a
-run. The frontend uses no browser storage, so a program that has not been saved
-is lost when its tab is closed.
+run. The frontend keeps nothing in the local storage of the browser but the
+token (see "How a request carries the token"), so a program that has not been
+saved is lost when its tab is closed.
 
 A run lives in its output directory, not in the tab that launched it. Nothing
 that happens to a tab stops it, and a tab follows any run of its output
@@ -1454,11 +1473,11 @@ DeBasher", a dialog with a link to the article that describes DeBasher and its
 reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
 the prompt panel when the browser refuses the clipboard (see "The prompt
 panel"), and "Claude Code", a dialog with the command that starts Claude Code on
-the program (see "Claude Code on a program"). The links and the reference are
-data, in `models/helpLinks.ts`, and the command and the skills it lists in
-`models/claudeCommand.ts`. Every link opens in a new tab of the browser, with no
-access back to the tab of the editor, so that the editor stays as it is, with
-any unsaved changes (see "Screens and the store").
+the program where the backend offers it (see "Claude Code on a program"). The
+links and the reference are data, in `models/helpLinks.ts`, and the command and
+the skills it lists in `models/claudeCommand.ts`. Every link opens in a new tab
+of the browser, with no access back to the tab of the editor, so that the editor
+stays as it is, with any unsaved changes (see "Screens and the store").
 
 A link to a page of the documentation of DeBasher names a page of
 `rtdocs/source` by the name of its source, and the tests of the frontend check
@@ -1676,11 +1695,36 @@ non-goals of a resident program".
   only by being pasted into the code editor and saved, and "Cancel" drops it
   (see "The prompt panel").
 
+**Access to the backend**
+
+- **No call to the API without the token.** The backend answers no request to
+  the API that does not carry its token (see "What the backend checks"), and it
+  cannot be started without one (see "The token").
+- **The browser hands the token to nobody.** It keeps the token for the origin
+  of the backend alone and sends it only where the page puts it, and the token
+  is never in an address that reaches a server or a log (see "How a request
+  carries the token"). A token given to outlive its backend is the exception
+  (see "What the token does not protect").
+- **No page of another origin acts through the browser.** Its requests carry
+  no token, and one that names a host that is not the backend's is refused
+  when the backend listens on a single address (see "What the backend
+  checks").
+- **The token file belongs to the backend that owns the port.** It is written
+  only once the port is bound, readable only by the user, removed before the
+  port is released when the backend stops in order, and used by `debasher_mcp`
+  only while its backend is alive and only towards the local machine (see "The
+  token file").
+- **A refused token loses no unsaved change.** The editor stops and says how to
+  get a new token, and keeps the program as it is (see "The editor without a
+  valid token").
+
 ## Non-goals
 
-- **Security.** The web UI trusts whoever reaches it: it has no
-  authentication, and it runs every tool, and reads any path, as the user who
-  started it. It listens only on the local machine unless told otherwise.
+- **Security beyond the token.** The web UI trusts whoever holds the token: it
+  has no users and no permissions, and it runs every tool, and reads any path,
+  as the user who started it. It speaks plain HTTP, so it listens only on the
+  local machine unless told otherwise (see "What the token does not
+  protect").
 - **Several people on one program.** Two tabs on the same program or the same
   directories are not coordinated beyond two guards: a save over what another
   saved since the program was loaded is refused (see "Revisions of the program
@@ -3254,8 +3298,9 @@ editor, beside the code, which stays editable. The prompt panel holds:
   draft changes. The user changes it through the code request, or in the AI
   tool once it is copied.
 - "Copy", which puts the code prompt on the clipboard. When the browser does
-  not offer the clipboard, as on a page opened from a file, or refuses it, the
-  panel selects the whole code prompt and says to copy it with the keyboard.
+  not offer the clipboard, as on a page served over plain HTTP from another
+  machine, or refuses it, the panel selects the whole code prompt and says to
+  copy it with the keyboard.
 
 The prompt panel takes nothing back. The user copies the code from the answer
 of the AI tool and pastes it into the code editor, over the draft, as any code
@@ -3507,9 +3552,11 @@ endpoint by a path relative to the page that serves them, and under Node.js
 there is no page: the MCP server resolves every relative URL against the URL
 of the backend before it sends the request (`frontend/mcp/src/backend.ts`).
 The backend has to be running; the MCP server starts nothing, and a call that
-cannot reach the backend says so. It widens nothing either: the backend
-already runs the engine's tools, as the user who started it, for whoever
-reaches it, and the MCP server is reached only by the agent that started it.
+cannot reach the backend says so. It sends the token of the backend, which it
+reads from the token file (see "The token file"). It widens nothing either: the
+backend already runs the engine's tools, as the user who started it, for
+whoever holds the token, and the MCP server is reached only by the agent that
+started it.
 
 The code is in `frontend/mcp/src/`: `backend.ts` gathers the clients of the
 backend into one object, which the tests replace with a fake one;
@@ -3708,16 +3755,43 @@ account of Claude Code: the web UI calls no AI service, and holds no key of one.
 The web UI gives the command: "Claude Code" in the Help menu shows
 `debasher_claude` with the home directory of the program and the URL of the
 backend, for the user to copy (`components/ClaudeCodeDialog.tsx`, which builds
-it with `models/claudeCommand.ts`). The URL is the origin of the page, which the
-backend serves; under the dev server, which forwards `/api` to the backend, that
-origin reaches the API as well. A page opened from a file gets the default of
-`debasher_webui` instead, and the user can change the URL in the dialog. The
-home directory and the URL are quoted for a POSIX shell when they hold anything
-that the shell would read otherwise. The command gives no session mode (no
-`--mode`): the skills are listed for the user to know them, and Claude Code
-calls one on its own when the work asks for it. A program that was never saved
-gets no command, since the MCP tools work on the program as saved, and one with
-unsaved changes gets a note that says so.
+it with `models/claudeCommand.ts`). The URL is the one that the backend gives:
+the address and the port that `debasher_webui` listens on, as seen from the
+machine where it runs (the local machine when it listens on every address),
+which is where the command runs too, whatever address the browser reached it by
+(a tunnel, the port of a container). A backend that uvicorn started by hand does
+not know its port and gives none; the URL is then the origin of the page, which
+the backend serves (under the dev server, which forwards `/api` to the backend,
+that origin reaches the API as well). The user can change the URL in the dialog.
+The command holds no token: the MCP server reads it from the token file (see
+"The token file"). The home directory and the URL are quoted for a POSIX shell
+when they hold anything that the shell would read otherwise. The command gives
+no session mode (no `--mode`): the skills are listed for the user to know them,
+and Claude Code calls one on its own when the work asks for it. A program that
+was never saved gets no command, since the MCP tools work on the program as
+saved, and one with unsaved changes gets a note that says so.
+
+The dialog asks the backend, when it opens, how it offers Claude Code
+(`GET /api/webui/info`, `routers/webui.py`), and shows only its title and
+"Close" until the backend answers. The backend answers from its environment:
+
+- `DEBASHER_WEBUI_CLAUDE_CODE` set to `no`: it does not offer Claude Code, and
+  the dialog gives no command and says why: the directories of the backend are
+  not those of the machine where `debasher_claude` would run, so neither the
+  launcher nor the MCP tools would find the program by its home directory;
+- `DEBASHER_WEBUI_CLAUDE_CODE_PREFIX`: the command that `debasher_claude` is
+  run through, to run it where the backend runs, as the `docker compose exec`
+  of the Docker image (see "Claude Code in the Docker image");
+- `DEBASHER_WEBUI_CLAUDE_CODE_INSTALL`: the command that installs Claude Code
+  there, which the dialog says to run the first time;
+- the URL of the command (see above), from the address and the port that
+  `api/serve.py` puts in the environment of the backend.
+
+A backend that does not answer is taken to offer the command as it is, with the
+origin of the page as the URL, since a command that does not work there harms
+nothing. The tests of the backend check the answer for each value of the
+variables (`test/api/test_webui_info.py`), and those of the Help menu what the
+dialog shows for each answer (`components/HelpMenu.test.tsx`).
 
 ## The launcher
 
@@ -3802,6 +3876,39 @@ its description, which Claude Code reads to call it unasked, and how to work:
 
 A skill leaves to another what is not its own, and says so to the user.
 
+## Claude Code in the Docker image
+
+In the Docker image of the web UI (`Dockerfile`, see `DOCKER.md`), Claude Code
+runs inside the container, next to the backend, not on the user's computer.
+There, the home directory of a program is the path that the backend saved it
+under, and `debasher_mcp` finds the token file of the backend, so neither the
+paths nor the token have to cross the boundary of the container. Claude Code
+also sees only the container and what is mounted into it, never the rest of
+the user's computer.
+
+The image installs `debasher_mcp`, `debasher_claude` and the plugin of DeBasher
+with the rest of DeBasher: the stage that builds the frontend builds the MCP
+server too, and the stage that builds DeBasher takes both in, as a release
+tarball made with `make dist-vendored` carries them, and so needs no npm. It
+runs the MCP server with the Node.js of the stage that builds it, the one it is
+built for. Claude Code itself is not in the image: each user has an account of
+their own, it updates itself, and not every user of the image wants it.
+`install-claude-code` (`docker-install-claude-code.sh`) runs its official
+installer once, which puts it under `~/.local` of the `debasher` user, first in
+the `PATH` of the image; that home directory is a volume, which keeps Claude
+Code, and the login it asks for on its first start, across restarts and rebuilds
+of the image.
+
+The image sets `DEBASHER_WEBUI_CLAUDE_CODE_PREFIX` to
+`docker compose exec -it debasher`, which the user runs in a terminal of the
+computer, in the directory of `docker-compose.yml`, and
+`DEBASHER_WEBUI_CLAUDE_CODE_INSTALL` to the same with `install-claude-code`. The
+prefix names the service of `docker-compose.yml`; without compose, the user runs
+the command through `docker exec -it` and the name of the container instead.
+The backend listens on every address of the container, so the URL of the
+command names the local machine, from inside the container, with the port of
+the container, whatever port the host maps to it.
+
 ## Building and testing debasher_claude
 
 `debasher_claude` is built from `frontend/claude/debasher_claude.sh`, as
@@ -3812,6 +3919,257 @@ a `debasher_mcp` and a Claude Code that write down what they are given, and
 those of the permissions (`frontend/mcp/src/claudeSettings.test.ts`) check that
 every MCP tool is ruled by what it says it does.
 
+# Access to the backend: the token
+
+The backend runs the engine's tools, and the Bash of the program, as the user
+who started it, so whoever can send it a request can run anything as that user.
+Listening only on the local machine does not narrow that down enough: another
+user of the same machine reaches `127.0.0.1` as well, and so does any page open
+in the user's browser, whose scripts can send requests to the backend. The
+backend therefore obeys only the requests that carry its token, a random secret
+that only the user who started it knows, as Jupyter does. This section
+describes the token, how a request carries it, what the backend checks, how the
+MCP server finds the token, how development works with it, what the editor
+does without a valid token, and what the token does not protect.
+
+## The token
+
+`debasher_webui` draws a new token at every start, 24 random bytes from the
+secure generator of Python (`secrets.token_hex`), and prints the token URL, the
+address of the web UI with the token in its fragment:
+
+```
+http://127.0.0.1:8000/#token=<token>
+```
+
+The user opens that URL once, and the browser keeps the token from then on (see
+"How a request carries the token"). When the backend listens on every address
+(`0.0.0.0` or `::`), which no browser can open, the token URL names `localhost`
+instead.
+
+A token can also be given, so that it stays the same across restarts and the
+open tabs keep working: in `DEBASHER_WEBUI_TOKEN`, or with `--token`. The
+variable is the one to prefer, since the command line of a process is visible to
+every user of the machine. A token that stays the same has a cost, though (see
+"What the token does not protect"). The backend takes its token from
+`DEBASHER_WEBUI_TOKEN` alone, which `debasher_webui` sets, and refuses to start
+when it is unset or empty: there is no way to run the backend without a token.
+
+## How a request carries the token
+
+Every request to the API carries the token in its `Authorization` header
+(`Bearer <token>`), whoever sends it: the editor and the MCP server alike. The
+backend compares it with its own in constant time (`secrets.compare_digest`).
+
+The page of the web UI takes the token from the fragment of its address when it
+loads, keeps it in the local storage of the browser (`localStorage`), and takes
+the fragment out of the address (`history.replaceState`), so that the token
+stays neither in the address bar, nor in the history of the browser, nor in a
+link copied from it. The browser never sends the fragment of an address to the
+server, so the token is never in a request line either, nor in the access log
+of the backend.
+
+Every client of the backend in the frontend (`src/api/`, `src/storage/`) sends
+its requests through one function, `apiFetch` (`src/api/apiFetch.ts`), the one
+place that sees them all. It adds the header with the token of its token source
+and calls the `fetch` of the moment, and it adds the header only to a request
+for a path of the backend itself (a relative URL), never to another site. In
+the browser the token source reads the local storage; a browser that refuses
+it (some private windows do) leaves the token in the memory of the tab, which
+then works alone: another tab needs the token URL again. The MCP server runs
+the same clients under Node.js, which has no local storage to rely on, and
+gives `apiFetch` a token source of its own, the token file (see "The token
+file").
+
+The token is kept in the local storage, not in a cookie, because the browser
+keeps a cookie per host and sends it to every port of that host. A cookie of a
+backend on `localhost:8000` would reach any server on another port of
+`localhost`, such as one that another user of the machine runs, as soon as the
+browser is made to open it, which any page can do. The local storage belongs to
+one origin: no page on another port reads it, and the browser sends nothing
+from it on its own.
+
+The page itself is served without a token: a `GET` or `HEAD` of `/` or of a file
+of the built frontend (`index.html`, with the scripts in it, and its icons),
+which is the same for every user and holds none of their data. Every other
+request asks for the token, so a path that is added later is closed until it is
+opened on purpose. The pages that FastAPI adds on its own to describe the API
+(`/docs`, `/redoc`, `/openapi.json`) are turned off.
+
+## What the backend checks
+
+A middleware of the backend checks every request in this order; a request for
+the page (see "How a request carries the token") is spared the second check
+only:
+
+1. **The `Host` header**, which names the host that the client asked for. A
+   backend that listens on a loopback address accepts only `localhost`,
+   `127.0.0.1` and `[::1]`, with any port; one that listens on another address
+   accepts that address as well; and one that listens on every address checks
+   nothing, since it cannot know every name that it is reached by. A request
+   with another host, or with none, is answered with 400. This stops a page
+   whose own name has been made to point to the local machine (DNS rebinding):
+   its requests name its own host. The token stops such a page as well, since
+   it holds no token of the backend, and the check of the host keeps it out
+   even of a path that a mistake would leave open.
+2. **The token**, in the `Authorization` header. A request without it, or with
+   another, is answered with 401 and the usual error body of the API
+   (`{"detail": "..."}`).
+
+A page of another origin cannot act through the user's browser
+(cross-site request forgery): it has no token to send, the browser adds none
+on its own, and it cannot even add an `Authorization` header to a request to
+another origin without first asking the backend, which grants no such request
+(it answers no cross-origin request with permission). A form, which sends no
+header of its own, is refused for the same reason. No check of the `Origin`
+header is needed.
+
+The address that the backend listens on reaches the middleware from
+`api/serve.py`, which binds it (see "The token file"). A backend that uvicorn
+starts by hand, as in development, listens on its default, `127.0.0.1`, and the
+middleware takes it as such.
+
+The page of the web UI works only as the backend serves it. Opened from a file,
+it reaches no backend: its requests to `/api` resolve against no server.
+
+## The token file
+
+The MCP server is not a browser, and the user should not have to give it the
+token, which changes at every start. The backend writes it into the token file,
+a file of the user's private runtime directory named after the port, which
+`debasher_mcp` reads by itself:
+
+```
+$XDG_RUNTIME_DIR/debasher/webui-<port>.token
+~/.debasher/run/webui-<port>.token      (where XDG_RUNTIME_DIR is unset)
+```
+
+The runtime directory of the XDG specification fits the token: it belongs to one
+user, lives in memory and is emptied when the user's session ends; macOS has
+none, hence the fallback. The token file holds the token and the PID of the
+backend that wrote it, with the time at which that process started, as
+`ps -o lstart=` prints it in the C locale and in UTC, so that the backend and
+`debasher_mcp` read the same text whatever their environment. Where there is no
+`ps` (a slim container image), the backend cannot tell when it started, so it
+writes no token file and says so, and `debasher_mcp` takes no token file with an
+empty start time: the backend works, and only the MCP server cannot reach it.
+
+`debasher_webui` starts the backend through `api/serve.py` instead of running
+uvicorn itself, so that the token file follows the backend that owns the port:
+
+1. it binds the address and port, and ends if it cannot, without touching the
+   token file, which may belong to a backend already running on that port; the
+   socket never takes `SO_REUSEPORT`, which would let a second process bind the
+   same port;
+2. it creates the directory of the token file with mode 700 if it is missing,
+   and writes nothing if the directory belongs to another user or anyone else
+   has access to it, saying so;
+3. it writes the token file: into a new temporary file of the same directory,
+   created with mode 600 (`O_CREAT | O_EXCL`), which it then renames, so that
+   the file is never readable by others and a reader never sees half of it;
+4. it hands the bound socket to uvicorn, which serves on it, and keeps a copy of
+   it;
+5. when uvicorn stops, which closes its own copy of the socket, it removes the
+   token file if the file still holds its own token, and only then closes its
+   copy, so that no other backend can bind the port and write its token file
+   in between. It stops so on `SIGINT`, on `SIGTERM` and on `SIGHUP`, which a
+   closed terminal sends.
+
+A backend killed with no chance to clean up leaves its token file behind, and
+the next backend on that port writes over it. `debasher_mcp` reads the token
+file of the port of its URL, and uses it only if its backend is alive and the
+host of the URL is a loopback address: it never sends the token to another
+machine. The backend is alive if the process of the PID is the user's own (a
+signal 0 to it does not fail with `EPERM`) and started at the time that the file
+records, so that a PID taken again by another process after the backend died
+does not count. Its token source (`frontend/mcp/src/tokenFile.ts`) reads the
+token file again for every request, since the backend may restart with another
+token while the agent works, and `apiFetch` sends the token with the request.
+Without a token file that it can use, it sends none, and the error of the first
+refused request names the file it looked for and asks whether `debasher_webui`
+runs on this machine with that port. Neither the command of the "Claude Code"
+dialog nor a server registered with Claude Code holds the token, so neither
+changes when the backend restarts with another one. The token file of another
+user is in that user's private directory, out of reach.
+
+The token file is named after the port alone: two backends on the same port of
+two loopback addresses (`127.0.0.1` and `[::1]`) write the same file, and the
+last one to start wins.
+
+## Development with the token
+
+During development the backend is started by hand, with
+`uvicorn api.main:app --reload`, and reads its token from `DEBASHER_WEBUI_TOKEN`
+like any other backend, so the developer sets it in the shell. It stays the same
+while uvicorn reloads the code, since every new process of uvicorn inherits the
+variable. No token file is written, so the MCP server reaches only a backend
+that `debasher_webui` started.
+
+The dev server of Vite serves the frontend and forwards `/api` to the backend.
+It forwards the requests as they come, with their `Authorization` header and
+their `Host`, and adds nothing: a dev server that added the token itself would
+hand it to anyone who reaches its port, another user of the machine included.
+The developer opens `http://localhost:5173/#token=<token>` once; the page keeps
+the token in the local storage of the dev server's origin and sends it with
+every request, which the dev server forwards to the backend.
+
+## The editor without a valid token
+
+The editor needs the token from its first request. A page that has none, opened
+without the token URL in a browser that never kept one, shows a notice that says
+to open the token URL that `debasher_webui` printed, instead of failing request
+after request.
+
+A tab whose token the backend no longer knows, because the backend restarted
+with a new one, gets 401 for every request. `apiFetch` sees it in one place,
+and no client of the backend is left to report it on its own. The tab
+(`components/TokenNotice.tsx`):
+
+- shows a notice that stays over every screen, saying that the backend no
+  longer knows this tab, that it restarted with another token, and that the
+  token URL it printed has to be opened;
+- stops its polling (the revision of the program, the files of the program
+  files panel, the process statuses, a watched FIFO), which would only get 401
+  again every few seconds;
+- leaves the program in the store as it is, with its unsaved changes, and
+  offers "Retry", which asks the backend again (`/api/webui/info`) with the
+  token that the local storage holds then and, if the backend takes it, takes
+  the notice away and starts the polling again.
+
+The token URL can be opened in the tab itself: it differs from the address of
+the tab in its fragment alone, so the browser loads nothing again and only
+tells the page (`hashchange`), which takes the token, asks the backend as
+"Retry" does, and goes on with its unsaved changes. Opened in another tab, it
+stores the new token, which every tab of the same origin shares, and "Retry"
+then succeeds in the first one.
+
+## What the token does not protect
+
+- **Whoever holds the token can do anything.** The backend has no users and no
+  permissions: the token gives everything that the user who started it can do.
+  It is a secret, to keep like a password.
+- **A script in the page reads the token.** The local storage is open to the
+  scripts of the page, so a script injected into it would read the token; such
+  a script could use the API through the page anyway, so the token adds little
+  to what it already holds.
+- **A token that stays the same outlives its backend.** While no backend
+  listens on the port, another user of the machine can listen there. A tab or a
+  token URL opened then loads that user's page, which reads the token from the
+  local storage of the origin. A token drawn at the start dies with its backend,
+  so stealing it gives nothing; a token given with `--token` or
+  `DEBASHER_WEBUI_TOKEN` stays valid, so it is best kept for a machine that the
+  user does not share. `debasher_mcp` does not send it there, since the backend
+  of the token file is gone. That user's page can also leave a token of its own
+  in the local storage, which harms nothing: once the backend is back, the tab
+  gets 401 and asks for the token URL (see "The editor without a valid
+  token").
+- **The token travels in clear over HTTP.** On the local machine that exposes it
+  to nobody, but a backend that listens on a network sends the token, and
+  everything else, unencrypted. The safe way to reach a remote backend is an SSH
+  tunnel to a backend that listens on its loopback address.
+- **The token URL is printed.** It stays in the terminal that started
+  `debasher_webui`, and in its log where one is kept.
+
 # Future work
 
 - **The result of each test.** "Run tests" shows the reports of bats and
@@ -3821,12 +4179,12 @@ every MCP tool is ruled by what it says it does.
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
   the MCP server and `debasher_claude` (see "Claude Code on a program") give it;
-  a terminal in the page that runs `debasher_claude` would come first, once the
-  backend checks who sends each request. It shares the open questions of the
-  assistant on the documentation (see "An assistant on the documentation of
-  DeBasher" below): where the key of the AI service lives on a server with no
-  authentication, and that the program, and maybe its files, leave the machine
-  for that service, which the user has to know.
+  a terminal in the page that runs `debasher_claude` would come first, behind
+  the token (see "Access to the backend: the token"). It shares the open
+  questions of the assistant on the documentation (see "An assistant on the
+  documentation of DeBasher" below): where the key of the AI service lives on a
+  server whose only guard is the token, and that the program, and maybe its
+  files, leave the machine for that service, which the user has to know.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.
@@ -3841,15 +4199,14 @@ every MCP tool is ruled by what it says it does.
   `manual` process, which is written with the API of the engine for options and
   would need a reference of it, read from the engine as the node reference is
   read from the runtime library.
-- **An assistant on the documentation of DeBasher.** A chat in the web UI
-  that answers questions about DeBasher from its documentation (the
-  documentation of the project, the design documents and the module
-  documentation of the modules at hand), through a model of an AI service with
-  a key that the user gives. Not designed. It needs a place for the key that
-  fits a server with no authentication, never the program metadata; it sends
-  the documentation, and maybe the program, to a service outside the machine,
-  which the user has to know; and its answers are only as good as a
-  documentation kept in step with the code.
+- **An assistant on the documentation of DeBasher.** A chat in the web UI that
+  answers questions about DeBasher from its documentation (the documentation of
+  the project, the design documents and the module documentation of the modules
+  at hand), through a model of an AI service with a key that the user gives. Not
+  designed. It needs a place for the key that fits a server whose only guard is
+  the token, never the program metadata; it sends the documentation, and maybe
+  the program, to a service outside the machine, which the user has to know; and
+  its answers are only as good as a documentation kept in step with the code.
 - **The documentation installed with DeBasher.** Building the documentation
   of DeBasher into HTML when the package is made, installing it, and serving it
   from the backend, so that the Help menu links to the documentation of the

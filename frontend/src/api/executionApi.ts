@@ -2,6 +2,7 @@ import type { InspectNodeCommand, NodeNotice } from "../models/nodeState";
 import type { Program } from "../models/program";
 import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
 import { throwIfRevisionConflict } from "./revisionConflict";
+import { apiFetch } from "./apiFetch";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -19,7 +20,7 @@ async function errorDetail(response: Response, fallback: string): Promise<string
 }
 
 export async function listSchedulers(): Promise<string[]> {
-  const response = await fetch("/api/execution/schedulers");
+  const response = await apiFetch("/api/execution/schedulers");
 
   if (!response.ok) {
     throw new Error(`Failed to list schedulers (${response.status})`);
@@ -73,7 +74,7 @@ export async function runProgram(
   resumeChangedProgram = false
 ): Promise<RunProgramResult> {
   const query = resumeChangedProgram ? "?resumeChangedProgram=true" : "";
-  const response = await fetch(`/api/execution/run${query}`, {
+  const response = await apiFetch(`/api/execution/run${query}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -107,7 +108,7 @@ export interface LaunchCheckResult {
 }
 
 export async function checkLaunch(program: Program): Promise<LaunchCheckResult> {
-  const response = await fetch("/api/execution/launch-check", {
+  const response = await apiFetch("/api/execution/launch-check", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -144,7 +145,7 @@ export interface TestRun {
 // "Run tests": the business tests of the program, in its home directory,
 // after saving it. Refused while there is a run in progress.
 export async function runTests(program: Program): Promise<TestRun> {
-  const response = await fetch("/api/execution/run-tests", {
+  const response = await apiFetch("/api/execution/run-tests", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -164,7 +165,7 @@ export async function runTests(program: Program): Promise<TestRun> {
 // the processes, and, with the built-in scheduler, the resources of each
 // process against its limits.
 export async function validateProgram(program: Program): Promise<SavedOutput> {
-  const response = await fetch("/api/execution/validate", {
+  const response = await apiFetch("/api/execution/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -192,7 +193,7 @@ export interface ProgramStatusResult {
 // state and the debasher_status output from one call, to show the
 // latter alongside an "unfinished" run-finished notice.
 export async function fetchProgramStatus(program: Program): Promise<ProgramStatusResult> {
-  const response = await fetch("/api/execution/status", {
+  const response = await apiFetch("/api/execution/status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -236,7 +237,7 @@ export interface ProcessStatusesResult {
 // and ProcessNode's use of it, and to derive the run phase of a resident
 // program.
 export async function getProcessStatuses(program: Program): Promise<ProcessStatusesResult> {
-  const response = await fetch("/api/execution/process-statuses", {
+  const response = await apiFetch("/api/execution/process-statuses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -258,7 +259,7 @@ async function fetchProcessOutput(
   fallback: string,
   extra: Record<string, unknown> = {}
 ): Promise<string> {
-  const response = await fetch(endpoint, {
+  const response = await apiFetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, taskIndex, ...extra }),
@@ -357,7 +358,7 @@ export async function writeFifo(
   fifoName: string,
   text: string
 ): Promise<{ ok: boolean; error?: string }> {
-  const response = await fetch("/api/execution/fifo-write", {
+  const response = await apiFetch("/api/execution/fifo-write", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, fifoName, text }),
@@ -383,7 +384,7 @@ export async function readFifo(
   fifoName: string,
   signal?: AbortSignal
 ): Promise<{ line?: string; timedOut?: boolean; error?: string }> {
-  const response = await fetch("/api/execution/fifo-read", {
+  const response = await apiFetch("/api/execution/fifo-read", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, fifoName }),
@@ -408,7 +409,7 @@ export async function writeResidentFifo(
   text: string,
   mode: TalkMode
 ): Promise<{ ok: boolean; error?: string }> {
-  const response = await fetch("/api/execution/resident-fifo-write", {
+  const response = await apiFetch("/api/execution/resident-fifo-write", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, fifoName, text, mode }),
@@ -430,7 +431,7 @@ export async function readResidentFifo(
   processName: string,
   fifoName: string
 ): Promise<ResidentFifoRead> {
-  const response = await fetch("/api/execution/resident-fifo-read", {
+  const response = await apiFetch("/api/execution/resident-fifo-read", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, fifoName }),
@@ -452,7 +453,7 @@ export async function getProcessResolvedOptions(
   processName: string,
   taskIndex?: number
 ): Promise<Record<string, string>> {
-  const response = await fetch("/api/execution/process-resolved-options", {
+  const response = await apiFetch("/api/execution/process-resolved-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, taskIndex }),
@@ -479,7 +480,7 @@ export async function inspectNode<T>(
   taskIndex: number | undefined,
   command: InspectNodeCommand
 ): Promise<{ result: T | null; error: string | null }> {
-  const response = await fetch("/api/execution/inspect-node", {
+  const response = await apiFetch("/api/execution/inspect-node", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName, taskIndex, ...command }),
@@ -497,7 +498,7 @@ export async function inspectNode<T>(
 // What debasher_status says of the run directory of a batch run of a
 // launcher node that is a whole general program, for "Show batch runs".
 export async function getBatchRunStatus(program: Program, runDir: string): Promise<string> {
-  const response = await fetch("/api/execution/batch-run-status", {
+  const response = await apiFetch("/api/execution/batch-run-status", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, runDir }),
@@ -521,7 +522,7 @@ export type PathInspection =
 // content, or a directory's listing — for the "Show inputs and
 // outputs" modal's per-option "View" button.
 export async function inspectPath(path: string): Promise<PathInspection> {
-  const response = await fetch("/api/execution/inspect-path", {
+  const response = await apiFetch("/api/execution/inspect-path", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path }),
@@ -557,7 +558,7 @@ export async function getProcessTasks(
   program: Program,
   processName: string
 ): Promise<number[]> {
-  const response = await fetch("/api/execution/process-tasks", {
+  const response = await apiFetch("/api/execution/process-tasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName }),
@@ -574,7 +575,7 @@ export async function getProcessTasks(
 }
 
 export async function checkProgramOptions(program: Program): Promise<SavedOutput> {
-  const response = await fetch("/api/execution/check-program-options", {
+  const response = await apiFetch("/api/execution/check-program-options", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -595,7 +596,7 @@ export async function checkProgramOptions(program: Program): Promise<SavedOutput
 // no-op — e.g. outputDir is blank — so the caller can tell the user
 // there was nothing to reset.
 export async function resetOutputDir(program: Program): Promise<boolean> {
-  const response = await fetch("/api/execution/reset-output-dir", {
+  const response = await apiFetch("/api/execution/reset-output-dir", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -623,7 +624,7 @@ export async function resetProgramState(
   program: Program,
   deleteState: boolean
 ): Promise<ResetProgramStateResult> {
-  const response = await fetch("/api/execution/reset-program-state", {
+  const response = await apiFetch("/api/execution/reset-program-state", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, delete: deleteState }),
@@ -645,7 +646,7 @@ export interface StopResult {
 }
 
 async function postStop(endpoint: string, program: Program, fallback: string): Promise<StopResult> {
-  const response = await fetch(endpoint, {
+  const response = await apiFetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -686,7 +687,7 @@ async function postNodeAction(
   processName: string,
   fallback: string
 ): Promise<RelaunchResult> {
-  const response = await fetch(endpoint, {
+  const response = await apiFetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName }),
@@ -726,7 +727,7 @@ export interface SnapshotResult {
 // "Take snapshot" (debasher_snapshot_resident): starts one round and
 // resolves once it has closed at every node, or its timeout has passed.
 export async function takeSnapshot(program: Program): Promise<SnapshotResult> {
-  const response = await fetch("/api/execution/snapshot", {
+  const response = await apiFetch("/api/execution/snapshot", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -743,7 +744,7 @@ export async function takeSnapshot(program: Program): Promise<SnapshotResult> {
 // Whether the Supervisor of the live program was launched with
 // -no-hold-fifos, as the options it was given say.
 export async function launchedWithNoHoldFifos(program: Program): Promise<boolean> {
-  const response = await fetch("/api/execution/launched-with-no-hold-fifos", {
+  const response = await apiFetch("/api/execution/launched-with-no-hold-fifos", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(program),
@@ -760,7 +761,7 @@ export async function launchedWithNoHoldFifos(program: Program): Promise<boolean
 // Stop a single process (the canvas's right-click "Stop process"
 // action), see api/routers/execution.py's /stop-process.
 export async function stopProcess(program: Program, processName: string): Promise<string> {
-  const response = await fetch("/api/execution/stop-process", {
+  const response = await apiFetch("/api/execution/stop-process", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program, processName }),

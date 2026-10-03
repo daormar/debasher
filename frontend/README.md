@@ -9,6 +9,12 @@ npm install
 npm run dev
 ```
 
+The dev server serves the editor on port 5173 and forwards `/api/*` to the
+server of the API on port 8000, which has to be running with a token, and
+the editor has to be opened once with that token
+(`http://localhost:5173/#token=<token>`). See "Running the web UI from the
+sources" in `api/README.md` for the whole recipe, Claude Code included.
+
 ## Production build
 
 Normally invoked from the top-level project `make`, but it can also be

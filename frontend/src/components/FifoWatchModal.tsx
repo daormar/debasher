@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Program } from "../models/program";
+import { isTokenRefused } from "../api/apiFetch";
 import { getFifoMirror } from "../api/executionApi";
 
 // Fast enough to feel "live" for an interactive debugging panel, unlike
@@ -44,6 +45,10 @@ export default function FifoWatchModal({
     let cancelled = false;
 
     async function poll() {
+      // Against a refused token every poll would only be refused again.
+      if (isTokenRefused()) {
+        return;
+      }
       try {
         const result = await getFifoMirror(program, processName, fifoName, taskIndex);
         if (!cancelled) {

@@ -43,15 +43,28 @@ interpreter of the environment):
     $ debasher_webui
     $ debasher_webui --host 127.0.0.1 --port 8000
 
-and the web interface is at ``http://127.0.0.1:8000/``. The server
-runs in the foreground until it is stopped, for example with
-``Ctrl-C``; stopping it stops no program that it launched.
+It prints the address of the web interface, which holds the token of
+the server::
 
-The server has no authentication, and runs every program as the user
-who started it: whoever can reach it can run anything as that user.
-By default it listens only on ``127.0.0.1``, the local machine; to
-reach it from another machine, forward the port over SSH rather than
-giving ``--host`` a public address.
+    http://127.0.0.1:8000/#token=4c69fa31e123e52e6bb11501444379432f7b5a4c22738a57
+
+Open that address once: the browser keeps the token, and takes it out
+of the address bar. The server runs in the foreground until it is
+stopped, for example with ``Ctrl-C``; stopping it stops no program
+that it launched.
+
+The server runs every program as the user who started it, so it obeys
+only the requests that carry its token, which it draws anew at every
+start. Once the server restarts, an open tab says that the server no
+longer knows it: open the new address in that tab, which keeps its
+unsaved changes. To keep the same token across restarts, set
+``DEBASHER_WEBUI_TOKEN`` before starting the server (or give
+``--token``, which other users of the machine can see), on a machine
+that you do not share. Keep the token as you would keep a password:
+whoever has it can run anything as you. By default the server listens
+only on ``127.0.0.1``, the local machine; to reach it from another
+machine, forward the port over SSH rather than giving ``--host`` a
+public address, since the server speaks plain HTTP.
 
 Where a Program Lives
 ---------------------
@@ -484,7 +497,10 @@ Starting a Session
                        --url http://127.0.0.1:8000
 
    The URL is that of the web interface, which Claude Code talks to;
-   change it in the dialog if the page was opened from a file.
+   change it in the dialog if Claude Code has to reach it at another
+   address. The command holds no token: ``debasher_mcp`` reads it by
+   itself from the file that ``debasher_webui`` leaves for its port, so
+   it works with a ``debasher_webui`` that runs on the same machine.
 3. Copy the command and run it in a terminal. Claude Code starts in
    the home directory of the program, with the tools of DeBasher and
    the plugin of DeBasher.

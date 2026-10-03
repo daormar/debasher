@@ -1,19 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { backendUrl, claudeCommand, DEFAULT_BACKEND_URL, shellWord } from "./claudeCommand";
-
-describe("backendUrl", () => {
-
-  it("is the origin of the page, which the backend serves", () => {
-    expect(backendUrl({ protocol: "http:", origin: "http://127.0.0.1:8123" })).toBe("http://127.0.0.1:8123");
-    expect(backendUrl({ protocol: "https:", origin: "https://lab.example.org" })).toBe("https://lab.example.org");
-  });
-
-  it("is the default of debasher_webui for a page opened from a file", () => {
-    expect(backendUrl({ protocol: "file:", origin: "null" })).toBe(DEFAULT_BACKEND_URL);
-  });
-
-});
+import { claudeCommand, shellWord } from "./claudeCommand";
 
 describe("shellWord", () => {
 
@@ -37,6 +24,12 @@ describe("claudeCommand", () => {
   it("names the home directory and the backend", () => {
     expect(claudeCommand("/home/me/my programs/wc", "http://127.0.0.1:8000")).toBe(
       "debasher_claude --home-dir '/home/me/my programs/wc' --url http://127.0.0.1:8000"
+    );
+  });
+
+  it("runs through the prefix given", () => {
+    expect(claudeCommand("/data/wc", "http://127.0.0.1:8000", "docker compose exec -it debasher")).toBe(
+      "docker compose exec -it debasher debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000"
     );
   });
 

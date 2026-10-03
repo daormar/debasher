@@ -54,17 +54,24 @@ export type Backend = typeof httpBackend;
  * Sends the requests of the frontend's clients, which name the backend by a
  * path relative to the page that serves them ("/api/..."), to the backend
  * at `url`, by resolving every relative URL that fetch is given against it.
- * Under Node.js there is no page to resolve them against.
+ * Under Node.js there is no page to resolve them against. The clients add the
+ * token (see apiFetch); a request that the backend refuses for its token
+ * fails with `tokenHint`, which says where the token came from.
  */
-export function sendRequestsTo(url: string): void {
+export function sendRequestsTo(url: string, tokenHint: () => string = () => ""): void {
   const base = new URL(url);
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = async (input, init) => {
+    let response: Response;
     try {
-      return await nodeFetch(typeof input === "string" ? new URL(input, base) : input, init);
+      response = await nodeFetch(typeof input === "string" ? new URL(input, base) : input, init);
     } catch (err) {
       // fetch fails only when no answer came at all.
       throw new Error(`Cannot reach the backend at ${base.origin}: is debasher_webui running there? (${err})`);
     }
+    if (response.status === 401) {
+      throw new Error(`The backend at ${base.origin} refused the request: it carries no valid token. ${tokenHint()}`);
+    }
+    return response;
   };
 }

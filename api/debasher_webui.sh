@@ -27,10 +27,14 @@ print_desc()
 usage()
 {
     echo "debasher_webui             [--host <string>] [--port <int>]"
-    echo "                           [--help]"
+    echo "                           [--token <string>] [--help]"
     echo ""
     echo "--host <string>            Address to bind to (default: 127.0.0.1)"
     echo "--port <int>               Port to listen on (default: 8000)"
+    echo "--token <string>           Token that every request has to carry (default:"
+    echo "                           \$DEBASHER_WEBUI_TOKEN, or else a new random one;"
+    echo "                           prefer the variable, which other users cannot"
+    echo "                           see in the list of processes)"
     echo "--help                     Display this help and exit"
 }
 
@@ -54,6 +58,12 @@ read_pars()
                           port=$1
                       fi
                       ;;
+            "--token") shift
+                       if [ $# -ne 0 ]; then
+                           DEBASHER_WEBUI_TOKEN=$1
+                           export DEBASHER_WEBUI_TOKEN
+                       fi
+                       ;;
         esac
         shift
     done
@@ -123,9 +133,8 @@ export DEBASHER_WEBUI_LIBEXEC_DIR="${debasher_libexecdir}"
 # resident programs was installed, whose code the node code editor shows.
 export DEBASHER_WEBUI_PYTHON_DIR="${debasher_pythondir}"
 
-echo "Once started, open http://${host}:${port}/ in your browser to use the web interface." >&2
-
-exec "${PYTHON}" -m uvicorn api.main:app \
-     --app-dir "${debasher_pkgdatadir}" \
-     --host "${host}" \
-     --port "${port}"
+# api/serve.py binds the address, writes the token file, prints the address
+# of the web interface with its token, and runs uvicorn (see its docstring).
+# The token goes in DEBASHER_WEBUI_TOKEN, never on the command line.
+PYTHONPATH="${debasher_pkgdatadir}${PYTHONPATH:+:${PYTHONPATH}}" \
+    exec "${PYTHON}" -m api.serve --host "${host}" --port "${port}"

@@ -2,6 +2,7 @@ import type { Program, ProgramType } from "../models/program";
 import { DEFAULT_SCHEDULER } from "../models/program";
 import { layoutProcesses } from "../models/programLayout";
 import { throwIfRevisionConflict } from "../api/revisionConflict";
+import { apiFetch } from "../api/apiFetch";
 
 // ---------------------------------------------------------------
 // FAKE IMPLEMENTATION — replace the body of each function below
@@ -35,7 +36,7 @@ export async function saveProgram(
   program: Program,
   outputDir: string
 ): Promise<{ revision: number }> {
-  const response = await fetch("/api/programs/save", {
+  const response = await apiFetch("/api/programs/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ outputDir, program }),
@@ -54,7 +55,7 @@ export async function saveProgram(
 // The revision of the program metadata in `homeDir`, null when there is
 // none, without loading the program.
 export async function getProgramRevision(homeDir: string): Promise<number | null> {
-  const response = await fetch("/api/programs/revision", {
+  const response = await apiFetch("/api/programs/revision", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir }),
@@ -72,7 +73,7 @@ export async function getProgramRevision(homeDir: string): Promise<number | null
 export class NoProgramMetadata extends Error {}
 
 export async function loadProgram(inputDir: string): Promise<Program> {
-  const response = await fetch("/api/programs/load", {
+  const response = await apiFetch("/api/programs/load", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ inputDir }),
@@ -96,7 +97,7 @@ export async function importProgram(
   scriptPath: string,
   debasherModDir: string
 ): Promise<Program> {
-  const response = await fetch("/api/programs/import", {
+  const response = await apiFetch("/api/programs/import", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scriptPath, debasherModDir }),
@@ -112,7 +113,7 @@ export async function importProgram(
 export async function getAllEnvVars(
   program: Program
 ): Promise<Record<string, string>> {
-  const response = await fetch("/api/programs/all-envvars", {
+  const response = await apiFetch("/api/programs/all-envvars", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ program }),
