@@ -42,7 +42,11 @@ run_program "${datadir}/webui_programs/webui_batch_greet/webui_batch_greet.sh" \
 # The web UI's server starts, and serves the frontend and the API.
 echo "## Web UI"
 port=18765
-debasher_webui --host 127.0.0.1 --port "${port}" > "${tmpdir}/webui.log" 2>&1 &
+# The server obeys only the requests that carry its token, which it takes from
+# DEBASHER_WEBUI_TOKEN when the variable is set; the page itself needs none.
+token=conda-test-token
+DEBASHER_WEBUI_TOKEN="${token}" \
+    debasher_webui --host 127.0.0.1 --port "${port}" > "${tmpdir}/webui.log" 2>&1 &
 webui_pid=$!
 ok=no
 for _ in $(seq 60); do
@@ -54,7 +58,13 @@ for _ in $(seq 60); do
 done
 if [ "${ok}" = yes ]; then
     grep -q '<div id="root">' "${tmpdir}/index.html" || ok=no
+    # Without the token, the API refuses the request.
+    status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST \
+                  -H 'Content-Type: application/json' -d '{}' \
+                  "http://127.0.0.1:${port}/api/programs/load")
+    [ "${status}" = 401 ] || ok=no
     curl -fsS -X POST -H 'Content-Type: application/json' \
+         -H "Authorization: Bearer ${token}" \
          -d "{\"inputDir\": \"${datadir}/webui_programs/webui_running_sum\"}" \
          "http://127.0.0.1:${port}/api/programs/load" |
         grep -q '"name":"webui_running_sum"' || ok=no
