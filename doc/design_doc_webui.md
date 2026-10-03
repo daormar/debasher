@@ -42,18 +42,19 @@ backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, and "Execution and observation" how it runs a program and follows it.
-"Frontend state and the canvas" describes the frontend's own state and the
-Help menu of the editor, and "Sequential processes in the web UI" describes how
-a program keeps the sequential processes of its module. "Guarantees and
-non-goals" gathers the guarantees stated along the way. "Resident programs in
-the web UI" designs the extension to resident programs, and says which parts of
-it are built. "Business tests in the web UI" describes how the web UI runs the
-tests of a program and writes a first test for a process. "A prompt for the
-code of a process" describes how the code editors help to have an AI tool write
-the code of a process, of its options handler, of its additional methods or of
-a node. "Editing a program from an agent: the MCP server" describes a second
-client of the backend, for AI agents, and "Future work" lists what is known to
-be missing.
+"Frontend state and the canvas" describes the frontend's own state and the Help
+menu of the editor, and "Sequential processes in the web UI" describes how a
+program keeps the sequential processes of its module. "Guarantees and non-goals"
+gathers the guarantees stated along the way. "Resident programs in the web UI"
+designs the extension to resident programs, and says which parts of it are
+built. "Business tests in the web UI" describes how the web UI runs the tests of
+a program and writes a first test for a process. "A prompt for the code of a
+process" describes how the code editors help to have an AI tool write the code
+of a process, of its options handler, of its additional methods or of a node.
+"Editing a program from an agent: the MCP server" describes a second client of
+the backend, for AI agents, "Claude Code on a program" how DeBasher starts
+Claude Code with that server, and "Future work" lists what is known to be
+missing.
 
 # Glossary
 
@@ -331,6 +332,21 @@ See "Editing a program from an agent: the MCP server".
 - **proposal**: what an MCP tool called with `dry_run` answers: the edits it
   would apply, resolved and validated, and what they would change, with nothing
   saved.
+
+## Claude Code on a program
+
+See "Claude Code on a program".
+
+- **launcher of Claude Code**: the command, run as `debasher_claude`, that
+  starts Claude Code on one program with the MCP server, the permissions of
+  its MCP tools and the plugin of DeBasher.
+- **plugin of DeBasher**: the plugin of Claude Code that DeBasher installs,
+  which holds its skills and the reference they share
+  (`reference/concepts.md`).
+- **skill**: a set of instructions of the plugin of DeBasher that Claude Code
+  follows for one kind of work, called in a session as `/debasher:<name>`.
+- **session mode**: the skill that a session of `debasher_claude` starts with
+  (`--mode`): `help`, `design` or `implement`, or none.
 
 # Architecture
 
@@ -3676,6 +3692,110 @@ that keeps the program metadata in memory with the revision check of the backend
 (`frontend/mcp/src/tools.test.ts`); the revision check itself is tested in the
 backend's own tests.
 
+# Claude Code on a program
+
+`debasher_claude` starts Claude Code on one program, with what DeBasher gives
+it: the MCP server, the permissions of its MCP tools, and the plugin of
+DeBasher.
+The user runs it in a terminal of their own, with the home directory of the
+program and the URL of the backend, and Claude Code edits the program through
+the MCP tools while the editor of the web UI follows what it saves (see
+"Revisions of the program metadata"). It uses the user's own installation and
+account of Claude Code: the web UI calls no AI service, and holds no key of one.
+
+## The launcher
+
+```
+debasher_claude --home-dir <dir> [--url <url>] [--mode <mode>] [--prompt <text>]
+```
+
+The launcher of Claude Code checks that a program is saved in the home
+directory, and starts Claude Code there with:
+
+- the MCP server, as a server named `debasher` that runs the installed
+  `debasher_mcp` with the URL given (`--mcp-config`, as a JSON string, since the
+  URL is only known when the session starts). A server of the same name that
+  the user registered with Claude Code gives way to it for the session, and
+  the user's other servers stay;
+- the permissions of the MCP tools (`--settings`, see "The permissions of the
+  MCP tools");
+- the plugin of DeBasher, from the package data (`--plugin-dir`), whose files
+  Claude Code is allowed to read, and only to read, without asking
+  (`--allowedTools` with a rule on Read, on the real path of the plugin, since
+  Claude Code compares the paths it reads without symbolic links), for the
+  skills to read its reference;
+- a line added to the system prompt that names the home directory, which the
+  MCP tools take as `home_dir`, and the backend, and says that the editor of the
+  web UI may have the program open;
+- a first message: the skill of the session mode given, if any
+  (`/debasher:<mode>`), which takes the prompt given as its arguments, or else
+  the prompt alone. Claude Code takes a single first message; it goes after
+  `--`, so that an option of Claude Code that takes several values never takes
+  it as one of them. Every skill can be called later in the same session, so a
+  session moves from one kind of work to another without losing what it holds.
+
+What follows `--` is passed to Claude Code as it is, `DEBASHER_CLAUDE_CMD`
+names the command of Claude Code, and `--dry-run` prints the command instead of
+running it.
+
+## The permissions of the MCP tools
+
+The permissions come from the MCP server itself (`debasher_mcp
+--claude-settings`, `frontend/mcp/src/claudeSettings.ts`), from what each MCP
+tool says it does (its annotations), so that an MCP tool added to the server is
+ruled with no other change:
+
+- an MCP tool that only reads, changing nothing and running no code of the
+  program, is allowed without asking; validating the program and running its
+  tests save it and run its code, so they are not among them;
+- an MCP tool that deletes or stops something (resetting the output directory or
+  the program state, deleting a user file, stopping a program, restarting a
+  node) asks every time: an "ask" rule wins over an "allow" one, so it asks even
+  once the user chose to always allow it;
+- any other MCP tool, which edits the program or runs it, is left to Claude
+  Code, which asks until the user allows it;
+- the tools of Claude Code that edit files are denied the program metadata
+  (`Edit(**/.debasher/**)`, a rule that Claude Code applies to each of them),
+  which changes only through the MCP tools, keeping the rules of the editor
+  and the revision. A command of Bash is not covered by the rule, but Claude
+  Code asks before running one. Nothing denies editing the generated script,
+  which the next save writes again; the reference of the plugin tells Claude
+  Code to change the code of a process with `update_process` instead.
+
+## The plugin of DeBasher
+
+The plugin of DeBasher (`frontend/claude/plugin`, installed in the
+`claude/plugin` directory of the package data) holds three skills and the
+reference they share, `reference/concepts.md`: a summary of DeBasher for an
+agent that works through the MCP tools (programs, processes and their code,
+options, connections, resident programs, business tests, running), which a
+skill reads at its start, through `${CLAUDE_PLUGIN_ROOT}`, which Claude Code
+replaces with the directory of the plugin. Each skill says what it is for in
+its description, which Claude Code reads to call it unasked, and how to work:
+
+- `help` answers questions on the web UI and on DeBasher, looking at the
+  program with the tools that only read, and changes nothing;
+- `design` asks what the program has to do, proposes its processes, options
+  and connections (a file or a FIFO, and why), and builds them, once the user
+  agrees, with `apply_edits`, laid out on the canvas and validated; it writes
+  no code;
+- `implement` writes the code of one process at a time from its code prompt
+  (`get_code_prompt`), fills in a business test from the skeleton of
+  `add_test`, and runs the tests until they pass; it runs the program only
+  when the user agrees.
+
+A skill leaves to another what is not its own, and says so to the user.
+
+## Building and testing debasher_claude
+
+`debasher_claude` is built from `frontend/claude/debasher_claude.sh`, as
+`debasher_mcp` is, with the package data and command directories that configure
+sets, and installed among the commands; `make install` installs the plugin. Its
+tests (`frontend/mcp/src/debasherClaude.test.ts`) build it the same way, against
+a `debasher_mcp` and a Claude Code that write down what they are given, and
+those of the permissions (`frontend/mcp/src/claudeSettings.test.ts`) check that
+every MCP tool is ruled by what it says it does.
+
 # Future work
 
 - **The result of each test.** "Run tests" shows the reports of bats and
@@ -3684,11 +3804,13 @@ backend's own tests.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
-  the MCP server gives it. It shares the open questions of the assistant on the
-  documentation (see "An assistant on the documentation of DeBasher" below):
-  where the key of the AI service lives on a server with no authentication, and
-  that the program, and maybe its files, leave the machine for that service,
-  which the user has to know.
+  the MCP server and `debasher_claude` (see "Claude Code on a program") give it;
+  a terminal in the page that runs `debasher_claude` would come first, once the
+  backend checks who sends each request. It shares the open questions of the
+  assistant on the documentation (see "An assistant on the documentation of
+  DeBasher" below): where the key of the AI service lives on a server with no
+  authentication, and that the program, and maybe its files, leave the machine
+  for that service, which the user has to know.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.

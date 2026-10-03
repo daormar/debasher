@@ -40,16 +40,20 @@ install-data-local: $(FRONTEND_STAMP)
 	cp -r dist/. $(DESTDIR)$(pkgdatadir)/web/
 	$(MKDIR_P) $(DESTDIR)$(pkgdatadir)/mcp
 	cp mcp/dist/debasher_mcp.mjs $(DESTDIR)$(pkgdatadir)/mcp/
+	$(MKDIR_P) $(DESTDIR)$(pkgdatadir)/claude/plugin
+	cp -r $(srcdir)/claude/plugin/. $(DESTDIR)$(pkgdatadir)/claude/plugin/
 
 uninstall-local:
-	rm -rf $(DESTDIR)$(pkgdatadir)/web $(DESTDIR)$(pkgdatadir)/mcp
+	rm -rf $(DESTDIR)$(pkgdatadir)/web $(DESTDIR)$(pkgdatadir)/mcp \
+	       $(DESTDIR)$(pkgdatadir)/claude
 
 # The launcher of the MCP server, which runs the module installed above
-# under Node.js. Makefile: built again after a new configure, whose values
-# it carries.
-bin_SCRIPTS = debasher_mcp
+# under Node.js, and the one of Claude Code on a program, which gives it that
+# server and the plugin installed above. Makefile: built again after a new
+# configure, whose values they carry.
+bin_SCRIPTS = debasher_mcp debasher_claude
 
-CLEANFILES = debasher_mcp
+CLEANFILES = debasher_mcp debasher_claude
 
 debasher_mcp: mcp/debasher_mcp.sh Makefile
 	rm -f $@
@@ -59,6 +63,14 @@ debasher_mcp: mcp/debasher_mcp.sh Makefile
 	cat $(srcdir)/mcp/debasher_mcp.sh >> $@
 	chmod ugo+x $@
 
+debasher_claude: claude/debasher_claude.sh Makefile
+	rm -f $@
+	echo "#! " $(BASH) > $@
+	echo "debasher_pkgdatadir=\"$(pkgdatadir)\"" >> $@
+	echo "debasher_bindir=\"$(bindir)\"" >> $@
+	cat $(srcdir)/claude/debasher_claude.sh >> $@
+	chmod ugo+x $@
+
 distclean-local:
 	rm -rf node_modules
 
@@ -66,7 +78,8 @@ endif
 
 EXTRA_DIST = src public scripts index.html package.json package-lock.json \
              vite.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json \
-             tsconfig.mcp.json mcp/src mcp/vite.config.ts mcp/debasher_mcp.sh
+             tsconfig.mcp.json mcp/src mcp/vite.config.ts mcp/debasher_mcp.sh \
+             claude
 
 # CRAP report of the frontend (scripts/crap_report.mjs), called by the
 # `crap` target of the root Makefile. Like check-local, it runs where npm

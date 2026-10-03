@@ -475,10 +475,13 @@ changes saved elsewhere since it read the program, and, called with
 
 ::
 
-    $ debasher_mcp [--url <string>]
+    $ debasher_mcp [--url <string>] [--claude-settings]
 
 * ``--url <string>``: URL of the server of the web interface
   (``http://127.0.0.1:8000`` by default).
+* ``--claude-settings``: prints the settings of Claude Code that
+  `debasher_claude`_ passes, the permissions of the tools of the server,
+  and exits.
 
 The tool needs Node.js: it runs under the ``node`` named by the
 ``DEBASHER_MCP_NODE`` environment variable, or else the one found when
@@ -486,3 +489,47 @@ DeBasher was configured, or else the first one on ``PATH``. To make it
 available to Claude Code, for example::
 
     $ claude mcp add debasher -- debasher_mcp --url http://127.0.0.1:8000
+
+To start Claude Code on one program, with this server already set up,
+see `debasher_claude`_.
+
+debasher_claude
+^^^^^^^^^^^^^^^
+
+``debasher_claude`` starts Claude Code on a program saved with the web
+interface, in its home directory, with everything DeBasher gives it: the
+MCP server (see `debasher_mcp`_) talking to the server of the web
+interface, the permissions of its tools, and the plugin of DeBasher,
+whose skills help with the web interface and DeBasher
+(``/debasher:help``), with the design of a program, its processes and
+their connections (``/debasher:design``), and with the code of the
+processes and their tests (``/debasher:implement``). The editor of the
+web interface, if the program is open there, loads what Claude Code
+saves. It uses your own installation and account of Claude Code.
+
+::
+
+    $ debasher_claude --home-dir <string> [--url <string>]
+                      [--mode <string>] [--prompt <string>] [--dry-run]
+                      [-- <claude options>]
+
+* ``--home-dir <string>``: home directory of the program.
+* ``--url <string>``: URL of the server of the web interface
+  (``http://127.0.0.1:8000`` by default).
+* ``--mode <string>``: the skill the session starts with, ``help``,
+  ``design`` or ``implement``. Any of them can be called later in the
+  same session.
+* ``--prompt <string>``: the first message of the session, given to the
+  skill of the mode when there is one.
+* ``--dry-run``: prints the command that starts Claude Code instead of
+  running it.
+
+What follows ``--`` is passed to Claude Code as it is, and the
+``DEBASHER_CLAUDE_CMD`` environment variable names its command
+(``claude`` by default). Tools that only read run without asking; those
+that edit, validate, test or run the program ask until you allow them,
+and those that delete files or program state, or stop or restart
+something, always ask. Claude Code may not edit by hand what DeBasher
+keeps in ``.debasher``. For example::
+
+    $ debasher_claude --home-dir ~/programs/my_program --mode design
