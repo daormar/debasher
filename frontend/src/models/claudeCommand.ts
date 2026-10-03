@@ -24,4 +24,5 @@ export const CLAUDE_SKILLS = [
   { command: "/debasher:help", does: "questions on DeBasher and on this editor" },
   { command: "/debasher:design", does: "the processes of the program and their connections" },
   { command: "/debasher:implement", does: "the code of the processes and their tests" },
+  { command: "/debasher:review", does: "feedback on the code and the tests that are written" },
 ];

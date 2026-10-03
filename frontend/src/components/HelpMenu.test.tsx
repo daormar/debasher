@@ -119,7 +119,9 @@ describe("HelpMenu", () => {
     expect(command).toHaveValue(
       `debasher_claude --home-dir '/home/me/my programs/wc' --url ${window.location.origin}`
     );
-    expect(screen.getByText("/debasher:design")).toBeInTheDocument();
+    for (const skill of ["/debasher:help", "/debasher:design", "/debasher:implement", "/debasher:review"]) {
+      expect(screen.getByText(skill)).toBeInTheDocument();
+    }
     expect(screen.queryByText(/unsaved changes/)).toBeNull();
 
     fireEvent.change(screen.getByRole("textbox", { name: /Backend URL/ }), { target: { value: "http://127.0.0.1:9000" } });

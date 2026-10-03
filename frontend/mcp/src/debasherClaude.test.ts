@@ -92,6 +92,9 @@ describe("debasher_claude", () => {
     launch(["--home-dir", home, "--mode", "implement", "--prompt", "fill in count", "--", "--allowedTools", "Read"]);
     expect(claudeArgs().slice(-4)).toEqual(["--allowedTools", "Read", "--", "/debasher:implement fill in count"]);
 
+    launch(["--home-dir", home, "--mode", "review", "--prompt", "count_words"]);
+    expect(claudeArgs().at(-1)).toBe("/debasher:review count_words");
+
     launch(["--home-dir", home, "--prompt", "what is a FIFO?"]);
     expect(claudeArgs().at(-1)).toBe("what is a FIFO?");
   });

@@ -43,5 +43,6 @@ the web UI shows them.
 
 If the answer is a change to the program, describe the change and offer to
 make it. Designing processes and their connections is the work of the
-`/debasher:design` skill, and writing the code of processes and their tests
-that of `/debasher:implement`: say so when the user wants that done.
+`/debasher:design` skill, writing the code of processes and their tests that
+of `/debasher:implement`, and reviewing code that is written that of
+`/debasher:review`: say so when the user wants that done.
