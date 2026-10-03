@@ -46,6 +46,15 @@ html_static_path = ['_static']
 
 html_theme = 'sphinx_rtd_theme'
 
+# The logo replaces the name of the project at the top of the sidebar, on a
+# white background: the letter of the logo is navy, which the default blue
+# of that area would swallow.
+html_logo = 'images/debasher_logo.svg'
+html_theme_options = {
+    'logo_only': True,
+    'style_nav_header_background': '#ffffff',
+}
+
 html_css_files = [
     'css/styles.css',
 ]

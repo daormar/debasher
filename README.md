@@ -1,3 +1,12 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)"
+            srcset="rtdocs/source/images/debasher_logo_dark.svg">
+    <img src="rtdocs/source/images/debasher_logo.svg" alt="DeBasher logo"
+         width="320">
+  </picture>
+</p>
+
 # DeBasher
 
 DeBasher is a flow-based programming extension for Bash.
