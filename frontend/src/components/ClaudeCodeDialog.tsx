@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { getWebuiInfo } from "../api/webuiApi";
 import { backendUrl, CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
 import { copyOrSelect } from "../utils/clipboard";
 
@@ -13,7 +14,28 @@ interface Props {
 // "Claude Code" of the Help menu: the command that starts Claude Code on the
 // program (debasher_claude), for the user to run in a terminal of their own,
 // and the skills that the session offers. The web UI runs nothing itself.
+// Where the backend says that Claude Code cannot work on its programs (it
+// runs in a container), it gives no command and says why.
 export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: Props) {
+
+  // Null until the backend answers; a backend that cannot answer is taken
+  // to offer Claude Code, as a command is no harm where it does not work.
+  const [isOffered, setOffered] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+    getWebuiInfo()
+      .then(info => info.claudeCode)
+      .catch(() => true)
+      .then(offered => {
+        if (isCurrent) {
+          setOffered(offered);
+        }
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   const [url, setUrl] = useState(() => backendUrl(window.location));
 
@@ -65,7 +87,15 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
           Claude Code
         </h3>
 
-        {!homeDir ? (
+        {isOffered === null ? null : !isOffered ? (
+
+          <p style={{ margin: 0 }}>
+            Claude Code is not available with this web UI: it runs in a
+            container, whose directories are not those of your computer,
+            where Claude Code would work on the program.
+          </p>
+
+        ) : !homeDir ? (
 
           <p style={{ margin: 0 }}>
             Claude Code works on a program saved in its home directory: save

@@ -1454,11 +1454,11 @@ DeBasher", a dialog with a link to the article that describes DeBasher and its
 reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
 the prompt panel when the browser refuses the clipboard (see "The prompt
 panel"), and "Claude Code", a dialog with the command that starts Claude Code on
-the program (see "Claude Code on a program"). The links and the reference are
-data, in `models/helpLinks.ts`, and the command and the skills it lists in
-`models/claudeCommand.ts`. Every link opens in a new tab of the browser, with no
-access back to the tab of the editor, so that the editor stays as it is, with
-any unsaved changes (see "Screens and the store").
+the program where the backend offers it (see "Claude Code on a program"). The
+links and the reference are data, in `models/helpLinks.ts`, and the command and
+the skills it lists in `models/claudeCommand.ts`. Every link opens in a new tab
+of the browser, with no access back to the tab of the editor, so that the editor
+stays as it is, with any unsaved changes (see "Screens and the store").
 
 A link to a page of the documentation of DeBasher names a page of
 `rtdocs/source` by the name of its source, and the tests of the frontend check
@@ -3718,6 +3718,19 @@ that the shell would read otherwise. The command gives no session mode (no
 calls one on its own when the work asks for it. A program that was never saved
 gets no command, since the MCP tools work on the program as saved, and one with
 unsaved changes gets a note that says so.
+
+The dialog gives the command only where the backend offers Claude Code: it
+asks the backend when it opens (`GET /api/webui/info`, `routers/webui.py`), and
+shows only its title and "Close" until the backend answers. A backend started
+with `DEBASHER_WEBUI_CLAUDE_CODE` set to `no` does not offer it, and the dialog
+says why instead: the backend runs in a container, whose directories are not
+those of the computer where `debasher_claude` would run, so neither the launcher
+nor the MCP tools find the program by its home directory. The Docker image of
+the web UI (`Dockerfile`) sets the variable. A backend that does not answer is
+taken to offer Claude Code, since a command that does not work there harms
+nothing. The tests of the backend check the answer for each value of the
+variable (`test/api/test_webui_info.py`), and those of the Help menu what the
+dialog shows for each answer (`components/HelpMenu.test.tsx`).
 
 ## The launcher
 

@@ -71,6 +71,9 @@ RUN python3 -m venv /opt/debasher-venv \
     && /opt/debasher-venv/bin/pip install --no-cache-dir \
          -r /usr/local/share/debasher/api/requirements.txt
 ENV PATH="/opt/debasher-venv/bin:${PATH}"
+# The Help menu gives no command to start Claude Code: the directories of
+# the container are not those of the computer where it would run.
+ENV DEBASHER_WEBUI_CLAUDE_CODE=no
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 

@@ -8,6 +8,18 @@ function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Help" }));
 }
 
+// The backend of the dialog of Claude Code, which tells whether it is offered.
+function stubWebuiInfo(claudeCode: boolean) {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ claudeCode }))));
+}
+
+// The dialog shows what it offers once the backend has answered: the tests
+// wait for it with findBy.
+function openClaudeCodeDialog() {
+  openMenu();
+  fireEvent.click(screen.getByRole("menuitem", { name: "Claude Code..." }));
+}
+
 describe("HelpMenu", () => {
 
   afterEach(() => {
@@ -95,11 +107,11 @@ describe("HelpMenu", () => {
   it("shows the command that starts Claude Code on the program, and copies it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    stubWebuiInfo(true);
     render(<HelpMenu homeDir="/home/me/my programs/wc" unsavedChanges={false} />);
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Claude Code..." }));
+    openClaudeCodeDialog();
 
-    const command = screen.getByRole("textbox", { name: "Command" });
+    const command = await screen.findByRole("textbox", { name: "Command" });
     expect(command).toHaveValue(
       `debasher_claude --home-dir '/home/me/my programs/wc' --url ${window.location.origin}`
     );
@@ -115,21 +127,39 @@ describe("HelpMenu", () => {
     ));
   });
 
-  it("asks to save a program first, before giving a command", () => {
+  it("asks to save a program first, before giving a command", async () => {
+    stubWebuiInfo(true);
     render(<HelpMenu homeDir="" unsavedChanges={true} />);
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Claude Code..." }));
+    openClaudeCodeDialog();
 
+    expect(await screen.findByText(/save this one first/)).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
-    expect(screen.getByRole("dialog")).toHaveTextContent(/save this one first/);
   });
 
-  it("warns that Claude Code does not see the unsaved changes", () => {
+  it("warns that Claude Code does not see the unsaved changes", async () => {
+    stubWebuiInfo(true);
     render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={true} />);
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Claude Code..." }));
+    openClaudeCodeDialog();
 
-    expect(screen.getByRole("dialog")).toHaveTextContent(/unsaved changes, which Claude Code does not see/);
+    expect(await screen.findByText(/unsaved changes, which Claude Code does not see/)).toBeInTheDocument();
+  });
+
+  it("gives no command where the backend does not offer Claude Code", async () => {
+    stubWebuiInfo(false);
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    expect(await screen.findByText(/Claude Code is not available with this web UI/)).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
+    expect(fetch).toHaveBeenCalledWith("/api/webui/info");
+  });
+
+  it("gives the command when the backend cannot say whether it offers Claude Code", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    expect(await screen.findByRole("textbox", { name: "Command" })).toBeInTheDocument();
   });
 
 });

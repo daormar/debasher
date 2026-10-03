@@ -61,6 +61,16 @@ Without compose, `/data` is a directory of the container, lost when the
 container is removed; set `DEBASHER_DEMO_DIR` (`-e DEBASHER_DEMO_DIR=...`) to
 copy them somewhere else.
 
+## Claude Code
+
+The Help menu of the image gives no command to start Claude Code on a
+program: its "Claude Code" dialog says that Claude Code is not available.
+`debasher_claude` runs on your computer and finds the program by its home
+directory, a path of the container (`/data/my-program`) that is another one
+on the host (`./demo-data/my-program`), and the API in the container would
+not find the program by the host's path either. The `Dockerfile` turns the
+command off by setting `DEBASHER_WEBUI_CLAUDE_CODE=no`.
+
 ## Working with real data
 
 `docker-compose.yml` also bind-mounts `./demo-data` (on the host) to `/data`
