@@ -1,4 +1,5 @@
 import { throwIfFileVersionConflict } from "./fileVersionConflict";
+import { apiFetch } from "./apiFetch";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
@@ -35,7 +36,7 @@ export type FileContent =
   | { kind: "missing" };
 
 export async function getFileTree(homeDir: string, programName: string): Promise<FileEntry[]> {
-  const response = await fetch("/api/program-files/tree", {
+  const response = await apiFetch("/api/program-files/tree", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, programName }),
@@ -50,7 +51,7 @@ export async function getFileTree(homeDir: string, programName: string): Promise
 }
 
 export async function getFileContent(homeDir: string, path: string): Promise<FileContent> {
-  const response = await fetch("/api/program-files/content", {
+  const response = await apiFetch("/api/program-files/content", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, path }),
@@ -68,7 +69,7 @@ export async function createFolder(
   programName: string,
   path: string
 ): Promise<FileEntry[]> {
-  const response = await fetch("/api/program-files/mkdir", {
+  const response = await apiFetch("/api/program-files/mkdir", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, programName, path }),
@@ -84,7 +85,7 @@ export async function createFolder(
 
 // The version of a file, without reading it; null when there is no file.
 export async function getFileVersion(homeDir: string, path: string): Promise<string | null> {
-  const response = await fetch("/api/program-files/version", {
+  const response = await apiFetch("/api/program-files/version", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, path }),
@@ -108,7 +109,7 @@ interface WriteContentRequest {
 }
 
 async function postWriteContent(request: WriteContentRequest): Promise<{ entries: FileEntry[]; version: string | null }> {
-  const response = await fetch("/api/program-files/write-content", {
+  const response = await apiFetch("/api/program-files/write-content", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -157,7 +158,7 @@ export async function deleteEntry(
   programName: string,
   path: string
 ): Promise<FileEntry[]> {
-  const response = await fetch("/api/program-files/delete", {
+  const response = await apiFetch("/api/program-files/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, programName, path }),
@@ -177,7 +178,7 @@ export async function moveEntry(
   srcPath: string,
   dstPath: string
 ): Promise<FileEntry[]> {
-  const response = await fetch("/api/program-files/move", {
+  const response = await apiFetch("/api/program-files/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir, programName, srcPath, dstPath }),
@@ -205,7 +206,7 @@ export async function uploadFiles(
     formData.append("files", file);
   }
 
-  const response = await fetch("/api/program-files/upload", {
+  const response = await apiFetch("/api/program-files/upload", {
     method: "POST",
     body: formData,
   });

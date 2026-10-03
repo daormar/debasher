@@ -4,9 +4,12 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from . import token_auth
 from .routers import execution, fs_browse, processes, program_files, programs, webui
 
-app = FastAPI(title="Program API")
+# The pages that FastAPI adds to describe the API are turned off: whatever the
+# backend serves without the token is the page of the web UI alone.
+app = FastAPI(title="Program API", docs_url=None, redoc_url=None, openapi_url=None)
 
 # API routes must be registered before mounting static files,
 # otherwise the static mount at "/" would shadow them.
@@ -30,3 +33,14 @@ frontend_dist = (
 )
 if frontend_dist.is_dir():
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+
+# Every request but those for the page has to carry the token of the backend,
+# which refuses to start without one.
+app.add_middleware(
+    token_auth.TokenAuthMiddleware,
+    token=token_auth.token_from_env(),
+    hosts=token_auth.allowed_hosts(
+        os.environ.get(token_auth.HOST_ENV_VAR, token_auth.DEFAULT_HOST)
+    ),
+    pages=token_auth.page_paths(frontend_dist),
+)

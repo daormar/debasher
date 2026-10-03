@@ -1,3 +1,5 @@
+import { apiFetch, clearTokenRefused } from "./apiFetch";
+
 // What the web UI offers that depends on where the backend runs.
 export interface WebuiInfo {
   // Whether the Help menu gives the command that starts Claude Code on a
@@ -7,11 +9,22 @@ export interface WebuiInfo {
 }
 
 export async function getWebuiInfo(): Promise<WebuiInfo> {
-  const response = await fetch("/api/webui/info");
+  const response = await apiFetch("/api/webui/info");
 
   if (!response.ok) {
     throw new Error(`Failed to get what the web UI offers (${response.status})`);
   }
 
   return response.json();
+}
+
+// Asks the backend again whether it takes the token of the tab, once the tab
+// has a new one: a refused request marks the token refused again.
+export async function checkToken(): Promise<void> {
+  clearTokenRefused();
+  try {
+    await getWebuiInfo();
+  } catch {
+    // Not refused for its token: left to the requests of the editor.
+  }
 }

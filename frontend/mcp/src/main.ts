@@ -1,8 +1,10 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
+import { setTokenSource } from "../../src/api/apiFetch";
 import { httpBackend, sendRequestsTo } from "./backend";
 import { claudeSettings } from "./claudeSettings";
 import { createServer } from "./server";
+import { tokenFromFile } from "./tokenFile";
 import { TOOLS } from "./tools";
 
 // debasher_mcp: the MCP server, spoken over its standard input and output
@@ -17,6 +19,8 @@ const USAGE = `debasher_mcp [--url <string>]
 Offers the editing, running and following of DeBasher programs to an agent
 through the Model Context Protocol, over standard input and output, as a
 client of the backend of the web UI (debasher_webui), which has to be running.
+It sends the token of the backend, which it reads from the token file that
+debasher_webui writes for its port, when the backend runs on this machine.
 
 --url <string>       URL of the backend (default: ${DEFAULT_URL})
 --claude-settings    Print, as JSON, the settings of Claude Code that
@@ -53,6 +57,9 @@ function parseArgs(argv: string[]): { url: string } {
 
 const { url } = parseArgs(process.argv.slice(2));
 
-sendRequestsTo(url);
+// The clients of the backend send the token of the token file of its port.
+const token = tokenFromFile(new URL(url));
+setTokenSource(token.token);
+sendRequestsTo(url, token.describe);
 
 await createServer(httpBackend, VERSION).connect(new StdioServerTransport());

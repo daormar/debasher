@@ -3,6 +3,7 @@ import type { Program } from "./models/program";
 import { ProgramProvider } from "./store/ProgramContext";
 import HomeScreen from "./components/HomeScreen";
 import ProgramEditor from "./components/ProgramEditor";
+import TokenNotice from "./components/TokenNotice";
 
 type Screen =
   | { name: "home" }
@@ -16,27 +17,28 @@ export default function App() {
   // record of it.
   const [runMessage, setRunMessage] = useState<string | null>(null);
 
-  if (screen.name === "home") {
-    return (
-      <HomeScreen
-        runMessage={runMessage}
-        onDismissRunMessage={() => setRunMessage(null)}
-        onOpen={program => {
-          setRunMessage(null);
-          setScreen({ name: "editor", program });
-        }}
-      />
-    );
-  }
-
   return (
-    <ProgramProvider initialProgram={screen.program}>
-      <ProgramEditor
-        onClose={message => {
-          setRunMessage(message);
-          setScreen({ name: "home" });
-        }}
-      />
-    </ProgramProvider>
+    <>
+      <TokenNotice />
+      {screen.name === "home" ? (
+        <HomeScreen
+          runMessage={runMessage}
+          onDismissRunMessage={() => setRunMessage(null)}
+          onOpen={program => {
+            setRunMessage(null);
+            setScreen({ name: "editor", program });
+          }}
+        />
+      ) : (
+        <ProgramProvider initialProgram={screen.program}>
+          <ProgramEditor
+            onClose={message => {
+              setRunMessage(message);
+              setScreen({ name: "home" });
+            }}
+          />
+        </ProgramProvider>
+      )}
+    </>
   );
 }

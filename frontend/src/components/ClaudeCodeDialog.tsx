@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getWebuiInfo } from "../api/webuiApi";
-import { backendUrl, CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
+import { CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
 import { copyOrSelect } from "../utils/clipboard";
 
 interface Props {
@@ -37,7 +37,9 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
     };
   }, []);
 
-  const [url, setUrl] = useState(() => backendUrl(window.location));
+  // The URL of the backend is the origin of the page, which the backend
+  // serves; under the dev server, which forwards /api, it reaches the API too.
+  const [url, setUrl] = useState(() => window.location.origin);
 
   const [copyNote, setCopyNote] = useState<string | null>(null);
 

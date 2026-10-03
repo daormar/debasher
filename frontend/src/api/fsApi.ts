@@ -1,3 +1,5 @@
+import { apiFetch } from "./apiFetch";
+
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
 // message when present, otherwise fall back to a generic one.
 async function errorDetail(response: Response, fallback: string): Promise<string> {
@@ -40,7 +42,7 @@ export async function listDirs(
   path: string,
   options: ListDirsOptions = {}
 ): Promise<ListDirsResult> {
-  const response = await fetch("/api/fs/list-dirs", {
+  const response = await apiFetch("/api/fs/list-dirs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

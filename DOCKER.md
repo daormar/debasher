@@ -19,7 +19,15 @@ docker build -t debasher-demo .
 docker run --rm -p 8000:8000 debasher-demo
 ```
 
-Then open http://localhost:8000/.
+Then open the address of the web interface that the container prints,
+which holds the token that every request has to carry: `docker compose
+logs debasher` shows it (or the output of `docker run`), as
+`http://localhost:8000/#token=<token>`. The token is new at every start
+of the container; to keep the same one, set `DEBASHER_WEBUI_TOKEN`
+(`-e DEBASHER_WEBUI_TOKEN=...`, or under `environment:` in
+`docker-compose.yml`). The address names the port inside the container:
+with another port on the host (`-p 9000:8000`), change it in the
+address.
 
 `docker-compose.yml` mounts a named volume at `/home/debasher`, so programs
 created through the UI survive container restarts and rebuilds. Without

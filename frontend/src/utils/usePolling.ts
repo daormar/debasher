@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+
+import { isTokenRefused, subscribeTokenRefused } from "../api/apiFetch";
 
 interface PollingOptions {
   intervalMs: number;
@@ -9,8 +11,9 @@ interface PollingOptions {
 }
 
 /**
- * Calls `poll` every `intervalMs` while `enabled` holds and the page is
- * visible. A poll never starts while the one before is in flight, however
+ * Calls `poll` every `intervalMs` while `enabled` holds, the page is visible
+ * and the backend has not refused the token of the tab, against which every
+ * poll would only be refused again. A poll never starts while the one before is in flight, however
  * long it takes, and `isCancelled` tells a poll in flight that polling
  * stopped or started over, so that it changes nothing. The latest `poll` is
  * the one called, so a new one on every render does not restart the polling.
@@ -24,13 +27,16 @@ export function usePolling(
   const pollRef =
     useRef(poll);
 
+  const tokenRefused =
+    useSyncExternalStore(subscribeTokenRefused, isTokenRefused);
+
   useEffect(() => {
     pollRef.current = poll;
   });
 
   useEffect(() => {
 
-    if (!enabled) {
+    if (!enabled || tokenRefused) {
       return;
     }
 
@@ -58,6 +64,6 @@ export function usePolling(
       window.clearInterval(interval);
     };
 
-  }, [enabled, intervalMs, resetKey]);
+  }, [enabled, tokenRefused, intervalMs, resetKey]);
 
 }

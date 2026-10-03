@@ -440,14 +440,23 @@ debasher_webui
 :ref:`webui` Section): a server that exposes the workflow API and,
 once the frontend has been built and installed, also serves it, so
 that both are available from a single process at
-``http://<host>:<port>/``.
+``http://<host>:<port>/``. The server obeys only the requests that
+carry its token: it prints the address of the web interface with the
+token (``http://<host>:<port>/#token=<token>``), to open once in a
+browser, and leaves the token for ``debasher_mcp`` in a file readable
+only by the user (``webui-<port>.token`` under
+``$XDG_RUNTIME_DIR/debasher``, or ``~/.debasher/run``).
 
 ::
 
-    $ debasher_webui [--host <string>] [--port <int>]
+    $ debasher_webui [--host <string>] [--port <int>] [--token <string>]
 
 * ``--host <string>``: address to bind to (``127.0.0.1`` by default).
 * ``--port <int>``: port to listen on (``8000`` by default).
+* ``--token <string>``: the token, instead of a new random one at every
+  start. The ``DEBASHER_WEBUI_TOKEN`` environment variable gives it as
+  well, without showing it to the other users of the machine in the
+  list of processes.
 
 The tool requires the ``fastapi`` and ``uvicorn`` Python packages for
 whichever ``python3`` interpreter is first found on ``PATH``. If they
@@ -482,6 +491,12 @@ changes saved elsewhere since it read the program, and, called with
 * ``--claude-settings``: prints the settings of Claude Code that
   `debasher_claude`_ passes, the permissions of the tools of the server,
   and exits.
+
+It sends the token of the server with every request, which it reads by
+itself from the file that ``debasher_webui`` leaves for its port (see
+`debasher_webui`_), so neither its command line nor its registration
+with an agent holds the token. It does so only for a server on the local
+machine that is still running.
 
 The tool needs Node.js: it runs under the ``node`` named by the
 ``DEBASHER_MCP_NODE`` environment variable, or else the one found when

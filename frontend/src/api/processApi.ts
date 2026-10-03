@@ -1,8 +1,9 @@
 import type { ProcessInfo } from "../models/process";
 import type { NodeHookPart, NodeInfo, SuggestedNode } from "../models/node";
+import { apiFetch } from "./apiFetch";
 
 export async function validateProcessName(name: string): Promise<boolean> {
-  const response = await fetch("/api/processes/validate-name", {
+  const response = await apiFetch("/api/processes/validate-name", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
@@ -20,7 +21,7 @@ export async function suggestProcessNames(
   preamble: string,
   envVars: Record<string, string>
 ): Promise<string[]> {
-  const response = await fetch("/api/processes/suggest-names", {
+  const response = await apiFetch("/api/processes/suggest-names", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ preamble, envVars }),
@@ -39,7 +40,7 @@ export async function getProcessInfo(
   envVars: Record<string, string>,
   name: string
 ): Promise<ProcessInfo | null> {
-  const response = await fetch("/api/processes/get-info", {
+  const response = await apiFetch("/api/processes/get-info", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ preamble, envVars, name }),
@@ -70,7 +71,7 @@ export async function suggestNodes(
   preamble: string,
   envVars: Record<string, string>
 ): Promise<SuggestedNode[]> {
-  const response = await fetch("/api/processes/suggest-nodes", {
+  const response = await apiFetch("/api/processes/suggest-nodes", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ preamble, envVars }),
@@ -93,7 +94,7 @@ export async function getNodeInfo(
   envVars: Record<string, string>,
   name: string
 ): Promise<NodeInfo> {
-  const response = await fetch("/api/processes/get-node-info", {
+  const response = await apiFetch("/api/processes/get-node-info", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ preamble, envVars, name }),
@@ -114,7 +115,7 @@ export async function getNodeInfo(
 export async function getInheritedHooks(
   kind: string
 ): Promise<{ hooks: Partial<Record<NodeHookPart, string>>; error: string | null }> {
-  const response = await fetch("/api/processes/inherited-hooks", {
+  const response = await apiFetch("/api/processes/inherited-hooks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind }),
@@ -132,7 +133,7 @@ export async function getInheritedHooks(
 export async function getNodeReference(
   kind: string
 ): Promise<{ reference: string; error: string | null }> {
-  const response = await fetch("/api/processes/node-reference", {
+  const response = await apiFetch("/api/processes/node-reference", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ kind }),

@@ -1,6 +1,7 @@
 import { useEffect, useState, type RefObject } from "react";
 
 import type { Program } from "../models/program";
+import { isTokenRefused } from "../api/apiFetch";
 import type { ProcessStatusesResult } from "../api/executionApi";
 import {
   getProcessStatuses,
@@ -227,6 +228,10 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     let cancelled = false;
 
     async function poll() {
+      // Against a refused token every poll would only be refused again.
+      if (isTokenRefused()) {
+        return;
+      }
       const result = await readProcessStatuses(programRef.current);
       if (!cancelled) {
         applyProcessStatuses(result);

@@ -393,7 +393,8 @@ are installed (see the :ref:`webui` Section), it is started with:
 
     $ debasher_webui
 
-and opened in a browser at ``http://127.0.0.1:8000/``. There, "Create
+and opened in a browser at the address that it prints, such as
+``http://127.0.0.1:8000/#token=...``, which holds its token. There, "Create
 new program" starts an empty program, where processes are added and
 their options connected on a canvas; "Save" writes the program and its
 generated module into a directory, and the "Run" menu runs it with
