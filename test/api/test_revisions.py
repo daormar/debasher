@@ -209,3 +209,29 @@ def test_what_saves_before_running_answers_with_the_revision_it_wrote(tmp_path, 
     assert refused.value.status_code == 409
 
     assert execution.validate_program(changed.model_copy(update={"revision": 1})).revision == 2
+
+
+def _revision(home_dir: str):
+    return programs.get_program_revision(programs.ProgramRevisionRequest(homeDir=home_dir)).revision
+
+
+def test_the_revision_is_read_without_loading_the_program(tmp_path):
+    program = _program(tmp_path)
+    _save(program)
+    assert _revision(program.homeDir) == 1
+
+    loaded = persistence.load_program(program.homeDir)
+    _save(loaded.model_copy(update={"description": "changed"}))
+
+    assert _revision(program.homeDir) == 2
+
+
+def test_a_directory_with_no_program_metadata_has_no_revision(tmp_path):
+    assert _revision(str(tmp_path)) is None
+    assert _revision(str(tmp_path / "missing")) is None
+
+
+def test_the_revision_of_a_blank_home_directory_is_refused(tmp_path):
+    with pytest.raises(programs.HTTPException) as refused:
+        _revision("  ")
+    assert refused.value.status_code == 400

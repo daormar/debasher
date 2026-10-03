@@ -69,8 +69,17 @@ A program built with the web interface uses two directories:
 
 The two must be different directories. A program is saved with the
 "Save" button, and loaded again from its home directory with "Load
-program". Nothing is kept in the browser: a program that has not been
-saved is lost when its tab is closed.
+program". Nothing is kept in the browser: changes that have not been
+saved are lost when the tab is closed, and "Close", or closing or
+reloading the tab of the browser, asks first.
+
+Another tab, or an AI agent through ``debasher_mcp`` (see the
+:ref:`tools` Section), may save the same program meanwhile. The editor
+notices within a few seconds: with nothing unsaved, it loads the program
+again on its own, positions on the canvas included; with unsaved
+changes, a banner under the toolbar offers to load it, losing them, or
+to save yours over it, losing what was saved. Until you choose, saving
+is refused, so that nobody's work is overwritten without your knowing.
 
 The Home Screen
 ---------------
@@ -261,7 +270,11 @@ The "Program files" panel, in the corner of the canvas, manages the
 files of the home directory: it shows, edits, uploads, renames, moves
 and deletes them, and creates directories. It never shows the files
 that belong to the engine or to the web interface, and the generated
-script is shown read only, since every save writes it again.
+script is shown read only, since every save writes it again. While it is
+open it shows the files that someone else adds, and a file shown that
+someone else writes is read again; if it has unsaved changes, a line
+above it offers to load the file, losing them, or to save it over what
+was written.
 
 Running a General Program
 -------------------------

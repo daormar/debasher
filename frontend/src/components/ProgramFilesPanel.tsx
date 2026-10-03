@@ -10,11 +10,19 @@ import {
   deleteEntry,
   getFileContent,
   getFileTree,
+  getFileVersion,
   moveEntry,
+  saveFileContent,
   uploadFiles,
-  writeFileContent,
 } from "../api/programFilesApi";
-import type { FileEntry } from "../api/programFilesApi";
+import type { FileContent, FileEntry } from "../api/programFilesApi";
+import { FileVersionConflict } from "../api/fileVersionConflict";
+import { usePolling } from "../utils/usePolling";
+import ChangedElsewhereBanner from "./ChangedElsewhereBanner";
+
+// How often the open panel reads again its tree and the version of the file
+// it shows, which someone else (an agent through the MCP server) may write.
+export const FILES_POLL_INTERVAL_MS = 3000;
 
 // Guesses a CodeMirror language from a previewed file's extension,
 // distinct from ProgramProcess.language, which is explicit metadata a
@@ -202,7 +210,7 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
     useState<string | null>(null);
 
   const [preview, setPreview] =
-    useState<{ path: string; kind: "file" | "binary" | "missing"; content?: string } | null>(null);
+    useState<({ path: string } & FileContent) | null>(null);
 
   const [previewLoading, setPreviewLoading] =
     useState(false);
@@ -216,6 +224,13 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
 
   const [savingContent, setSavingContent] =
     useState(false);
+
+  // The version on disk of the file shown, when someone else wrote it while
+  // the buffer held unsaved changes, or when a save was refused because they
+  // did: the user loads it, losing those changes, or saves the buffer over
+  // it. A null version is a file that someone else deleted.
+  const [externalVersion, setExternalVersion] =
+    useState<{ path: string; version: string | null } | null>(null);
 
   // The line shown above the file that an open request named, while that
   // file stays the one shown
@@ -250,9 +265,8 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  // The panel holds no other notice of a file written outside it, so it
-  // reads the tree again before it shows the file, with every directory
-  // above it expanded.
+  // The tree is read again at once, rather than at the next poll, before
+  // the file is shown, with every directory above it expanded.
   useEffect(() => {
     if (!openRequest) {
       return;
@@ -300,6 +314,54 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
   const isDirty =
     canEditPreview && draft !== null && draft !== preview?.content;
 
+  // The file shown and whether its buffer holds unsaved changes, as of the
+  // last render, for the poll to check once its requests are answered that
+  // the user did not open another file or edit this one meanwhile.
+  const shownRef =
+    useRef({ preview, isDirty });
+
+  useEffect(() => {
+    shownRef.current = { preview, isDirty };
+  });
+
+  // While the panel is open, the tree is read again, and so is the file
+  // shown when its version changed: in place when the buffer holds nothing
+  // unsaved, and otherwise left to the user (see externalVersion).
+  usePolling(async isCancelled => {
+    const entries = await getFileTree(program.homeDir, program.name);
+    if (!isCancelled() && JSON.stringify(entries) !== JSON.stringify(tree)) {
+      setTree(entries);
+    }
+    const shown = preview;
+    if (!shown || shown.kind === "missing" || savingContent || previewLoading) {
+      return;
+    }
+    const version = await getFileVersion(program.homeDir, shown.path);
+    if (isCancelled() || shownRef.current.preview !== shown || version === shown.version) {
+      return;
+    }
+    if (shownRef.current.isDirty) {
+      setExternalVersion({ path: shown.path, version });
+      return;
+    }
+    await showFile(shown.path, () => isCancelled() || shownRef.current.preview !== shown);
+  }, {
+    intervalMs: FILES_POLL_INTERVAL_MS,
+    enabled: isOpen && Boolean(program.homeDir),
+    resetKey: `${program.homeDir}\n${program.name}`,
+  });
+
+  // Reads the file at `path` into the preview and the buffer, unless
+  // `isStale` says by then that it is no longer wanted.
+  async function showFile(path: string, isStale: () => boolean = () => false) {
+    const result = await getFileContent(program.homeDir, path);
+    if (isStale()) {
+      return;
+    }
+    setPreview({ path, ...result });
+    setDraft(result.kind === "file" ? result.content : null);
+  }
+
   // Where "Upload files" / "New folder" write to: the selected
   // directory, the selected file's parent, or the root when nothing
   // is selected.
@@ -329,6 +391,7 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
     }
 
     setSelectedPath(entry.path);
+    setExternalVersion(null);
 
     if (entry.type === "dir") {
       setPreview(null);
@@ -338,9 +401,7 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
 
     setPreviewLoading(true);
     try {
-      const result = await getFileContent(program.homeDir, entry.path);
-      setPreview({ path: entry.path, ...result });
-      setDraft(result.kind === "file" ? (result.content ?? "") : null);
+      await showFile(entry.path);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to read ${entry.path}.`);
     } finally {
@@ -349,20 +410,44 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
 
   }
 
-  async function handleSaveContent() {
-    if (!selectedEntry || !canEditPreview || draft === null) {
+  // Saves the buffer, only over the version that was read, or, to save it
+  // over what someone else wrote since, over `overVersion`.
+  async function handleSaveContent(overVersion?: string) {
+    if (!selectedEntry || preview?.kind !== "file" || !canEditPreview || draft === null) {
       return;
     }
     setSavingContent(true);
     setError(null);
     try {
-      const entries = await writeFileContent(program.homeDir, program.name, selectedEntry.path, draft);
+      const { entries, version } = await saveFileContent(
+        program.homeDir, program.name, selectedEntry.path, draft, overVersion ?? preview.version
+      );
       setTree(entries);
-      setPreview(current => (current ? { ...current, content: draft } : current));
+      setPreview(current =>
+        current?.kind === "file" && version !== null ? { ...current, content: draft, version } : current
+      );
+      setExternalVersion(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save.");
+      if (err instanceof FileVersionConflict) {
+        setExternalVersion({ path: selectedEntry.path, version: err.version });
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to save.");
+      }
     } finally {
       setSavingContent(false);
+    }
+  }
+
+  // Loads again the file shown, losing the changes of the buffer.
+  async function handleLoadExternal() {
+    if (!preview) {
+      return;
+    }
+    setExternalVersion(null);
+    try {
+      await showFile(preview.path);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to read ${preview.path}.`);
     }
   }
 
@@ -551,7 +636,7 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
               </button>
 
               <button
-                onClick={handleSaveContent}
+                onClick={() => handleSaveContent()}
                 disabled={!canEditPreview || !isDirty || savingContent}
               >
                 {savingContent ? "Saving..." : "Save"}
@@ -628,6 +713,24 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
                   flexDirection: "column",
                 }}
               >
+
+                {externalVersion && preview?.path === externalVersion.path && (
+                  <ChangedElsewhereBanner
+                    message={
+                      externalVersion.version === null
+                        ? "This file was deleted from elsewhere while it has unsaved changes here."
+                        : "This file was written from elsewhere while it has unsaved changes here."
+                    }
+                    actions={[
+                      { label: "Load it (lose my changes)", onClick: handleLoadExternal },
+                      ...(externalVersion.version === null ? [] : [{
+                        label: "Save mine over it",
+                        onClick: () => handleSaveContent(externalVersion.version ?? undefined),
+                        disabled: savingContent,
+                      }]),
+                    ]}
+                  />
+                )}
 
                 {openNotice && preview?.path === openNotice.path && (
                   <div

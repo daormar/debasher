@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import stat
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +11,26 @@ from pydantic import BaseModel
 from .. import file_inspection, persistence
 
 router = APIRouter(prefix="/api/program-files", tags=["program-files"])
+
+# The code of the conflict with which a write answers when the file changed
+# since the version the writer read (see write_file_content).
+FILE_VERSION_CONFLICT = "file-version"
+
+
+def file_version(path: Path) -> str | None:
+    """
+    The version of the file at `path`: its modification time and its size,
+    which a write that changes the file changes, or None when there is no
+    file there. A write that keeps both the size and the modification time,
+    on a file system whose clock is coarse, goes unseen.
+    """
+    try:
+        status = path.stat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(status.st_mode):
+        return None
+    return f"{status.st_mtime_ns}-{status.st_size}"
 
 
 def resolve_within(home_dir: str, rel_path: str) -> Path:
@@ -178,6 +199,8 @@ class FileContentRequest(BaseModel):
 class FileContentResponse(BaseModel):
     kind: Literal["file", "binary", "missing"]
     content: str | None = None
+    # The version of the file read (see file_version), None when missing.
+    version: str | None = None
 
 
 @router.post("/content", response_model=FileContentResponse)
@@ -194,15 +217,37 @@ def get_file_content(request: FileContentRequest) -> FileContentResponse:
     if not resolved.is_file():
         return FileContentResponse(kind="missing")
 
+    # Before reading, so that a write between the two shows as a newer
+    # version than the one read, never as the same one.
+    version = file_version(resolved)
+
     if file_inspection.looks_binary(resolved):
-        return FileContentResponse(kind="binary")
+        return FileContentResponse(kind="binary", version=version)
 
     try:
         content = file_inspection.read_text_capped(resolved)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Could not read {request.path!r}: {e}")
 
-    return FileContentResponse(kind="file", content=content)
+    return FileContentResponse(kind="file", content=content, version=version)
+
+
+class FileVersionResponse(BaseModel):
+    version: str | None
+
+
+@router.post("/version", response_model=FileVersionResponse)
+def get_file_version(request: FileContentRequest) -> FileVersionResponse:
+    """
+    The version of one file (see file_version), without reading it: what the
+    panel polls to learn that someone else wrote the file it shows.
+    """
+    try:
+        resolved = resolve_within(request.homeDir, request.path)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    return FileVersionResponse(version=file_version(resolved))
 
 
 class MkdirRequest(BaseModel):
@@ -240,16 +285,30 @@ class WriteContentRequest(BaseModel):
     # above it, as "Add test" and the MCP server need; without it, only an
     # existing file is written, as the panel's editor does.
     create: bool = False
+    # The version of the file that the writer read (see file_version): the
+    # write is refused when the file holds another one, so that it never
+    # overwrites what someone else wrote since. Without it, the file is
+    # written whatever it holds.
+    expectedVersion: str | None = None
 
 
-@router.post("/write-content", response_model=FileTreeResponse)
-def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
+class WriteContentResponse(FileTreeResponse):
+    # The version of the file just written.
+    version: str | None = None
+
+
+@router.post("/write-content", response_model=WriteContentResponse)
+def write_file_content(request: WriteContentRequest) -> WriteContentResponse:
     """
     Overwrites an existing file's content, for the panel's in-place
     editor, or, with `create`, also creates a file that does not exist,
     with the directories above it. Refuses the protected
     `<programName>.sh`, and, without `create`, any path that doesn't
     already name a file. A path that names a directory is always refused.
+    With `expectedVersion`, a file whose version is another one is refused
+    with a conflict whose detail has the code "file-version", the version
+    it holds and a message. The version is compared just before the write,
+    with no lock: a write by someone else in between goes unseen.
     """
     if not request.path:
         raise HTTPException(status_code=400, detail="path must not be empty")
@@ -270,13 +329,30 @@ def write_file_content(request: WriteContentRequest) -> FileTreeResponse:
     if not target.is_file() and not request.create:
         raise HTTPException(status_code=404, detail=f"{request.path!r} does not exist")
 
+    if request.expectedVersion is not None:
+        current = file_version(target)
+        if current != request.expectedVersion:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": FILE_VERSION_CONFLICT,
+                    "version": current,
+                    "message": (
+                        f"{request.path!r} changed on disk since it was opened "
+                        "(another client of the backend wrote it). Open it again "
+                        "to see those changes: saving now would discard them."
+                    ),
+                },
+            )
+
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(request.content)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Could not write {request.path!r}: {e}")
 
-    return _tree_response(request.homeDir, request.programName)
+    tree = _tree_response(request.homeDir, request.programName)
+    return WriteContentResponse(entries=tree.entries, version=file_version(target))
 
 
 class DeleteRequest(BaseModel):

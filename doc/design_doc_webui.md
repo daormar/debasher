@@ -166,7 +166,12 @@ refer to it.
 - **revision**: a counter in the program metadata that a save which changes it
   increments; a write into the program's own home directory that would change
   the metadata is refused when the metadata there holds another revision than
-  the one the program was loaded with (see "Revisions of the program metadata").
+  the one the write names: the one the program was loaded with, or the one on
+  disk when the user saves over it (see "Revisions of the program metadata").
+- **file version**: the modification time and the size of a user file, which a
+  write that changes the file changes; the editor of the program files panel
+  saves a file only over the version it read (see "Reserved names and user
+  files").
 - **generated script**: the module that script generation writes as `<name>.sh`
   in the home directory.
 - **reserved name**: a file or directory name that the engine or the web UI
@@ -216,6 +221,9 @@ refer to it.
 - **tab**: one browser tab with the web UI open, holding its own store.
 - **store**: the state of the frontend in a tab (`ProgramContext`): the program
   being edited and what the tab last read of its run.
+- **unsaved changes**: how the program of a tab differs from the program as it
+  was last loaded or saved, its revision and home directory apart (see
+  "Screens and the store").
 - **edit**: one change of a program as plain data (`EditOp` in
   `models/programEdits.ts`), such as adding a process or connecting two
   options; an operation of the store applies one or more edits.
@@ -970,11 +978,32 @@ metadata, and replaces the metadata file whole, so that two writes arriving
 together cannot both pass the comparison (`persistence.save`).
 
 When a write is refused, the editor says that the program changed on disk since
-it was loaded, and offers to load it again. Loading it again replaces the
-program of the tab with the one on disk, and loses what was changed in the tab
-since it was loaded; declining keeps the tab as it is, and its saves into the
-home directory stay refused until the program is loaded again. The revision is a
-guard against overwriting, not a merge.
+it was loaded, and shows a banner under the toolbar with two choices. "Load it
+(lose my changes)" replaces the program of the tab with the one on disk, and
+loses what was changed in the tab since it was loaded. "Save mine over it" saves
+the program of the tab naming the revision on disk, and loses what was saved
+there since the tab loaded it; if someone saved again meanwhile, that save is
+refused in turn, and the banner stays, now for the newer revision. Until the
+user chooses, the tab goes on as it is, and its writes into the home directory
+stay refused; a tab with no unsaved changes, which loses nothing, loads the
+program again at the next reading of the revision, as below. The revision is a
+guard against overwriting without knowing, not a merge.
+
+A tab also learns of a revision saved elsewhere before it writes. While the page
+is visible and the program has a home directory, the editor reads the revision
+of the program metadata there every few seconds (`/revision`, which reads only
+the revision, polled by `store/useDiskRevision.ts`). When it is another than the
+one of the tab, a tab with no unsaved changes loads the program again on its
+own, since it loses nothing, and a tab with unsaved changes shows the same
+banner. Whether the tab holds unsaved changes is decided when the revision is
+read, from the latest program, not from the last render, so that an edit made
+meanwhile is never lost to a load that does not ask. A revision read while a
+write of the tab is in flight, or read before such a write was answered, is set
+aside, since it may be that write's own, which the tab has not taken yet; and a
+reading never starts while the one before has not been answered. A program
+loaded again keeps the selection and the view of the canvas, and the canvas
+takes the positions of its processes from it (see "Keeping the canvas in step
+with the store").
 
 ## Reserved names and user files
 
@@ -1008,6 +1037,21 @@ It keeps four guarantees:
   itself is never deleted or moved.
 - The generated script is shown, read-only: the panel never edits, deletes,
   moves or overwrites it, since the next save would regenerate it anyway.
+
+The panel also follows what someone else, such as an agent through the MCP
+server, writes into the home directory. While it is open and the page is
+visible, it reads the tree again every few seconds, and the file version of the
+file it shows (`/version`, which reads no content); when the version changed, a
+buffer that holds no edit since the file was read is read again in place, and a
+buffer with such edits shows a banner above the file that offers to load the
+file, losing them, or to save the buffer over it (only to load it, when the file
+was deleted). Its saves name the version they read (`expectedVersion` of
+`/write-content`), and a file that holds another version is refused with a
+conflict and the same banner, so that the editor never overwrites what someone
+else wrote since it read the file unless the user chooses to. The version is
+compared just before the write, with no lock, and a write that keeps both the
+size and the modification time of a file goes unseen. "Add test" and the MCP
+server name no version.
 
 ## The output directory
 
@@ -1185,18 +1229,20 @@ goes away and comes back.
 **The tab.** Nothing that happens to a tab stops a run: closing or reloading it,
 leaving the editor, or hiding the indicator of the run. Only "Stop program"
 stops it, and "Stop process" one of its processes, besides the actions that stop
-a resident program (see "Running a resident program"). The tab asks nothing when
-it is closed: the browser shows only a generic warning, which could not say that
-the run goes on, and would show it every time.
+a resident program (see "Running a resident program"). The tab asks nothing
+about the run when it is closed (it asks only when the program holds unsaved
+changes, see "Screens and the store"): the browser shows only a generic warning,
+which could not say that the run goes on, and would show it every time.
 
 Leaving the editor while there is a run in progress shows a short message, which
-blocks nothing: the run goes on in its output directory, and is followed or
-stopped by opening its program again. This is the only moment at which the web
-UI can say where the run lives. The backend keeps no record of it, and the home
-screen cannot list the runs in progress, since it does not know which output
-directories exist. A run is found again by loading its program from its home
-directory: its program metadata holds its output directory, and its run phase
-comes from the process statuses of that directory.
+blocks nothing (apart from the question about unsaved changes): the run goes on
+in its output directory, and is followed or stopped by opening its program
+again. This is the only moment at which the web UI can say where the run lives.
+The backend keeps no record of it, and the home screen cannot list the runs in
+progress, since it does not know which output directories exist. A run is found
+again by loading its program from its home directory: its program metadata holds
+its output directory, and its run phase comes from the process statuses of that
+directory.
 
 A request of the tab that is still pending when the tab goes away, to launch or
 to stop a run, goes on in the backend to its end. The tab loses the answer, and
@@ -1299,9 +1345,15 @@ that the ids an edit refers to exist and those it adds are free. Whether the
 engine accepts the name of a process is left to the backend, and what "Add
 program" brings is checked before its edit is built (`mergeRefusal`).
 
-The store keeps no history and no record of unsaved changes: there is no
-undo, and leaving the editor or closing the tab loses the changes made since
-the last save, without a warning.
+The store keeps no history, so there is no undo, but it keeps the program as
+it was last loaded or saved, and the program holds unsaved changes when it
+differs from it in anything but the revision and the home directory
+(`hasUnsavedChanges` in `models/externalChanges.ts`, which compares the two as
+the program metadata would hold them, whatever the order of the keys of an
+object). What a save keeps is the program it wrote, not the one the tab holds
+when the save is answered, since the user may have kept editing meanwhile.
+Leaving the editor with "Close", or closing or reloading the tab of the browser,
+asks first when the program holds unsaved changes.
 
 ## From the store to the canvas
 
@@ -1364,7 +1416,10 @@ when the program's structural key changes (for each process: its id, name and
 mode, and the id, label and direction of each option, and for an input, where
 its value comes from when no connection can give it) or when the set of moved
 handles changes, keeping the positions that the list already has. Refreshing
-it on every change of the store would fight with the drag.
+it on every change of the store would fight with the drag. After the program
+was loaded again from its home directory (see "Revisions of the program
+metadata"), the list takes the positions from the store instead, since they are
+those that someone else saved, a moved process included.
 
 The rule that follows is that whatever a canvas node draws from its process
 must be part of the structural key; otherwise the canvas node keeps drawing an
@@ -1383,9 +1438,9 @@ DeBasher", a dialog with a link to the article that describes DeBasher and its
 reference, as text and as BibTeX, each with a "Copy" that behaves as the one of
 the prompt panel when the browser refuses the clipboard (see "The prompt
 panel"). What the menu offers is data, in `models/helpLinks.ts`. Every link
-opens in a new tab of the browser, with no access back to the tab of the editor:
-the store keeps no record of unsaved changes (see "Screens and the store"), so
-following a link in the same tab would lose them without a warning.
+opens in a new tab of the browser, with no access back to the tab of the editor,
+so that the editor stays as it is, with any unsaved changes (see "Screens and
+the store").
 
 A link to a page of the documentation of DeBasher names a page of
 `rtdocs/source` by the name of its source, and the tests of the frontend check
@@ -1543,9 +1598,17 @@ non-goals of a resident program".
 
 - **Two directories apart.** A program is never saved into its output
   directory, and the output directory is never set to the home directory.
-- **No save over another's.** A save into a program's own home directory never
-  overwrites what another tab or client saved there since the program was loaded
-  (see "Revisions of the program metadata").
+- **No save over another's without knowing.** A save into a program's own home
+  directory never overwrites what another tab or client saved there since the
+  program was loaded, unless the user, told so, chooses to (see "Revisions of
+  the program metadata").
+- **No write over another's file.** The editor of the program files panel never
+  overwrites a file that someone else wrote since it read it, unless the user
+  chooses to (see "Reserved names and user files").
+- **Unsaved changes are lost only when the user lets them go.** A revision saved
+  elsewhere is loaded on its own only into a tab with no unsaved changes, and
+  leaving the editor or closing its tab with unsaved changes asks first (see
+  "Revisions of the program metadata" and "Screens and the store").
 - **A program lives where it is loaded from.** Its home directory is the
   directory it was loaded from, even if it was copied or moved there (see
   "The home directory").
@@ -1604,9 +1667,10 @@ non-goals of a resident program".
   directories are not coordinated beyond two guards: a save over what another
   saved since the program was loaded is refused (see "Revisions of the program
   metadata"), and the guards based on the engine's own files (a run in progress)
-  see the other tab. Nothing merges the changes of two tabs.
-- **Keeping unsaved work.** There is no autosave, no undo and no warning
-  before unsaved changes are lost.
+  see the other tab. A tab learns of a revision that another saved, and loads
+  it or asks, but nothing merges the changes of two tabs.
+- **Keeping unsaved work.** There is no autosave and no undo: unsaved changes
+  live only in the tab.
 - **Live updates.** The web UI learns what happens in a run by polling, every
   few seconds, not by being told.
 - **Being told that a run ended, or a list of the runs in progress.** A run is
@@ -3023,7 +3087,7 @@ The file is written through the program files of the backend, whose
 `create`, with the directories above it, keeping the guarantees of the program
 files panel (see "Reserved names and user files"); without `create` it writes
 only a file that exists. After "Add test", the program files panel reads the
-tree again, since it holds no other notice of a file written outside it.
+tree again at once, without waiting for its next reading.
 
 ## Business tests from the MCP server
 

@@ -35,7 +35,13 @@ const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 // How the store sends a request of the run that saves the program first
 // (launching, validating, checking its options): it handles a revision
 // conflict, which it rethrows, and takes the revision the request wrote.
-export type WriteProgram = <T extends { revision: number | null }>(request: () => Promise<T>) => Promise<T>;
+// Sends `request` with `written`, the program it writes into the program
+// metadata: the request is given the program, rather than taking one of its
+// own, so that what is written is always what the tab takes as saved.
+export type WriteProgram = <T extends { revision: number | null }>(
+  written: Program,
+  request: (written: Program) => Promise<T>
+) => Promise<T>;
 
 /**
  * The run of the program in its output directory as the tab follows it: the
@@ -100,7 +106,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     if (program.programType === "resident") {
       return withRunRequest("launching", async () => {
         await ensureNoRunInProgress();
-        return writeProgram(() => runProgram(program, resumeChangedProgram));
+        return writeProgram(program, written => runProgram(written, resumeChangedProgram));
       });
     }
 
@@ -111,7 +117,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
 
     try {
       await ensureNoRunInProgress();
-      const result = await writeProgram(() => runProgram(program));
+      const result = await writeProgram(program, runProgram);
       if (result.started) {
         setGeneralTracking(LAUNCHED_GENERAL_TRACKING);
       }
@@ -125,19 +131,19 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
   // "Validate program" and "Check program options", which save the program
   // before debasher_exec runs; each answers with what it printed.
   async function validateProgram() {
-    const { output } = await writeProgram(() => requestValidation(program));
+    const { output } = await writeProgram(program, requestValidation);
     return output;
   }
 
   async function checkProgramOptions() {
-    const { output } = await writeProgram(() => requestOptionsCheck(program));
+    const { output } = await writeProgram(program, requestOptionsCheck);
     return output;
   }
 
   // "Run tests", which saves the program before debasher_test runs its
   // tests; answers with the test outcome and the reports of the tests.
   async function runTests() {
-    const { outcome, output } = await writeProgram(() => requestTests(program));
+    const { outcome, output } = await writeProgram(program, requestTests);
     return { outcome, output };
   }
 

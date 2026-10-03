@@ -10,18 +10,28 @@ from fastapi import HTTPException  # noqa: E402
 
 from api.routers.program_files import (  # noqa: E402
     DeleteRequest,
+    FileContentRequest,
     MoveRequest,
     WriteContentRequest,
     delete_entry,
+    get_file_content,
+    get_file_version,
     move_entry,
     write_file_content,
 )
 
 
-def _write(home, path, content, create=False):
+def _write(home, path, content, create=False, expected_version=None):
     return write_file_content(
-        WriteContentRequest(homeDir=str(home), programName="prog", path=path, content=content, create=create)
+        WriteContentRequest(
+            homeDir=str(home), programName="prog", path=path, content=content, create=create,
+            expectedVersion=expected_version,
+        )
     )
+
+
+def _version(home, path):
+    return get_file_version(FileContentRequest(homeDir=str(home), path=path)).version
 
 
 def _refused(home, path, create=False):
@@ -192,3 +202,45 @@ def test_a_move_never_replaces_an_entry_not_even_a_link(layout):
 
     assert _status(lambda: _move(home, "test/other.txt", "link_in")) == 400
     assert (home / "test" / "other.txt").read_text() == "other"
+
+
+def test_reading_a_file_gives_its_version_and_writing_it_changes_it(tmp_path):
+    (tmp_path / "notes.txt").write_text("old")
+
+    read = get_file_content(FileContentRequest(homeDir=str(tmp_path), path="notes.txt"))
+    assert read.version is not None
+    assert read.version == _version(tmp_path, "notes.txt")
+
+    written = _write(tmp_path, "notes.txt", "newer", expected_version=read.version)
+
+    assert written.version == _version(tmp_path, "notes.txt")
+    assert written.version != read.version
+
+
+def test_a_write_on_a_stale_version_is_refused_and_writes_nothing(tmp_path):
+    (tmp_path / "notes.txt").write_text("old")
+    stale = _version(tmp_path, "notes.txt")
+    _write(tmp_path, "notes.txt", "theirs, longer")
+
+    with pytest.raises(HTTPException) as refused:
+        _write(tmp_path, "notes.txt", "mine", expected_version=stale)
+
+    assert refused.value.status_code == 409
+    assert refused.value.detail["code"] == "file-version"
+    assert refused.value.detail["version"] == _version(tmp_path, "notes.txt")
+    assert (tmp_path / "notes.txt").read_text() == "theirs, longer"
+
+
+def test_a_missing_file_or_a_directory_has_no_version(tmp_path):
+    (tmp_path / "data").mkdir()
+
+    assert _version(tmp_path, "missing.txt") is None
+    assert _version(tmp_path, "data") is None
+    assert get_file_content(FileContentRequest(homeDir=str(tmp_path), path="missing.txt")).version is None
+
+
+def test_the_version_of_a_reserved_or_outside_path_is_refused(tmp_path):
+    for path in (".debasher/program.json", "../outside.txt"):
+        with pytest.raises(HTTPException) as refused:
+            _version(tmp_path, path)
+        assert refused.value.status_code == 400

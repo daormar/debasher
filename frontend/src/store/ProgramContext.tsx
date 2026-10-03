@@ -38,6 +38,8 @@ import type { ResidentRunPhase } from "../models/residentRun";
 import type { NodeNotice } from "../models/nodeState";
 import { useProgramRun, type WriteProgram } from "./useProgramRun";
 import { RevisionConflict } from "../api/revisionConflict";
+import { hasUnsavedChanges } from "../models/externalChanges";
+import { useDiskRevision, type ProgramWrites } from "./useDiskRevision";
 
 export type ProgramRunPhase = GeneralRunPhase;
 
@@ -49,6 +51,27 @@ interface ProgramContextType {
   selectProcess: (processId: string | null) => void;
 
   save: (outputDir: string) => Promise<void>;
+
+  // Whether the program holds changes that it did not hold when it was last
+  // loaded or saved: what leaving the editor would lose.
+  unsavedChanges: boolean;
+
+  // The revision of the program metadata in the home directory when someone
+  // else saved it while the program held unsaved changes, or when a write of
+  // the tab was refused for it, for the user to choose between loading it
+  // (`loadExternal`, which loses those changes) and saving the tab over it
+  // (`saveOverExternal`); null otherwise. A tab with nothing unsaved loads
+  // such a revision on its own.
+  externalRevision: number | null;
+
+  loadExternal: () => Promise<void>;
+
+  saveOverExternal: () => Promise<void>;
+
+  // How many times the program was loaded again from its home directory:
+  // the canvas then takes the positions of the processes from the program,
+  // not from what it draws.
+  diskLoads: number;
 
   // True whenever processStatuses reports at least one process as
   // "IN-PROGRESS", i.e. a run is going for program.outputDir, whether
@@ -315,7 +338,46 @@ export function ProgramProvider({
     setProgramRaw(next);
   }
 
+  // The program as it was last loaded or saved, with a ref ahead of the
+  // render, as for the program.
+  const [savedProgram, setSavedProgramRaw] =
+    useState<Program>(program);
+
+  const savedProgramRef =
+    useRef(savedProgram);
+
+  function setSavedProgram(saved: Program) {
+    savedProgramRef.current = saved;
+    setSavedProgramRaw(saved);
+  }
+
+  const unsavedChanges = useMemo(
+    () => hasUnsavedChanges(program, savedProgram),
+    [program, savedProgram]
+  );
+
+  const writesRef =
+    useRef<ProgramWrites>({ inFlight: 0, answered: 0 });
+
+  const [diskLoads, setDiskLoads] =
+    useState(0);
+
   async function save(outputDir: string) {
+    await saveInto(outputDir, program);
+  }
+
+  // Saves the tab over the revision that someone else saved, which loses
+  // their changes.
+  async function saveOverExternal() {
+    if (externalRevision === null) {
+      return;
+    }
+    const current = programRef.current;
+    await saveInto(current.homeDir, { ...current, revision: externalRevision });
+    askAbout(null);
+  }
+
+  async function saveInto(outputDir: string, toSave: Program) {
 
     // Saving regenerates the .sh script in homeDir (see
     // persistence.save), but engine/debasher_exec_process
@@ -341,7 +403,7 @@ export function ProgramProvider({
     // "Reset output directory" would delete it. Kept here (not just as
     // SaveDialog's proactive disable) so any other future caller of
     // save() gets the same protection; the backend enforces this too.
-    if (program.outputDir.trim() && outputDir.trim() === program.outputDir.trim()) {
+    if (toSave.outputDir.trim() && outputDir.trim() === toSave.outputDir.trim()) {
       throw new Error(
         "The save directory can't be the same as this program's output " +
         "directory (Run menu > Set output directory)."
@@ -351,7 +413,7 @@ export function ProgramProvider({
     // The program goes with the home directory it was loaded from, which
     // tells the backend a save into it, checked against the revision of the
     // program metadata there, from a save into another directory.
-    await writeProgram(() => saveProgram(program, outputDir));
+    await writeProgram(toSave, written => saveProgram(written, outputDir));
     // Only homeDir and the revision are taken from the save: the user may
     // have kept editing while the request was in flight, and putting the
     // saved copy back whole would silently drop those edits.
@@ -363,32 +425,50 @@ export function ProgramProvider({
   async function reloadFromDisk() {
     const loaded = await loadProgram(programRef.current.homeDir);
     setProgram(() => loaded);
+    setSavedProgram(programRef.current);
+    setDiskLoads(count => count + 1);
   }
 
-  // Sends a request that writes the program metadata, and takes the
-  // revision it wrote. When someone else saved the program since it was
-  // loaded, the backend refuses it, and the user may load the program
-  // again, which loses what this tab changed since it was loaded.
-  const writeProgram: WriteProgram = async request => {
+  const { externalRevision, askAbout } = useDiskRevision({
+    homeDir: program.homeDir,
+    programRef,
+    savedProgramRef,
+    writesRef,
+    reloadFromDisk,
+  });
+
+  // Loads the revision that someone else saved, which loses the unsaved
+  // changes of the tab.
+  async function loadExternal() {
+    await reloadFromDisk();
+    askAbout(null);
+  }
+
+  // Sends a request that writes `written` into the program metadata, and
+  // takes the revision it wrote. When someone else saved the program since
+  // it was loaded, the backend refuses it, and the user chooses, as for a
+  // revision that the tab finds on its own, between loading what they saved
+  // and saving the tab over it.
+  const writeProgram: WriteProgram = async (written, request) => {
     let result;
+    writesRef.current.inFlight += 1;
     try {
-      result = await request();
+      result = await request(written);
     } catch (err) {
-      if (
-        err instanceof RevisionConflict &&
-        window.confirm(
-          `${err.message}\n\nLoad it again now? What was changed in this tab ` +
-          "since it was loaded is lost."
-        )
-      ) {
-        await reloadFromDisk();
-        throw new Error("The program was loaded again from disk, with the changes saved elsewhere.");
+      if (err instanceof RevisionConflict) {
+        askAbout(err.revision);
       }
       throw err;
+    } finally {
+      writesRef.current.inFlight -= 1;
+      writesRef.current.answered += 1;
     }
     const { revision } = result;
     if (revision !== null) {
       setProgram(current => ({ ...current, revision }));
+      // What was written, not what the tab holds now: the user may have
+      // kept editing while the request was in flight.
+      setSavedProgram(edits.normalizeProgram({ ...written, revision }));
     }
     return result;
   };
@@ -650,6 +730,16 @@ export function ProgramProvider({
 
     save,
 
+    unsavedChanges,
+
+    externalRevision,
+
+    loadExternal,
+
+    saveOverExternal,
+
+    diskLoads,
+
     isRunInProgress,
 
     runPhase,
@@ -741,6 +831,9 @@ export function ProgramProvider({
   }), [
     program,
     selectedProcess,
+    unsavedChanges,
+    externalRevision,
+    diskLoads,
     runPhase,
     runOutput,
     runEndSeen,

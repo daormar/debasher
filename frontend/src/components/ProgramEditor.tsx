@@ -1,4 +1,8 @@
+import { useEffect } from "react";
+
 import Toolbar from "./Toolbar";
+import ExternalChangeBanner from "./ExternalChangeBanner";
+import { useProgram } from "../store/ProgramContext";
 import ProgramCanvas from "./ProgramCanvas";
 import Inspector from "./Inspector";
 
@@ -7,6 +11,21 @@ interface Props {
 }
 
 export default function ProgramEditor({ onClose }: Props) {
+
+  const { unsavedChanges } = useProgram();
+
+  // Closing or reloading the browser tab with unsaved changes asks first;
+  // the browser words the question.
+  useEffect(() => {
+    if (!unsavedChanges) {
+      return;
+    }
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [unsavedChanges]);
 
   return (
 
@@ -20,6 +39,8 @@ export default function ProgramEditor({ onClose }: Props) {
     >
 
       <Toolbar onClose={onClose} />
+
+      <ExternalChangeBanner />
 
 
       <div
