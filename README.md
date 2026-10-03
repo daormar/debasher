@@ -3,7 +3,7 @@
     <source media="(prefers-color-scheme: dark)"
             srcset="rtdocs/source/images/debasher_logo_readme_dark.svg">
     <img src="rtdocs/source/images/debasher_logo_readme.svg"
-         alt="DeBasher logo" width="416">
+         alt="DeBasher logo" width="440">
   </picture>
 </p>
 
