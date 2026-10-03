@@ -21,3 +21,9 @@ code {
     background-color: lightgray;
     padding: 2px;
 }
+
+/* Version under the logo: the theme draws it in translucent white, meant
+   for its blue header, which conf.py turns white to show the logo on. */
+.wy-side-nav-search > div.version {
+    color: #1f2a44;
+}
