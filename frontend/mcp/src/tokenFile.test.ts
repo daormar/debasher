@@ -67,7 +67,9 @@ describe("the token file", () => {
     expect(tokenFromFile(new URL("http://127.0.0.1:8000"), { XDG_RUNTIME_DIR: dir }).token()).toBeNull();
   });
 
-  it("gives no token of a process of another user", () => {
+  // Root may signal any process, so for root PID 1 is no process of another
+  // user.
+  it.skipIf(process.getuid?.() === 0)("gives no token of a process of another user", () => {
     const dir = runtimeDir();
     // PID 1 is not the user's: a signal to it fails with EPERM.
     writeTokenFile(dir, "8000", { token: "tok", pid: 1, started: processStartTime(1) });
