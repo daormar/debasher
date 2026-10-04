@@ -3959,3 +3959,77 @@ Design ideas from Future work move here once they are actually built.
 - **A restart of every node, with no test written for it.** The test runner
   checking `restart()` on every node of a program; the harness would need the
   options that the constructor of each node reads.
+- **Python without the GIL.** The free-threaded build of CPython
+  (`python3.14t`) runs the threads of a node in parallel. The reader threads
+  decode and log their lines while the brain thread runs `process_data`,
+  which helps a node with many ports and much traffic. The heartbeat thread
+  goes on while `process_data` is inside a long call of a C extension that
+  keeps the GIL, which would otherwise stop every other thread until it
+  returned, so that a busy node is not taken for a dead one. And the window of
+  "Messages read from a FIFO but not yet written to the input log" (in the
+  Contract's limits) no longer includes the wait for the GIL. The runtime
+  library uses only the standard library, and is meant to guard what its
+  threads share with queues, events and locks, never with the GIL, so it is
+  expected to run on that build as it is. Running its tests and its chaos
+  tests many times on that build would bring out any race that true
+  parallelism makes more likely. `GIL_SWITCH_INTERVAL_SECS` would then have no
+  effect, and that limit of the Contract would be written without the GIL. A
+  node with a single busy thread gains nothing and pays the small cost of that
+  build, and a module that imports an extension not marked as safe without the
+  GIL turns it back on for its whole process.
+- **Nodes in a compiled language, such as Go.** The brain thread runs
+  `process_data` in sequence, so a node whose logic is plain Python is bound by
+  the speed of the interpreter when it has many messages and little work for
+  each (a router, a filter, the aggregator of a stream) or a large node state.
+  So is its recovery, whose replay runs `process_data` again on every `DATA`
+  record of the input log. Removing the GIL (see "Python without the GIL"
+  above) does not change that: it runs the threads of a node in parallel, not
+  the brain thread faster. A node written in Go, or in another language with
+  direct access to POSIX (opening a FIFO without blocking, `EPIPE` instead of
+  `SIGPIPE`, partial writes, `setrlimit`, an atomic `rename`), could share a
+  program with nodes in Python, since what ties nodes together is not their
+  language but what crosses the FIFOs and what lands on disk. What crosses
+  the FIFOs is the envelope, `HELLO` and `CLOSE`, sequence numbers and rounds.
+  What lands on disk is the input log, the checkpoint with its schema version,
+  the node info file, the control ports file, the halted marker and the
+  notice file, which the tools of resident programs read today with the code
+  of the Python runtime. It needs:
+  - every rule of that protocol, and the format of every one of those files,
+    written down in this document, not only in the Python code;
+  - a conformance suite that talks to a node only through its FIFOs and its
+    files, kills it and relaunches it, so that the same tests check every
+    implementation;
+  - an engine that recognizes the role of a node by something other than a
+    Python class in its heredoc (`debasher::_classify_resident_process_role`),
+    and that builds the binary of the node, with a toolchain that a conda
+    environment or the system provides.
+
+  Instead of a whole implementation for each language, the runtime library
+  could be written once, in Rust, as a library with a C interface: the reader,
+  writer, brain and heartbeat threads, the input log, the barrier logic, the
+  checkpoints and the files of the node. Each language would add a thin layer
+  on top, with the hooks of a node (`process_data`, `capture_node_state()`,
+  `restore_node_state()`, `initialize_runtime()`, and `observe()` where it is
+  defined) and the calls that a node makes (`send_data`, `sleep`,
+  `set_notice()`, `clear_notice()`, `inject()`). The protocol would then have
+  a single implementation, a new language would cost only that layer, and the
+  Python runtime library itself could rest on it. Rust suits a library that
+  other languages load, since it brings no language runtime and no garbage
+  collector of its own into their process, which Go does. The price is a
+  compiled package to build for every platform, which conda can distribute,
+  and a crossing into the code of another language for every message: with
+  Python, taking the GIL and building the packet as Python objects. In
+  exchange, the threads of the library never wait for the GIL, which leaves
+  little for "Python without the GIL" to add.
+
+  The `Supervisor` stays in Python, since what it needs of a node is that
+  protocol and the files of the engine (its `.id`, its completion marker and its
+  process script), none of which depends on the language of the node. A node
+  that waits on the outside world (a service, a directory, a batch run), or
+  whose heavy work is already in compiled code that it calls, gains nothing.
+  Python stays the language of a node by default, the one that most module
+  authors and AI assistants write best, and a compiled language serves the few
+  nodes of a program where its time goes. Above some rate of messages the limit
+  moves to the protocol itself, one envelope and one record for each message,
+  which only larger packets (many items in one `DATA`) push back, in any
+  language.
