@@ -27,3 +27,16 @@ code {
 .wy-side-nav-search > div.version {
     color: #1f2a44;
 }
+
+/* The top bar that replaces the sidebar on narrow screens takes the same
+   white background, so its menu button and the name of the project need
+   the navy too, or they vanish and the menu with the logo cannot be
+   opened. */
+.wy-nav-top a,
+.wy-nav-top i {
+    color: #1f2a44;
+}
+
+.wy-nav-top {
+    border-bottom: 1px solid #e1e4e5;
+}
