@@ -27,7 +27,7 @@ Among its features:
   resume;
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
-- a web interface to build and run programs without writing their module.
+- a web interface to build and run programs without explicitly writing their topology.
 
 ## Installation
 
@@ -40,7 +40,7 @@ make
 make install
 ```
 
-DeBasher runs on Linux, and on Windows under WSL2; see the
+DeBasher runs on Linux, macOS and on Windows under WSL2; see the
 [installation instructions](https://daormar.github.io/debasher/#installation)
 for its requirements and for each system.
 
