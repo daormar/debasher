@@ -330,7 +330,7 @@ const libraryTools = [
         `${name} (${info.language})`,
         ...(info.description ? [info.description] : []),
         ...info.options.map(option =>
-          `  ${option.label} (${[option.dataType, option.commandLine ? "command line" : null, option.mandatory ? "mandatory" : null]
+          `  ${option.label} (${[option.dataType, option.commandLine ? "command line" : null, option.taskShaping ? "task shaping" : null, option.mandatory ? "mandatory" : null]
             .filter(Boolean).join(", ")})${option.description ? `: ${option.description}` : ""}`
         ),
         ...(info.code ? ["Code:", info.code] : []),

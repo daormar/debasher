@@ -199,6 +199,8 @@ export interface ProcessInfoOption {
 
   mandatory: boolean;
 
+  taskShaping?: boolean;
+
 }
 
 export interface ProcessInfo {
@@ -220,6 +222,7 @@ export function optionFromInfo(info: ProcessInfoOption, id: string): ProgramOpti
     description: info.description,
     commandLine: info.commandLine,
     mandatory: info.mandatory,
+    taskShaping: info.taskShaping ?? false,
   });
 }
 

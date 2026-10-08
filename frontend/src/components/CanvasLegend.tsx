@@ -117,7 +117,7 @@ function GeneralLegend() {
       <Heading>Handles</Heading>
       <LegendRow mark={<HollowHandleSample />}>
         A hollow handle takes no connection: its tag says where the value
-        comes from (cmdline, spec or flag).
+        comes from (cmdline, shaping, spec or flag).
       </LegendRow>
 
       <Heading>Edges</Heading>
@@ -184,7 +184,7 @@ function ResidentLegend() {
       </LegendRow>
       <LegendRow mark={<HollowHandleSample />}>
         A hollow handle takes no connection: its tag says where the value
-        comes from (cmdline, spec, flag or fixed).
+        comes from (cmdline, shaping, spec, flag or fixed).
       </LegendRow>
       <LegendRow mark={<TriggerMark />}>
         A trigger port of the Supervisor wiring.

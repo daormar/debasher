@@ -108,6 +108,97 @@ def test_command_line_option_with_an_option_channel_is_refused():
         _option_definition_line(process, option, {}, {})
 
 
+# --- Task shaping options -------------------------------------------------
+
+from api.script_generation import (  # noqa: E402
+    _add_explain_opts_func,
+    _add_explain_task_shaping_opts_func,
+    _add_identify_cmdline_opts_func,
+)
+
+
+def _shaping_option(**fields):
+    defaults = dict(
+        id="ow",
+        label="-w",
+        direction="input",
+        dataType="int",
+        description="Number of workers.",
+        value="",
+        commandLine=True,
+        mandatory=True,
+        taskShaping=True,
+    )
+    return ProgramOption(**(defaults | fields))
+
+
+def test_a_task_shaping_option_is_declared_apart_and_never_defined():
+    shaping = _shaping_option()
+    task_option = _make_file_option("input", label="-inf")
+    process = _make_process([shaping, task_option])
+
+    assert _add_explain_task_shaping_opts_func(process) == [
+        "count_explain_task_shaping_opts()",
+        "{",
+        '    debasher::explain_task_shaping_opt "-w" "<int>" "Number of workers."',
+        "}",
+    ]
+    assert not any("-w" in line for line in _add_explain_opts_func(process))
+    assert not any("-w" in line for line in _add_identify_cmdline_opts_func(process))
+    assert _option_definition_line(process, shaping, {}, {}) == []
+
+
+def test_a_process_without_task_shaping_options_gets_no_method_for_them():
+    process = _make_process([_make_file_option("input", label="-inf")])
+
+    assert _add_explain_task_shaping_opts_func(process) == []
+
+
+def test_explain_opts_of_a_process_with_only_task_shaping_options_is_empty():
+    process = _make_process([_shaping_option()])
+
+    assert _add_explain_opts_func(process) == ["count_explain_opts()", "{", "    :", "}"]
+    assert _add_identify_cmdline_opts_func(process) == ["count_identify_cmdline_opts()", "{", "    :", "}"]
+
+
+@pytest.mark.parametrize(
+    "fields, message",
+    [
+        (dict(mandatory=False), "must be a mandatory command-line option"),
+        (dict(commandLine=False, mandatory=False), "must be a mandatory command-line option"),
+        (dict(dataType="None"), "can't be a flag"),
+        (dict(label="-outw", direction="output"), "can't be an output"),
+        (dict(fromProcessSpec=True), "from the command line only"),
+        (dict(label="-with"), "can't be a fanout family"),
+    ],
+)
+def test_a_task_shaping_option_that_the_engine_would_not_take_is_refused(fields, message):
+    process = _make_process([_shaping_option(**fields)])
+
+    with pytest.raises(ValueError, match=message):
+        _add_explain_task_shaping_opts_func(process)
+
+
+def test_a_task_shaping_option_cannot_count_a_fanout_family():
+    from api.script_generation import _fanout_count_source_option
+
+    count = _shaping_option()
+    family = ProgramOption(
+        id="of",
+        label="-outfith",
+        direction="output",
+        dataType="file",
+        description="",
+        value="${process_outdir}/part_${i}",
+        commandLine=False,
+        countSourceOptionId="ow",
+    )
+    process = _make_process([count, family])
+
+    with pytest.raises(ValueError, match="a task shaping option, which no task receives"):
+        _fanout_count_source_option(process, family)
+
+
 # --- Sequential processes ------------------------------------------------
 
 from api.models import (  # noqa: E402

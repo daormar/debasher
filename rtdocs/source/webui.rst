@@ -171,9 +171,9 @@ an input, as the engine requires. Its editor sets:
 * its **data type** (int, float, string or file, or "None (flag)" for
   an input that takes no value);
 * whether it is a **command line** option, given when the program is
-  run (and whether it is mandatory), or whether its value is taken
-  from an attribute of the **process specifications**, such as
-  ``cpus``;
+  run (and whether it is mandatory, and whether it is a **task
+  shaping** option, see below), or whether its value is taken from an
+  attribute of the **process specifications**, such as ``cpus``;
 * its **channel**, how its value is delivered: a direct value; a
   value descriptor, the path of a file where an output writes a value
   for the processes connected to it; a FIFO; or a shared directory;
@@ -225,6 +225,14 @@ options (``-outf0``, ``-outf1``, ...) as a command line option of the
 same process says, and it connects to an array or generator process,
 one option for each task.
 
+A command line option that only decides the tasks of a process, such
+as the number of workers that the code of an array reads to build it,
+is marked as **task shaping**: the code of the options handler reads
+it, and no task receives it, so the process code cannot read it either
+(see the task shaping options in the :ref:`implem` Section). A task
+shaping option is always mandatory, and its hollow handle is tagged
+``shaping``.
+
 Connections
 ^^^^^^^^^^^
 
@@ -236,7 +244,7 @@ only when the engine would:
 * an input takes a single connection, and none at all if it is a flag,
   a command line option or an option taken from the process
   specifications (those have a hollow handle, tagged ``cmdline``,
-  ``spec`` or ``flag``);
+  ``shaping``, ``spec`` or ``flag``);
 * a connection that is not from a FIFO makes the input wait for the
   output's process to finish, so a cycle made only of such connections
   is refused; a cycle through a FIFO is allowed, since both ends of a

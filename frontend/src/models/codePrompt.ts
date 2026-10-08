@@ -103,6 +103,9 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
   if (option.commandLine) {
     facts.push("command line option");
   }
+  if (option.taskShaping) {
+    facts.push("task shaping option");
+  }
 
   const lines = [`- \`${option.label}\` (${facts.join(", ")})`];
   const notes: string[] = [];
@@ -110,6 +113,9 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
   const description = option.description.trim();
   if (description !== "") {
     notes.push(...description.split("\n"));
+  }
+  if (option.taskShaping) {
+    notes.push("Only the options handler reads it, to decide the tasks of the process: no task receives it, so the code of the process cannot read it.");
   }
 
   const fanoutFamily = process.optionsHandler.mode === "standard" && isFanoutOption(option.label);

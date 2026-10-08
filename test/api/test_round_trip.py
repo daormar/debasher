@@ -174,6 +174,22 @@ def test_the_sequential_process_of_a_module_is_imported():
     assert "transformation_b" not in worker.code.replace("seq_execute_slurm transformation_b", "")
 
 
+def test_the_task_shaping_option_of_a_module_is_imported():
+    module = _PROGRAMS_DIR / "debasher_dynamic_fanout.sh"
+
+    imported = import_program_from_script(module, str(_PROGRAMS_DIR))
+
+    processes = {process.name: process for process in imported.processes}
+    worker_options = {option.label: option for option in processes["worker"].options}
+    assert worker_options["-w"].taskShaping
+    assert worker_options["-w"].commandLine and worker_options["-w"].mandatory
+    assert not worker_options["-inf"].taskShaping
+    # dispatch reads -w in its process function too, so it is an option of
+    # its task
+    dispatch_options = {option.label: option for option in processes["dispatch"].options}
+    assert not dispatch_options["-w"].taskShaping
+
+
 # --- From the model to a module and back ---------------------------------
 
 
@@ -334,6 +350,45 @@ def test_a_fanout_family_survives_the_round_trip(tmp_path):
         optionsHandler=OptionsHandler(mode="array", arrayCode="array=(0 1)"),
     )
     program = _program("rt_fanout", [dispatch, worker], [_edge("dispatch", "-outfith", "worker", "-inf")])
+
+    _assert_model_round_trip(program, tmp_path)
+
+
+def test_task_shaping_options_survive_the_round_trip(tmp_path):
+    # A task shaping option is read only by the options handler: by the code
+    # that builds the array or by the code that counts the tasks. The count
+    # of a fanout family, which its task reads, is an option of the task
+    dispatch = _process(
+        "dispatch",
+        [
+            _option("-w", dataType="int", commandLine=True, mandatory=True),
+            _option("-outfith", value="${process_outdir}/part_${i}"),
+        ],
+    )
+    dispatch.options[1].countSourceOptionId = dispatch.options[0].id
+    worker = _process(
+        "worker",
+        [
+            _option("-w", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
+            _option("-inf", value="[dispatch;-outfith]"),
+            _option("-outf", value="${process_outdir}/out_${idx}"),
+        ],
+        optionsHandler=OptionsHandler(
+            mode="array",
+            arrayCode='local w=$(get_cmdline_opt "${cmdline}" "-w")\narray=($(seq 0 $((w - 1))))',
+        ),
+    )
+    counter = _process(
+        "counter",
+        [
+            _option("-n", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
+            _option("-outf", value="${process_outdir}/out_${task_idx}"),
+        ],
+        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"'),
+    )
+    program = _program(
+        "rt_shaping", [dispatch, worker, counter], [_edge("dispatch", "-outfith", "worker", "-inf")]
+    )
 
     _assert_model_round_trip(program, tmp_path)
 

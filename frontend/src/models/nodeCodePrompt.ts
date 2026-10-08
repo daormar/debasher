@@ -200,6 +200,10 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
   if (option.commandLine) {
     facts.push("command line option");
   }
+  if (option.taskShaping) {
+    facts.push("task shaping option");
+    notes.push("Only the options handler reads it, to decide the tasks of the node: no task receives it, so the code of the node cannot read it.");
+  }
   return [`- \`${option.label}\` (${facts.join(", ")})`, ...notes.map(note => `  ${note}`)];
 }
 

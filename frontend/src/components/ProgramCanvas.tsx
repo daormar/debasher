@@ -536,7 +536,8 @@ export default function ProgramCanvas() {
 
     const resolvedValues = await getProcessResolvedOptions(program, process.name, taskIndex);
 
-    const candidates = process.options.filter(o => !o.fromProcessSpec);
+    // A task shaping option is no option of any task either
+    const candidates = process.options.filter(o => !o.fromProcessSpec && !o.taskShaping);
 
     // Resolved from candidates (real option ids, matching program.edges)
     // before fanout expansion synthesizes any "id:index" ones, a

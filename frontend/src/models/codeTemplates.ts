@@ -26,6 +26,12 @@ function withIdentifiers(options: ProgramOption[]): [ProgramOption, string][] {
   return options.map(option => [option, toIdentifier(option.label)]);
 }
 
+// The options that a task of the process receives: all but its task
+// shaping options, which only its options handler reads.
+function taskOptionsOf(process: ProgramProcess): ProgramOption[] {
+  return process.options.filter(o => !o.taskShaping);
+}
+
 // This process's fanout family options (see isFanoutOption) — only
 // meaningful on a "standard"-mode process.
 function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
@@ -93,7 +99,7 @@ function generateBashTemplate(process: ProgramProcess): string {
   const lines: string[] = [`${process.name}()`, "{"];
 
   const fanoutOptions = fanoutOptionsOf(process);
-  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
 
   if (optionsWithIds.length > 0 || fanoutOptions.length > 0) {
@@ -154,7 +160,7 @@ function pythonDest(label: string): string {
 
 function generatePythonTemplate(process: ProgramProcess): string {
   const fanoutOptions = fanoutOptionsOf(process);
-  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [
@@ -239,7 +245,7 @@ function perlDefaultLiteral(dataType: OptionDataType): string {
 
 function generatePerlTemplate(process: ProgramProcess): string {
   const fanoutOptions = fanoutOptionsOf(process);
-  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [
@@ -296,7 +302,7 @@ function generatePerlTemplate(process: ProgramProcess): string {
 
 function generateRTemplate(process: ProgramProcess): string {
   const fanoutOptions = fanoutOptionsOf(process);
-  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = ["args <- commandArgs(trailingOnly = TRUE)"];
@@ -352,7 +358,7 @@ function generateRTemplate(process: ProgramProcess): string {
 
 function generateGroovyTemplate(process: ProgramProcess): string {
   const fanoutOptions = fanoutOptionsOf(process);
-  const plainOptions = process.options.filter(o => !fanoutOptions.includes(o));
+  const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
 
   const lines: string[] = [];

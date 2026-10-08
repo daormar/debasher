@@ -2184,7 +2184,3 @@ What is known to be missing from the design, or left open by it:
   filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the
   sequential processes of a program nor keeps them when it saves the program.
-- **Task shaping options in the web UI.** The web UI does not hold the task
-  shaping options of a process: it leaves out the `_explain_task_shaping_opts`
-  method when it imports a module, so the program it saves no longer declares
-  them.

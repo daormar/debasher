@@ -68,6 +68,7 @@ def _to_program_option(info: ProcessInfoOption) -> ProgramOption:
         value="",
         commandLine=info.commandLine,
         mandatory=info.mandatory,
+        taskShaping=info.taskShaping,
     )
 
 

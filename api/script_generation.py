@@ -9,6 +9,7 @@ from .debasher_constants import (
     MODULE_SHARED_DIRS_SUFFIX,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
+    PROCESS_METHOD_EXPLAIN_TASK_SHAPING_OPTS_SUFFIX,
     PROCESS_METHOD_IDENTIFY_CMDLINE_OPTS_SUFFIX,
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
@@ -186,10 +187,17 @@ def _add_document_proc_func(process):
     return lines
 
 
+def _task_options(process):
+    """The options that the tasks of the process receive: all but its task
+    shaping options."""
+    return [option for option in process.options if not option.taskShaping]
+
+
 def _add_explain_opts_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX}()", "{"]
-    if process.options:
-        for option in process.options:
+    task_options = _task_options(process)
+    if task_options:
+        for option in task_options:
             if option.dataType == "None":
                 lines.append(f'{INDENT}debasher::explain_flag "{option.label}" "{_double_quoted_text(option.description)}"')
             else:
@@ -204,11 +212,53 @@ def _add_explain_opts_func(process):
     return lines
 
 
+def _check_task_shaping(process, option) -> None:
+    """
+    Refuses a task shaping option that the engine would not take as one:
+    it is a mandatory command line option with a value, which no
+    connection, option channel or process specification can give, and
+    which is not a fanout family.
+    """
+    if not (option.commandLine and option.mandatory):
+        raise ValueError(
+            f'Task shaping option "{option.label}" on "{process.name}" must be a '
+            "mandatory command-line option."
+        )
+    if option.dataType == "None":
+        raise ValueError(f'Task shaping option "{option.label}" on "{process.name}" can\'t be a flag.')
+    if option.direction == "output":
+        raise ValueError(f'Task shaping option "{option.label}" on "{process.name}" can\'t be an output.')
+    if option.channel != "none" or option.fromProcessSpec:
+        raise ValueError(
+            f'Task shaping option "{option.label}" on "{process.name}" takes its value '
+            "from the command line only."
+        )
+    if process.optionsHandler.mode == "standard" and _is_fanout_label(option.label):
+        raise ValueError(f'Task shaping option "{option.label}" on "{process.name}" can\'t be a fanout family.')
+
+
+def _add_explain_task_shaping_opts_func(process):
+    """The method that declares the task shaping options of the process, or
+    nothing when it has none."""
+    shaping_options = [option for option in process.options if option.taskShaping]
+    if not shaping_options:
+        return []
+    lines = [f"{process.name}{PROCESS_METHOD_EXPLAIN_TASK_SHAPING_OPTS_SUFFIX}()", "{"]
+    for option in shaping_options:
+        _check_task_shaping(process, option)
+        lines.append(f'{INDENT}debasher::explain_task_shaping_opt "{option.label}" "<{option.dataType}>" "{_double_quoted_text(option.description)}"')
+    lines.append("}")
+    return lines
+
+
 def _add_identify_cmdline_opts_func(process):
+    # A task shaping option is a command line option already, and the
+    # engine refuses a mark on it
     lines = [f"{process.name}{PROCESS_METHOD_IDENTIFY_CMDLINE_OPTS_SUFFIX}()", "{"]
-    if process.options:
+    task_options = _task_options(process)
+    if task_options:
         cmdline_option_found = False
-        for option in process.options:
+        for option in task_options:
             if option.commandLine:
                 if option.mandatory:
                     lines.append(f'{INDENT}debasher::opt_is_cmdline "{option.label}"')
@@ -351,6 +401,12 @@ def _fanout_count_source_option(process, option):
             "as command-line. Check that "
             f'"{process.name}_identify_cmdline_opts" calls opt_is_cmdline (or '
             f'opt_is_non_mandatory_cmdline) on "{source.label}".'
+        )
+    if source.taskShaping:
+        raise ValueError(
+            f'Fanout option "{option.label}" on process "{process.name}" is counted by '
+            f'"{source.label}", a task shaping option, which no task receives: the task '
+            "could not tell how many options of the family it gets."
         )
     return source
 
@@ -588,6 +644,10 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     specifications, the command line, a connection, and a literal value.
     """
     _check_option_sources(process, option)
+    # Only the options handler reads a task shaping option: no task
+    # receives it
+    if option.taskShaping:
+        return []
     if option.dataType == "None":
         return _flag_lines(option)
     if option.channel != "none":
@@ -934,6 +994,11 @@ def _build_script(
 
         lines.extend(_add_explain_opts_func(process))
         lines.extend(["", ""])
+
+        explain_task_shaping_lines = _add_explain_task_shaping_opts_func(process)
+        if explain_task_shaping_lines:
+            lines.extend(explain_task_shaping_lines)
+            lines.extend(["", ""])
 
         lines.extend(_add_identify_cmdline_opts_func(process))
         lines.extend(["", ""])

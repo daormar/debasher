@@ -170,6 +170,21 @@ describe("editing a program", () => {
     expect(c.options[0].value).toBe("[a;-outf]");
   });
 
+  it("marks an option as a task shaping option, and shows it so", async () => {
+    const backend = fakeBackend([program()]);
+
+    await call(backend, "add_option", {
+      home_dir: HOME,
+      process: "b",
+      label: "-w",
+      fields: { dataType: "int", commandLine: true, mandatory: true, taskShaping: true },
+    });
+
+    const w = savedProgram(backend).processes[1].options.find(option => option.label === "-w")!;
+    expect(w.taskShaping).toBe(true);
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("-w (input, int, command line, task shaping, mandatory)");
+  });
+
   it("saves nothing when one edit breaks a rule, and says which", async () => {
     const backend = fakeBackend([program()]);
 

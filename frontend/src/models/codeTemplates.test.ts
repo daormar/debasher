@@ -70,3 +70,19 @@ describe("generateCodeTemplate with a fanout family", () => {
     });
   }
 });
+
+describe("generateCodeTemplate with a task shaping option", () => {
+  const options = [
+    createOption("w", "-w", { dataType: "int", commandLine: true, mandatory: true, taskShaping: true }),
+    createOption("inf", "-inf", { dataType: "file" }),
+  ];
+
+  for (const language of ["bash", "python", "perl", "r", "groovy"] as ProcessLanguage[]) {
+    it(`does not read an option that no task receives in ${language}`, () => {
+      const template = generateCodeTemplate(process(language, options));
+      expect(template).toMatch(/inf/);
+      expect(template).not.toMatch(/\bw\b/);
+    });
+  }
+});
+

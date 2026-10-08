@@ -34,6 +34,8 @@ export const optionFields = z.object({
     .describe("A Bash word; a connected input takes its value from its connection."),
   commandLine: z.boolean().optional().describe("The value comes from the command line of the program."),
   mandatory: z.boolean().optional(),
+  taskShaping: z.boolean().optional()
+    .describe("A task shaping option: only the options handler reads it, to decide the tasks of the process, and no task receives it. It must be a mandatory command line option with a value, and cannot be the count source of a fanout family."),
   fromProcessSpec: z.boolean().optional()
     .describe("The value comes from an attribute of the process specifications, which `value` names."),
   countSource: z.string().optional()

@@ -72,6 +72,14 @@ class ProgramOption(BaseModel):
     # for a fanout family (a label ending in "ith") — see
     # script_generation.py's _is_fanout_label/_fanout_definition_lines.
     countSourceOptionId: Optional[str] = None
+    # A task shaping option: a command line option that only the options
+    # handler of the process reads (arrayCode, generatorSizeCode or the
+    # manual code), to decide its tasks, and that no task receives. It
+    # cannot count a fanout family, whose task needs the count to read it. Script generation declares it with the
+    # engine's explain_task_shaping_opt and never defines it. It is always
+    # a mandatory command line option, so it requires commandLine and
+    # mandatory (see script_generation.py's _check_task_shaping).
+    taskShaping: bool = False
 
 
 class ComputationalSpecs(BaseModel):

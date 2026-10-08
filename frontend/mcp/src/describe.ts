@@ -33,6 +33,7 @@ export function optionLine(process: ProgramProcess, option: ProgramOption): stri
     option.mirror ? "mirrored" : null,
     option.fifoTag === "external" ? "external input" : null,
     option.commandLine ? "command line" : null,
+    option.taskShaping ? "task shaping" : null,
     option.fromProcessSpec ? "from process spec" : null,
     option.mandatory ? "mandatory" : null,
     option.countSourceOptionId ? `count from ${labelOf(process, option.countSourceOptionId)}` : null,

@@ -155,8 +155,10 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   // suffix, rather than only after saving.
   const isFanout = isFanoutOption(label) && ownerProcess?.optionsHandler.mode === "standard";
 
+  // A task shaping option cannot count a family: no task receives it, and
+  // the task needs the count to read the family
   const countSourceCandidates =
-    ownerProcess?.options.filter(o => o.commandLine && o.id !== option.id) ?? [];
+    ownerProcess?.options.filter(o => o.commandLine && !o.taskShaping && o.id !== option.id) ?? [];
 
   const [countSourceOptionId, setCountSourceOptionId] =
     useState(option.countSourceOptionId ?? "");
@@ -237,6 +239,15 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const [mandatory, setMandatory] =
     useState(option.mandatory);
 
+  const [taskShaping, setTaskShaping] =
+    useState(option.taskShaping ?? false);
+
+  // A task shaping option is a mandatory command line input with a value,
+  // and not a fanout family, which script_generation.py refuses otherwise
+  // and not the count of a fanout family
+  const countsAFamily = ownerProcess?.options.some(o => o.countSourceOptionId === option.id) ?? false;
+  const canShapeTasks = commandLine && !isFlag && direction === "input" && !isFanout && !countsAFamily;
+
   useEffect(() => {
     // Not a channel (see ProgramOption.fromProcessSpec) — but, like a
     // connection, it's still incompatible with one: a process-spec-
@@ -257,6 +268,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     // combination), whatever the disabled channel selector still holds.
     const savedCommandLine = commandLine && !savedFromProcessSpec;
 
+    const savedTaskShaping = savedCommandLine && canShapeTasks && taskShaping;
+
     const savedChannel =
       isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel;
 
@@ -271,7 +284,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
       value: isFlag || isValueDescriptor ? "" : value,
       commandLine: savedCommandLine,
       fromProcessSpec: savedFromProcessSpec,
-      mandatory: commandLine && !savedFromProcessSpec && mandatory && !isFlag,
+      mandatory: commandLine && !savedFromProcessSpec && (mandatory || savedTaskShaping) && !isFlag,
+      taskShaping: savedTaskShaping,
       countSourceOptionId: isFanout ? (countSourceOptionId || undefined) : undefined,
     });
 
@@ -493,9 +507,9 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
                 type="checkbox"
 
-                checked={isFlag ? false : mandatory}
+                checked={isFlag ? false : mandatory || (canShapeTasks && taskShaping)}
 
-                disabled={!commandLine || isFlag}
+                disabled={!commandLine || isFlag || (canShapeTasks && taskShaping)}
 
                 onChange={(event) =>
                   setMandatory(event.target.checked)
@@ -503,6 +517,28 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
               />
               {" "}Mandatory
+
+            </label>
+
+            <label
+              style={{ color: canShapeTasks ? undefined : "#999" }}
+              title="Only the options handler reads it, to decide the tasks of the process: no task receives it. Always mandatory."
+            >
+
+              <input
+
+                type="checkbox"
+
+                checked={canShapeTasks && taskShaping}
+
+                disabled={!canShapeTasks}
+
+                onChange={(event) =>
+                  setTaskShaping(event.target.checked)
+                }
+
+              />
+              {" "}Task shaping
 
             </label>
 

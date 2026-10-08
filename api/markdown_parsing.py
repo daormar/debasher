@@ -106,6 +106,9 @@ class ProcessInfoOption(BaseModel):
     description: str
     commandLine: bool
     mandatory: bool
+    # Listed under "### Task Shaping Options" rather than "### Process
+    # Options" (see debasher::_show_process_documentation)
+    taskShaping: bool = False
 
 
 class ProcessInfo(BaseModel):
@@ -431,7 +434,12 @@ def parse_proc_info_markdown(markdown: str) -> ProcessInfo:
     sections = split_markdown_sections(markdown)
 
     description = "\n".join(sections.get("Description", [])).strip()
-    options = parse_options(sections.get("Process Options", []))
+    # The task shaping options come in a section of their own, which only
+    # a process that declares them has
+    options = parse_options(sections.get("Process Options", [])) + [
+        option.model_copy(update={"taskShaping": True})
+        for option in parse_options(sections.get("Task Shaping Options", []))
+    ]
     language, code = parse_code(sections.get("Process Implementation", []))
     option_handler = parse_option_handler(sections.get("Process Option Handler", []))
     computational_specs = parse_specs(sections.get("Computational Specifications", []))

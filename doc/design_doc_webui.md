@@ -123,6 +123,10 @@ refer to it.
   by `ProgramOption.commandLine`. It takes its value from the command line and
   nowhere else: script generation refuses an option that is both a command line
   option and delivered through an option channel.
+- **task shaping option**: as defined in the design of the engine, marked as one
+  by `ProgramOption.taskShaping` on a mandatory command line option. Only the
+  options handler of its process reads it, and no task receives it (see
+  "Option definitions").
 - **program options**: the values given to the command line options for the next
   run (`Program.programOptions`), keyed by label.
 - **edge, connection**: a link from an output option of one process to an input
@@ -473,13 +477,13 @@ bodies of the other methods a process may define (`_post`, `_skip`,
 from the options and the options handler.
 
 An option has a `label`, a `direction`, a `dataType`, an option channel, a
-`description` and a `value`, and four flags: `commandLine` and `mandatory`,
-`fromProcessSpec` (its value is an attribute of the process's own
-specifications, such as `cpus`) and `mirror` (a copy of what the process writes
-into a FIFO is kept in a log that the web UI can show without taking data from
-the reader). An option's direction always follows from its label, by the
-engine's convention: output if the label starts with `-out` or `--out`, input
-otherwise.
+`description` and a `value`, and five flags: `commandLine` and `mandatory`,
+`taskShaping` (a task shaping option), `fromProcessSpec` (its value is an
+attribute of the process's own specifications, such as `cpus`) and `mirror` (a
+copy of what the process writes into a FIFO is kept in a log that the web UI can
+show without taking data from the reader). An option's direction always follows
+from its label, by the engine's convention: output if the label starts with
+`-out` or `--out`, input otherwise.
 
 The labels of the options of a process are distinct, compared without the spaces
 around them, case included. The engine treats a label as the key of an option of
@@ -505,16 +509,17 @@ receive at run time:
 - nothing that script generation uses, for a command line option, whose value
   comes from the program options at run time.
 
-A few combinations make no sense, and the model keeps them out. A flag is
-always an input. `mirror` only applies to a `fifo` output. `value_desc` only
-applies to an output: the consumer of a value descriptor just connects to it.
+A few combinations make no sense, and the model keeps them out. A flag is always
+an input. `mirror` only applies to a `fifo` output. `value_desc` only applies to
+an output: the consumer of a value descriptor just connects to it.
 `fromProcessSpec` and `commandLine` exclude each other, and a command line
 option has option channel `none`, since its value comes only from the command
-line. A fanout family only
-exists on a `standard` process, and names in `countSourceOptionId` a command
-line option of the same process that gives the count. The editor offers only
-the valid combinations, and script generation checks again those whose
-violation would produce a wrong module, refusing to generate it.
+line. A task shaping option is a mandatory command line input with a value, and
+not a fanout family. A fanout family only exists on a `standard` process, and
+names in `countSourceOptionId` a command line option of the same process that
+gives the count. The editor offers only the valid combinations, and script
+generation checks again those whose violation would produce a wrong module,
+refusing to generate it.
 
 ## Connections
 
@@ -631,9 +636,11 @@ The generated module holds, in this order:
 2. `<name>_document`, with the program's description, and
    `<name>_shared_dirs`, with one `define_shared_dir` per shared directory.
 3. For each process, in the order of the model: `_document`, `_explain_opts`
-   (one `explain_opt` per option, or `explain_flag` for a flag),
-   `_identify_cmdline_opts` (one `opt_is_cmdline` or
-   `opt_is_non_mandatory_cmdline` per command line option), the option
+   (one `explain_opt` per option that is not a task shaping option, or
+   `explain_flag` for a flag), `_explain_task_shaping_opts` (one
+   `explain_task_shaping_opt` per task shaping option, only for a process that
+   has one), `_identify_cmdline_opts` (one `opt_is_cmdline` or
+   `opt_is_non_mandatory_cmdline` per other command line option), the option
    definition functions of its options handler mode (see "Option
    definitions"), its code, and one function for each additional method that
    has a body. Code in Bash is written as it is; code in another language
@@ -663,8 +670,8 @@ the two directories only matter to the web UI.
 ## Option definitions
 
 In `standard`, `array` and `generator` mode, script generation writes one
-definition for each option (one per edge for a fan-in), taken from the first
-rule that applies:
+definition for each option that is not a task shaping option (one per edge for
+a fan-in), taken from the first rule that applies:
 
 1. A flag: `define_flag`, or `define_cmdline_flag_if_given` if it is a
    command line option.
@@ -690,6 +697,13 @@ for a flag, since one with an option channel other than `none` is refused (see
 one line: it reads the count from its command line option and defines one
 option per index, `define_opt` or `define_fifo_opt` on the writing side,
 `define_opt_from_proc_task_out` on the reading side.
+
+A task shaping option gets no definition, since no task receives it: the
+options handler reads it from the command line, in the code that builds
+`array`, in the code that counts the tasks of a generator, or in the user's own
+function in `manual` mode. It cannot count a fanout family, although the engine
+would accept one: the task of the family needs the count to read the options of
+the family, and the template of the code reads it for that.
 
 In `standard` and `generator` mode each definition is written once, in
 `_define_opts` or in `_generate_opts`. In `array` mode the generated
@@ -742,17 +756,19 @@ normally does not define the function it runs, and so is not written.
 
 Script generation raises an error, and writes no module, for a program that
 would produce a wrong one: an option both `fromProcessSpec` and a command line
-option; a command line option with an option channel other than `none`; a fanout
-family that is a flag, a command line option or taken from the process
-specifications, whose count option is missing or is not a command line option,
-whose output is connected, mirrored or uses an option channel other than `none`
-or `fifo`, or whose input is not connected to a process in `array` or
-`generator` mode; a connection to a fanout family from a process in another
-mode; and a sequential process in a resident program, or with the name of a
-process or of another sequential process (see "Generating and importing a
-sequential process"). The save generates the script before it writes anything,
-so a program that script generation refuses leaves the home directory as it was.
-The save answers with the reason of the refusal, which the frontend shows.
+option; a command line option with an option channel other than `none`; a task
+shaping option that is not a mandatory command line input with a value, or that
+is a fanout family; a fanout family that is a flag, a command line option or
+taken from the process specifications, whose count option is missing, is not a
+command line option or is a task shaping option, whose output is connected,
+mirrored or uses an option channel other than `none` or `fifo`, or whose input
+is not connected to a process in `array` or `generator` mode; a connection to a
+fanout family from a process in another mode; and a sequential process in a
+resident program, or with the name of a process or of another sequential process
+(see "Generating and importing a sequential process"). The save generates the
+script before it writes anything, so a program that script generation refuses
+leaves the home directory as it was. The save answers with the reason of the
+refusal, which the frontend shows.
 
 ## Environment variables of a program
 
@@ -840,10 +856,12 @@ never a wrong module.
 
 With the processes read, import assembles the program:
 
-- **Options.** Each explained option becomes an option, its direction taken
-  from its label. An option that a connection names but that no `explain_opt`
-  declares, common in `array` mode, gets a minimal option of type `string` so
-  that the edge has somewhere to attach.
+- **Options.** Each explained option becomes an option, its direction taken from
+  its label, and each one that the module documentation lists among the task
+  shaping options becomes one with `taskShaping` set. An option that a
+  connection names but that no `explain_opt` declares, common in `array` mode,
+  gets a minimal option of type `string` so that the edge has somewhere to
+  attach.
 - **Connections.** Each recovered connection becomes an edge, and a connection
   to a process outside the program is dropped. A connection by task index whose
   source does not run in `array` or `generator` mode cannot be written again as
@@ -1405,16 +1423,16 @@ describes; or a fanout edge, a wedge narrow at the end of the fanout family,
 which follows the route of a back edge when its target sits at or above its
 source. An edge from a FIFO is dashed.
 
-A canvas node shows the process's name and options, its options handler mode
-(a double border for `array` and `generator`, a dashed one for `manual`), its
-group (a border color derived from the `groupId`, and a badge with the
-module's name), and, as its background, the process status. An input whose
-value no connection can give, since script generation writes it before it
-looks at any connection (see "Connections"), has a hollow handle, which takes
-no connection, and a tag after its label that says where its value comes
-from: `cmdline` for a command line option, a flag included, `spec` for an
-option taken from the process specifications, and `flag` for a flag that the
-module always gives.
+A canvas node shows the process's name and options, its options handler mode (a
+double border for `array` and `generator`, a dashed one for `manual`), its group
+(a border color derived from the `groupId`, and a badge with the module's name),
+and, as its background, the process status. An input whose value no connection
+can give, since script generation writes it before it looks at any connection
+(see "Connections"), or never writes it, for a task shaping option, has a hollow
+handle, which takes no connection, and a tag after its label that says where its
+value comes from: `shaping` for a task shaping option, `cmdline` for any other
+command line option, a flag included, `spec` for an option taken from the
+process specifications, and `flag` for a flag that the module always gives.
 
 The canvas has a legend, which the user can fold. It says what each process
 status means (see "Process status" in `doc/design_doc_engine.md`), and what the
@@ -2825,15 +2843,16 @@ shows what the option is:
   handle that accepts no connection and a mark that says that it is written
   from outside the program. It is where "Talk to FIFOs" writes, and where the
   activity of the program comes in, which the canvas thus shows.
-- A configuration option that no connection can reach has a hollow handle,
-  which accepts no connection, so that it does not look like an input left
-  unconnected, and a tag after its label that says where its value comes
-  from: `cmdline` for a command line option, a flag included, `spec` for an
-  option taken from the process specifications, `flag` for a flag that the
-  module always gives, and `fixed` for an output with option channel `none`.
-  The `Supervisor` has among its options the flag `-no-hold-fifos`, a command
-  line option that script generation writes and each run sets, although the
-  program model does not hold it.
+- A configuration option that no connection can reach has a hollow handle, which
+  accepts no connection, so that it does not look like an input left
+  unconnected, and a tag after its label that says where its value comes from:
+  `shaping` for a task shaping option, `cmdline` for any other command line
+  option, a flag included, `spec` for an option taken from the process
+  specifications, `flag` for a flag that the module always gives, and `fixed`
+  for an output with option channel `none`. The `Supervisor` has among its
+  options the flag `-no-hold-fifos`, a command line option that script
+  generation writes and each run sets, although the program model does not hold
+  it.
 - The options of the Supervisor wiring are not in the program model, and have
   no handle unless the wiring is shown.
 
@@ -3214,9 +3233,10 @@ under a heading of its own:
    with the option list of that task.
 4. **The options.** For each option of the process, in its order: its label,
    its direction and data type, or that it is a flag, its description, whether
-   it is mandatory or a command line option, and its literal value if it has
-   one, or where its value comes from: the specifications of the process or a
-   shared directory. An option channel other than `none` says what it means
+   it is mandatory, a command line option or a task shaping option (which the
+   code cannot read, since no task receives it), and its literal value if it
+   has one, or where its value comes from: the specifications of the process or
+   a shared directory. An option channel other than `none` says what it means
    for the code: a FIFO is closed once written or read until its end, and a
    value descriptor is written as the language rules say. A connected input
    names the process and the output option it reads from, with their
@@ -3233,9 +3253,9 @@ under a heading of its own:
    template while the code is still one, or the template when the user has
    emptied the draft, in a fenced code block tagged with the language and longer
    than any run of backquotes in the code. The template already reads every
-   option, so the code prompt asks to keep those lines and to write the code
-   where the template marker is; without the marker, it asks to change the code
-   as the code request says and to keep the rest.
+   option that a task receives, so the code prompt asks to keep those lines and
+   to write the code where the template marker is; without the marker, it asks
+   to change the code as the code request says and to keep the rest.
 6. **The code request.** What the user wrote in the prompt panel, or, when it
    is blank, to write the code that the description of the process asks for.
 7. **What the AI tool returns.** The whole code (for a Bash process, including

@@ -118,6 +118,17 @@ describe("buildCodePrompt", () => {
     expect(prompt).toContain("A FIFO that this process writes: close it once everything is written.\n  Nothing in the program reads it: someone outside the program reads it.");
   });
 
+  it("says that the code does not receive a task shaping option", () => {
+    const worker = process("worker", [
+      createOption("w", "-w", { dataType: "int", commandLine: true, mandatory: true, taskShaping: true }),
+      createOption("inf", "-inf"),
+    ], { optionsHandler: { mode: "array", arrayCode: "array=(0 1)" } });
+    const prompt = buildCodePrompt({ ...program, processes: [worker], edges: [] } as Program, worker, "", "");
+    expect(prompt).toContain("- `-w` (input, int, mandatory, command line option, task shaping option)");
+    expect(prompt).toContain("no task receives it, so the code of the process cannot read it");
+    expect(prompt).not.toMatch(/`-inf` \([^)]*task shaping/);
+  });
+
   it("names the count of a fanout family", () => {
     const dispatch = process("dispatch", [
       createOption("w", "-w", { dataType: "int", commandLine: true }),

@@ -33,6 +33,7 @@ import { SELECTED_NODE_COLOR, groupColor } from "../utils/groupColor";
 
 // What the tag of a hollow handle says, in full.
 const VALUE_SOURCE_TITLE: Record<string, string> = {
+  shaping: "Given on the command line of the program, only to decide the tasks of the process: no task receives it",
   cmdline: "Given on the command line of the program",
   spec: "Taken from the process specifications",
   flag: "A flag that the module always gives",

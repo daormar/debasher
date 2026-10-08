@@ -28,3 +28,25 @@ def test_function_header_name_reads_the_first_lines_function_name():
 
 def test_function_header_name_returns_none_for_empty_source():
     assert function_header_name("") is None
+
+
+def test_parse_proc_info_markdown_reads_the_task_shaping_options_apart():
+    from api.markdown_parsing import parse_proc_info_markdown
+
+    info = parse_proc_info_markdown(
+        "## worker\n"
+        "\n"
+        "### Process Options\n"
+        "- `-id` <int> id of writer \n"
+        "\n"
+        "### Task Shaping Options\n"
+        "Read only to define the tasks of the process; the process function does not receive them.\n"
+        "- `-w` <int> Number of workers. (command-line,mandatory)\n"
+    )
+
+    options = {option.label: option for option in info.options}
+    assert not options["-id"].taskShaping
+    assert options["-w"].taskShaping
+    assert options["-w"].commandLine and options["-w"].mandatory
+    assert options["-w"].dataType == "int"
+    assert options["-w"].description == "Number of workers."

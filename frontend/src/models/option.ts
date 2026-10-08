@@ -47,6 +47,13 @@ export interface ProgramOption {
   // value supplies the runtime count for this fanout family — e.g.
   // "-outfith"'s countSourceOptionId points at that process's own "-w".
   countSourceOptionId?: string;
+  // A task shaping option: a mandatory command line option that only the
+  // options handler of the process reads (the code that builds the array,
+  // counts the tasks or defines the options by hand), to decide its tasks,
+  // and that no task receives. It cannot count a fanout family, whose task
+  // needs the count to read it. See api/models.py's
+  // ProgramOption.taskShaping.
+  taskShaping?: boolean;
 }
 
 // Process-spec attribute names a "from process spec" option can name in
@@ -156,11 +163,15 @@ export function getCommandLineOptions(
 // Where the value of an option comes from when no connection can give it:
 // the command line (a flag of the command line included), an attribute of
 // the process specifications, or the module itself for a flag that is not
-// of the command line, which is always given. The canvas tags the hollow
+// of the command line, which is always given. A task shaping option is one
+// of the command line that no task receives. The canvas tags the hollow
 // handle of such an option with it.
-export type OptionValueSource = "cmdline" | "spec" | "flag";
+export type OptionValueSource = "shaping" | "cmdline" | "spec" | "flag";
 
 export function optionValueSource(option: ProgramOption): OptionValueSource | null {
+  if (option.taskShaping) {
+    return "shaping";
+  }
   if (option.commandLine) {
     return "cmdline";
   }

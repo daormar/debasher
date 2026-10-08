@@ -105,6 +105,7 @@ describe("nodeOptionRole", () => {
 describe("configurationSource", () => {
   it("says where the value of an option that takes no connection comes from", () => {
     expect(configurationSource(option("-n", { commandLine: true }))).toBe("cmdline");
+    expect(configurationSource(option("-w", { commandLine: true, mandatory: true, taskShaping: true }))).toBe("shaping");
     expect(configurationSource(option("-v", { commandLine: true, dataType: "None" }))).toBe("cmdline");
     expect(configurationSource(option("-c", { fromProcessSpec: true, value: "cpus" }))).toBe("spec");
     expect(configurationSource(option("-verbose", { dataType: "None" }))).toBe("flag");

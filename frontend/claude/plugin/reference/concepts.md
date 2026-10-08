@@ -93,6 +93,10 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   Bash word, such as `10` or `${idx}`); `commandLine` (from the program
   options); or `fromProcessSpec` (`value` names a specification: `cpus`,
   `mem`, `time`, ...). The last two take no connection.
+- `taskShaping`: a mandatory command-line input with a value that only the
+  options handler reads (the code that builds the array or counts the tasks),
+  to decide the tasks; no task receives it, so the code of the process cannot
+  read it, and it cannot be the `countSource` of a fanout family.
 - `mandatory`; `mirror` (a FIFO output keeps a copy readable without taking
   data from the reader; general programs only); `fifoTag: "external"` (a FIFO
   input of a resident program fed from outside).
