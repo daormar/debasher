@@ -43,15 +43,21 @@ host1_document()
 ########
 host1_explain_opts()
 {
+    :
+}
+
+########
+host1_explain_task_shaping_opts()
+{
     # -n option
     local description="Number of array tasks"
-    explain_opt "-n" "<int>" "$description"
+    explain_task_shaping_opt "-n" "<int>" "$description"
 }
 
 ########
 host1_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    :
 }
 
 ########
@@ -94,15 +100,21 @@ host2_document()
 ########
 host2_explain_opts()
 {
+    :
+}
+
+########
+host2_explain_task_shaping_opts()
+{
     # -n option
     local description="Number of array tasks"
-    explain_opt "-n" "<int>" "$description"
+    explain_task_shaping_opt "-n" "<int>" "$description"
 }
 
 ########
 host2_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    :
 }
 
 ########

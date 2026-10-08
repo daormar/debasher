@@ -360,10 +360,6 @@ worker_document()
 ########
 worker_explain_opts()
 {
-    # -w option
-    local description="Number of workers."
-    explain_opt "-w" "<int>" "$description"
-
     # -id option
     local description="id of writer"
     explain_opt "-id" "<int>" "$description"
@@ -378,9 +374,17 @@ worker_explain_opts()
 }
 
 ########
+worker_explain_task_shaping_opts()
+{
+    # -w option
+    local description="Number of workers."
+    explain_task_shaping_opt "-w" "<int>" "$description"
+}
+
+########
 worker_identify_cmdline_opts()
 {
-    opt_is_cmdline "-w"
+    :
 }
 
 ########

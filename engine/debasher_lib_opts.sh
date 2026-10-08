@@ -543,6 +543,7 @@ debasher::explain_cmdline_opt()
 
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_TASK_OPT[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_IS_CMDLINE[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
@@ -601,6 +602,7 @@ debasher::explain_opt()
 
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_TASK_OPT[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -653,6 +655,7 @@ debasher::explain_flag()
 
     # Store option in associative arrays
     local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_TASK_OPT[$proc_opt]=1
     DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=""
     DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
     DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
@@ -672,6 +675,68 @@ debasher::explain_flag()
 #
 # The function does not return any value.
 explain_flag() { debasher::explain_flag "$@"; }
+
+########
+# Public: Explains task shaping option, an option given on the command
+# line that only the methods that define the options of the process
+# (define_opts, or generate_opts_size and generate_opts) read, to
+# decide how many tasks the process has and what each one gets, and
+# that no task of the process receives. A task shaping option is
+# always a command-line option and always mandatory: the process does
+# not mark it in its identify_cmdline_opts method.
+#
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   debasher::explain_task_shaping_opt "-w" "<int>" "Number of workers"
+#
+# The function does not return any value.
+debasher::explain_task_shaping_opt()
+{
+    local opt=$1
+    local type=$2
+    local desc=$3
+    local categ=$4
+
+    # Obtain caller process name
+    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_TASK_SHAPING_OPTS}")
+
+    # Assign default category if not given
+    if [ "$categ" = "" ]; then
+        categ=${DEBASHER_GENERAL_OPT_CATEGORY}
+    fi
+
+    # Store option in associative arrays. The option is not marked as a
+    # command-line option here, so that a mark that identify_cmdline_opts
+    # puts on it can be told apart (see
+    # debasher::_check_opt_names_vs_explain)
+    local proc_opt=${proc_name}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${opt}
+    DEBASHER_PROGRAM_OPT_IS_TASK_SHAPING[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_IS_MANDATORY[$proc_opt]=1
+    DEBASHER_PROGRAM_OPT_TYPE[$proc_opt]=$type
+    DEBASHER_PROGRAM_OPT_DESC[$proc_opt]=$desc
+    DEBASHER_PROGRAM_OPT_CATEG[$proc_opt]=$categ
+    DEBASHER_PROGRAM_CATEG_MAP[$categ]=1
+}
+
+########
+# Public: Explains task shaping option.
+#
+# $1 - Option name.
+# $2 - Data type of option value.
+# $3 - Option description.
+# $4 - Option category ("GENERAL" category by default).
+#
+# Examples
+#
+#   explain_task_shaping_opt "-w" "<int>" "Number of workers"
+#
+# The function does not return any value.
+explain_task_shaping_opt() { debasher::explain_task_shaping_opt "$@"; }
 
 ########
 # Public: Identify option/flag as a command-line option.
@@ -764,18 +829,28 @@ debasher::_print_program_opts()
             opt="${key#*"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"}"
             # An option is a command-line option only when the process's
             # identify_cmdline_opts (or the legacy explain_cmdline_opt)
-            # marked it so: explaining it leaves the mark unset
-            if [ "${only_cmdline_opts}" -eq 1 ] && [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]}" != 1 ]; then
+            # marked it so: explaining it leaves the mark unset. A task
+            # shaping option is always one
+            local is_task_shaping=0
+            if [ "${DEBASHER_PROGRAM_OPT_IS_TASK_SHAPING[${key}]}" = 1 ]; then
+                is_task_shaping=1
+            fi
+            if [ "${only_cmdline_opts}" -eq 1 ] && [ "${DEBASHER_PROGRAM_OPT_IS_CMDLINE[${key}]}" != 1 ] && [ "${is_task_shaping}" -eq 0 ]; then
                 continue
             fi
 
             # Check if option belongs to current category
             if [ ${DEBASHER_PROGRAM_OPT_CATEG[${key}]} = $categ ]; then
-                # Print option
+                # Print option, telling a task shaping option apart,
+                # since the process function never receives it
+                local proc_info="[${processname}]"
+                if [ "${is_task_shaping}" -eq 1 ]; then
+                    proc_info="[${processname}, task shaping]"
+                fi
                 if [ -z "${DEBASHER_PROGRAM_OPT_TYPE[$key]}" ]; then
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${proc_info}"
                 else
-                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} [${processname}]"
+                    echo "${opt} ${DEBASHER_PROGRAM_OPT_TYPE[$key]} ${DEBASHER_PROGRAM_OPT_DESC[$key]} ${proc_info}"
                 fi
             fi
         done

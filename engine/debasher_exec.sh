@@ -614,6 +614,10 @@ show_cmdline_opts()
         if [ -n "${identify_cmdline_opt_funcname}" ]; then
             ${identify_cmdline_opt_funcname} || exit 1
         fi
+        local task_shaping_opts_funcname=$(debasher::_get_explain_task_shaping_opts_funcname "${processname}")
+        if [ "${task_shaping_opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+            ${task_shaping_opts_funcname} || exit 1
+        fi
     done
 
     # Print options

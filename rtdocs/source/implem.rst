@@ -330,12 +330,44 @@ options (see below), an option marked with ``opt_is_cmdline`` or
 ``define_cmdline_opt`` or one of its variants
 (``define_cmdline_opt_if_given``, ``define_cmdline_infile_opt``,
 ``define_cmdline_infile_opt_if_given``,
-``define_cmdline_flag_if_given``), or not be defined at all, for
-instance when it is only read to build the tasks of the process (such as
-a number of tasks). ``debasher_exec`` stops with an error when a process
-gives a command-line option a value of its own. When the tasks of a
-process need a value derived from a command-line option, they should
-receive it through a different option.
+``define_cmdline_flag_if_given``), or not be defined at all when it is
+optional and not given. ``debasher_exec`` stops with an error when a
+process gives a command-line option a value of its own. When the tasks
+of a process need a value derived from a command-line option, they
+should receive it through a different option.
+
+**Task shaping options**: a command-line option may serve only to
+decide the tasks of a process: the ``define_opts`` method (or the
+``generate_opts_size`` and ``generate_opts`` pair) reads it to know how
+many tasks to define and what each one gets, and the process
+implementation never receives it. Such an option is not declared in
+``explain_opts``, which documents what each task receives, but in a
+method of its own, ``explain_task_shaping_opts``, with
+``explain_task_shaping_opt``. For instance, the ``worker`` process of
+the ``debasher_dynamic_fanout`` module reads the number of workers,
+``-w``, to define one task per worker, and each task only receives its
+own list of blocks:
+
+.. code-block:: bash
+
+    worker_explain_task_shaping_opts()
+    {
+        # -w option
+        local description="Number of workers."
+        explain_task_shaping_opt "-w" "<int>" "$description"
+    }
+
+A task shaping option is always a mandatory command-line option, so it
+is not marked in ``identify_cmdline_opts``. ``debasher_exec`` stops
+with an error when it is not given, before the options of the process
+are defined, and also when a task of the process defines it, or when
+the process declares it in ``explain_opts`` as well. A mandatory
+command-line option of ``explain_opts`` that the first task of its
+process does not receive gives a warning that suggests declaring it as
+a task shaping option. ``debasher_exec --show-cmdline-opts`` lists a
+task shaping option among the other command-line options, marked as
+such, and ``debasher_doc_mod`` and ``debasher_exec_process`` show it in
+a section of its own.
 
 **IMPORTANT NOTE**: initially, only the command-line options of each
 process were documented by means of the ``explain_cmdline_opt``
@@ -750,7 +782,8 @@ restricts the output to a single process (omit it to document every
 process the module defines). Each ``--show-*`` flag adds one more
 section to the report: ``--show-opts``/``--show-opthnd``/``--show-impl``
 show, respectively, the process options (as documented by
-``explain_opts``), the option-handler method actually used
+``explain_opts``, followed by the task shaping options, if any), the
+option-handler method actually used
 (``define_opts``, or the ``generate_opts_size``/``generate_opts``
 pair), and the process implementation itself; ``--show-specs`` shows
 its computational and additional specifications (see `Process
@@ -766,7 +799,8 @@ Process Methods
 ^^^^^^^^^^^^^^^^
 
 Besides the methods already covered above (``document``,
-``explain_opts``, ``identify_cmdline_opts``,
+``explain_opts``, ``explain_task_shaping_opts``,
+``identify_cmdline_opts``,
 ``define_opts``/``generate_opts_size``/``generate_opts``, and the
 process implementation itself), a process may define a few more
 methods to further characterize its behavior. All of them are

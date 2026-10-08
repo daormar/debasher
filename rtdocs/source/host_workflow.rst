@@ -22,10 +22,6 @@ Host Workflow Example
 
     host1_explain_opts()
     {
-        # -n option
-        local description="Number of array tasks"
-        explain_opt "-n" "<int>" "$description"
-
         # -id option
         local description="process id"
         explain_opt "-id" "<int>" "$description"
@@ -35,9 +31,16 @@ Host Workflow Example
         explain_opt "-outf" "<file>" "$description"
     }
 
+    host1_explain_task_shaping_opts()
+    {
+        # -n option
+        local description="Number of array tasks"
+        explain_task_shaping_opt "-n" "<int>" "$description"
+    }
+
     host1_identify_cmdline_opts()
     {
-        opt_is_cmdline "-n"
+        :
     }
 
     host1_generate_opts_size()
@@ -95,10 +98,6 @@ Host Workflow Example
 
     host2_explain_opts()
     {
-        # -n option
-        local description="Number of array tasks"
-        explain_opt "-n" "<int>" "$description"
-
         # -id option
         local description="process id"
         explain_opt "-id" "<int>" "$description"
@@ -108,9 +107,16 @@ Host Workflow Example
         explain_opt "-inf" "<file>" "$description"
     }
 
+    host2_explain_task_shaping_opts()
+    {
+        # -n option
+        local description="Number of array tasks"
+        explain_task_shaping_opt "-n" "<int>" "$description"
+    }
+
     host2_identify_cmdline_opts()
     {
-        opt_is_cmdline "-n"
+        :
     }
 
     host2_generate_opts_size()

@@ -35,6 +35,8 @@ setup() {
     declare -gA DEBASHER_PROGRAM_OPT_TYPE
     declare -gA DEBASHER_PROGRAM_OPT_IS_CMDLINE
     declare -gA DEBASHER_PROGRAM_OPT_IS_MANDATORY
+    declare -gA DEBASHER_PROGRAM_OPT_IS_TASK_OPT
+    declare -gA DEBASHER_PROGRAM_OPT_IS_TASK_SHAPING
     declare -gA DEBASHER_MEMOIZED_OPTS
     declare -gA DEBASHER_PROGRAM_OPT_CATEG
     declare -gA DEBASHER_PROGRAM_CATEG_MAP
@@ -557,6 +559,40 @@ EOF
     [ "${DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]}" = "genfifoproc${sep}1" ]
 }
 
+@test "debasher::_define_opts_for_process stops before the options are defined when a task shaping option is missing" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    shapegenproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+
+    shapegenproc_generate_opts_size()
+    {
+        touch "${BATS_TEST_TMPDIR}/size_called"
+        echo 2
+    }
+
+    shapegenproc_generate_opts()
+    {
+        local task_idx=$5
+        local optlist=""
+
+        define_opt "-id" "${task_idx}" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="shapegenproc cpus=1 mem=32 time=00:01:00"
+    DEBASHER_INITIAL_PROCESS_SPEC["shapegenproc"]="${spec}"
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-l" "200")
+
+    run debasher::_define_opts_for_process "${cmdline}" "${spec}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapegenproc needs the task shaping option -w"* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/size_called" ]
+}
+
 @test "debasher::_define_opts_for_process takes the process name from the given process spec, not from a variable of its caller" {
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
@@ -1038,6 +1074,26 @@ hold_lock() {
     [[ "${output}" == *"-s <string> String to show [typedproc]"* ]]
 }
 
+@test "debasher::_print_program_opts lists a task shaping option among the command-line options, marked as such" {
+    declare -gA DEBASHER_PROGRAM_OPT_DESC=() DEBASHER_PROGRAM_OPT_TYPE=() DEBASHER_PROGRAM_OPT_CATEG=()
+    declare -gA DEBASHER_PROGRAM_CATEG_MAP=() DEBASHER_PROGRAM_OPT_IS_CMDLINE=()
+    declare -gA DEBASHER_PROGRAM_OPT_IS_TASK_SHAPING=()
+    listshapeproc_explain_opts()
+    {
+        explain_opt "-id" "<int>" "task id"
+    }
+    listshapeproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "Number of workers"
+    }
+    listshapeproc_explain_opts
+    listshapeproc_explain_task_shaping_opts
+
+    run debasher::_print_program_cmdline_opts
+    [[ "${output}" == *"-w <int> Number of workers [listshapeproc, task shaping]"* ]]
+    [[ "${output}" != *"-id"* ]]
+}
+
 # --- process of the caller -------------------------------------------------
 
 @test "debasher::_get_processname_from_caller prefers a registered process over a helper named like a method" {
@@ -1146,9 +1202,11 @@ hold_lock() {
 # --- debasher::_check_opt_names_vs_explain, command-line options ---------
 #
 # A command-line option takes its value from the command line and
-# nowhere else, and may be left out of its process's tasks (e.g. a task
-# count only read to build them, as host1 does with -n in
-# debasher_host_process.sh).
+# nowhere else. An optional one may be left out of its process's tasks,
+# since it may be defined only if given; a mandatory one left out is
+# warned about, since an option that only shapes the tasks (a task count
+# only read to build them, as host1 does with -n in
+# debasher_host_process.sh) is declared as a task shaping option.
 
 @test "debasher::_check_opt_names_vs_explain accepts a command-line option defined from the command line" {
     cmdokproc_explain_opts()
@@ -1229,20 +1287,227 @@ hold_lock() {
     [[ "${output}" == *"Error: process cmdmissproc defines command-line option -t with a value that does not come from the command line"* ]]
 }
 
-@test "debasher::_check_opt_names_vs_explain does not warn about a command-line option left out of the tasks" {
+@test "debasher::_check_opt_names_vs_explain does not warn about an optional command-line option left out of the tasks" {
+    cmdoptproc_explain_opts()
+    {
+        explain_opt "-n" "<int>" "defined only if given"
+        explain_opt "-id" "<int>" "task id"
+    }
+    cmdoptproc_identify_cmdline_opts()
+    {
+        opt_is_non_mandatory_cmdline "-n"
+    }
+    declare -gA DEBASHER_OPT_LIST_cmdoptproc_0=(["-id"]="0")
+    DEBASHER_PROGRAM_PROCESSES["cmdoptproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain does not warn about a mandatory command-line flag left out of the tasks" {
+    cmdflagoutproc_explain_opts()
+    {
+        explain_flag "-v" "defined only if given"
+    }
+    cmdflagoutproc_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-v"
+    }
+    declare -gA DEBASHER_OPT_LIST_cmdflagoutproc_0=()
+    DEBASHER_PROGRAM_PROCESSES["cmdflagoutproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain warns about a mandatory command-line option left out of the tasks, and suggests a task shaping option" {
     cmdshapeproc_explain_opts()
     {
         explain_opt "-n" "<int>" "number of tasks"
         explain_opt "-id" "<int>" "task id"
     }
-    DEBASHER_PROGRAM_OPT_IS_CMDLINE["cmdshapeproc${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-n"]=1
+    cmdshapeproc_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-n"
+    }
     declare -gA DEBASHER_OPT_LIST_cmdshapeproc_0=(["-id"]="0")
     DEBASHER_PROGRAM_PROCESSES["cmdshapeproc"]=1
     local cmdline=$(debasher::_serialize_args "debasher_exec" "-n" "3")
 
     run debasher::_check_opt_names_vs_explain "${cmdline}"
     [ "${status}" -eq 0 ]
+    [[ "${output}" == *"Warning: process cmdshapeproc declares mandatory command-line option -n in explain_opts, but it was not found among the options generated for its first task"* ]]
+    [[ "${output}" == *"is declared in cmdshapeproc_explain_task_shaping_opts instead"* ]]
+}
+
+# --- task shaping options -------------------------------------------------
+#
+# A task shaping option is read only by the methods that define the
+# options of a process, to decide its tasks, and no task receives it. It
+# is declared in explain_task_shaping_opts alone, and is always a
+# mandatory command-line option.
+
+@test "debasher::_get_task_shaping_opt_names collects the names that explain_task_shaping_opts declares" {
+    shapenamesproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+        explain_task_shaping_opt "-pref" "<string>" "prefix of the files"
+    }
+
+    local -A shaping=()
+    debasher::_get_task_shaping_opt_names "shapenamesproc" shaping
+    [ "${#shaping[@]}" -eq 2 ]
+    [[ -v shaping["-w"] ]]
+    [[ -v shaping["-pref"] ]]
+}
+
+@test "debasher::_get_task_shaping_opt_names leaves the set empty for a process without explain_task_shaping_opts" {
+    local -A shaping=()
+    debasher::_get_task_shaping_opt_names "noshapeproc" shaping
+    [ "${#shaping[@]}" -eq 0 ]
+}
+
+@test "debasher::_get_explained_opt_names leaves out the task shaping options" {
+    mixedproc_explain_opts()
+    {
+        explain_opt "-id" "<int>" "task id"
+    }
+    mixedproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    mixedproc_explain_task_shaping_opts
+
+    local -A explained=()
+    debasher::_get_explained_opt_names "mixedproc" explained
+    [ "${#explained[@]}" -eq 1 ]
+    [[ -v explained["-id"] ]]
+}
+
+@test "debasher::_check_task_shaping_opts_given accepts a task shaping option given on the command line" {
+    givenproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-w" "3")
+
+    run debasher::_check_task_shaping_opts_given "${cmdline}" "givenproc"
+    [ "${status}" -eq 0 ]
     [ -z "${output}" ]
+}
+
+@test "debasher::_check_task_shaping_opts_given refuses a task shaping option missing from the command line" {
+    missingproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-x" "3")
+
+    run debasher::_check_task_shaping_opts_given "${cmdline}" "missingproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process missingproc needs the task shaping option -w, which was not given on the command line"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain accepts a task shaping option that no task receives" {
+    shapeokproc_explain_opts()
+    {
+        explain_opt "-id" "<int>" "task id"
+    }
+    shapeokproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    declare -gA DEBASHER_OPT_LIST_shapeokproc_0=(["-id"]="0")
+    DEBASHER_PROGRAM_PROCESSES["shapeokproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-w" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when an option is declared both in explain_opts and as a task shaping option" {
+    shapebothproc_explain_opts()
+    {
+        explain_opt "-w" "<int>" "number of workers"
+    }
+    shapebothproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    declare -gA DEBASHER_OPT_LIST_shapebothproc_0=()
+    DEBASHER_PROGRAM_PROCESSES["shapebothproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-w" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapebothproc declares option -w both in its explain_opts and in its explain_task_shaping_opts"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when a task shaping option is marked in identify_cmdline_opts" {
+    shapemarkproc_explain_opts()
+    {
+        :
+    }
+    shapemarkproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    shapemarkproc_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-w"
+    }
+    declare -gA DEBASHER_OPT_LIST_shapemarkproc_0=()
+    DEBASHER_PROGRAM_PROCESSES["shapemarkproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-w" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapemarkproc marks its task shaping option -w in its identify_cmdline_opts"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain aborts when a task defines a task shaping option" {
+    shapedefproc_explain_opts()
+    {
+        :
+    }
+    shapedefproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    declare -gA DEBASHER_OPT_LIST_shapedefproc_0=(["-w"]="3")
+    DEBASHER_PROGRAM_PROCESSES["shapedefproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-w" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapedefproc defines its task shaping option -w for its first task"* ]]
+    [[ "${output}" != *"not declared in its explain_opts"* ]]
+}
+
+@test "debasher::_show_proc_opts shows the task shaping options apart from the others" {
+    showshapeproc_explain_opts()
+    {
+        explain_opt "-id" "<int>" "task id"
+    }
+    showshapeproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+    showshapeproc_explain_opts
+    showshapeproc_explain_task_shaping_opts
+
+    run debasher::_show_proc_opts "showshapeproc"
+    [[ "${output}" == *"-id"* ]]
+    [[ "${output}" != *"-w"* ]]
+
+    run debasher::_show_proc_opts "showshapeproc" 1
+    [[ "${output}" == *'- `-w` <int> number of workers (command-line,mandatory)'* ]]
+    [[ "${output}" != *"-id"* ]]
 }
 
 # --- debasher::_show_proc_implem_heredoc ---------------------------------

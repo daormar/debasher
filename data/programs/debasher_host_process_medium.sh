@@ -43,19 +43,23 @@ host1_document()
 ########
 host1_explain_opts()
 {
-    # -n option
-    local description="Number of array tasks"
-    explain_opt "-n" "<int>" "$description"
-
     # -id option
     local description="process id"
     explain_opt "-id" "<int>" "$description"
 }
 
 ########
+host1_explain_task_shaping_opts()
+{
+    # -n option
+    local description="Number of array tasks"
+    explain_task_shaping_opt "-n" "<int>" "$description"
+}
+
+########
 host1_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    :
 }
 
 ########

@@ -42,7 +42,8 @@ mainly useful to debug a process implementation in isolation.
 * If ``-- <process_opts>`` is omitted, the tool does not execute the
   process. Instead, it prints the process's option documentation (the
   same information ``debasher_doc_mod --show-opts`` would show for
-  it) and exits.
+  it) and exits. The task shaping options of the process are listed
+  apart, since they are not given to the process.
 
 * If ``--`` is given, everything after it is passed as the process's
   own command line options, and the process is executed. The tool
@@ -404,7 +405,9 @@ always opens with the module's name and description, followed by a
 ``resident``). The remaining options select which information is
 included in the report:
 
-* ``--show-opts``: process options, as documented by ``explain_opts``.
+* ``--show-opts``: process options, as documented by ``explain_opts``,
+  and, in a section of their own, the task shaping options that
+  ``explain_task_shaping_opts`` documents.
 * ``--show-opthnd``: the option-handler method actually used
   (``define_opts``, or the ``generate_opts_size``/``generate_opts``
   pair).

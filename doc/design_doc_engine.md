@@ -159,8 +159,9 @@ relative to the output directory of the run.
 - **task shaping option**: a value given on the command line of `debasher_exec`
   that only the `_define_opts`, `_generate_opts_size` or `_generate_opts`
   method of a process reads, to decide how many tasks it has and what each one
-  gets, and that no task of that process receives as an option. The engine has
-  no declaration of its own for it yet (see "Future work").
+  gets, and that no task of that process receives. The process declares it in
+  its `_explain_task_shaping_opts` method, and the engine lists and checks it
+  like a mandatory command line option.
 - **connection**: an input option defined with `define_opt_from_proc_out` or
   `define_opt_from_proc_task_out`, which takes the value of an output option of
   another process.
@@ -548,6 +549,7 @@ when a process does not define it:
 | `_explain_opts` | to list the options of the program (`--show-cmdline-opts`) and to check the options that a task defines | the process cannot be added, unless it has `_explain_cmdline_opts` |
 | `_identify_cmdline_opts` | together with `_explain_opts`, to mark which options are command line options | the process has no command line options |
 | `_explain_cmdline_opts` | an older form of the two methods above, whose options are all command line options | the two methods above are used |
+| `_explain_task_shaping_opts` | together with `_explain_opts`, and before the options of the process are defined, to check that its task shaping options are given | the process has no task shaping options |
 | `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
 | `_skip` | by the task, before the process output directory is reset, with the options of the task | the task is never skipped |
 | `_reset_outfiles` | by the task, before the process function, with the options of the task | the default reset (see "Executing a task") |
@@ -987,7 +989,44 @@ of a module without running its `_program` method. The declarations document the
 program: `debasher_exec --show-cmdline-opts` lists the command line options of
 every process, by category, and `debasher_doc_mod` documents them. Whether a
 mandatory option is given is decided by `define_cmdline_opt` when the options
-are built, not by the declaration.
+are built, not by the declaration; a task shaping option is the exception (see
+below).
+
+**Task shaping options.** A value given on the command line can serve only to
+decide the tasks of a process: its `_define_opts` method, or its
+`_generate_opts_size` and `_generate_opts` methods, read it to know how many
+tasks to define and what each one gets, and no task receives it. The `worker`
+process of `data/programs/debasher_dynamic_fanout.sh` reads `-w`, the number of
+workers, to define one task per worker. `_explain_opts` declares what a task
+receives, which `debasher_exec_process` shows as the options to give to the
+process function, so a task shaping option is declared apart, in the
+`_explain_task_shaping_opts` method, with `explain_task_shaping_opt`:
+
+```
+worker_explain_task_shaping_opts()
+{
+    local description="Number of workers."
+    explain_task_shaping_opt "-w" "<int>" "$description"
+}
+```
+
+A task shaping option is always given on the command line, since a value that a
+method reads while the options are defined comes either from the command line
+or from the module itself (a constant, the process specification), and the
+latter needs no declaration. It is also always mandatory: its value fixes the
+tasks of the process and, through connections by task index, how they meet the
+tasks of other processes, so two processes that read the same option with
+different defaults of their own would disagree on that structure. It is
+therefore not marked in `_identify_cmdline_opts`. Whether it is given is
+decided before the options of the process are defined, and a missing one stops
+the preparation of the run: the methods that read it never define it, so
+nothing else would stop a run that lacks it. `--show-cmdline-opts` lists it
+among the command line options, marked as a task shaping option, and
+`debasher_doc_mod` and `debasher_exec_process` show it in a section of its
+own. An option that shapes the option lists of the tasks and that the process
+function also reads, like `-w` in the `dispatch` process of the same module,
+which sets how many `-outf<i>` options its task gets, is declared in
+`_explain_opts` like any other.
 
 ## Arrays and option generators
 
@@ -1017,13 +1056,16 @@ task of every process are checked against the declared ones while the run is
 prepared. An option that the task defines but the process does not declare stops
 the preparation, as it usually means a typo or a declaration out of date; a
 declared option that the first task does not define only gives a warning, and
-none at all for a command line option, which the first task may lack because it
-is defined only when given, or because it is a task shaping option, which only
-the methods that define the options read (see "Future work"). Only the first
-task is checked, and the check assumes that the tasks of an array have the same
-option names. A process whose number of options depends on the run, such as
-`-outf0`, `-outf1`, and so on, declares the whole fanout family once, as
-`-outfith`, and any option made of the prefix and a number matches it.
+none at all for a command line option that is optional or a flag, which is
+often defined only when given. The warning for a mandatory command line option
+that the first task lacks suggests declaring it as a task shaping option, the
+usual reason for that absence. A task shaping option that the process also
+declares in `_explain_opts`, marks in `_identify_cmdline_opts`, or defines for
+its first task stops the preparation. Only the first task is checked, and the
+check assumes that the tasks of an array have the same option names. A process
+whose number of options depends on the run, such as `-outf0`, `-outf1`, and so
+on, declares the whole fanout family once, as `-outfith`, and any option made
+of the prefix and a number matches it.
 
 ## How option values reach a task
 
@@ -2069,6 +2111,9 @@ leaves, by design, to the program or to whoever runs it.
 15. After `debasher_stop` on a whole program, no task of the run is running,
     nothing is left that could launch one, and nothing is left half launched
     (see "Tools that read a run").
+16. The methods that define the options of a process run only when every task
+    shaping option of the process is given on the command line (see "Command
+    line options").
 
 **Limits and non-goals.**
 
@@ -2115,59 +2160,6 @@ leaves, by design, to the program or to whoever runs it.
 
 What is known to be missing from the design, or left open by it:
 
-- **Declaring task shaping options.** The `worker` process of
-  `data/programs/debasher_dynamic_fanout.sh` reads `-w`, the number of
-  workers, from the command line in its `_define_opts` method, to define one
-  task per worker, and its process function never receives it. The engine
-  accepts such a task shaping option, since it never warns about a command line
-  option that the first task lacks, but the only place where the process can
-  declare it, so that `--show-cmdline-opts` and `debasher_doc_mod` list it, is
-  `_explain_opts`, which then no longer describes what a task receives:
-  `debasher_exec_process` lists `-w` among the options to give to the process
-  function, which ignores it.
-
-  A new process method, `_explain_task_shaping_opts`, would declare these
-  options apart, with `explain_task_shaping_opt`, so that `_explain_opts`
-  declares exactly the options of a task:
-
-  ```
-  worker_explain_task_shaping_opts()
-  {
-      local description="Number of workers."
-      explain_task_shaping_opt "-w" "<int>" "$description"
-  }
-  ```
-
-  A task shaping option is always given on the command line, since a value that
-  a method reads while the options are defined comes either from the command
-  line or from the module itself (a constant, the process specification), and
-  the latter needs no declaration. It is also always mandatory: its value fixes
-  the tasks of the process and, through connections by task index, how they
-  meet the tasks of other processes, so two processes that read the same option
-  with different defaults of their own would disagree on that structure. The
-  rules that follow from this:
-
-  - A task shaping option is not marked in the `_identify_cmdline_opts` method
-    of the same process, and no task of that process defines it; either stops
-    the preparation of the run.
-  - An option is declared in one of the two methods, never in both. An option
-    that shapes the option lists of the tasks and that the process function
-    also reads, like `-w` in the `dispatch` process of the same module, which
-    sets how many `-outf<i>` options its task gets, stays in `_explain_opts`.
-  - The engine checks that every task shaping option is given before it calls
-    `_define_opts` or `_generate_opts_size`. Today a missing option, read with
-    `get_cmdline_opt` or, as `worker` reads `-w`, with
-    `read_opt_value_from_line`, gives an empty value with no error, and the
-    method builds its tasks from it.
-  - Since the only mandatory command line options that a task may lack are
-    then declared apart, the check of the options of the first task can warn
-    about a mandatory command line option of `_explain_opts` that the task
-    lacks. A module written before the new method, which declares a task
-    shaping option in `_explain_opts`, gets that warning, which suggests moving
-    the option to the new method, and is not refused.
-  - `--show-cmdline-opts`, `debasher_doc_mod` and `debasher_exec_process` list
-    task shaping options apart from the options of a task, and the import and
-    script generation of the web UI know the new method.
 - **Watching the ends of a FIFO.** When one end of a FIFO fails, the built-in
   scheduler could stop the other, instead of leaving it blocked until someone
   runs `debasher_stop`.
@@ -2190,3 +2182,7 @@ What is known to be missing from the design, or left open by it:
   filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the
   sequential processes of a program nor keeps them when it saves the program.
+- **Task shaping options in the web UI.** The web UI does not hold the task
+  shaping options of a process: it leaves out the `_explain_task_shaping_opts`
+  method when it imports a module, so the program it saves no longer declares
+  them.
