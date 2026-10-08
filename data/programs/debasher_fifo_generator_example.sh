@@ -43,10 +43,6 @@ producer_document()
 ########
 producer_explain_opts()
 {
-    # -n option
-    local description="Number of tasks"
-    explain_opt "-n" "<int>" "$description"
-
     # -id option
     local description="task id"
     explain_opt "-id" "<int>" "$description"
@@ -57,9 +53,17 @@ producer_explain_opts()
 }
 
 ########
+producer_explain_task_shaping_opts()
+{
+    # -n option
+    local description="Number of tasks"
+    explain_task_shaping_opt "-n" "<int>" "$description"
+}
+
+########
 producer_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    :
 }
 
 ########
@@ -84,9 +88,6 @@ producer_generate_opts()
     local process_outdir=$4
     local task_idx=$5
     local optlist=""
-
-    # -n option
-    define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
     # -id option
     define_opt "-id" "${task_idx}" optlist || return 1
@@ -117,10 +118,6 @@ consumer_document()
 ########
 consumer_explain_opts()
 {
-    # -n option
-    local description="Number of tasks"
-    explain_opt "-n" "<int>" "$description"
-
     # -id option
     local description="task id"
     explain_opt "-id" "<int>" "$description"
@@ -135,9 +132,17 @@ consumer_explain_opts()
 }
 
 ########
+consumer_explain_task_shaping_opts()
+{
+    # -n option
+    local description="Number of tasks"
+    explain_task_shaping_opt "-n" "<int>" "$description"
+}
+
+########
 consumer_identify_cmdline_opts()
 {
-    opt_is_cmdline "-n"
+    :
 }
 
 ########
@@ -162,9 +167,6 @@ consumer_generate_opts()
     local process_outdir=$4
     local task_idx=$5
     local optlist=""
-
-    # -n option
-    define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
     # -id option
     define_opt "-id" "${task_idx}" optlist || return 1

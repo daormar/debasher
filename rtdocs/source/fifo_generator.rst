@@ -21,10 +21,6 @@ FIFO Array Example using Generators
 
     producer_explain_opts()
     {
-        # -n option
-        local description="Number of tasks"
-        explain_opt "-n" "<int>" "$description"
-
         # -id option
         local description="task id"
         explain_opt "-id" "<int>" "$description"
@@ -34,9 +30,16 @@ FIFO Array Example using Generators
         explain_opt "-outf" "<string>" "$description"
     }
 
+    producer_explain_task_shaping_opts()
+    {
+        # -n option
+        local description="Number of tasks"
+        explain_task_shaping_opt "-n" "<int>" "$description"
+    }
+
     producer_identify_cmdline_opts()
     {
-        opt_is_cmdline "-n"
+        :
     }
 
     producer_generate_opts_size()
@@ -59,9 +62,6 @@ FIFO Array Example using Generators
         local process_outdir=$4
         local task_idx=$5
         local optlist=""
-
-        # -n option
-        define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1
@@ -89,10 +89,6 @@ FIFO Array Example using Generators
 
     consumer_explain_opts()
     {
-        # -n option
-        local description="Number of tasks"
-        explain_opt "-n" "<int>" "$description"
-
         # -id option
         local description="task id"
         explain_opt "-id" "<int>" "$description"
@@ -106,9 +102,16 @@ FIFO Array Example using Generators
         explain_opt "-outf" "<file>" "$description"
     }
 
+    consumer_explain_task_shaping_opts()
+    {
+        # -n option
+        local description="Number of tasks"
+        explain_task_shaping_opt "-n" "<int>" "$description"
+    }
+
     consumer_identify_cmdline_opts()
     {
-        opt_is_cmdline "-n"
+        :
     }
 
     consumer_generate_opts_size()
@@ -131,9 +134,6 @@ FIFO Array Example using Generators
         local process_outdir=$4
         local task_idx=$5
         local optlist=""
-
-        # -n option
-        define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1

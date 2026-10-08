@@ -314,10 +314,6 @@ Dynamic Fanout Example Using FIFOs and Generators
 
     worker_explain_opts()
     {
-        # -w option
-        local description="Number of workers."
-        explain_opt "-w" "<int>" "$description"
-
         # -id option
         local description="id of writer"
         explain_opt "-id" "<int>" "$description"
@@ -331,9 +327,16 @@ Dynamic Fanout Example Using FIFOs and Generators
         explain_opt "-outd" "<file>" "$description"
     }
 
+    worker_explain_task_shaping_opts()
+    {
+        # -w option
+        local description="Number of workers."
+        explain_task_shaping_opt "-w" "<int>" "$description"
+    }
+
     worker_identify_cmdline_opts()
     {
-        opt_is_cmdline "-w"
+        :
     }
 
     worker_generate_opts_size()
@@ -357,9 +360,6 @@ Dynamic Fanout Example Using FIFOs and Generators
         local process_outdir=$4
         local task_idx=$5
         local optlist=""
-
-        # -w option
-        define_cmdline_opt "$cmdline" "-w" optlist || return 1
 
         # -id option
         define_opt "-id" "${task_idx}" optlist || return 1
