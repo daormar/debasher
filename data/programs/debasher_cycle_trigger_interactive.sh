@@ -64,7 +64,6 @@ master_explain_opts()
 master_identify_cmdline_opts()
 {
     opt_is_cmdline "-n"
-    opt_is_cmdline "-value"
 }
 
 ########

@@ -324,17 +324,18 @@ never changes. However, the ``identify_cmdline_opts`` method for a
 process may be different from one program to another**.
 
 **IMPORTANT NOTE**: a command-line option takes its value from the
-command line and from nowhere else. When the process defines its
-options (see below), an option marked with ``opt_is_cmdline`` or
+command line and from nowhere else. When the process defines its options
+(see below), an option marked with ``opt_is_cmdline`` or
 ``opt_is_non_mandatory_cmdline`` can only be defined with
 ``define_cmdline_opt`` or one of its variants
 (``define_cmdline_opt_if_given``, ``define_cmdline_infile_opt``,
 ``define_cmdline_infile_opt_if_given``,
 ``define_cmdline_flag_if_given``), or not be defined at all when it is
 optional and not given. ``debasher_exec`` stops with an error when a
-process gives a command-line option a value of its own. When the tasks
-of a process need a value derived from a command-line option, they
-should receive it through a different option.
+process gives a command-line option a value of its own, and also when
+``identify_cmdline_opts`` marks an option that ``explain_opts`` does not
+declare. When the tasks of a process need a value derived from a
+command-line option, they should receive it through a different option.
 
 **Task shaping options**: a command-line option may serve only to
 decide the tasks of a process: the ``define_opts`` method (or the

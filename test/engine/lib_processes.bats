@@ -1287,6 +1287,26 @@ hold_lock() {
     [[ "${output}" == *"Error: process cmdmissproc defines command-line option -t with a value that does not come from the command line"* ]]
 }
 
+@test "debasher::_check_opt_names_vs_explain aborts when identify_cmdline_opts marks an option that explain_opts does not declare" {
+    strayproc_explain_opts()
+    {
+        explain_opt "-n" "<int>" "desc n"
+    }
+    strayproc_identify_cmdline_opts()
+    {
+        opt_is_cmdline "-n"
+        opt_is_cmdline "-value"
+    }
+    declare -gA DEBASHER_OPT_LIST_strayproc_0=(["-n"]="3")
+    DEBASHER_PROGRAM_PROCESSES["strayproc"]=1
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-n" "3")
+
+    run debasher::_check_opt_names_vs_explain "${cmdline}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process strayproc marks option -value in its identify_cmdline_opts, but does not declare it in its explain_opts"* ]]
+    [[ "${output}" != *"option -n"* ]]
+}
+
 @test "debasher::_check_opt_names_vs_explain does not warn about an optional command-line option left out of the tasks" {
     cmdoptproc_explain_opts()
     {
@@ -1468,6 +1488,7 @@ hold_lock() {
     run debasher::_check_opt_names_vs_explain "${cmdline}"
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: process shapemarkproc marks its task shaping option -w in its identify_cmdline_opts"* ]]
+    [[ "${output}" != *"does not declare it in its explain_opts"* ]]
 }
 
 @test "debasher::_check_opt_names_vs_explain aborts when a task defines a task shaping option" {

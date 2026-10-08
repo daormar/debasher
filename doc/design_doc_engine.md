@@ -1056,16 +1056,18 @@ task of every process are checked against the declared ones while the run is
 prepared. An option that the task defines but the process does not declare stops
 the preparation, as it usually means a typo or a declaration out of date; a
 declared option that the first task does not define only gives a warning, and
-none at all for a command line option that is optional or a flag, which is
-often defined only when given. The warning for a mandatory command line option
-that the first task lacks suggests declaring it as a task shaping option, the
-usual reason for that absence. A task shaping option that the process also
-declares in `_explain_opts`, marks in `_identify_cmdline_opts`, or defines for
-its first task stops the preparation. Only the first task is checked, and the
+none at all for a command line option that is optional or a flag, which is often
+defined only when given. The warning for a mandatory command line option that
+the first task lacks suggests declaring it as a task shaping option, the usual
+reason for that absence. A task shaping option that the process also declares in
+`_explain_opts`, marks in `_identify_cmdline_opts`, or defines for its first
+task stops the preparation. So does an option that `_identify_cmdline_opts`
+marks but `_explain_opts` does not declare: it is usually a typo that leaves the
+intended option unmarked, or a leftover. Only the first task is checked, and the
 check assumes that the tasks of an array have the same option names. A process
 whose number of options depends on the run, such as `-outf0`, `-outf1`, and so
-on, declares the whole fanout family once, as `-outfith`, and any option made
-of the prefix and a number matches it.
+on, declares the whole fanout family once, as `-outfith`, and any option made of
+the prefix and a number matches it.
 
 ## How option values reach a task
 

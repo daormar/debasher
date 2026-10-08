@@ -1304,6 +1304,10 @@ debasher::_get_actual_opt_names_for_first_task()
 # mandatory command-line option already), and no task defines it:
 # each of these is an error.
 #
+# identify_cmdline_opts only classifies options that explain_opts
+# declares, so marking any other option is an error too: it is a typo,
+# which leaves the intended option unmarked, or a leftover.
+#
 # One more legitimate mismatch, handled separately by
 # debasher::_actual_opt_is_ith_instance below: a process whose number
 # of "-foo0", "-foo1", ... "-foo<N-1>" options depends on a run-time
@@ -1343,6 +1347,22 @@ debasher::_check_opt_names_vs_explain()
                 had_undeclared_opt=1
             elif [ -n "${actual_opt_names[${opt}]+x}" ]; then
                 echo "Error: process ${processname} defines its task shaping option ${opt} for its first task; a task shaping option is only read by the methods that define the options, and no task receives it" >&2
+                had_undeclared_opt=1
+            fi
+        done
+
+        local prefix="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+        local key
+        for key in "${!DEBASHER_PROGRAM_OPT_IS_CMDLINE[@]}"; do
+            case "${key}" in
+                "${prefix}"*) ;;
+                *) continue ;;
+            esac
+            opt="${key#"${prefix}"}"
+            # A marked task shaping option was reported above
+            [ -n "${task_shaping_opt_names[${opt}]+x}" ] && continue
+            if [ -z "${explained_opt_names[${opt}]+x}" ]; then
+                echo "Error: process ${processname} marks option ${opt} in its identify_cmdline_opts, but does not declare it in its explain_opts" >&2
                 had_undeclared_opt=1
             fi
         done
