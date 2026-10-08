@@ -442,8 +442,15 @@ const editingTools = [
   editTool(
     "connect",
     "Connects an output of a process to an input of another, or of the same one; the input then takes its value from the output.",
-    { from: schemas.optionRef, to: schemas.optionRef },
-    ({ from, to }) => [{ op: "connect", from, to }]
+    { from: schemas.optionRef, to: schemas.optionRef, display: schemas.connectionDisplay.optional() },
+    ({ from, to, display }) => [{ op: "connect", from, to, display }]
+  ),
+
+  editTool(
+    "set_connection_display",
+    "Sets how the canvas draws a connection: as a line, or as a label edge, a stub at each end naming the other.",
+    { from: schemas.optionRef, to: schemas.optionRef, display: schemas.connectionDisplay },
+    ({ from, to, display }) => [{ op: "setConnectionDisplay", from, to, display }]
   ),
 
   editTool(

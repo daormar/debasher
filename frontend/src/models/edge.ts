@@ -25,6 +25,12 @@ export function isLabelEdge(edge: ProgramEdge): boolean {
   return edge.display === "label";
 }
 
+// What names one end of an edge to the user, in the stub of a label edge and
+// wherever an input is connected by name: "<process> <option>".
+export function edgeEndText(processName: string, optionLabel: string): string {
+  return `${processName} ${optionLabel}`;
+}
+
 // The "[proc;opt]" sentinel a connected option's value takes, shared by
 // the edits that derive it (see programEdits.ts) and any UI that needs to
 // display the same thing read-only.

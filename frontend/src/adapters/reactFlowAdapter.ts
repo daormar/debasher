@@ -7,7 +7,7 @@ import type {
 import type { Program } from "../models/program";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
-import { isLabelEdge } from "../models/edge";
+import { edgeEndText, isLabelEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
 import { optionValueSource } from "../models/option";
@@ -281,9 +281,9 @@ export interface LabelEdgeSourceStub {
   targetProcessIds: string[];
 }
 
-// What a label edge names an option by: its process and its label.
+// What a label edge names an option by (see edgeEndText).
 function optionText(process: ProgramProcess | undefined, option: ProgramOption | undefined): string {
-  return `${process?.name ?? "?"} ${option?.label ?? "?"}`;
+  return edgeEndText(process?.name ?? "?", option?.label ?? "?");
 }
 
 /**

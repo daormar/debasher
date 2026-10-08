@@ -153,6 +153,28 @@ describe("editing a program", () => {
     expect(saved.processes[1].options[0].value).toBe("[a;-outf]");
   });
 
+  it("draws a connection as a label edge, when asked, and shows it so", async () => {
+    const backend = fakeBackend([program()]);
+
+    const answer = await text(backend, "connect", { home_dir: HOME, ...A_TO_B, display: "label" });
+
+    expect(answer).toContain("+ Connection a -outf -> b -in (drawn as a label edge)");
+    expect(savedProgram(backend).edges[0].display).toBe("label");
+  });
+
+  it("switches how an existing connection is drawn", async () => {
+    const backend = fakeBackend([program()]);
+    await call(backend, "connect", { home_dir: HOME, ...A_TO_B });
+
+    const answer = await text(backend, "set_connection_display", { home_dir: HOME, ...A_TO_B, display: "label" });
+
+    expect(answer).toContain("- Connection a -outf -> b -in\n+ Connection a -outf -> b -in (drawn as a label edge)");
+    expect(savedProgram(backend).edges[0].display).toBe("label");
+    await expect(
+      call(backend, "set_connection_display", { home_dir: HOME, ...A_TO_B, to: { process: "a", option: "-outf" }, display: "line" })
+    ).rejects.toThrow("There is no connection");
+  });
+
   it("applies a list of edits whole, each naming what an earlier one added", async () => {
     const backend = fakeBackend([program()]);
 

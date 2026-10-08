@@ -117,6 +117,10 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   streams until the writer closes. Use it to stream, to run steps
   concurrently, or for a cycle, which needs at least one FIFO edge. A FIFO has
   one reader, both ends on the same machine, and no Slurm.
+- **How the canvas draws it** (`display` of `connect`, or
+  `set_connection_display`): a line, or a label edge, a stub at each end that
+  names the other. Use a label edge for a connection whose line would cross
+  others; it changes nothing in what runs.
 
 ## Resident programs
 

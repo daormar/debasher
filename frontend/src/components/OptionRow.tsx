@@ -10,6 +10,9 @@ interface OptionRowProps {
   isFanoutMode: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  // On an input that some output can be connected to: opens the dialog
+  // that connects it by name (see ConnectByNameDialog).
+  onConnect?: () => void;
 }
 
 export default function OptionRow({
@@ -17,6 +20,7 @@ export default function OptionRow({
   isFanoutMode,
   onEdit,
   onRemove,
+  onConnect,
 }: OptionRowProps) {
 
   const {
@@ -73,6 +77,16 @@ export default function OptionRow({
 
 
       <span>
+
+        {onConnect && (
+          <button
+            onClick={onConnect}
+            title="Connect this input to an output named by typing it"
+            style={{ marginRight: 4 }}
+          >
+            Connect
+          </button>
+        )}
 
         <button onClick={onEdit}>
           Edit

@@ -14,6 +14,12 @@ export const optionLabel = z.string().min(1).describe('The label of an option of
 
 export const optionRef = z.object({ process: processName, option: optionLabel }).strict();
 
+export const connectionDisplay = z.enum(["line", "label"])
+  .describe(
+    "How the canvas draws the connection: a line, or a label edge, a short stub at each end naming the " +
+    "other, for a connection whose line would cross others. It changes nothing in the program that runs."
+  );
+
 export const position = z.object({ x: z.number(), y: z.number() }).strict()
   .describe("A position on the canvas, in pixels; y grows downwards.");
 
@@ -162,8 +168,9 @@ export const namedEdit = z.discriminatedUnion("op", [
   z.object({ op: z.literal("addOption"), process: processName, label: optionLabel, fields: optionFields.optional() }).strict(),
   z.object({ op: z.literal("updateOption"), process: processName, option: optionLabel, changes: optionChanges }).strict(),
   z.object({ op: z.literal("removeOption"), process: processName, option: optionLabel }).strict(),
-  z.object({ op: z.literal("connect"), from: optionRef, to: optionRef }).strict(),
+  z.object({ op: z.literal("connect"), from: optionRef, to: optionRef, display: connectionDisplay.optional() }).strict(),
   z.object({ op: z.literal("disconnect"), from: optionRef, to: optionRef }).strict(),
+  z.object({ op: z.literal("setConnectionDisplay"), from: optionRef, to: optionRef, display: connectionDisplay }).strict(),
   z.object({ op: z.literal("addSeqProcess"), name: z.string().min(1), changes: seqProcessChanges.optional() }).strict(),
   z.object({
     op: z.literal("updateSeqProcess"),

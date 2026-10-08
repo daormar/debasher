@@ -1,4 +1,5 @@
 import type { ProgramEdge } from "./edge";
+import { edgeEndText } from "./edge";
 import { isFanoutOption } from "./option";
 import { isBusinessInputCandidate, isBusinessOutput } from "./node";
 import type { ProgramProcess } from "./process";
@@ -210,6 +211,57 @@ export function isValidEdge(
   return (
     sourceOptionDef?.direction === "output" &&
     targetOptionDef?.direction === "input"
+  );
+
+}
+
+// An output that an input can be connected to, with the text that names it
+// (see edgeEndText).
+export interface ConnectionCandidate {
+  sourceProcessId: string;
+  sourceOptionId: string;
+  text: string;
+}
+
+/**
+ * The outputs that the input `targetOptionId` of `targetProcessId` can be
+ * connected to, by the same rules as an edge drawn on the canvas (see
+ * isValidEdge), in the order of the processes and of their options. An
+ * output already connected to the input is left out.
+ */
+export function connectionCandidates(
+  program: Program,
+  targetProcessId: string,
+  targetOptionId: string
+): ConnectionCandidate[] {
+
+  const connected = (sourceProcessId: string, sourceOptionId: string) =>
+    program.edges.some(
+      edge =>
+        edge.sourceProcessId === sourceProcessId &&
+        edge.sourceOptionId === sourceOptionId &&
+        edge.targetProcessId === targetProcessId &&
+        edge.targetOptionId === targetOptionId
+    );
+
+  return program.processes.flatMap(process =>
+    process.options
+      .filter(
+        option =>
+          option.direction === "output" &&
+          !connected(process.id, option.id) &&
+          isValidEdge(program, {
+            sourceProcessId: process.id,
+            sourceOptionId: option.id,
+            targetProcessId,
+            targetOptionId,
+          })
+      )
+      .map(option => ({
+        sourceProcessId: process.id,
+        sourceOptionId: option.id,
+        text: edgeEndText(process.name, option.label),
+      }))
   );
 
 }

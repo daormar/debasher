@@ -1,5 +1,5 @@
 import type { EdgeDisplay } from "./edge";
-import { isLabelEdge } from "./edge";
+import { edgeEndText, isLabelEdge } from "./edge";
 import type { Program } from "./program";
 
 // One entry of the context menu of an edge: set how the canvas draws the
@@ -49,7 +49,7 @@ export function edgeDisplayActions(
 
     const sourceProcess = program.processes.find(process => process.id === edge.sourceProcessId);
     const sourceOption = sourceProcess?.options.find(option => option.id === edge.sourceOptionId);
-    const output = `${sourceProcess?.name ?? "?"} ${sourceOption?.label ?? "?"}`;
+    const output = edgeEndText(sourceProcess?.name ?? "?", sourceOption?.label ?? "?");
     const edgeIds = siblings.map(e => e.id);
 
     if (siblings.some(e => !isLabelEdge(e))) {

@@ -19,6 +19,9 @@ import CodeEditor from "./CodeEditor";
 import AdditionalMethodsEditor from "./AdditionalMethodsEditor";
 import OptionEditor from "./OptionEditor";
 import OptionRow from "./OptionRow";
+import ConnectByNameDialog from "./ConnectByNameDialog";
+import { connectionCandidates } from "../models/connections";
+import { edgeEndText } from "../models/edge";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
 import GeneratorConfigEditor from "./GeneratorConfigEditor";
@@ -44,6 +47,7 @@ export default function Inspector() {
     setProcessLanguage,
     setOptionsHandler,
     setInitiator,
+    connect,
   } = useProgram();
 
   const sensors = useSensors(
@@ -63,6 +67,10 @@ export default function Inspector() {
     useState(false);
 
   const [editingOptionId, setEditingOptionId] =
+    useState<string | null>(null);
+
+  // The input being connected by name (see ConnectByNameDialog).
+  const [connectingOptionId, setConnectingOptionId] =
     useState<string | null>(null);
 
   const [isComputationalSpecsOpen, setComputationalSpecsOpen] =
@@ -436,6 +444,12 @@ export default function Inspector() {
                         option.id
                       )
                     }
+                    onConnect={
+                      option.direction === "input" &&
+                      connectionCandidates(program, selectedProcess.id, option.id).length > 0
+                        ? () => setConnectingOptionId(option.id)
+                        : undefined
+                    }
                   />
                 ))}
 
@@ -448,6 +462,37 @@ export default function Inspector() {
 
       </div>
 
+
+      {connectingOptionId && (() => {
+
+        const connectingOption =
+          selectedProcess.options.find(
+            o => o.id === connectingOptionId
+          );
+
+        if (!connectingOption) {
+          return null;
+        }
+
+        return (
+          <ConnectByNameDialog
+            targetText={edgeEndText(selectedProcess.name, connectingOption.label)}
+            candidates={connectionCandidates(program, selectedProcess.id, connectingOption.id)}
+            onConnect={(candidate, display) =>
+              connect({
+                id: crypto.randomUUID(),
+                sourceProcessId: candidate.sourceProcessId,
+                sourceOptionId: candidate.sourceOptionId,
+                targetProcessId: selectedProcess.id,
+                targetOptionId: connectingOption.id,
+                display,
+              })
+            }
+            onClose={() => setConnectingOptionId(null)}
+          />
+        );
+
+      })()}
 
       {editingOptionId && (() => {
 

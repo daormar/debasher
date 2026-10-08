@@ -139,8 +139,10 @@ refer to it.
 - **self-loop**: a connection from an output option of a process to an input
   option of the same process.
 - **label edge**: an edge that the canvas draws, instead of as a line between
-  its two handles, as a stub at each of them: a short line out of the handle
-  with a text that names the other end (see "Label edges").
+  its two handles, as a stub at each of them (see "Label edges").
+- **stub**: one end of a label edge: a short line out of a handle, a ring and a
+  text that names the other end. The source stub of an output with several
+  label edges stands for all of them.
 - **options handler mode**: how a process defines its options and so how many
   tasks it runs: `standard`, `array`, `generator` or `manual` (see "Options
   handler modes").
@@ -1505,6 +1507,14 @@ an edge that the user did not pick. The context menu of an edge switches it
 between a line and a label edge and, when its output has more than one edge,
 switches all of them at once. Opened from a shared source stub, the menu only
 has the entry that switches every edge of the output.
+
+**Connecting by name.** An edge between two processes far apart on the canvas
+can be made without drawing it across: the inspector offers, on each input that
+some output can be connected to, a dialog where the user types the output as
+`<process> <option>`, with the outputs it can be connected to offered as they
+type (`connectionCandidates`, which applies the rules of an edge drawn on the
+canvas, see "Connections", and leaves out the outputs already connected to the
+input). The new edge is a label edge unless the user asks for a line.
 
 ## Keeping the canvas in step with the store
 
@@ -3712,10 +3722,10 @@ can move a process afterwards, or lay out the whole program again in layers.
 
 The MCP tools are grouped by what they do. Each answers with short text meant
 for a model to read, not with the program model as JSON: a program is shown as
-its processes with their options and their connections, one per line, and the
-output of a process is cut to its last lines unless the call asks for more. A
-call that is refused, or that the backend fails, answers with the reason as an
-error.
+its processes with their options and their connections, one per line (a label
+edge marked as such), and the output of a process is cut to its last lines
+unless the call asks for more. A call that is refused, or that the backend
+fails, answers with the reason as an error.
 
 - **Reading.** `get_program` (the settings of the program, its processes, its
   sequential processes and its connections), `get_process` (one process or
@@ -3732,8 +3742,10 @@ error.
   loaded from a directory replaces what is there (see "Revisions of the program
   metadata"); `add_process`, `update_process`, `remove_process` and
   `move_process` (which, with `layout`, lays out every process again in
-  layers); `add_option`, `update_option` and `remove_option`; `connect` and
-  `disconnect`; `set_program_settings` (name, description, preamble,
+  layers); `add_option`, `update_option` and `remove_option`; `connect`
+  (which may make a label edge, see "Label edges"), `disconnect` and
+  `set_connection_display`, which switches a connection between a line and a
+  label edge; `set_program_settings` (name, description, preamble,
   environment variables, output directory, execution options, program options
   and shared directories); `set_seq_processes`, each of whose entries adds the
   sequential process it names, or changes or removes it if it exists; and

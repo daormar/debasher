@@ -1,4 +1,4 @@
-import type { ProgramEdge } from "./edge";
+import type { EdgeDisplay, ProgramEdge } from "./edge";
 import type { NodeInfo, NodeKind } from "./node";
 import type { ProgramOption } from "./option";
 import { createOption, getOptionDirection } from "./option";
@@ -103,8 +103,9 @@ export type NamedEdit =
   | { op: "addOption"; process: string; label: string; fields?: NamedOptionFields }
   | { op: "updateOption"; process: string; option: string; changes: NamedOptionFields & { label?: string } }
   | { op: "removeOption"; process: string; option: string }
-  | { op: "connect"; from: OptionRef; to: OptionRef }
+  | { op: "connect"; from: OptionRef; to: OptionRef; display?: EdgeDisplay }
   | { op: "disconnect"; from: OptionRef; to: OptionRef }
+  | { op: "setConnectionDisplay"; from: OptionRef; to: OptionRef; display: EdgeDisplay }
   | { op: "addSeqProcess"; name: string; changes?: NamedSeqProcessChanges }
   | { op: "updateSeqProcess"; name: string; changes: NamedSeqProcessChanges & { name?: string } }
   | { op: "removeSeqProcess"; name: string };
@@ -263,12 +264,16 @@ function resolveOne(program: Program, named: NamedEdit, newId: () => string): Ed
           sourceOptionId: optionLabeled(source, named.from.option).id,
           targetProcessId: target.id,
           targetOptionId: optionLabeled(target, named.to.option).id,
+          ...(named.display ? { display: named.display } : {}),
         },
       };
     }
 
     case "disconnect":
       return { op: "disconnect", edgeId: edgeBetween(program, named.from, named.to).id };
+
+    case "setConnectionDisplay":
+      return { op: "setEdgeDisplay", edgeIds: [edgeBetween(program, named.from, named.to).id], display: named.display };
 
     case "addSeqProcess":
       return {

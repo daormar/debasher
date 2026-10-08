@@ -1,3 +1,4 @@
+import { isLabelEdge } from "../../src/models/edge";
 import type { ProgramOption } from "../../src/models/option";
 import type { ProgramProcess } from "../../src/models/process";
 import type { Program } from "../../src/models/program";
@@ -78,7 +79,8 @@ export function connectionLines(program: Program): string[] {
     const target = byId.get(edge.targetProcessId);
     return (
       `${source?.name} ${source && labelOf(source, edge.sourceOptionId)} -> ` +
-      `${target?.name} ${target && labelOf(target, edge.targetOptionId)}`
+      `${target?.name} ${target && labelOf(target, edge.targetOptionId)}` +
+      (isLabelEdge(edge) ? " (drawn as a label edge)" : "")
     );
   });
 }
