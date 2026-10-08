@@ -58,6 +58,12 @@ import ProcessNode from "./ProcessNode";
 import FanoutEdge from "./FanoutEdge";
 import BackEdge from "./BackEdge";
 import SelfLoopEdge from "./SelfLoopEdge";
+import LabelEdge from "./LabelEdge";
+import { LabelEdgeFocusContext } from "./labelEdgeFocus";
+import type { LabelEdgeFocus, LabelEdgeHover } from "./labelEdgeFocus";
+import EdgeContextMenu from "./EdgeContextMenu";
+import { edgeDisplayActions } from "../models/edgeDisplay";
+import type { EdgeDisplayAction } from "../models/edgeDisplay";
 import ConfirmDialog from "./ConfirmDialog";
 import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
@@ -201,10 +207,12 @@ function expandFanoutOptions(
 export default function ProgramCanvas() {
   const {
     program,
+    selectedProcess,
     selectProcess,
     moveProcess,
     removeFromCanvas,
     connect,
+    setEdgeDisplay,
     runPhase,
     runOutput,
     runEndSeen,
@@ -258,8 +266,20 @@ export default function ProgramCanvas() {
       fanout: FanoutEdge,
       backedge: BackEdge,
       selfloop: SelfLoopEdge,
+      label: LabelEdge,
     }),
     []
+  );
+
+  // The stub of a label edge under the pointer, and the selected process,
+  // which decide the ghost lines that label edges draw (see LabelEdge).
+  const [labelEdgeHover, setLabelEdgeHover] = useState<LabelEdgeHover>(null);
+
+  const selectedProcessId = selectedProcess?.id ?? null;
+
+  const labelEdgeFocus = useMemo<LabelEdgeFocus>(
+    () => ({ hover: labelEdgeHover, setHover: setLabelEdgeHover, selectedProcessId }),
+    [labelEdgeHover, selectedProcessId]
   );
 
   // "React Flow" nodes: the local copy that stays in sync frame by
@@ -394,6 +414,32 @@ export default function ProgramCanvas() {
   const onPaneClick = useCallback(() => {
     selectProcess(null);
   }, [selectProcess]);
+
+  // Right-click menu of an edge of the program, see EdgeContextMenu. The
+  // edges of the Supervisor wiring are not in the program and have none.
+  const [edgeContextMenu, setEdgeContextMenu] =
+    useState<{ actions: EdgeDisplayAction[]; x: number; y: number } | null>(null);
+
+  const onEdgeContextMenu = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.preventDefault();
+      // The source stub of a label edge stands for every label edge of its
+      // output when it names more than one target.
+      const fromSourceStub =
+        event.target instanceof Element &&
+        !!event.target.closest('[data-label-edge-end="source"]');
+      const sourceStub = (edge.data as { sourceStub?: { targetTexts: string[] } } | undefined)?.sourceStub;
+      const actions = edgeDisplayActions(
+        program,
+        edge.id,
+        fromSourceStub && (sourceStub?.targetTexts.length ?? 0) > 1
+      );
+      if (actions.length > 0) {
+        setEdgeContextMenu({ actions, x: event.clientX, y: event.clientY });
+      }
+    },
+    [program]
+  );
 
   // Right-click "Inspect execution" menu, see ProcessContextMenu.
   const [processContextMenu, setProcessContextMenu] =
@@ -914,56 +960,72 @@ export default function ProgramCanvas() {
         height: "100%",
       }}
     >
-      <ReactFlow
-        nodes={localNodes}
-        edges={localEdges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onConnect={onConnect}
-        isValidConnection={isValidConnection}
-        onNodeClick={onNodeClick}
-        onNodeContextMenu={onNodeContextMenu}
-        onPaneClick={onPaneClick}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onBeforeDelete={onBeforeDelete}
-        deleteKeyCode={["Delete", "Backspace"]}
-        fitView
-      >
-        <Background />
-        <Controls />
-        <MiniMap />
+      <LabelEdgeFocusContext.Provider value={labelEdgeFocus}>
+        <ReactFlow
+          nodes={localNodes}
+          edges={localEdges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onConnect={onConnect}
+          isValidConnection={isValidConnection}
+          onNodeClick={onNodeClick}
+          onNodeContextMenu={onNodeContextMenu}
+          onEdgeContextMenu={onEdgeContextMenu}
+          onPaneClick={onPaneClick}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onBeforeDelete={onBeforeDelete}
+          deleteKeyCode={["Delete", "Backspace"]}
+          fitView
+        >
+          <Background />
+          <Controls />
+          <MiniMap />
 
-        <Panel position="top-left">
-          <ProgramFilesPanel openRequest={filesPanelRequest} />
-        </Panel>
-
-        <Panel position="top-right">
-          <CanvasLegend programType={program.programType} />
-        </Panel>
-
-        {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&
-          hiddenIndicator !== indicatorKey && (
-          <Panel position="bottom-right" style={{ marginBottom: 170 }}>
-            <RunStatusIndicator
-              phase={runPhase}
-              output={runOutput}
-              onHide={() => setHiddenIndicator(indicatorKey)}
-            />
+          <Panel position="top-left">
+            <ProgramFilesPanel openRequest={filesPanelRequest} />
           </Panel>
-        )}
 
-        {isResident && residentPhase !== "new" &&
-          hiddenIndicator !== indicatorKey && (
-          <Panel position="bottom-right" style={{ marginBottom: 170 }}>
-            <ResidentRunIndicator
-              phase={residentPhase}
-              inOrder={inOrder}
-              onHide={() => setHiddenIndicator(indicatorKey)}
-            />
+          <Panel position="top-right">
+            <CanvasLegend programType={program.programType} />
           </Panel>
-        )}
-      </ReactFlow>
+
+          {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&
+            hiddenIndicator !== indicatorKey && (
+            <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+              <RunStatusIndicator
+                phase={runPhase}
+                output={runOutput}
+                onHide={() => setHiddenIndicator(indicatorKey)}
+              />
+            </Panel>
+          )}
+
+          {isResident && residentPhase !== "new" &&
+            hiddenIndicator !== indicatorKey && (
+            <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+              <ResidentRunIndicator
+                phase={residentPhase}
+                inOrder={inOrder}
+                onHide={() => setHiddenIndicator(indicatorKey)}
+              />
+            </Panel>
+          )}
+        </ReactFlow>
+      </LabelEdgeFocusContext.Provider>
+
+      {edgeContextMenu && (
+        <EdgeContextMenu
+          x={edgeContextMenu.x}
+          y={edgeContextMenu.y}
+          actions={edgeContextMenu.actions}
+          onSelect={action => {
+            setEdgeDisplay(action.edgeIds, action.display);
+            setEdgeContextMenu(null);
+          }}
+          onClose={() => setEdgeContextMenu(null)}
+        />
+      )}
 
       {processContextMenu && (
         <ProcessContextMenu

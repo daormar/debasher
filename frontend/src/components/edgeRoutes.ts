@@ -1,6 +1,7 @@
 // The route of an edge that goes back up (see isBackEdge in
 // reactFlowAdapter.ts), shared by BackEdge, which strokes it, and by
-// FanoutEdge, which draws its wedge along it.
+// FanoutEdge, which draws its wedge along it; and the stubs of a label
+// edge (see LabelEdge).
 
 // Vertical clearance (px) between a handle and where the detour path
 // turns sideways, so the elbow doesn't hug the node border.
@@ -124,5 +125,49 @@ export function taperedBand(
     ]);
 
   return [...side(1), ...side(-1).reverse()];
+
+}
+
+// Length (px) of the stub of a label edge, from its handle to the ring at
+// its far end, and the radius of that ring.
+const LABEL_STUB_LENGTH = 14;
+export const LABEL_RING_RADIUS = 2.5;
+
+// Gap (px) between the ring and the text of a label edge.
+const LABEL_TEXT_GAP = 3;
+
+// Length (px) along which a stub that is shifted sideways (see labelStub)
+// first runs straight out of its handle, before it bends.
+const LABEL_BEND = 4;
+
+/**
+ * The stub of a label edge at one handle: the points of its line, out of
+ * the node (up from an input along the top, down from an output along the
+ * bottom), the center of the ring at its far end, and where its text
+ * starts. The text runs vertically away from the node, so that the stubs
+ * of neighboring handles never overlap however long their texts are.
+ * `shift` moves the far end sideways, which sets apart the stubs of the
+ * label edges that share one input.
+ */
+export function labelStub(
+  x: number,
+  y: number,
+  side: "top" | "bottom",
+  shift = 0
+): { line: Point[]; ring: Point; textAt: Point } {
+
+  const out = side === "top" ? -1 : 1;
+  const farX = x + shift;
+  const farY = y + out * LABEL_STUB_LENGTH;
+
+  const line: Point[] = shift === 0
+    ? [[x, y], [farX, farY]]
+    : [[x, y], [x, y + out * LABEL_BEND], [farX, y + out * 2 * LABEL_BEND], [farX, farY]];
+
+  return {
+    line,
+    ring: [farX, farY + out * LABEL_RING_RADIUS],
+    textAt: [farX, farY + out * (2 * LABEL_RING_RADIUS + LABEL_TEXT_GAP)],
+  };
 
 }

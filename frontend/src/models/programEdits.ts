@@ -1,4 +1,4 @@
-import type { ProgramEdge } from "./edge";
+import type { EdgeDisplay, ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
@@ -341,6 +341,22 @@ export function disconnect(program: Program, edgeId: string): Program {
 
 }
 
+/**
+ * Sets how the canvas draws the given edges (see EdgeDisplay). The rest of
+ * each edge, and the target option's reference to its source, stay as they
+ * are.
+ */
+export function setEdgeDisplay(program: Program, edgeIds: string[], display: EdgeDisplay): Program {
+
+  const ids = new Set(edgeIds);
+
+  return {
+    ...program,
+    edges: program.edges.map(edge => (ids.has(edge.id) ? { ...edge, display } : edge)),
+  };
+
+}
+
 // Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
 const MOD_DIR_SEP = ":";
 
@@ -524,6 +540,7 @@ export type EditOp =
   | { op: "removeOption"; processId: string; optionId: string }
   | { op: "connect"; edge: ProgramEdge }
   | { op: "disconnect"; edgeId: string }
+  | { op: "setEdgeDisplay"; edgeIds: string[]; display: EdgeDisplay }
   | { op: "setSeqProcesses"; seqProcesses: SeqProcess[] }
   | { op: "addGroup"; group: MergedGroup };
 
@@ -552,6 +569,8 @@ export function applyEdit(program: Program, edit: EditOp): Program {
       return connect(program, edit.edge);
     case "disconnect":
       return disconnect(program, edit.edgeId);
+    case "setEdgeDisplay":
+      return setEdgeDisplay(program, edit.edgeIds, edit.display);
     case "setSeqProcesses":
       return { ...program, seqProcesses: edit.seqProcesses };
     case "addGroup":
@@ -573,8 +592,8 @@ export function applyEdits(program: Program, edits: EditOp[]): Program {
  * define_opt_from_proc_out call lives in the target's own generated function
  * (see api/script_generation.py's _option_definition_line). Replacing the
  * sequential processes touches the groups of those it changes or leaves out.
- * Moving a process, editing the program's own fields and adding processes or
- * a group touch none.
+ * Moving a process, setting how edges are drawn, editing the program's own
+ * fields and adding processes or a group touch none.
  */
 export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
 
@@ -600,6 +619,7 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
         case "setEnvVar":
         case "addProcess":
         case "moveProcess":
+        case "setEdgeDisplay":
         case "addGroup":
           return new Map<string, string>();
       }

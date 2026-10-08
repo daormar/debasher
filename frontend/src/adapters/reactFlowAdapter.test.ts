@@ -309,6 +309,61 @@ describe("programToReactFlowEdges", () => {
   });
 });
 
+describe("programToReactFlowEdges with label edges", () => {
+  function edge(id: string, source: string, sourceOption: string, target: string, targetOption: string): ProgramEdge {
+    return {
+      id,
+      sourceProcessId: source,
+      sourceOptionId: sourceOption,
+      targetProcessId: target,
+      targetOptionId: targetOption,
+      display: "label",
+    };
+  }
+
+  const left = process("left", [option("left-in", "-in")], 400);
+  const right = process("right", [option("right-in", "-in"), option("right-inb", "-inb")], 400);
+  const other = process("other", [option("other-out", "-out")]);
+
+  it("draws a label edge whatever route a line would take, a self-loop included", () => {
+    const [loop] = programToReactFlowEdges({
+      ...program([counter, sink]),
+      edges: [edge("loop", "counter", "counter-outself", "counter", "counter-self")],
+    });
+    expect(loop.type).toBe("label");
+    expect(loop.data).toMatchObject({ sourceText: "counter -outself", isFifo: true });
+  });
+
+  it("names every target of an output in one source stub, drawn by its first label edge", () => {
+    const edges = programToReactFlowEdges({
+      ...program([counter, left, right]),
+      edges: [
+        edge("toLeft", "counter", "counter-outsink", "left", "left-in"),
+        { ...edge("line", "counter", "counter-outsink", "right", "right-inb"), display: "line" },
+        edge("toRight", "counter", "counter-outsink", "right", "right-in"),
+      ],
+    });
+    expect(edges.map(e => e.type)).toEqual(["label", undefined, "label"]);
+    expect(edges[0].data).toMatchObject({
+      sourceKey: "counter:counter-outsink",
+      sourceStub: { targetTexts: ["left -in", "right -in"], targetProcessIds: ["left", "right"] },
+    });
+    expect(edges[2].data).not.toHaveProperty("sourceStub");
+  });
+
+  it("sets apart the label edges into one input", () => {
+    const edges = programToReactFlowEdges({
+      ...program([counter, other, left]),
+      edges: [
+        edge("first", "counter", "counter-outsink", "left", "left-in"),
+        edge("second", "other", "other-out", "left", "left-in"),
+      ],
+    });
+    expect(edges.map(e => [e.data?.targetIndex, e.data?.targetCount])).toEqual([[0, 2], [1, 2]]);
+    expect(edges[1].data).toMatchObject({ sourceText: "other -out", isFifo: false });
+  });
+});
+
 describe("supervisorWiring", () => {
   function residentNode(id: string, fields: Partial<ProgramProcess> = {}, y = 0): ProgramProcess {
     return { ...process(id, [], y), language: "python", nodeKind: "FBPProcess", nodeCode: emptyNodeCode(), ...fields };

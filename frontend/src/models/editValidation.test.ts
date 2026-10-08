@@ -96,11 +96,13 @@ describe("validateEdits", () => {
       { op: "removeOption", processId: "id-a", optionId: "nope" },
       { op: "disconnect", edgeId: "nope" },
       { op: "moveProcess", processId: "nope", position: { x: 0, y: 0 } },
+      { op: "setEdgeDisplay", edgeIds: ["nope2"], display: "label" },
     ])).toEqual([
       '"bad" is not an option label: it has to start with "-".',
       'Process "a" has no option with id "nope".',
       'There is no edge with id "nope".',
       'There is no process with id "nope".',
+      'There is no edge with id "nope2".',
     ]);
   });
 

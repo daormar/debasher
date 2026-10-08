@@ -412,6 +412,22 @@ def test_a_self_loop_survives_the_round_trip(tmp_path):
     _assert_model_round_trip(program, tmp_path)
 
 
+def test_a_label_edge_generates_the_same_script_as_a_line(tmp_path):
+    writer = _process("writer", [_option("-outf", channel="fifo", value="writer_fifo")])
+    reader = _process("reader", [_option("-inf", value="[writer;-outf]")])
+    edge = _edge("writer", "-outf", "reader", "-inf")
+
+    def program_with(display: str) -> Program:
+        return _program("rt_label", [writer, reader], [edge.model_copy(update={"display": display})])
+
+    label_program = program_with("label")
+
+    assert script_generation.generate_script(label_program) == script_generation.generate_script(
+        program_with("line")
+    )
+    _assert_model_round_trip(label_program, tmp_path)
+
+
 def test_code_of_a_namespaced_process_in_another_language_survives_the_round_trip(tmp_path):
     # A Bash variable name cannot contain the "." of a namespace, so the
     # code has to be written as a heredoc function, not as a variable.

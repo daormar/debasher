@@ -138,6 +138,9 @@ refer to it.
 - **fan-in**: more than one connection into the same input option.
 - **self-loop**: a connection from an output option of a process to an input
   option of the same process.
+- **label edge**: an edge that the canvas draws, instead of as a line between
+  its two handles, as a stub at each of them: a short line out of the handle
+  with a text that names the other end (see "Label edges").
 - **options handler mode**: how a process defines its options and so how many
   tasks it runs: `standard`, `array`, `generator` or `manual` (see "Options
   handler modes").
@@ -901,8 +904,9 @@ modes, the code, the additional methods, the specifications, the descriptions
 and the sequential processes survive. The order of the processes, and of the
 options of a process, follows the module documentation and may differ from the
 original. What lives only in the program metadata does not survive: the ids,
-which are new; the positions, which are laid out again; the groups, which come
-back flattened; the connection sentinels, derived again from the connections
+which are new; the positions, which are laid out again; which edges are label
+edges, since import draws every edge as a line; the groups, which come back
+flattened; the connection sentinels, derived again from the connections
 when the program is loaded; the environment variables, except the
 `DEBASHER_MOD_DIR` given to import; the execution options and program options;
 and the home and output directories. A `manual` function that happens to fit the
@@ -1416,12 +1420,13 @@ and position, and a handle for each option, with the option's id: the inputs
 along the top and the outputs along the bottom, except the pair of handles
 that the canvas moves to keep a short edge between two processes that answer
 each other (see "Connections"). Each edge becomes a canvas edge between two
-handles, drawn in one of four ways: a plain edge; a back edge, routed along a
+handles, drawn in one of five ways: a plain edge; a back edge, routed along a
 lane to the right of every process; a self-loop, routed around the right side
 of its own process, clear of its box, as "The canvas of a resident program"
-describes; or a fanout edge, a wedge narrow at the end of the fanout family,
+describes; a fanout edge, a wedge narrow at the end of the fanout family,
 which follows the route of a back edge when its target sits at or above its
-source. An edge from a FIFO is dashed.
+source; or, whatever its route would be, a label edge (see "Label edges"). An
+edge from a FIFO is dashed.
 
 A canvas node shows the process's name and options, its options handler mode (a
 double border for `array` and `generator`, a dashed one for `manual`), its group
@@ -1439,12 +1444,12 @@ status means (see "Process status" in `doc/design_doc_engine.md`), and what the
 canvas draws to tell processes and edges apart: the borders of a canvas node,
 a hollow handle and its tag, an edge from a file or a value and one from a
 FIFO, a fanout edge, the route of an edge that goes back up and of a
-self-loop, and the label of a fanout family.
+self-loop, a label edge, and the label of a fanout family.
 
-Of what the canvas shows, only the positions belong to the program model and
-are saved. The selection, the part of the canvas in view (fitted to the
-program when the editor opens), whether the legend is folded and the colors
-are not.
+Of what the canvas shows, only the positions and which edges are label edges
+belong to the program model and are saved. The selection, the part of the
+canvas in view (fitted to the program when the editor opens), whether the
+legend is folded and the colors are not.
 
 Where the program brings processes whose position nobody chose, a function of
 the model chooses it (`models/programLayout.ts`). The processes of an imported
@@ -1459,6 +1464,47 @@ left out. `nextFreePosition` gives the place to the right of the rightmost
 process, where "Add program" moves the processes it brings, as a block that
 keeps their layout. A process that the user adds in the editor is the exception:
 it starts at a fixed place of the canvas, and the user drags it.
+
+## Label edges
+
+Moving processes and reordering options does not always remove the crossings
+of a program's edges: some graphs have no drawing in the plane without one
+(three processes that each feed the same three others, for instance). For the
+edges that still cross, the canvas can draw a label edge instead of a line, as
+the net labels of an electronic schematic do: a short stub at each handle, a
+ring at its far end, and a text that names the option at the other end as
+`<process> <option>`. The text runs vertically away from the node, so that the
+stubs of neighboring handles never overlap however long their texts are; a
+long text is cut, and the tooltip of the stub has it whole.
+
+Each edge says how it is drawn (`ProgramEdge.display`: `line`, the default for
+an edge saved without it, or `label`), so the edges of one output may mix both.
+It is part of the program model and is saved, but it only changes the drawing:
+script generation ignores it, and so does every check of the connections.
+Changing it does not dissolve a group, since it is no part of what
+`add_debasher_program` declares.
+
+**The stubs of an output and of an input.** An output with several label edges
+would draw several stubs on top of each other at its handle, so only one of
+them, the first in the program, draws the stub at the source, which names its
+target, or says how many there are when there are several (`3 inputs`), with
+the list in its tooltip. An input with fan-in (see "Connections") draws one
+stub per label edge, side by side.
+
+**Finding the other end.** A label edge draws a faint ghost of the line it
+stands for while one of its stubs is under the pointer, while it is selected,
+and while its source or its target is the selected process. Hovering the
+source stub shared by several label edges shows the ghosts of all of them. A
+double click on a stub brings the other end into view, never zooming in: the
+source from the target stub, every target from the source stub.
+
+**Selecting and changing it.** A click on a stub selects its edge, which the
+delete key then removes like any other, except the source stub shared by
+several label edges, which selects none, so that the delete key never removes
+an edge that the user did not pick. The context menu of an edge switches it
+between a line and a label edge and, when its output has more than one edge,
+switches all of them at once. Opened from a shared source stub, the menu only
+has the entry that switches every edge of the output.
 
 ## Keeping the canvas in step with the store
 

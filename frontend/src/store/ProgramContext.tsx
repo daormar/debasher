@@ -21,7 +21,7 @@ import { createProcess, optionFromInfo } from "../models/process";
 import type { ProgramOption } from "../models/option";
 import { createOption } from "../models/option";
 import * as edits from "../models/programEdits";
-import type { ProgramEdge } from "../models/edge";
+import type { EdgeDisplay, ProgramEdge } from "../models/edge";
 import type { SeqProcess } from "../models/seqProcess";
 import type { Position } from "../models/position";
 import type { NodeCode, NodeInfo, NodeKind } from "../models/node";
@@ -301,6 +301,11 @@ interface ProgramContextType {
 
   connect: (
     edge: ProgramEdge
+  ) => void;
+
+  setEdgeDisplay: (
+    edgeIds: string[],
+    display: EdgeDisplay
   ) => void;
 
 }
@@ -715,6 +720,12 @@ export function ProgramProvider({
     edit({ op: "connect", edge });
   }
 
+  // How an edge is drawn is not part of what add_debasher_program declares,
+  // so it leaves the group of the edge's target as it is.
+  function setEdgeDisplay(edgeIds: string[], display: EdgeDisplay) {
+    edit({ op: "setEdgeDisplay", edgeIds, display });
+  }
+
   const selectedProcess =
     program.processes.find(
       p => p.id === selectedProcessId
@@ -826,6 +837,8 @@ export function ProgramProvider({
     reorderOptionGroup,
 
     connect,
+
+    setEdgeDisplay,
 
 
   }), [

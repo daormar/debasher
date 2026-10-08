@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backEdgeRoute, taperedBand } from "./edgeRoutes";
+import { backEdgeRoute, labelStub, taperedBand } from "./edgeRoutes";
 
 describe("backEdgeRoute", () => {
   it("goes down, out to the lane, up, and in to the target from above", () => {
@@ -45,5 +45,18 @@ describe("taperedBand", () => {
 
   it("drops a point that repeats the one before it", () => {
     expect(taperedBand([[0, 0], [0, 0], [0, 100]], 1.5, 6)).toEqual(taperedBand([[0, 0], [0, 100]], 1.5, 6));
+  });
+});
+
+describe("labelStub", () => {
+  it("runs up from an input and down from an output", () => {
+    expect(labelStub(10, 100, "top")).toEqual({ line: [[10, 100], [10, 86]], ring: [10, 83.5], textAt: [10, 78] });
+    expect(labelStub(10, 100, "bottom")).toEqual({ line: [[10, 100], [10, 114]], ring: [10, 116.5], textAt: [10, 122] });
+  });
+
+  it("leaves its handle straight before it bends sideways", () => {
+    const { line, ring } = labelStub(10, 100, "top", -12);
+    expect(line).toEqual([[10, 100], [10, 96], [-2, 92], [-2, 86]]);
+    expect(ring[0]).toBe(-2);
   });
 });

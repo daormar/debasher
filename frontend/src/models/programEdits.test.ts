@@ -16,6 +16,7 @@ import {
   normalizeProgram,
   prepareMerge,
   removeProcess,
+  setEdgeDisplay,
   updateProcess,
 } from "./programEdits";
 import { createSeqProcess } from "./seqProcess";
@@ -96,6 +97,14 @@ describe("the edits of a program", () => {
     const disconnected = disconnect(connected, "e1");
     expect(disconnected.edges).toEqual([]);
     expect(disconnected.processes[1].options[0].value).toBe("");
+  });
+
+  it("set how an edge is drawn, and nothing else of it", () => {
+    const connected = connect(program(), ab);
+    const labeled = setEdgeDisplay(connected, ["e1"], "label");
+    expect(labeled.edges).toEqual([{ ...ab, display: "label" }]);
+    expect(labeled.processes).toBe(connected.processes);
+    expect(setEdgeDisplay(labeled, ["e1"], "line").edges).toEqual([{ ...ab, display: "line" }]);
   });
 
   it("leave the reference to normalizeProgram after a rename", () => {
@@ -185,7 +194,7 @@ describe("edits as data", () => {
     expect(edited.processes[1].options[0].value).toBe("[producer;-outf]");
   });
 
-  it("touch the group of what they change, and nothing when they only move or connect out of it", () => {
+  it("touch the group of what they change, and nothing when they only move, redraw or connect out of it", () => {
     const groupSource = { programName: "other", groupId: "g1", groupSize: 1, sourceDir: "/src" };
     const grouped = { ...program(), edges: [ab] };
     grouped.processes = grouped.processes.map(p => p.name === "b" ? { ...p, groupSource } : p);
@@ -195,6 +204,7 @@ describe("edits as data", () => {
     expect(touched([{ op: "updateProcess", processId: "id-a", changes: { code: "x" } }])).toEqual([]);
     expect(touched([{ op: "updateProcess", processId: "id-b", changes: { code: "x" } }])).toEqual(["g1"]);
     expect(touched([{ op: "disconnect", edgeId: "e1" }])).toEqual(["g1"]);
+    expect(touched([{ op: "setEdgeDisplay", edgeIds: ["e1"], display: "label" }])).toEqual([]);
     expect(touched([{ op: "removeOption", processId: "id-b", optionId: "bi" }])).toEqual(["g1"]);
     expect(touched([{ op: "setProgramFields", changes: { name: "renamed" } }])).toEqual([]);
   });

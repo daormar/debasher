@@ -94,6 +94,28 @@ function EdgeSample({ points, dash, color = "#999" }: { points: string; dash?: s
   );
 }
 
+// The stub of a label edge: a short line, a ring, and the start of a text
+// running up.
+function LabelEdgeSample() {
+  return (
+    <svg width={24} height={12} viewBox="0 0 24 12">
+      <polyline points="2,6 9,6" fill="none" stroke="#888" strokeWidth={1.5} />
+      <circle cx={11.5} cy={6} r={2.5} fill="#fff" stroke="#888" strokeWidth={1.5} />
+      <polyline points="16,6 23,6" fill="none" stroke="#888" strokeWidth={3} strokeDasharray="1 1" />
+    </svg>
+  );
+}
+
+// The row of a label edge, the same in both legends.
+function LabelEdgeRow() {
+  return (
+    <LegendRow mark={<LabelEdgeSample />}>
+      A label edge: a stub at each end naming the other, drawn instead of a
+      line from the menu of the edge.
+    </LegendRow>
+  );
+}
+
 /** What the canvas of a general program draws. */
 function GeneralLegend() {
   return (
@@ -140,6 +162,7 @@ function GeneralLegend() {
         Around the processes, on the right: an edge that goes back up, or a
         self-loop around its own process.
       </LegendRow>
+      <LabelEdgeRow />
       <LegendRow
         mark={<span style={{ fontSize: 10 }}>-out<span style={{ color: "#c0392b" }}>ith</span></span>}
       >
@@ -193,6 +216,7 @@ function ResidentLegend() {
         The Supervisor wiring, read only, shown from the menu of the
         Supervisor.
       </LegendRow>
+      <LabelEdgeRow />
     </>
   );
 }

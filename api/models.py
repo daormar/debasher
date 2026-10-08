@@ -245,6 +245,9 @@ class ProgramEdge(BaseModel):
     sourceOptionId: str
     targetProcessId: str
     targetOptionId: str
+    # How the canvas draws the edge: a line, or a label edge, a stub at
+    # each handle naming the other end. Script generation ignores it.
+    display: Literal["line", "label"] = "line"
 
 
 class ExecutionOptions(BaseModel):

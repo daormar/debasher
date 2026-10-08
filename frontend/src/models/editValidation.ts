@@ -141,6 +141,11 @@ function editProblem(program: Program, edit: EditOp): string | null {
         ? null
         : `There is no edge with id "${edit.edgeId}".`;
 
+    case "setEdgeDisplay": {
+      const missing = edit.edgeIds.find(edgeId => !program.edges.some(edge => edge.id === edgeId));
+      return missing === undefined ? null : `There is no edge with id "${missing}".`;
+    }
+
     case "setSeqProcesses":
       return seqProcessesProblem(edit.seqProcesses, program.processes.map(process => process.name));
 

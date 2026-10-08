@@ -7,6 +7,7 @@ import type {
 import type { Program } from "../models/program";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramEdge } from "../models/edge";
+import { isLabelEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
 import { optionValueSource } from "../models/option";
@@ -252,11 +253,105 @@ function isBackEdge(
 }
 
 /**
+ * What the adapter gives a label edge (see LabelEdge). The stub at the
+ * target names the source. The stub at the source is drawn by only one of
+ * the label edges of its output, the first in the program, and names the
+ * targets of all of them, so that an output with several label edges shows
+ * one stub rather than several on top of each other. An input with several
+ * label edges, one per source, shows one stub per edge, side by side.
+ */
+export interface LabelEdgeData {
+  // The output of the source, `<process id>:<option id>`, shared by every
+  // label edge from it.
+  sourceKey: string;
+  // "<process> <option>" of the source, which the target stub shows.
+  sourceText: string;
+  // Only on the edge that draws the source stub.
+  sourceStub?: LabelEdgeSourceStub;
+  // The place of this edge among the label edges into the same input.
+  targetIndex: number;
+  targetCount: number;
+  isFifo: boolean;
+  [key: string]: unknown;
+}
+
+export interface LabelEdgeSourceStub {
+  // "<process> <option>" of each target, in program order.
+  targetTexts: string[];
+  targetProcessIds: string[];
+}
+
+// What a label edge names an option by: its process and its label.
+function optionText(process: ProgramProcess | undefined, option: ProgramOption | undefined): string {
+  return `${process?.name ?? "?"} ${option?.label ?? "?"}`;
+}
+
+/**
+ * The data of each label edge of the program, by edge id.
+ */
+function labelEdgeData(program: Program): Map<string, LabelEdgeData> {
+
+  const processById = new Map(program.processes.map(process => [process.id, process]));
+
+  const optionOf = (processId: string, optionId: string) =>
+    processById.get(processId)?.options.find(option => option.id === optionId);
+
+  const labelEdges = program.edges.filter(isLabelEdge);
+
+  const bySource = new Map<string, ProgramEdge[]>();
+  const byTarget = new Map<string, ProgramEdge[]>();
+
+  for (const edge of labelEdges) {
+    const sourceKey = `${edge.sourceProcessId}:${edge.sourceOptionId}`;
+    const targetKey = `${edge.targetProcessId}:${edge.targetOptionId}`;
+    bySource.set(sourceKey, [...(bySource.get(sourceKey) ?? []), edge]);
+    byTarget.set(targetKey, [...(byTarget.get(targetKey) ?? []), edge]);
+  }
+
+  const data = new Map<string, LabelEdgeData>();
+
+  for (const edge of labelEdges) {
+
+    const sourceKey = `${edge.sourceProcessId}:${edge.sourceOptionId}`;
+    const siblings = bySource.get(sourceKey)!;
+    const intoTarget = byTarget.get(`${edge.targetProcessId}:${edge.targetOptionId}`)!;
+    const sourceOption = optionOf(edge.sourceProcessId, edge.sourceOptionId);
+
+    data.set(edge.id, {
+      sourceKey,
+      sourceText: optionText(processById.get(edge.sourceProcessId), sourceOption),
+      ...(siblings[0] === edge
+        ? {
+            sourceStub: {
+              targetTexts: siblings.map(sibling =>
+                optionText(
+                  processById.get(sibling.targetProcessId),
+                  optionOf(sibling.targetProcessId, sibling.targetOptionId)
+                )
+              ),
+              targetProcessIds: siblings.map(sibling => sibling.targetProcessId),
+            },
+          }
+        : {}),
+      targetIndex: intoTarget.indexOf(edge),
+      targetCount: intoTarget.length,
+      isFifo: sourceOption?.channel === "fifo",
+    });
+
+  }
+
+  return data;
+
+}
+
+/**
  * Converts program edges into React Flow edges.
  */
 export function programToReactFlowEdges(
   program: Program
 ): Edge[] {
+
+  const labelData = labelEdgeData(program);
 
   // Computed once per call (not per edge): every back edge shares the
   // same detour lane, positioned clear of every process in the
@@ -269,6 +364,21 @@ export function programToReactFlowEdges(
   const flippedOptionIds = computeFlippedOptionIds(program);
 
   return program.edges.map(edge => {
+
+    // A label edge draws no route, so none of what follows applies to it.
+    const label = labelData.get(edge.id);
+
+    if (label) {
+      return {
+        id: edge.id,
+        source: edge.sourceProcessId,
+        sourceHandle: edge.sourceOptionId,
+        target: edge.targetProcessId,
+        targetHandle: edge.targetOptionId,
+        type: "label",
+        data: label,
+      };
+    }
 
     const sourceProcess = program.processes.find(
       process => process.id === edge.sourceProcessId
