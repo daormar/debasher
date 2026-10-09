@@ -32,6 +32,16 @@ program that a Bash function runs. A process receives a list of options and
 produces files, values or data written into a FIFO, and nothing in that
 contract depends on the language of its code.
 
+Nor does it depend on the number of tasks of the process. A process is like a
+Unix command: its function receives a list of options, and its implementation
+is the same whether the process runs one task or many. What changes between one
+task and many is the wiring, the `_define_opts` method or the option generator
+of the process, which gives each task its own options (see "Arrays and option
+generators"). The engine aims to hold to this principle by treating every run
+resource of a task alike, whatever the number of tasks of its process; "Run
+resources and their life cycle" lists the run resources, and those that do not
+follow the principle yet.
+
 Given a program file and an output directory, `debasher_exec` loads the
 modules, builds the options of every task, infers the dependency graph and
 hands the processes to a scheduler, the built-in one on the local machine or
@@ -63,11 +73,11 @@ the order of the processes from them. "FIFOs" describes streaming between
 processes. "Scheduling" presents the scheduler abstraction and its two
 implementations, and "Running a process" what happens from the launch of a
 process to the end of its tasks. "The state of a run" describes the output
-directory, the status of a process, reruns and the tools that read a run.
-"Business tests of a program" describes how the processes of a program are
-tested one at a time, outside any run. "Guarantees and non-goals" gathers the
-guarantees stated along the way, and "Future work" lists what is known to be
-missing.
+directory, the life cycle of the run resources, the status of a process, reruns
+and the tools that read a run. "Business tests of a program" describes how the
+processes of a program are tested one at a time, outside any run. "Guarantees
+and non-goals" gathers the guarantees stated along the way, and "Future work"
+lists what is known to be missing.
 
 # Glossary
 
@@ -256,10 +266,16 @@ relative to the output directory of the run.
   directory, named after the process unless its `_outdir_basename` method gives
   another name. Before each task runs, the `_reset_outfiles` method of the
   process resets it; without that method, the directory of a process with a
-  single task is emptied, and that of an array process, which its tasks share,
-  is left as it is.
+  single task is emptied of every entry whose name does not start with a dot,
+  and that of an array process, which its tasks share, is left as it is.
 - **exec directory**: `__exec__/<process>`, where the engine keeps the process
   script, the logs, the ids and the completion markers of a process.
+- **run resource**: a directory or a FIFO that the engine creates for a task or
+  hands to it, or a file of a task whose name the engine gives, such as a value
+  descriptor or a step marker, with an owner and a life cycle: when it is
+  created, when it is emptied and when it is removed (see "Run resources and
+  their life cycle"). It is not a computational specification, which the
+  document also calls a resource.
 - **process script**: the self-contained Bash script that the engine writes for
   a process in its exec directory, and that the scheduler runs for each of its
   tasks.
@@ -1708,9 +1724,10 @@ and completion markers. For a process that is prepared:
   "Reruns"), so none of its tasks counts as finished.
 - The FIFOs that the process owns are created again, empty (see "Declaring
   and owning a FIFO").
-- Its process output directory is created if it does not exist. What it
-  holds from an earlier run is not removed here: each task resets it when it
-  starts (see "Executing a task").
+- Its process output directory is created if it does not exist; under the
+  Slurm scheduler, only when the process has never run. What it holds from an
+  earlier run is not removed here: each task resets it when it starts (see
+  "Executing a task").
 
 ## The process script: how code travels
 
@@ -1761,12 +1778,12 @@ A task does the same, in this order, under both schedulers:
    the time it ended and stops: its process output directory, its process
    function and its `_post` method are left untouched, and it counts as
    finished.
-4. It resets the process output directory: through the `_reset_outfiles`
-   method of the process, called with the options of the task, or, without
-   that method, by emptying it when the process has a single task. The tasks
-   of an array process share the directory, and without the method it is left
-   as it is. A process of a resident program is never reset, since its
-   directory holds what its node has done so far.
+4. It resets the process output directory: through the `_reset_outfiles` method
+   of the process, called with the options of the task, or, without that method,
+   when the process has a single task, by removing every entry whose name does
+   not start with a dot. The tasks of an array process share the directory, and
+   without the method it is left as it is. A process of a resident program is
+   never reset, since its directory holds what its node has done so far.
 5. It starts the mirror taps of the mirrored FIFOs it owns (see "Mirror
    taps"), which only the built-in scheduler runs.
 6. It runs the process function with its options as arguments, and sends what
@@ -1848,9 +1865,9 @@ in the `PATH`.
 Everything that is known about a run is in its output directory (see
 "Architecture"): what `debasher_exec` wrote while preparing it, and what the
 scheduler and the tasks write while it goes on. This section lists what the
-directory holds, describes how the status of a process is derived from it,
-how a new run on the same directory decides what to run again, and what the
-tools that read a run take from it.
+directory holds and the life cycle of the run resources, describes how the
+status of a process is derived from it, how a new run on the same directory
+decides what to run again, and what the tools that read a run take from it.
 
 ## The output directory
 
@@ -1886,6 +1903,41 @@ process output directory of each process, named after it or after what its
 `_outdir_basename` method gives, and the shared directories. They share the
 top of the directory with the files of the engine, and the engine refuses
 neither a process nor a shared directory whose name is one of those names.
+
+## Run resources and their life cycle
+
+Every directory and FIFO that the engine creates for a task or hands to it, and
+every file of a task whose name the engine gives, is a run resource, with an
+owner and a life cycle. The files that a task writes under the names that its
+options give, its outputs, follow the directory that holds them, and have no row
+of their own; nor do the files that the engine keeps for itself at the top of
+the output directory (see "The output directory").
+The last column says whether a process with many tasks gets the same run
+resource as a process with a single task, as the principle stated in the
+"Introduction" requires.
+
+| Run resource | Owner | Created | Emptied | Removed | One task and many |
+|---|---|---|---|---|---|
+| process output directory | the process | when its process is prepared, if missing; under the Slurm scheduler, only when the process has never run (see "Preparing a run") | before each task that is not skipped, by the `_reset_outfiles` method of the process, or, without it, for a process with a single task, of every entry whose name does not start with a dot (see "Executing a task") | never | differ: the tasks of an array share it, and without `_reset_outfiles` it is not emptied |
+| value descriptor | the process | by a task, with `write_value_to_desc`, in the process output directory (see "Output options") | does not apply | never: its name starts with a dot, so the default reset keeps it | differ: it is named after the process and the option, not the task, so the tasks of an array share it |
+| step marker | the process | by a task, with `mark_step_done`, in a directory of its choice (see "Sequential processes") | does not apply | with the contents of the directory that holds it: by the default reset of a process with a single task, when it is in the process output directory, or with a shared subdirectory that no option asks for while its shared directory is subdivided | differ, when it is in the process output directory: removed by the default reset before each task of a process with a single task, kept for an array |
+| FIFO, with its shim FIFO and mirror log | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO") | created again, empty, each time the process of its owner is prepared | never | alike: each task declares a FIFO of its own |
+| shared directory | the module that declares it | before any process is launched, if missing (see "Output options") | never, except a subdivided shared directory, from which every entry that is neither a shared subdirectory of the run nor a directory on the way to one is removed before any process is launched (see "Shared subdirectories") | never | alike |
+| shared subdirectory | the tasks that ask for it | before any process is launched, if missing (see "Shared subdirectories") | never | before any process is launched, when no option asks for it while another asks for a shared subdirectory of the same shared directory (see "Shared subdirectories") | alike |
+| exec directory | the engine | when a process that has never run is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished, and, for a process marked to rerun, of its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker |
+
+**Where one task and many still differ.** Three run resources do not follow the
+principle yet, and the first is the cause of the third. The process output
+directory of an array process is shared by its tasks and, without a
+`_reset_outfiles` method, is not emptied before each of them: a process that
+relies on finding its output directory empty, or that writes a file of a fixed
+name into it, works with a single task and not with many, unless its own code
+divides the directory between them. A value descriptor is named after the
+process and the option, so the tasks of an array that write one overwrite each
+other. And a step marker kept in the process output directory is removed by the
+default reset before each task of a process with a single task, and kept for an
+array.
+"Future work" lists the first two.
 
 ## Process status
 
@@ -2294,10 +2346,15 @@ leaves, by design, to the program or to whoever runs it.
   leaves in a subdivided shared directory outside its shared subdirectories; and
   a task that reads a whole shared directory gets no dependency on the tasks
   that write its shared subdirectories (see "Shared subdirectories").
+- **One task and many.** The process output directory of an array process is
+  shared by its tasks and, without a `_reset_outfiles` method, not emptied
+  before each of them, and the tasks of an array share their value
+  descriptors (see "Run resources and their life cycle").
 - **Steps.** The engine keeps no record of a step: it has no status, no log
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step
-  markers, which the engine never invalidates (see "Sequential processes").
+  markers, which the engine never invalidates on its own account (see
+  "Sequential processes").
 - **Mirror taps.** A mirror tap forwards lines of text, and relies on opening
   a FIFO for reading and writing, which POSIX leaves undefined (see "Mirror
   taps").
@@ -2324,6 +2381,14 @@ What is known to be missing from the design, or left open by it:
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process and the external scripts of aliases.
+- **A directory of its own for each task.** A task of an array process could
+  get, through an option, a subdirectory of the process output directory that
+  the engine creates and empties before the task runs, as it empties the
+  process output directory of a process with a single task, so that the same
+  process works with one task and with many.
+- **A value descriptor for each task.** The value descriptor of a task of an
+  array process could be named after the task, so that the tasks of an array
+  do not share it.
 - **Processes that left the program.** `debasher_exec` could refuse to start
   in every run, and not only in a run with a subdivided shared directory,
   while a process that an earlier run had, and that the program no longer has,
