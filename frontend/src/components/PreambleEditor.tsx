@@ -1,6 +1,8 @@
 import { useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
+import { languageExtension } from "./codeLanguages";
 
 interface Props {
   onClose: () => void;
@@ -52,27 +54,29 @@ export default function PreambleEditor({ onClose }: Props) {
           Preamble
         </h3>
 
-        <textarea
-
-          value={draft}
-
-          onChange={(event) =>
-            setDraft(event.target.value)
-          }
-
-          rows={16}
-
-          spellCheck={false}
-
-          placeholder="# Bash code to run before the program..."
-
+        <div
           style={{
-            width: "100%",
-            fontFamily: "ui-monospace, Consolas, monospace",
-            resize: "vertical",
+            border: "1px solid #ccc",
           }}
+        >
 
-        />
+          <CodeMirror
+
+            value={draft}
+
+            height="320px"
+
+            placeholder="# Bash code to run before the program..."
+
+            extensions={[
+              languageExtension("bash"),
+            ]}
+
+            onChange={value => setDraft(value)}
+
+          />
+
+        </div>
 
         <div
           style={{
