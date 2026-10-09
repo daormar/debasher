@@ -46,16 +46,12 @@ worker_parallel_document()
 ########
 worker_parallel_explain_opts()
 {
-    # -id option
-    local description="id of writer"
-    explain_opt "-id" "<int>" "$description"
-
     # -inf option
     local description="input file"
     explain_opt "-inf" "<file>" "$description"
 
     # -outd option
-    local description="output directory"
+    local description="directory of the task, below the output directory of the process"
     explain_opt "-outd" "<file>" "$description"
 }
 
@@ -92,9 +88,8 @@ worker_parallel_define_opts()
     local task_idx
     for task_idx in "${!array[@]}"; do
         local optlist=""
-        define_opt "-id" "${task_idx}" optlist || return 1
         define_opt_from_proc_out "-inf" "dispatch" "-outf${task_idx}" optlist || return 1
-        define_opt "-outd" "${process_outdir}/${task_idx}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 1
         save_opt_list optlist
     done
 }
@@ -103,14 +98,8 @@ worker_parallel_define_opts()
 worker_parallel()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_func_args "-id" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outd=$(read_opt_value_from_func_args "-outd" "$@")
-
-    # Create output directory
-    if [ ! -d "${outd}" ]; then
-        mkdir -p "${outd}"
-    fi
 
     # Read the input file line by line (each line is a file path) and
     # launch the worker task in parallel
@@ -125,7 +114,7 @@ worker_parallel()
         # Execute worker task
         worker_task "$filepath" "$outd/$base" &
         pids+=($!)
-        echo "Worker ${id} launched task with PID $!" >&2
+        echo "Launched task with PID $!" >&2
     done < "$inf"
 
     # Wait for the processes to finish and check exit code

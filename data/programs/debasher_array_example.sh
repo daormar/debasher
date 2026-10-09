@@ -136,22 +136,18 @@ array_writer_reset_outfiles()
 ########
 array_reader_document()
 {
-    document_process "Reads each array_writer task's output file and copies its content to the reader's own output file."
+    document_process "Reads each array_writer task's output file and copies its content into a directory of the task's own, below the output directory of the process."
 }
 
 ########
 array_reader_explain_opts()
 {
-    # -id option
-    local description="id of reader"
-    explain_opt "-id" "<int>" "$description"
-
     # -infile option
     local description="input file"
     explain_opt "-infile" "<file>" "$description"
 
     # -outdir option
-    local description="output directory of reader"
+    local description="directory of the task, below the output directory of the process"
     explain_opt "-outdir" "<file>" "$description"
 }
 
@@ -176,14 +172,12 @@ array_reader_define_opts()
     for task_idx in "${!array[@]}"; do
         local optlist=""
 
-        # -id option
-        define_opt "-id" "${array[$task_idx]}" optlist || return 1
-
         # -infile option: the task of array_writer with the same index
         define_opt_from_proc_task_out "-infile" "array_writer" "${task_idx}" "-outf" optlist || return 1
 
-        # -outdir option
-        define_opt "-outdir" "${process_outdir}" optlist || return 1
+        # -outdir option: a directory of the task's own, which the engine
+        # creates and empties before the task runs
+        define_opt_from_process_outdir "-outdir" optlist --subdir "${task_idx}" || return 1
 
         # Save option list
         save_opt_list optlist
@@ -194,15 +188,14 @@ array_reader_define_opts()
 array_reader()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_func_args "-id" "$@")
     local infile=$(read_opt_value_from_func_args "-infile" "$@")
     local outd=$(read_opt_value_from_func_args "-outdir" "$@")
 
     # Copy content of infile to auxiliary file
-    cat "${infile}" > "${outd}"/${id}_aux
+    cat "${infile}" > "${outd}"/aux
 
     # Copy content of infile to final file
-    cat "${outd}"/${id}_aux > "${outd}"/${id}
+    cat "${outd}"/aux > "${outd}"/out
 }
 
 ########
@@ -211,11 +204,10 @@ array_reader_post()
     logmsg "Cleaning directory..."
 
     # Initialize variables
-    local id=$(read_opt_value_from_func_args "-id" "$@")
     local outd=$(read_opt_value_from_func_args "-outdir" "$@")
 
     # Remove auxiliary file
-    rm "${outd}"/${id}_aux
+    rm "${outd}"/aux
 
     logmsg "Cleaning finished"
 }

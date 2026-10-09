@@ -8,9 +8,9 @@ Dynamic Fanout Example Using FIFOs and Generators
     # instead of a loop over an array in "worker_define_opts".
     # "worker_generate_opts_size" returns the number of tasks, read
     # from "-w" on the command line, and "worker_generate_opts" builds
-    # the option list of a single task from its index: its "-id", the
-    # dispatcher output FIFO it reads ("-outf{i}") and its output
-    # directory. DeBasher calls the first function once and the second
+    # the option list of a single task from its index: the dispatcher
+    # output FIFO it reads ("-outf{i}") and a directory of its own below
+    # the output directory of the process. DeBasher calls the first function once and the second
     # once per index, so the iteration belongs to the engine rather
     # than to the module.
 
@@ -314,16 +314,12 @@ Dynamic Fanout Example Using FIFOs and Generators
 
     worker_explain_opts()
     {
-        # -id option
-        local description="id of writer"
-        explain_opt "-id" "<int>" "$description"
-
         # -inf option
         local description="input fifo"
         explain_opt "-inf" "<file>" "$description"
 
         # -outd option
-        local description="output directory"
+        local description="directory of the task, below the output directory of the process"
         explain_opt "-outd" "<file>" "$description"
     }
 
@@ -361,14 +357,11 @@ Dynamic Fanout Example Using FIFOs and Generators
         local task_idx=$5
         local optlist=""
 
-        # -id option
-        define_opt "-id" "${task_idx}" optlist || return 1
-
         # -inf option
         define_opt_from_proc_out "-inf" "dispatch" "-outf${task_idx}" optlist || return 1
 
         # -outd option
-        define_opt "-outd" "${process_outdir}/${task_idx}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 1
 
         save_opt_list optlist
     }
@@ -384,14 +377,8 @@ Dynamic Fanout Example Using FIFOs and Generators
     worker()
     {
         # Initialize variables
-        local id=$(read_opt_value_from_func_args "-id" "$@")
         local inf=$(read_opt_value_from_func_args "-inf" "$@")
         local outd=$(read_opt_value_from_func_args "-outd" "$@")
-
-        # Create output directory
-        if [ ! -d "${outd}" ]; then
-            mkdir -p "${outd}"
-        fi
 
         # Read the input file line by line (each line is a file path)
         while IFS= read -r filepath; do

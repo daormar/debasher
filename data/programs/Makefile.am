@@ -11,7 +11,7 @@ hello_world.py debasher_echo.sh debasher_echo_fifo.sh			\
 debasher_counter.sh debasher_simple_process.sh				\
 debasher_value_pass_example.sh debasher_file_example.sh			\
 debasher_fifo_example.sh debasher_define_opt_deps_example.sh		\
-debasher_shared_dir_example.sh						\
+debasher_shared_dir_example.sh debasher_shared_subdir_example.sh	\
 debasher_array_example.sh debasher_array_example_original.sh		\
 debasher_generator_example.sh debasher_fifo_generator_example.sh	\
 debasher_skip_example.sh debasher_conda_example.sh			\

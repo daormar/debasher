@@ -722,6 +722,24 @@ case $? in
         ;;
 esac
 
+# Check debasher_shared_subdir_example program
+progname="debasher_shared_subdir_example"
+sched="BUILTIN"
+bs_cpus=4
+bs_mem=128
+check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check debasher_fifo_generator_example program
 progname="debasher_fifo_generator_example"
 sched="BUILTIN"

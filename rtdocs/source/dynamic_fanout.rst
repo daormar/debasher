@@ -321,16 +321,12 @@ Dynamic Fanout Example
 
     worker_explain_opts()
     {
-        # -id option
-        local description="id of writer"
-        explain_opt "-id" "<int>" "$description"
-
         # -inf option
         local description="input file"
         explain_opt "-inf" "<file>" "$description"
 
         # -outd option
-        local description="output directory"
+        local description="directory of the task, below the output directory of the process"
         explain_opt "-outd" "<file>" "$description"
     }
 
@@ -364,9 +360,8 @@ Dynamic Fanout Example
         local task_idx
         for task_idx in "${!array[@]}"; do
             local optlist=""
-            define_opt "-id" "${task_idx}" optlist || return 1
             define_opt_from_proc_out "-inf" "dispatch" "-outf${task_idx}" optlist || return 1
-            define_opt "-outd" "${process_outdir}/${task_idx}" optlist || return 1
+            define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 1
             save_opt_list optlist
         done
     }
@@ -382,14 +377,8 @@ Dynamic Fanout Example
     worker()
     {
         # Initialize variables
-        local id=$(read_opt_value_from_func_args "-id" "$@")
         local inf=$(read_opt_value_from_func_args "-inf" "$@")
         local outd=$(read_opt_value_from_func_args "-outd" "$@")
-
-        # Create output directory
-        if [ ! -d "${outd}" ]; then
-            mkdir -p "${outd}"
-        fi
 
         # Read the input file line by line (each line is a file path)
         while IFS= read -r filepath; do

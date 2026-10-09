@@ -54,16 +54,12 @@ worker_stepdone_reset_outfiles()
 ########
 worker_stepdone_explain_opts()
 {
-    # -id option
-    local description="id of writer"
-    explain_opt "-id" "<int>" "$description"
-
     # -inf option
     local description="input file"
     explain_opt "-inf" "<file>" "$description"
 
     # -outd option
-    local description="output directory"
+    local description="directory of the task, below the output directory of the process"
     explain_opt "-outd" "<file>" "$description"
 }
 
@@ -100,9 +96,8 @@ worker_stepdone_define_opts()
     local task_idx
     for task_idx in "${!array[@]}"; do
         local optlist=""
-        define_opt "-id" "${task_idx}" optlist || return 1
         define_opt_from_proc_out "-inf" "dispatch" "-outf${task_idx}" optlist || return 1
-        define_opt "-outd" "${process_outdir}/${task_idx}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 1
         save_opt_list optlist
     done
 }
@@ -141,15 +136,9 @@ worker_task()
 worker_stepdone()
 {
     # Initialize variables
-    local id=$(read_opt_value_from_func_args "-id" "$@")
     local inf=$(read_opt_value_from_func_args "-inf" "$@")
     local outd=$(read_opt_value_from_func_args "-outd" "$@")
     local exit_code=0
-
-    # Create output directory
-    if [ ! -d "${outd}" ]; then
-        mkdir -p "${outd}"
-    fi
 
     # Read the input file line by line (each line is a file path)
     while IFS= read -r filepath; do
@@ -165,7 +154,7 @@ worker_stepdone()
         local sum
         sum=$(cksum < "$filepath" | awk '{print $1}')
         local stepid
-        stepid="${id}_${base}_${sum}"
+        stepid="${base}_${sum}"
 
         # Execute the step of the worker, only if it is not marked as
         # done. The step reads its standard input from /dev/null, since
@@ -176,7 +165,7 @@ worker_stepdone()
             # Remove the markers of this block left by an earlier run
             # with another input, since the step overwrites the output
             # they stand for
-            rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${id}_${base}_"*
+            rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${base}_"*
             if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
                 mark_step_done "${outd}" "${stepid}" || return 1
                 echo "Step ${stepid} completed and marked as done" >&2

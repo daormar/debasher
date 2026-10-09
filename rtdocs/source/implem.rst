@@ -624,6 +624,15 @@ one, replaces the emptying. Two tasks may not ask for the same
 subdirectory, and no subdirectory may be below another one of the same
 process.
 
+A task may still receive its index as an option when the index is data
+of its work, such as which part of an input it takes, but not to
+choose where it writes or to keep clear of the other tasks: that is
+what a subdirectory of its own, or an output option of its own, is
+for. To gather what every task wrote, a process reads it through a
+fanout family, one option per task, which also makes it wait for every
+task (see the ``debasher_shared_subdir_example`` example in
+:ref:`Examples`).
+
 An output directory for which some task asks for a subdirectory
 belongs to those subdirectories: when the process is prepared to run,
 DeBasher removes from it everything that is neither a subdirectory that
@@ -905,11 +914,10 @@ missing.
           logmsg "Cleaning directory..."
 
           # Initialize variables
-          local id=$(read_opt_value_from_func_args "-id" "$@")
           local outd=$(read_opt_value_from_func_args "-outdir" "$@")
 
           # Remove auxiliary file
-          rm "${outd}"/${id}_aux
+          rm "${outd}"/aux
 
           logmsg "Cleaning finished"
       }
@@ -1215,12 +1223,12 @@ exists. The ``debasher_dynamic_fanout_stepdone`` module in
 
     local sum
     sum=$(cksum < "$filepath" | awk '{print $1}')
-    local stepid="${id}_${base}_${sum}"
+    local stepid="${base}_${sum}"
 
     if is_step_done "${outd}" "${stepid}"; then
         echo "Step ${stepid} was already completed and marked as done" >&2
     else
-        rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${id}_${base}_"*
+        rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${base}_"*
         if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
             mark_step_done "${outd}" "${stepid}" || return 1
         else
@@ -1372,6 +1380,8 @@ repository.
    generator
 
    fifo_generator
+
+   shared_subdir
 
    subprogram
 

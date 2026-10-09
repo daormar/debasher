@@ -37,11 +37,14 @@ Unix command: its function receives a list of options, and its implementation is
 the same whether the process runs one task or many. What changes between one
 task and many is the wiring, the `_define_opts` method or the option generator
 of the process, which gives each task its own options (see "Arrays and option
-generators"). The engine aims to hold to this principle by treating every run
-resource of a task alike, whatever the number of tasks of its process; "Run
-resources and their life cycle" lists the run resources, and says which one the
-tasks of an array share, the process output directory, and how task
-subdirectories divide it between the tasks.
+generators"). A task may get its task index as an option when the index is data
+of its work, such as which part of an input it takes, never to choose where it
+writes or to keep clear of the other tasks: that is the wiring's, through a task
+subdirectory or an output option of its own. The engine aims to hold to this
+principle by treating every run resource of a task alike, whatever the number of
+tasks of its process; "Run resources and their life cycle" lists the run
+resources, and says which one the tasks of an array share, the process output
+directory, and how task subdirectories divide it between the tasks.
 
 Given a program file and an output directory, `debasher_exec` loads the
 modules, builds the options of every task, infers the dependency graph and
