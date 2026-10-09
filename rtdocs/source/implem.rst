@@ -750,6 +750,27 @@ DeBasher module can define its own methods, similarly to a process (see
   ``get_absolute_shdirname`` (e.g. ``get_absolute_shdirname "data"``).
   This lets two processes agree on a common directory without one
   having to pass it to the other as a regular connected option.
+
+  A process can also get the path of a shared directory as an option,
+  with ``define_opt_from_shared_dir`` (e.g.
+  ``define_opt_from_shared_dir "-datadir" "data" optlist``). With
+  ``--subdir``, the option gets instead a subdirectory of its own, which
+  ``debasher_exec`` creates before any process executes. The usual
+  subpath is the index of the task, so that the tasks of an array do not
+  overwrite each other's files:
+
+  .. code-block:: bash
+
+      define_opt_from_shared_dir "-outd" "data" optlist --subdir "${task_idx}" || return 1
+
+  A shared directory for which some option asks for a subdirectory
+  belongs to its subdirectories: each run removes from it everything
+  that is not a subdirectory that an option of the run asks for, or a
+  directory on the way to one, such as the subdirectories of tasks that
+  the program no longer has. A task therefore writes only into its own
+  subdirectory, and an output option that holds the whole shared
+  directory is refused; reading the whole directory, through an input
+  option, is allowed.
 * ``program_type``: declares the type of the program, using
   ``program_type``, either ``general`` (the default, when the module
   defines no such method) or ``resident``:

@@ -1,4 +1,4 @@
-EXTRA_DIST = lib_utils.bats lib_processes.bats lib_programs.bats	\
+EXTRA_DIST = lib_utils.bats lib_opts.bats lib_processes.bats lib_programs.bats \
 lib_modules.bats lib_mirror.bats builtin_sched_lib.bats		\
 lib_resident_tools.bats lib_sched.bats lib_sched_rerun.bats lib_sched_slurm.bats \
 conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py	\

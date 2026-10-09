@@ -923,6 +923,8 @@ create_basic_dirs()
 ########
 create_mod_shared_dirs()
 {
+    local validate=$1
+
     echo "# Creating shared directories for modules... (if any)" >&2
 
     # Create shared directories required by the program processes
@@ -932,6 +934,11 @@ create_mod_shared_dirs()
     debasher::_create_mod_shdirs
 
     debasher::_show_program_shdirs >&2
+
+    # Create the shared subdirectories that the options ask for, and
+    # remove from their shared directories what no option asks for (a
+    # validation only names it)
+    debasher::_prepare_shared_subdirs "${validate}" || return 1
 
     echo "Creation complete" >&2
 
@@ -1379,7 +1386,7 @@ fi
 
 gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 
-create_mod_shared_dirs || exit 1
+create_mod_shared_dirs "${validate}" || exit 1
 
 if [ ${conda_support_given} -eq 1 ]; then
     debasher::_prepare_conda_envs || exit 1

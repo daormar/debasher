@@ -1962,40 +1962,303 @@ debasher::get_absolute_shdirname()
 get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
 
 ########
+# Checks that a subpath given with --subdir stays below its shared
+# directory: it is not empty, does not start with "/", and has no empty
+# component and no component "." or "..".
+debasher::_check_shared_subpath()
+{
+    local subpath=$1
+
+    if [ -z "${subpath}" ]; then
+        echo "define_opt_from_shared_dir: Error, --subdir takes a non-empty subpath" >&2
+        return 1
+    fi
+
+    if [ "${subpath:0:1}" = "/" ]; then
+        echo "define_opt_from_shared_dir: Error, the subpath ${subpath} given with --subdir is absolute" >&2
+        return 1
+    fi
+
+    local -a components
+    IFS='/' read -r -a components <<< "${subpath}"
+    # A trailing "/" leaves no component after it, so it is checked apart
+    if [ "${subpath: -1}" = "/" ]; then
+        components+=("")
+    fi
+    local component
+    for component in "${components[@]}"; do
+        if [ -z "${component}" ] || [ "${component}" = "." ] || [ "${component}" = ".." ]; then
+            echo "define_opt_from_shared_dir: Error, the subpath ${subpath} given with --subdir has an empty, \".\" or \"..\" component" >&2
+            return 1
+        fi
+    done
+}
+
+########
+debasher::_read_shared_dir_opt_flags()
+{
+    local -n shared_dir_flags_subpath_ref=$1
+    shift
+
+    shared_dir_flags_subpath_ref=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            "--subdir")
+                if [ $# -lt 2 ]; then
+                    echo "define_opt_from_shared_dir: Error, --subdir takes a subpath" >&2
+                    return 1
+                fi
+                debasher::_check_shared_subpath "$2" || return 1
+                shared_dir_flags_subpath_ref=$2
+                shift 2
+                ;;
+            *)
+                echo "define_opt_from_shared_dir: Error, unknown flag $1" >&2
+                return 1
+                ;;
+        esac
+    done
+}
+
+########
 # Public: Defines process option whose value is the absolute path of a
-# shared directory.
+# shared directory, or of a shared subdirectory of it.
 #
 # $1 - Option name.
 # $2 - Name of the shared directory (as given to define_shared_dir).
 # $3 - Name of variable that will store the information about the option to be added.
+# $4... - (optional) "--subdir <subpath>": the option gets the absolute
+#      path of the shared subdirectory <subpath> instead, a directory
+#      below the shared directory that debasher_exec creates before any
+#      process runs. The subpath is relative, such as "${task_idx}" or
+#      "${sample}/bam", with no empty component and no component "." or
+#      "..". A shared directory for which some option asks for a shared
+#      subdirectory belongs to its shared subdirectories: debasher_exec
+#      removes from it every entry that is neither a shared subdirectory
+#      that an option of the run asks for nor a directory on the way to
+#      one, so a task writes only into its own shared subdirectory (see
+#      debasher::_prepare_shared_subdirs).
 #
 # Examples
 #
 #   debasher::define_opt_from_shared_dir "-datadir" "data" "optlist"
+#   debasher::define_opt_from_shared_dir "-outd" "data" "optlist" --subdir "${task_idx}"
 #
 # The function does not return any value
 debasher::define_opt_from_shared_dir()
 {
     local opt=$1
     local shdirname=$2
+    local varname=$3
+    local subpath
+    debasher::_read_shared_dir_opt_flags subpath "${@:4}" || exit 1
+
     local abs_shdirname=$(debasher::get_absolute_shdirname "${shdirname}")
-    debasher::define_opt "${opt}" "${abs_shdirname}" "$3"
+    if [ -z "${subpath}" ]; then
+        debasher::define_opt "${opt}" "${abs_shdirname}" "${varname}"
+        return
+    fi
+
+    # Register the shared subdirectory, which is only created when a run
+    # is prepared, since the options of a process are also defined when
+    # nothing is executed
+    DEBASHER_PROGRAM_SHSUBDIRS["${shdirname}/${subpath}"]=${shdirname}
+
+    debasher::define_opt "${opt}" "${abs_shdirname}/${subpath}" "${varname}"
 }
 
 ########
 # Public: Defines process option whose value is the absolute path of a
-# shared directory.
+# shared directory, or of a shared subdirectory of it.
 #
 # $1 - Option name.
 # $2 - Name of the shared directory (as given to define_shared_dir).
 # $3 - Name of variable that will store the information about the option to be added.
+# $4... - (optional) "--subdir <subpath>" (see
+#      debasher::define_opt_from_shared_dir).
 #
 # Examples
 #
 #   define_opt_from_shared_dir "-datadir" "data" "optlist"
+#   define_opt_from_shared_dir "-outd" "data" "optlist" --subdir "${task_idx}"
 #
 # The function does not return any value
 define_opt_from_shared_dir() { debasher::define_opt_from_shared_dir "$@"; }
+
+########
+# Fails when an output option of some task holds the path of a
+# subdivided shared directory, a shared directory for which some option
+# of the run asks for a shared subdirectory: a task writes only into its
+# own shared subdirectory, since everything else in a subdivided shared
+# directory is removed when a run is prepared.
+debasher::_check_no_output_opt_holds_subdivided_shdir()
+{
+    local -n subdivided_ref=$1
+
+    local shdirname
+    for shdirname in "${!subdivided_ref[@]}"; do
+        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+        local value
+        for value in "${absdir}" "${absdir}/"; do
+            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+                local processes=${DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]}
+                processes=${processes//${DEBASHER_ASSOC_ARRAY_PROC_SEP}/ }
+                processes=${processes//${DEBASHER_ASSOC_ARRAY_ELEM_SEP}/:}
+                echo "Error: an output option of ${processes} holds the shared directory ${shdirname}, which has shared subdirectories; a task writes only into its own shared subdirectory (define_opt_from_shared_dir --subdir)" >&2
+                return 1
+            fi
+        done
+    done
+}
+
+########
+# Fails when a process that the program no longer has, but whose exec
+# directory an earlier run left, is still running: it might be writing
+# into a subdivided shared directory, which is about to be pruned (the
+# processes of the program were already checked before their options
+# were defined).
+debasher::_check_left_processes_not_running()
+{
+    local execdir=$(debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}")
+    [ -d "${execdir}" ] || return 0
+
+    local procdir
+    for procdir in "${execdir}"/*; do
+        [ -d "${procdir}" ] || continue
+        local processname=$("${BASENAME}" "${procdir}")
+        [[ -v DEBASHER_PROGRAM_PROCESSES["${processname}"] ]] && continue
+        if debasher::_process_is_in_progress "${DEBASHER_PROGRAM_OUTDIR}" "${processname}"; then
+            echo "Error: process ${processname}, which the program no longer has, is still running from an earlier run, and might be writing into a shared directory with shared subdirectories" >&2
+            return 1
+        fi
+    done
+}
+
+########
+# Creates the shared subdirectory $1 (a path relative to the output
+# directory, "<shared dir>/<subpath>") of the shared directory $2, unless
+# $3 is 1, after checking that no component of its subpath is a
+# symbolic link, so that it never leaves its shared directory.
+debasher::_create_shared_subdir()
+{
+    local relpath=$1
+    local shdirname=$2
+    local only_report=$3
+
+    local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+    local subpath=${relpath#"${shdirname}/"}
+    local path=${absdir}
+    local -a components
+    IFS='/' read -r -a components <<< "${subpath}"
+    local component
+    for component in "${components[@]}"; do
+        path="${path}/${component}"
+        if [ -L "${path}" ]; then
+            echo "Error: the shared subdirectory ${relpath} goes through the symbolic link ${path}" >&2
+            return 1
+        fi
+    done
+
+    if [ "${only_report}" -ne 1 ]; then
+        "${MKDIR}" -p "${absdir}/${subpath}" || { echo "Error: cannot create the shared subdirectory ${relpath}" >&2; return 1; }
+    fi
+}
+
+########
+# Removes, from the directory $4 of the subdivided shared directory $2,
+# whose path relative to the shared directory is $3 (empty for the shared
+# directory itself), every entry that is neither a shared subdirectory of
+# the run nor a directory on the way to one, looking inside the
+# directories on the way to one. Nothing is removed when $1 is 1, and
+# each entry is only named. A symbolic link is never followed: removing
+# it removes the link (the shared directory itself may be one, which
+# find -H follows).
+debasher::_prune_subdivided_shdir()
+{
+    local only_report=$1
+    local shdirname=$2
+    local reldir=$3
+    local absdir=$4
+    local -n prune_ancestors_ref=$5
+
+    local entry
+    while IFS= read -r -d '' entry; do
+        local name=${entry##*/}
+        local relpath="${shdirname}/${name}"
+        [ -n "${reldir}" ] && relpath="${shdirname}/${reldir}/${name}"
+
+        # A shared subdirectory of the run is kept whole
+        [[ -v DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"] ]] && continue
+
+        # A directory on the way to one is looked inside
+        if [[ -v prune_ancestors_ref["${relpath}"] ]] && [ -d "${entry}" ] && [ ! -L "${entry}" ]; then
+            debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" "${relpath#"${shdirname}/"}" "${entry}" "$5" || return 1
+            continue
+        fi
+
+        if [ "${only_report}" -eq 1 ]; then
+            echo "A run would remove ${entry}, which no option asks for, from the shared directory ${shdirname}" >&2
+        else
+            echo "Removing ${entry}, which no option asks for, from the shared directory ${shdirname}" >&2
+            "${RM}" -rf -- "${entry}" || { echo "Error: cannot remove ${entry}" >&2; return 1; }
+        fi
+    done < <("${FIND}" -H "${absdir}" -mindepth 1 -maxdepth 1 -print0)
+}
+
+########
+# Prepares the shared subdirectories that the options of the run ask
+# for (see debasher::define_opt_from_shared_dir): refuses an output
+# option that holds a subdivided shared directory, checks that no process
+# that the program no longer has is still running, creates every shared
+# subdirectory, and removes from every subdivided shared directory each
+# entry that is neither a shared subdirectory of the run nor a directory
+# on the way to one. When $1 is 1, as in a validation, nothing is created
+# or removed, and the entries that a run would remove are only named.
+#
+# Must be called once the options of every process are defined and the
+# shared directories created.
+debasher::_prepare_shared_subdirs()
+{
+    local only_report=$1
+
+    [ ${#DEBASHER_PROGRAM_SHSUBDIRS[@]} -eq 0 ] && return 0
+
+    # Collect the subdivided shared directories, and the directories on
+    # the way to a shared subdirectory (relative to the output directory)
+    local -A subdivided
+    local -A ancestors
+    local relpath
+    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
+        if [[ ! -v DEBASHER_PROGRAM_SHDIRS["${shdirname}"] ]]; then
+            echo "Error: an option asks for the shared subdirectory ${relpath} of ${shdirname}, which no module declares as a shared directory" >&2
+            return 1
+        fi
+        subdivided["${shdirname}"]=1
+        local parent=${relpath%/*}
+        while [ "${parent}" != "${shdirname}" ]; do
+            ancestors["${parent}"]=1
+            parent=${parent%/*}
+        done
+    done
+
+    debasher::_check_no_output_opt_holds_subdivided_shdir subdivided || return 1
+
+    if [ "${only_report}" -ne 1 ]; then
+        debasher::_check_left_processes_not_running || return 1
+    fi
+
+    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+        debasher::_create_shared_subdir "${relpath}" "${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}" "${only_report}" || return 1
+    done
+
+    local shdirname
+    for shdirname in "${!subdivided[@]}"; do
+        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+        [ -d "${absdir}" ] || continue
+        debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" "" "${absdir}" ancestors || return 1
+    done
+}
 
 ########
 debasher::_get_absolute_fifodir()

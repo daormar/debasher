@@ -174,6 +174,19 @@ relative to the output directory of the run.
 - **shared directory**: a directory that a module declares in its `_shared_dirs`
   method, created in the output directory before any process runs, whose
   absolute path every process gets with `get_absolute_shdirname`.
+- **shared subdirectory**: a directory below a shared directory that an option
+  asks for, with `define_opt_from_shared_dir --subdir`, which the engine
+  creates, when missing, before any process runs (see "Shared
+  subdirectories").
+- **subdivided shared directory**: a shared directory for which some option of
+  the run asks for a shared subdirectory. The engine owns its contents, and
+  removes from it, before any process runs, every entry that is neither a
+  shared subdirectory of the run nor a directory on the way to one, and never
+  looks inside a shared subdirectory of the run.
+- **subpath**: the path of a shared subdirectory relative to its shared
+  directory, such as `3` or `sample1/bam`. A directory on the way to a shared
+  subdirectory is one that its subpath passes through, such as `sample1` for
+  `sample1/bam`.
 - **fanout family**: an option name ending in `ith` in the `_explain_opts`
   method of a process, such as `-outfith`, which stands for the numbered options
   `-outf0`, `-outf1`, ... that its tasks define.
@@ -268,7 +281,9 @@ relative to the output directory of the run.
   a single process asks for; a first round of the built-in scheduler that can
   choose no task, or, with `--builtinsched-oneshot`, that cannot launch every
   process at once, is still refused when the run starts. The validation leaves
-  the process options of the output directory as they were.
+  the process options of the output directory as they were, and the contents
+  of its shared directories too: it creates no shared subdirectory and removes
+  nothing (see "Shared subdirectories").
 - **scheduler**: what launches the tasks of a process once its dependencies
   hold: the built-in scheduler or the Slurm scheduler.
 - **built-in scheduler**: the scheduler that runs tasks on the local machine
@@ -349,8 +364,8 @@ fails, before any process is launched:
    the `_program` method of the program file, which records the process
    specification of every process of the program (see "Modules and
    programs").
-4. It refuses to go on while a process of a previous run on the same output
-   directory is still in progress.
+4. It refuses to go on while a process of the program is still in progress
+   from a previous run on the same output directory.
 5. It builds the option list of every task, through the `_define_opts` method
    or the option generator of each process, and resolves the output
    descriptors of the connections. It writes the option list of every task of
@@ -361,9 +376,13 @@ fails, before any process is launched:
    specification into `program.procspec` and sorts the processes in
    topological order, which fails if the dependency graph has a cycle (see
    "The dependency graph").
-7. It creates the shared directories, and, when asked to, the Conda
-   environments and the Docker images of the processes (see "Conda and Docker
-   environments").
+7. It creates the shared directories and the shared subdirectories. When the
+   run has a subdivided shared directory, it checks that no process that has
+   left the program is still running, and removes from each subdivided shared
+   directory every entry that is neither a shared subdirectory of the run nor
+   a directory on the way to one (see "Shared subdirectories"). When asked to,
+   it then creates the Conda environments and the Docker images of the
+   processes (see "Conda and Docker environments").
 8. It marks the processes to rerun (see "Reruns").
 9. It writes the command line file and the execution context.
 10. It hands the processes to the scheduler. Before a process is launched,
@@ -836,10 +855,10 @@ options, and the engine learns the structure of the program from the same
 options: an input option whose value another process produces makes a
 dependency (see "The dependency graph"), and an option whose value is a FIFO
 joins two tasks (see "FIFOs"). This section describes how the option list of a
-task is built, what makes an option an output, how options connect processes,
-how a program takes values from its command line, how a process gets more than
-one task, and how the option list of a task travels from `debasher_exec` to the
-task.
+task is built, what makes an option an output, how a task gets a directory of
+its own below a shared directory, how options connect processes, how a program
+takes values from its command line, how a process gets more than one task, and
+how the option list of a task travels from `debasher_exec` to the task.
 
 ## Defining the options of a task
 
@@ -928,9 +947,124 @@ exist. A shared directory is declared by a module, with `define_shared_dir` in
 its `_shared_dirs` method and never from a process method, and created in the
 output directory before any process runs. The `_shared_dirs` method of every
 loaded module is called, whether or not the module adds processes to the
-program. `define_opt_from_shared_dir` gives an option its absolute path. A
-shared directory is not an output of any process, so using it creates no
-dependency: processes that share one coordinate through it by other means.
+program. `define_opt_from_shared_dir` gives an option its absolute path, or
+that of a shared subdirectory (see "Shared subdirectories"). A shared directory
+is not an output of any process. Its path makes a dependency only by the rule
+that holds for any path, when an output option of a task of one process and an
+input option of a task of another process hold it (see "Inferring dependencies
+from options"); otherwise, processes that share one coordinate through it by
+other means.
+
+## Shared subdirectories
+
+The tasks of an array process that write into the same shared directory share
+its file names: two tasks that write a file of the same name overwrite each
+other. `define_opt_from_shared_dir` takes a subpath with `--subdir`, so that
+each task gets a directory of its own below the shared directory:
+
+```
+define_opt_from_shared_dir "-outd" "data" optlist --subdir "${task_idx}" || return 1
+```
+
+The option gets the absolute path of the shared subdirectory,
+`<output directory>/data/<subpath>`. The subpath is an ordinary argument,
+computed when the options are defined, usually from the task index, or from the
+element of the array that the task stands for, and it may have several
+components, such as `${sample}/bam`.
+
+**What a subpath may be.** A subpath is relative and stays below its shared
+directory: it is not empty, does not start with `/`, and has no empty component
+and no component `.` or `..`. Any other subpath is refused when the option is
+defined, which stops the preparation of a run. A shared subdirectory is
+therefore never the shared directory itself, nor anything outside it.
+
+**Registering and creating.** Defining the option creates nothing: it adds the
+path to the shared subdirectories of the run, as declaring a FIFO registers it
+(see "Declaring and owning a FIFO"), since the methods that define the options
+of a process also run when nothing is executed, and an option generator runs
+again inside its tasks. `debasher_exec` creates every shared subdirectory of the
+run that does not exist yet, right after the shared directories, before any
+process is launched, whatever the status of the process that asks for it (see
+"Architecture"). Every shared subdirectory thus exists before any task that
+writes or reads it starts, including a task launched together with the other end
+of a FIFO. Several options, of one process or of several, may ask for the same
+shared subdirectory, which is created once. A shared subdirectory of a shared
+directory that no module declares stops the preparation. A shared subdirectory
+with a symbolic link at any component of its subpath, the last one included,
+stops the preparation, so that creating it never leaves its shared directory;
+the shared directory itself may be a symbolic link, to another disk for example.
+
+**A subdivided shared directory belongs to its shared subdirectories.** A shared
+directory for which some option of the run asks for a shared subdirectory is a
+subdivided shared directory, and the engine owns its contents: what it holds is
+the shared subdirectories of the run, the directories on the way to them, and
+nothing else. A task may read the whole subdivided shared directory, through an
+option that gives its path without `--subdir`, but writes only into its own
+shared subdirectory. An output option that holds the path of a subdivided shared
+directory stops the preparation, since it would name the whole directory as
+something that a task produces. The engine cannot check the rest: a task that
+writes into the subdivided shared directory through `get_absolute_shdirname`, or
+a file that the user leaves there, breaks that contract, and what it leaves is
+removed by the next run.
+
+**Removing what no option asks for.** When the number of tasks of a process
+changes, or the subpath of a task does (one taken from the name of a sample,
+for example), a shared subdirectory of an earlier run that no option asks for
+any more would stay, and a task that reads the whole subdivided shared directory
+would take it for a current one. Right after creating the shared
+subdirectories of the run, `debasher_exec` goes through every subdivided shared
+directory and removes, with its contents, every entry that is neither a shared
+subdirectory of the run, nor a directory on the way to one, looking inside the
+directories on the way to one too. It names each entry that it removes on the
+standard error. The contents of a shared subdirectory of the run are not looked
+at, so nested subpaths need no rule of their own: when the run asks for `a` and
+for `a/b`, everything below `a` is kept. A failure stops the preparation before
+any process is launched. A validation creates no shared subdirectory and
+removes nothing: it only names on the standard error the entries that a run
+would remove.
+
+Removal is bounded by these rules:
+
+- **Only subdivided shared directories.** A shared directory for which no
+  option of the run asks for a shared subdirectory is left as it is, whatever
+  an earlier run created in it. A process that drops `--subdir`, or an array
+  process whose number of tasks becomes zero, leaves its earlier shared
+  subdirectories in place when no other option of the run asks for a shared
+  subdirectory of the same shared directory.
+- **Never outside a shared directory.** Removal starts from the subdivided
+  shared directory, never removes it, and never follows a symbolic link: a
+  link that it finds is an entry like any other, and removing it removes the
+  link, not what it points to.
+- **Every process counts.** The options of every process of the program are
+  defined in every run, whatever its status, so a finished process that does
+  not run again keeps its shared subdirectories, and a process that has left
+  the program loses them.
+- **No task is running.** Only one `debasher_exec` prepares a run in an output
+  directory at a time, and it refuses to start while a process of the program
+  is still running (see "Architecture"). A process that has left the program is
+  not part of that check, so in every run with a subdivided shared directory,
+  before removing anything, `debasher_exec` checks every process with an exec
+  directory that the program no longer has, as for any process (see "Process
+  status"), and one with a task still running stops the preparation. Removal
+  thus never takes anything from under a task.
+
+**What removal leaves.** The contents of a shared subdirectory that the run
+still asks for are kept: a task that runs again finds what an earlier run left
+in its own shared subdirectory, as it does in a shared directory. Clearing it is
+up to the process. The engine never does, since a shared subdirectory may hold
+the step markers that let a new run skip the steps that already succeeded (see
+"Sequential processes").
+
+**Dependencies.** The path of a shared subdirectory is an ordinary absolute
+path, so the rule of "Inferring dependencies from options" applies to it. When
+an array process writes into `--subdir "${task_idx}"` through an output option,
+and another array process reads the same shared subdirectory through an input
+option, each task of the reader depends on the task of the writer with the same
+task index (`aftercorr`). A task that reads the whole shared directory holds
+the path of the shared directory, not those of its shared subdirectories, and
+gets no dependency on the tasks that write them: its process is ordered after
+the writers with explicit dependencies, which replace all its inferred ones (see
+"Explicit dependencies").
 
 ## Connections between processes
 
@@ -2067,8 +2201,8 @@ leaves, by design, to the program or to whoever runs it.
    checked stops `debasher_exec` before any process is launched (see
    "Architecture").
 2. Only one `debasher_exec` prepares or runs a program in an output directory
-   at a time, and it refuses to start while a process of an earlier run in
-   that directory is still running (see "Architecture").
+   at a time, and it refuses to start while a process of the program is still
+   running from an earlier run in that directory (see "Architecture").
 3. A task runs the code of the modules as it was when its run was prepared;
    only the external script of an alias is read when the task runs (see "The
    process script: how code travels").
@@ -2116,6 +2250,12 @@ leaves, by design, to the program or to whoever runs it.
 16. The methods that define the options of a process run only when every task
     shaping option of the process is given on the command line (see "Command
     line options").
+17. Every shared subdirectory that an option asks for exists before any
+    process of the run is launched. The engine removes only what a subdivided
+    shared directory holds besides the shared subdirectories of the run and the
+    directories on the way to them, while no task is running; never the
+    contents of a shared subdirectory of the run, the shared directory itself
+    or anything outside it (see "Shared subdirectories").
 
 **Limits and non-goals.**
 
@@ -2148,6 +2288,12 @@ leaves, by design, to the program or to whoever runs it.
 - **Names.** A process, or a shared directory, may have the name of a file of
   the engine at the top of the output directory, and the engine does not
   refuse it (see "The output directory").
+- **Shared subdirectories.** The engine keeps what an earlier run left in a
+  shared subdirectory that the run still asks for, and in a shared directory
+  that is not a subdivided shared directory; it removes what a task or the user
+  leaves in a subdivided shared directory outside its shared subdirectories; and
+  a task that reads a whole shared directory gets no dependency on the tasks
+  that write its shared subdirectories (see "Shared subdirectories").
 - **Steps.** The engine keeps no record of a step: it has no status, no log
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step
@@ -2178,6 +2324,10 @@ What is known to be missing from the design, or left open by it:
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process and the external scripts of aliases.
+- **Processes that left the program.** `debasher_exec` could refuse to start
+  in every run, and not only in a run with a subdivided shared directory,
+  while a process that an earlier run had, and that the program no longer has,
+  is still running, as it does for the processes of the program.
 - **Reserved names.** Refusing a process or a shared directory whose name is
   that of a file of the engine in the output directory.
 - **Choosing the tests to run.** Giving the test runner the test files, or a

@@ -514,6 +514,12 @@ declare -a DEBASHER_PROGRAM_PROCESSES_TOPO_SORT
 # Declare associative arrays to store name of shared directories
 declare -A DEBASHER_PROGRAM_SHDIRS
 
+# Declare associative array to store the shared subdirectories that the
+# options of the run ask for (see debasher::define_opt_from_shared_dir),
+# by their path relative to the output directory ("<shared dir>/<subpath>"),
+# each with the name of its shared directory
+declare -A DEBASHER_PROGRAM_SHSUBDIRS
+
 # Declare associative arrays to store names of fifos
 declare -A DEBASHER_PROGRAM_FIFOS
 
