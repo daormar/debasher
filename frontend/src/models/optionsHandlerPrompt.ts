@@ -77,7 +77,7 @@ export function buildOptionsHandlerPrompt(
 function rulesSection(process: ProgramProcess, mode: PromptedHandlerMode): string[] {
   const own = mode === "array"
     ? [
-        `- The code is Bash, written into the function \`${process.name}_define_opts\`, which defines the options of every task of the process. It has to build a Bash array named \`array\`, with one element for each task. After it, a loop \`for idx in "\${!array[@]}"\` defines the options of each task, whose values can use \`\${array[$idx]}\`, the element of the task, \`\${idx}\`, its index, and any variable that the code sets.`,
+        `- The code is Bash, written into the function \`${process.name}_define_opts\`, which defines the options of every task of the process. It has to build a Bash array named \`array\`, with one element for each task. After it, a loop \`for task_idx in "\${!array[@]}"\` defines the options of each task, whose values can use \`\${array[$task_idx]}\`, the element of the task, \`\${task_idx}\`, its index, and any variable that the code sets.`,
         "- `debasher_exec` runs the code once each time it prepares a run, so a later run builds the array again, from what it reads then.",
       ]
     : [

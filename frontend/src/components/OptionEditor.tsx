@@ -79,8 +79,6 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     process => process.id === processId
   );
 
-  const idxVar = ownerProcess?.optionsHandler.mode === "generator" ? "task_idx" : "idx";
-
   // A "standard"-mode owner gathering from an "array"- or "generator"-
   // mode source (see script_generation.py's _fanout_definition_lines and
   // its _FANOUT_PARTNER_MODES) doesn't share a loop with the source the
@@ -108,7 +106,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
       TASK_INDEXED_MODES.has(entry.sourceProcess.optionsHandler.mode);
 
     if (entryIsTaskIndexed) {
-      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${${idxVar}}]`;
+      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${task_idx}]`;
     }
     if (isFanoutGather) {
       return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${i}]`;

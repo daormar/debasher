@@ -17,8 +17,8 @@ const count = {
   code: "count()\n{\n    local inf=$(read_opt_value_from_func_args \"-inf\" \"$@\")\n    wc -l < \"${inf}\"\n}",
   options: [
     createOption("dir", "-dir", { commandLine: true, description: "directory with the files" }),
-    createOption("inf", "-inf", { value: "${array[$idx]}", description: "the file of the task" }),
-    createOption("outf", "-outf", { direction: "output", dataType: "file", value: "${process_outdir}/${idx}.txt" }),
+    createOption("inf", "-inf", { value: "${array[$task_idx]}", description: "the file of the task" }),
+    createOption("outf", "-outf", { direction: "output", dataType: "file", value: "${process_outdir}/${task_idx}.txt" }),
   ],
   optionsHandler: { mode: "array" },
   additionalSpecs: {},
@@ -52,7 +52,7 @@ describe("buildOptionsHandlerPrompt", () => {
     expect(prompt).toContain("# Write the code that builds the array of tasks of the DeBasher process `count`");
     expect(prompt).toContain("written into the function `count_define_opts`");
     expect(prompt).toContain("It has to build a Bash array named `array`, with one element for each task.");
-    expect(prompt).toContain("whose values can use `${array[$idx]}`, the element of the task, `${idx}`, its index, and any variable that the code sets.");
+    expect(prompt).toContain("whose values can use `${array[$task_idx]}`, the element of the task, `${task_idx}`, its index, and any variable that the code sets.");
     expect(prompt).toContain("  ```bash\n  local cmdline=$1\n  local process_spec=$2\n  local process_name=$3\n  local process_outdir=$4\n  ```");
     expect(prompt).toContain("`get_cmdline_opt \"$cmdline\" \"<label>\"`");
     expect(prompt).toContain("It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO.");
@@ -71,7 +71,7 @@ describe("buildOptionsHandlerPrompt", () => {
 
   it("shows the values of the options, which say what a task is", () => {
     const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
-    expect(prompt).toContain("- `-inf` (input, string)\n  the file of the task\n  Its value: `${array[$idx]}`.");
+    expect(prompt).toContain("- `-inf` (input, string)\n  the file of the task\n  Its value: `${array[$task_idx]}`.");
     expect(prompt).toContain("- `-dir` (input, string, command line option)\n  directory with the files");
   });
 

@@ -48,7 +48,7 @@ its code. Offer to run the tests when what they do matters to a finding.
   done, and one that reads a FIFO read it to its end? Does it write its
   outputs where its options say, and nothing outside its output directory?
 - **Several tasks.** In array or generator mode, does each task use its own
-  values (`${idx}`), and not step on the outputs of the others?
+  values (`${task_idx}`), and not step on the outputs of the others?
 - **Nodes** of a resident program: is `process_data` deterministic, does it
   send only from there, is the node state complete and serializable as JSON,
   and are effects outside the program idempotent?

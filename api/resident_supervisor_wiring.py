@@ -12,6 +12,7 @@ user. Their labels are fixed, and no option of the user may take them.
 import uuid
 from dataclasses import dataclass
 
+from .debasher_constants import TASK_IDX_VAR
 from .models import Program, ProgramEdge, ProgramOption, ProgramProcess
 
 # The labels of the Supervisor wiring on a node, which no option of the user
@@ -42,10 +43,8 @@ def trigger_label(process_name: str) -> str:
 
 def _task_suffix(mode: str) -> str:
     """What a fifo name of a task adds, so that each task has its own."""
-    if mode == "array":
-        return "_${idx}"
-    if mode == "generator":
-        return "_${task_idx}"
+    if mode in ("array", "generator"):
+        return "_${" + TASK_IDX_VAR + "}"
     return ""
 
 

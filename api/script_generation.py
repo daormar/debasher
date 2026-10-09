@@ -21,6 +21,7 @@ from .debasher_constants import (
     PROCESS_METHOD_SKIP_SUFFIX,
     PROCESS_METHOD_CONDA_ENVS_SUFFIX,
     PROCESS_METHOD_DOCKER_IMGS_SUFFIX,
+    TASK_IDX_VAR,
 )
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
@@ -288,7 +289,7 @@ def _generate_opts_func_header():
     # Same as _define_opts_func_header, plus the per-task index the
     # engine calls _generate_opts with (see debasher_lib_processes.sh).
     lines = _define_opts_func_header()
-    lines.insert(-1, INDENT + "local task_idx=$5")
+    lines.insert(-1, INDENT + f"local {TASK_IDX_VAR}=$5")
     return lines
 
 
@@ -337,7 +338,7 @@ def _connections_by_option(program: Program) -> dict[tuple[str, str], Connection
 # Modes whose _define_opts/_generate_opts is guaranteed to produce one
 # save_opt_list call per task, numbered 0..N-1, generator via the
 # engine calling _generate_opts once per task_idx, array via a loop that
-# calls save_opt_list once per idx (see debasher_array_example.sh). Only
+# calls save_opt_list once per task_idx (see debasher_array_example.sh). Only
 # a source in one of these modes can be trusted to actually have a task
 # N to connect to; a standard source has only task 0, and a manual
 # source's task shape is unknown, so both default to task 0 instead (see
@@ -350,10 +351,6 @@ _TASK_INDEXED_MODES = {"generator", "array"}
 # process also provides, its own tasks are numbered the same way (see
 # _TASK_INDEXED_MODES above). The "-ith" side itself stays "standard"-only.
 _FANOUT_PARTNER_MODES = {"array", "generator"}
-
-
-def _task_idx_var(mode):
-    return "task_idx" if mode == "generator" else "idx"
 
 
 # debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)
@@ -593,9 +590,8 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
                 '"array"- or "generator"-mode, v1 only supports standard <-> '
                 "array/generator fanout pairings."
             )
-        idx_var = _task_idx_var(process.optionsHandler.mode)
         base_conn_opt = _fanout_base_label(conn_opt)
-        return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{idx_var}}}" optlist || return 1']
+        return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{TASK_IDX_VAR}}}" optlist || return 1']
 
     # Plain connection: one define_opt_from_proc_out[_task_out] per edge
     # into this option, usually just one, but a non-command-line input may
@@ -604,9 +600,8 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
     lines = []
     for src_proc, src_opt, src_mode in connections:
         if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
-            idx_var = _task_idx_var(process.optionsHandler.mode)
             lines.append(
-                f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{idx_var}}}" "{src_opt}" optlist || return 1'
+                f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{TASK_IDX_VAR}}}" "{src_opt}" optlist || return 1'
             )
         else:
             lines.append(
@@ -688,15 +683,17 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
     # debasher_array_example.sh uses by hand, so, unlike generator
     # mode, no separate _generate_opts_size is needed. The array itself
     # is built by the user's own arrayCode, embedded verbatim, under the
-    # fixed name "array"; the fixed loop variable "idx" (mirroring
-    # generator mode's "task_idx") is then available to option values as
-    # "${array[$idx]}" or "${idx}" and to connections (see
-    # _option_definition_line/_task_idx_var).
+    # fixed name "array"; the loop variable "task_idx", the same name
+    # generator mode gives its own task index (TASK_IDX_VAR), is then
+    # available to option values as "${array[$task_idx]}" or
+    # "${task_idx}" and to connections (see _option_definition_line). It
+    # is declared local, so that the loop never writes a variable of the
+    # same name in a function of the engine that calls _define_opts.
     #
     # Unlike "standard"/"generator", the header's own "local optlist="
     # is dropped: every option is (re)defined inside the loop regardless
-    # of whether its value actually depends on idx (uniform, no
-    # idx-independent option gets hoisted out as a one-time "shared
+    # of whether its value actually depends on task_idx (uniform, no
+    # task_idx-independent option gets hoisted out as a one-time "shared
     # prefix"), so "optlist" itself is simply declared fresh, empty, at
     # the top of each iteration instead of copied from an outer one.
     lines = [f"{process.name}{PROCESS_METHOD_DEFINE_OPTS_SUFFIX}()", "{"]
@@ -705,7 +702,8 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
     if process.optionsHandler.arrayCode:
         lines.append(_indent_block(process.optionsHandler.arrayCode, INDENT))
         lines.append("")
-    lines.append(f'{INDENT}for idx in "${{!array[@]}}"; do')
+    lines.append(f"{INDENT}local {TASK_IDX_VAR}")
+    lines.append(f'{INDENT}for {TASK_IDX_VAR} in "${{!array[@]}}"; do')
     lines.append(f'{INDENT * 2}local optlist=""')
     if process.options:
         for option in process.options:

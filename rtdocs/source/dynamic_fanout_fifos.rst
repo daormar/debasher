@@ -358,11 +358,12 @@ Dynamic Fanout Example Using FIFOs
             array+=("$i")
         done
 
-        for idx in "${!array[@]}"; do
+        local task_idx
+        for task_idx in "${!array[@]}"; do
             local optlist=""
-            define_opt "-id" "${idx}" optlist || return 1
-            define_opt_from_proc_out "-inf" "dispatch" "-outf${idx}" optlist || return 1
-            define_opt "-outd" "${process_outdir}/${idx}" optlist || return 1
+            define_opt "-id" "${task_idx}" optlist || return 1
+            define_opt_from_proc_out "-inf" "dispatch" "-outf${task_idx}" optlist || return 1
+            define_opt "-outd" "${process_outdir}/${task_idx}" optlist || return 1
             save_opt_list optlist
         done
     }

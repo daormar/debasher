@@ -70,3 +70,10 @@ RESERVED_MODULE_METHOD_SUFFIXES = [
 # sequential process, which a process name, having no blank, never
 # starts with.
 SEQ_PROCESS_DOC_HEADING_PREFIX = "Sequential Process: "
+
+# Not an engine constant but a convention of the web UI: the variable
+# holding the index of the task whose options are being defined, the
+# argument of _generate_opts in generator mode and the loop variable of
+# _define_opts in array mode. Script generation writes it and import
+# recognizes it, so both modes give option values the same name.
+TASK_IDX_VAR = "task_idx"

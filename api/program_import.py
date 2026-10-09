@@ -247,7 +247,7 @@ def _downgrade_unverifiable_task_indexed_connections(
     option_handler_code_by_process: dict[str, dict[str, str]],
 ) -> None:
     """
-    A define_opt_from_proc_task_out "${idx_var}" connection only means
+    A define_opt_from_proc_task_out "${task_idx}" connection only means
     "my task N pairs with the source's task N" if the source process is
     itself generator- or array-shaped, i.e. guaranteed to have a task N
     at all — script_generation.py only ever regenerates that for a pair

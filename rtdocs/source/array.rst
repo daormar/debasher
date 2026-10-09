@@ -7,8 +7,8 @@ Process Array Example Using the Array Option Handler
     # scenario as the previous example, but each define_opts method
     # follows DeBasher's array option handler convention instead of a
     # loop written by hand: an array variable named "array", built by
-    # user code, is iterated over using an index variable named "idx".
-    # This is exactly the shape produced by the frontend's option
+    # user code, is iterated over using an index variable named
+    # "task_idx". This is exactly the shape produced by the frontend's option
     # handler code generation and recognized back by its import logic,
     # so loading this module resolves both processes to array mode in
     # the visual editor instead of falling back to a manual handler.
@@ -50,17 +50,18 @@ Process Array Example Using the Array Option Handler
         # just its own index
         array=(0 1 2 3)
 
-        for idx in "${!array[@]}"; do
+        local task_idx
+        for task_idx in "${!array[@]}"; do
             local optlist=""
 
             # -c option
             define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
             # -id option
-            define_opt "-id" "${array[$idx]}" optlist || return 1
+            define_opt "-id" "${array[$task_idx]}" optlist || return 1
 
             # -outf option
-            define_opt "-outf" "${process_outdir}/${idx}" optlist || return 1
+            define_opt "-outf" "${process_outdir}/${task_idx}" optlist || return 1
 
             # Save option list
             save_opt_list optlist
@@ -127,14 +128,15 @@ Process Array Example Using the Array Option Handler
 
         array=(0 1 2 3)
 
-        for idx in "${!array[@]}"; do
+        local task_idx
+        for task_idx in "${!array[@]}"; do
             local optlist=""
 
             # -id option
-            define_opt "-id" "${array[$idx]}" optlist || return 1
+            define_opt "-id" "${array[$task_idx]}" optlist || return 1
 
-            # -infile option: connected to array_writer's own task idx
-            define_opt_from_proc_task_out "-infile" "array_writer" "${idx}" "-outf" optlist || return 1
+            # -infile option: the task of array_writer with the same index
+            define_opt_from_proc_task_out "-infile" "array_writer" "${task_idx}" "-outf" optlist || return 1
 
             # -outdir option
             define_opt "-outdir" "${process_outdir}" optlist || return 1

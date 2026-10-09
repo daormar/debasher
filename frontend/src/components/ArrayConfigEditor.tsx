@@ -88,8 +88,8 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
           Add your code below. Bash code that builds an array named{" "}
           <code>array</code>, run once before the per-task loop. Option
-          values below can then reference <code>{"${array[$idx]}"}</code>{" "}
-          (the current element) or <code>{"${idx}"}</code> (its index).
+          values below can then reference <code>{"${array[$task_idx]}"}</code>{" "}
+          (the current element) or <code>{"${task_idx}"}</code> (its index).
           Taking into account that it will be preceded by the following
           variable initialization:
           <br />

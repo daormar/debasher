@@ -23,6 +23,8 @@ import re
 import textwrap
 from pathlib import Path
 
+import pytest
+
 from api.program_import import import_program_from_script
 
 
@@ -167,3 +169,59 @@ def test_import_does_not_pull_in_a_sibling_process_named_only_inside_a_string(tm
     # -- the only place its name appears in count_chars's body is as an
     # awk array, inside a single-quoted script.
     assert _code_function_headers(worker_process.code) == ["count_chars", "worker"]
+
+
+def _array_process(name: str, loop_var: str, declared_local: bool) -> str:
+    """An array-mode process whose _define_opts builds a two-element array
+    and loops over it with `loop_var`, declared local before the loop or
+    not."""
+    explain_opts = "\n".join([f"{name}_explain_opts()", "{", '    explain_opt "-id" "<string>" "Element"', "}"])
+    define_opts = "\n".join(
+        [
+            f"{name}_define_opts()",
+            "{",
+            "    local cmdline=$1",
+            "    local process_spec=$2",
+            "    local process_name=$3",
+            "    local process_outdir=$4",
+            "",
+            "    array=(a b)",
+            "",
+            *([f"    local {loop_var}"] if declared_local else []),
+            f'    for {loop_var} in "${{!array[@]}}"; do',
+            '        local optlist=""',
+            f'        define_opt "-id" "${{array[${loop_var}]}}" optlist || return 1',
+            "        save_opt_list optlist",
+            "    done",
+            "}",
+        ]
+    )
+    process = _process_boilerplate(name, ["    :"])
+    process = process.replace(f"{name}_explain_opts()\n{{\n    :\n}}", explain_opts)
+    default_define_opts = re.search(rf"^{name}_define_opts\(\)\n\{{\n.*?^\}}", process, re.M | re.S).group(0)
+    return process.replace(default_define_opts, define_opts)
+
+
+@pytest.mark.parametrize("declared_local", [True, False])
+def test_an_array_loop_over_task_idx_is_imported_as_array_mode(tmp_path, declared_local):
+    process_def = _array_process("arrayproc", "task_idx", declared_local)
+    script = _write_script(tmp_path, "sample_array", process_def, ["arrayproc"])
+
+    program = import_program_from_script(script, "")
+
+    [process] = program.processes
+    assert process.optionsHandler.mode == "array"
+    # The declaration of the loop variable belongs to the loop, which
+    # script generation writes again, never to the user's code
+    assert process.optionsHandler.arrayCode == "array=(a b)"
+    assert [option.value for option in process.options] == ["${array[$task_idx]}"]
+
+
+def test_an_array_loop_over_another_variable_is_imported_as_manual_mode(tmp_path):
+    process_def = _array_process("arrayproc", "idx", declared_local=False)
+    script = _write_script(tmp_path, "sample_idx", process_def, ["arrayproc"])
+
+    program = import_program_from_script(script, "")
+
+    [process] = program.processes
+    assert process.optionsHandler.mode == "manual"

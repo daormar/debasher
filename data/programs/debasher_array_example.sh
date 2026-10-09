@@ -20,7 +20,7 @@
 # writer/reader tasks), but each _define_opts follows the frontend's
 # "array" option handler convention instead of a hand-rolled loop: a
 # fixed-name array ("array") built by user code, looped over with a
-# fixed index ("idx"). This is the exact shape
+# fixed index ("task_idx"). This is the exact shape
 # api/script_generation.py's _add_array_opts_func emits and
 # api/option_handler_import.py's _parse_array_define_opts recovers, so
 # importing this file resolves both processes to "array" mode in the
@@ -85,20 +85,21 @@ array_writer_define_opts()
     # its own index
     array=(0 1 2 3)
 
-    for idx in "${!array[@]}"; do
+    local task_idx
+    for task_idx in "${!array[@]}"; do
         local optlist=""
 
-        # -c option (its value never depends on idx, but every option is
-        # still defined once per iteration — the app's array mode always
-        # re-emits every option's call inside the loop, rather than
-        # hoisting idx-independent ones out of it)
+        # -c option (its value never depends on task_idx, but every
+        # option is still defined once per iteration: the app's array mode
+        # always re-emits every option's call inside the loop, rather
+        # than hoisting task_idx-independent ones out of it)
         define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
         # -id option
-        define_opt "-id" "${array[$idx]}" optlist || return 1
+        define_opt "-id" "${array[$task_idx]}" optlist || return 1
 
         # -outf option
-        define_opt "-outf" "${process_outdir}/${idx}" optlist || return 1
+        define_opt "-outf" "${process_outdir}/${task_idx}" optlist || return 1
 
         # Save option list
         save_opt_list optlist
@@ -171,14 +172,15 @@ array_reader_define_opts()
 
     array=(0 1 2 3)
 
-    for idx in "${!array[@]}"; do
+    local task_idx
+    for task_idx in "${!array[@]}"; do
         local optlist=""
 
         # -id option
-        define_opt "-id" "${array[$idx]}" optlist || return 1
+        define_opt "-id" "${array[$task_idx]}" optlist || return 1
 
-        # -infile option: connected to array_writer's own task idx
-        define_opt_from_proc_task_out "-infile" "array_writer" "${idx}" "-outf" optlist || return 1
+        # -infile option: the task of array_writer with the same index
+        define_opt_from_proc_task_out "-infile" "array_writer" "${task_idx}" "-outf" optlist || return 1
 
         # -outdir option
         define_opt "-outdir" "${process_outdir}" optlist || return 1

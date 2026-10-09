@@ -81,14 +81,15 @@ decomposer_define_opts()
         array+=("${file}")
     done
 
-    for idx in "${!array[@]}"; do
+    local task_idx
+    for task_idx in "${!array[@]}"; do
         local optlist=""
 
         # Define name of input file
-        define_opt "-f" "${array[$idx]}" optlist || return 1
+        define_opt "-f" "${array[$task_idx]}" optlist || return 1
 
         # Define name of output file
-        local outf="${process_outdir}/words_${idx}.txt"
+        local outf="${process_outdir}/words_${task_idx}.txt"
         define_opt "-outf" "${outf}" optlist || return 1
 
         # Save option list
@@ -144,20 +145,21 @@ recomposer_define_opts()
         array+=("${file}")
     done
 
-    for idx in "${!array[@]}"; do
+    local task_idx
+    for task_idx in "${!array[@]}"; do
         local optlist=""
 
-        # -c option (its value never depends on idx, but every option is
-        # still defined once per iteration — array mode always re-emits
-        # every option's call inside the loop, rather than hoisting
-        # idx-independent ones out of it)
+        # -c option (its value never depends on task_idx, but every
+        # option is still defined once per iteration: array mode always
+        # re-emits every option's call inside the loop, rather than
+        # hoisting task_idx-independent ones out of it)
         define_cmdline_opt "$cmdline" "-c" optlist || return 1
 
         # -inf option
-        define_opt_from_proc_task_out "-inf" "decomposer" "${idx}" "-outf" optlist || return 1
+        define_opt_from_proc_task_out "-inf" "decomposer" "${task_idx}" "-outf" optlist || return 1
 
         # Define name of output file
-        local outf="${process_outdir}/output_${idx}.txt"
+        local outf="${process_outdir}/output_${task_idx}.txt"
         define_opt "-outf" "${outf}" optlist || return 1
 
         # Save option list

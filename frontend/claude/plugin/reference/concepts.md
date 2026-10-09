@@ -68,10 +68,12 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   for a given process: follow it.
 - **Options handler mode.** `standard`: one task. `array`: one task per
   element of a Bash array named `array`, which `arrayCode` builds; option
-  values may use `${idx}`. `generator`: one task per index below the count that
-  `generatorSizeCode` prints. `manual`: the whole option definition written by
-  hand (general programs only). When both ends of a connection have several
-  tasks, task i reads task i.
+  values may use `${task_idx}`, its index, and `${array[$task_idx]}`, its
+  element. `generator`: one task per index below the count that
+  `generatorSizeCode` prints; option values may use that index,
+  `${task_idx}`. `manual`: the whole option definition written by hand
+  (general programs only). When both ends of a connection have several tasks,
+  task i reads task i.
 - **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`);
   `additionalSpecs` (`force` to always rerun, `processdeps` to replace the
   inferred dependencies, aliases).
@@ -90,7 +92,7 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   a reader gets as the value rather than a path), `shared_dir` (`value` names a
   shared directory).
 - **Where an input's value comes from**: a connection; a literal `value` (a
-  Bash word, such as `10` or `${idx}`); `commandLine` (from the program
+  Bash word, such as `10` or `${task_idx}`); `commandLine` (from the program
   options); or `fromProcessSpec` (`value` names a specification: `cpus`,
   `mem`, `time`, ...). The last two take no connection.
 - `taskShaping`: a mandatory command-line input with a value that only the

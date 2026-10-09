@@ -113,8 +113,8 @@ refer to it.
 - **literal value**: the value of an option with option channel `none` that is
   not connected, not a command line option and not taken from the process
   specifications: the Bash word that the user writes in `ProgramOption.value`,
-  such as `10` or `${idx}`, and that script generation writes as it is (see
-  "Option definitions").
+  such as `10` or `${task_idx}`, and that script generation writes as it is
+  (see "Option definitions").
 - **shared directory**: as defined in the design of the engine.
 - **value descriptor**: as defined in the design of the engine: the file,
   named by an output option with option channel `value_desc`, into which a
@@ -589,7 +589,7 @@ many tasks it runs:
   that defines every option once.
 - `array`: one task per element of a Bash array named `array`, which the
   user's code (`arrayCode`) builds. The generated `_define_opts` loops over
-  the array with the index `idx`, which option values can use.
+  the array with the index `task_idx`, which option values can use.
 - `generator`: one task per index, from 0 up to the count that the user's code
   (`generatorSizeCode`) prints. Script generation writes that code as
   `_generate_opts_size`, and a `_generate_opts` that the engine calls once per
@@ -598,6 +598,10 @@ many tasks it runs:
   (`manualCode`), and script generation copies it as it is. The options are
   still explained and documented from the model, but they are not used to
   define the option values.
+
+The index of a task has the same name, `task_idx`, in `array` and `generator`
+mode, so an option value written for one of them, such as
+`${process_outdir}/${task_idx}`, means the same in the other.
 
 When both ends of a connection run in `array` or `generator` mode, each task
 reads the output of the task with the same index at the other end. In every
@@ -713,19 +717,25 @@ the family, and the template of the code reads it for that.
 In `standard` and `generator` mode each definition is written once, in
 `_define_opts` or in `_generate_opts`. In `array` mode the generated
 `_define_opts` runs the user's code that builds `array`, then defines every
-option inside `for idx in "${!array[@]}"`, one task per iteration, even an
-option whose value does not depend on `idx`. In `manual` mode the user's
-function is written as it is, and the rules above do not apply.
+option inside `for task_idx in "${!array[@]}"`, one task per iteration, even an
+option whose value does not depend on `task_idx`. The loop variable is declared
+`local` right before the loop, so that the loop never changes a variable of the
+same name in a function of the engine that calls `_define_opts`. Import
+recognizes this shape, with or without that declaration, and takes everything
+before the declaration, or before the loop when there is none, as `arrayCode`.
+In `manual` mode the user's function is written as it is, and the rules above
+do not apply.
 
 ## Values are Bash words, descriptions are text
 
 Option values are written between double quotes as they are, without
 escaping. This is deliberate: a value is a Bash word, evaluated when the
 options are defined, so it can use the variables that script generation
-provides (`${array[$idx]}` in `array` mode, `$i` in a fanout family) and those
-of the preamble. It also means that a double quote, a backslash or a `$` meant
-literally has to be escaped by the user, and script generation does not check
-that the result is valid Bash.
+provides (`${task_idx}` in `array` and `generator` mode, `${array[$task_idx]}`
+in `array` mode, `$i` in a fanout family) and those of the preamble. It also
+means that a double quote, a backslash or a `$` meant literally has to be
+escaped by the user, and script generation does not check that the result is
+valid Bash.
 
 Descriptions (of the program, of each process and of each option) are text,
 never expressions, and script generation escapes the characters that keep a
@@ -2893,8 +2903,8 @@ shows what the option is:
 - A business input has a handle along the top, which accepts one connection,
   from a business output. An input that a connection can reach has it before
   it is connected too, even while it holds a literal value, such as the index
-  of a task (`-id ${idx}`): the canvas node draws it as any other input, and
-  the editor of the option shows its value.
+  of a task (`-id ${task_idx}`): the canvas node draws it as any other input,
+  and the editor of the option shows its value.
 - An external input is drawn along the top with the other inputs, with a
   handle that accepts no connection and a mark that says that it is written
   from outside the program. It is where "Talk to FIFOs" writes, and where the
@@ -3479,29 +3489,30 @@ uses its options. After a title and a sentence on what a task is, it says:
 1. **How the engine runs the code.** For `array`, that the code is written into
    the `_define_opts` method of the process, has to build a Bash array named
    `array`, one element for each task, and is followed by the loop that defines
-   the options of each task, whose values can use `${array[$idx]}`, `${idx}` and
-   any variable that the code sets; and that `debasher_exec` runs it each time
-   it prepares a run. For `generator`, that the code is written into the
-   `_generate_opts_size` method, has to print the number of tasks and nothing
-   else, and does not share its variables with the function that defines the
-   options of a task (whose values can use `${task_idx}`), since `debasher_exec`
-   runs it in a subshell, once each time it prepares a run (see "Arrays and
-   option generators" in `doc/design_doc_engine.md`). For both, the lines that
-   script generation writes before the code (`cmdline`, `process_spec`,
-   `process_name` and `process_outdir`), how to read a command line option with
-   `get_cmdline_opt`, and that the code runs while `debasher_exec` prepares the
-   run, before any process of the program. So it never opens a FIFO, of a
-   general or a resident program: nothing writes it yet, and opening it for
-   reading blocks until something does, which would leave `debasher_exec`
-   waiting, and whatever it read would be taken from the reader of the FIFO. Nor
-   does it read what a process of the program produces, which a first run does
-   not find and a later run finds as an earlier run left it. It may read what
-   exists before the run, such as a file or a directory given on the command
-   line; the number of tasks typically comes from a command line option.
+   the options of each task, whose values can use `${array[$task_idx]}`,
+   `${task_idx}` and any variable that the code sets; and that `debasher_exec`
+   runs it each time it prepares a run. For `generator`, that the code is
+   written into the `_generate_opts_size` method, has to print the number of
+   tasks and nothing else, and does not share its variables with the function
+   that defines the options of a task (whose values can use `${task_idx}`),
+   since `debasher_exec` runs it in a subshell, once each time it prepares a run
+   (see "Arrays and option generators" in `doc/design_doc_engine.md`). For both,
+   the lines that script generation writes before the code (`cmdline`,
+   `process_spec`, `process_name` and `process_outdir`), how to read a command
+   line option with `get_cmdline_opt`, and that the code runs while
+   `debasher_exec` prepares the run, before any process of the program. So it
+   never opens a FIFO, of a general or a resident program: nothing writes it
+   yet, and opening it for reading blocks until something does, which would
+   leave `debasher_exec` waiting, and whatever it read would be taken from the
+   reader of the FIFO. Nor does it read what a process of the program produces,
+   which a first run does not find and a later run finds as an earlier run left
+   it. It may read what exists before the run, such as a file or a directory
+   given on the command line; the number of tasks typically comes from a command
+   line option.
 2. **The program** and **the process**, with its options handler mode.
 3. **The options**, as in the code prompt of a process: their values show
    what a task needs, such as an input option whose value is
-   `${array[$idx]}`.
+   `${array[$task_idx]}`.
 4. **The code of the process**, for context only; or, since the options handler
    is often set before the code is written, that the code is not written yet
    while it is still a template (for a node, while no part has code); or that

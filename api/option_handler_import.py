@@ -43,15 +43,16 @@ import):
   script_generation.py's own fixed "array" shape exactly: the standard
   header minus its "local optlist=..." line, then arbitrary user code
   (kept verbatim as arrayCode) building a fixed-name array ("array"),
-  then a `for idx in "${!array[@]}"; do` loop whose body is itself just
-  a plain option-definition body — its own `local optlist=""`, the same
-  closed grammar of option-definition primitives as "standard" mode
-  (parsed the same way, just with "idx" in place of "task_idx" for a
-  task-indexed connection), `save_opt_list optlist` — then `done` and
-  nothing else. Every option is defined inside the loop this way, even
-  one whose value doesn't depend on idx — array mode never hoists an
-  idx-independent option out as a one-time "shared prefix". That
-  round-trips into "array" mode; anything that deviates from this exact
+  then an optional `local task_idx` and a
+  `for task_idx in "${!array[@]}"; do` loop whose body is itself just
+  a plain option-definition body (its own `local optlist=""`, the same
+  closed grammar of option-definition primitives as "standard" mode,
+  parsed the same way, with the same "task_idx" for a task-indexed
+  connection as a generator body, and `save_opt_list optlist`), then
+  `done` and nothing else. Every option is defined inside the loop this
+  way, even one whose value doesn't depend on task_idx: array mode
+  never hoists a task_idx-independent option out as a one-time "shared
+  prefix". That round-trips into "array" mode; anything that deviates from this exact
   shape (a different loop form, extra statements after the loop, a
   differently named array/index, a hoisted option, ...) still falls
   back to "manual" as before, with the whole _define_opts kept verbatim
@@ -74,6 +75,7 @@ from .debasher_constants import (
     PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX,
     PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
+    TASK_IDX_VAR,
 )
 from .doc_mod import run_get_verbatim_func_source
 from .markdown_parsing import (
@@ -171,7 +173,7 @@ _HEADER_BOILERPLATE_RES = [
     re.compile(r"^local\s+process_spec=\$2$"),
     re.compile(r"^local\s+process_name=\$3$"),
     re.compile(r"^local\s+process_outdir=\$4$"),
-    re.compile(r"^local\s+task_idx=\$5$"),  # only present on _generate_opts
+    re.compile(rf"^local\s+{TASK_IDX_VAR}=\$5$"),  # only present on _generate_opts
     re.compile(r'^local\s+optlist=("")?$'),
 ]
 _FOOTER_BOILERPLATE_RES = [
@@ -293,8 +295,9 @@ _CALL_TOKEN_COUNTS = {
     "define_infile_opt": 4,  # <label> <value> <optlist> <process_name>
 }
 
-def _idx_var_re(idx_var: str) -> re.Pattern:
-    return re.compile(rf"^\$\{{?{re.escape(idx_var)}\}}?$")
+# The only task index a define_opt_from_proc_task_out call round-trips
+# through the app with: "${task_idx}" or "$task_idx".
+_TASK_IDX_REF_RE = re.compile(rf"^\$\{{?{TASK_IDX_VAR}\}}?$")
 
 _CONNECTION_SCAN_RE = re.compile(
     r'(?:debasher::)?define_opt_from_proc_out\s+"(?P<label>[^"]*)"\s+'
@@ -379,7 +382,7 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
 #     done
 # but `declare -f` always reprints a for loop's "do" on its own line
 # (verified against real bash — same as _ARRAY_FOR_RE/_ARRAY_DO_LINE's
-# "for idx in ...; do" below), so the shape actually recovered here is
+# "for task_idx in ...; do" below), so the shape actually recovered here is
 # five lines: the count-read, the bare "for ((...))" header, "do", the
 # one inner call, "done". Recognized as a unit (see
 # _try_parse_fanout_block) only when allow_fanout_blocks is set — i.e.
@@ -418,14 +421,13 @@ def _fanout_for_re(var: str) -> re.Pattern:
     return re.compile(rf'^for\s+\(\(i=0;\s*i<{re.escape(var)};\s*i\+\+\)\)$')
 
 
-def _fanout_consumer_opt_re(idx_var: str) -> re.Pattern:
-    # The consumer side of a scatter connection (see
-    # script_generation.py's "Case B" branch in _option_definition_line):
-    # an ARRAY-mode process's own option, connected to a "standard"
-    # process's fanout family, referencing the member picked by the
-    # array's own per-task loop variable — e.g. "-outf${idx}" for
-    # idx_var="idx". Only meaningful when allow_fanout_consumer is set.
-    return re.compile(rf'^(?P<base>-[^"$]+)\$\{{{re.escape(idx_var)}\}}$')
+# The consumer side of a scatter connection (see script_generation.py's
+# "Case B" branch in _option_definition_line): an array- or
+# generator-mode process's own option, connected to a "standard"
+# process's fanout family, referencing the member picked by the index of
+# its own task, e.g. "-outf${task_idx}". Only meaningful when
+# allow_fanout_consumer is set.
+_FANOUT_CONSUMER_OPT_RE = re.compile(rf'^(?P<base>-[^"$]+)\$\{{{TASK_IDX_VAR}\}}$')
 
 
 def _try_parse_fanout_block(
@@ -529,8 +531,7 @@ class _ParseState:
     facts: _OptionFacts
     locals_table: dict[str, str]
     known_local_names: set[str]
-    idx_re: re.Pattern
-    fanout_consumer_re: re.Pattern | None
+    allow_fanout_consumer: bool
 
     def chase(self, text: str) -> tuple[str, bool]:
         return _chase_local_value(text, self.locals_table, self.known_local_names)
@@ -602,8 +603,8 @@ def _record_connection(state: _ParseState, func: str, tokens: list, mirrored: bo
     label, proc, opt = tokens[0], tokens[1], tokens[-2]
     opt_ok = opt[1]
     fanout_consumer_base = None
-    if not opt_ok and func == "define_opt_from_proc_out" and state.fanout_consumer_re is not None:
-        consumer_match = state.fanout_consumer_re.match(opt[0])
+    if not opt_ok and func == "define_opt_from_proc_out" and state.allow_fanout_consumer:
+        consumer_match = _FANOUT_CONSUMER_OPT_RE.match(opt[0])
         if consumer_match is not None:
             fanout_consumer_base = consumer_match.group("base")
             opt_ok = True
@@ -612,10 +613,10 @@ def _record_connection(state: _ParseState, func: str, tokens: list, mirrored: bo
     # define_opt_from_proc_task_out's args are <label> <proc> <task_idx>
     # <opt> <optlist>, one more than the plain define_opt_from_proc_out,
     # with task_idx in between. Only "connect to my own task"
-    # (${idx_var}/$idx_var) round-trips through the app: script_generation.py
-    # always regenerates exactly that (see _task_idx_var), never an
+    # (${task_idx}/$task_idx) round-trips through the app: script_generation.py
+    # always regenerates exactly that (see TASK_IDX_VAR), never an
     # arbitrary expression, so anything else isn't this grammar at all.
-    if func == "define_opt_from_proc_task_out" and not state.idx_re.match(tokens[2][0]):
+    if func == "define_opt_from_proc_task_out" and not _TASK_IDX_REF_RE.match(tokens[2][0]):
         return False
     state.facts.connections.append(
         ConnectionRef(
@@ -723,7 +724,6 @@ _CALL_RECORDERS = {
 
 def _parse_primitive_calls(
     body: list[str],
-    idx_var: str = "task_idx",
     allow_fanout_blocks: bool = False,
     allow_fanout_consumer: bool = False,
     initial_locals: dict[str, str] | None = None,
@@ -738,20 +738,16 @@ def _parse_primitive_calls(
     contains something outside that grammar (control flow, a computed
     call target, an unsupported call).
 
-    `idx_var` names the only bare loop-index reference a
-    define_opt_from_proc_task_out call round-trips through the app for
-    — "task_idx" for a generator body (the default), "idx" for an array
-    loop body (see _parse_array_define_opts).
-
     `allow_fanout_blocks` (only ever set for a "standard" _define_opts
     body — see resolve_options_handler) additionally recognizes the
     fanout-family block shape (see _try_parse_fanout_block).
 
-    `allow_fanout_consumer` (only ever set for an array-mode loop
-    body's `idx_var="idx"` — see _parse_array_define_opts) additionally
-    accepts a define_opt_from_proc_out whose connected option name is
-    "<base>${idx_var}" instead of a plain literal, reconstructing it as
-    a connection to that "standard" process's "<base>ith" fanout family.
+    `allow_fanout_consumer` (only ever set for an array-mode loop body
+    or a generator body, see _parse_array_define_opts and
+    _resolve_generator) additionally accepts a define_opt_from_proc_out
+    whose connected option name is "<base>${task_idx}" instead of a
+    plain literal, reconstructing it as a connection to that "standard"
+    process's "<base>ith" fanout family.
 
     `initial_locals`/`initial_known_local_names` seed the local-chasing
     state (see _resolve_embedded_refs/_chase_local_value) — only ever
@@ -768,8 +764,7 @@ def _parse_primitive_calls(
         facts=_OptionFacts(),
         locals_table=dict(initial_locals) if initial_locals else {},
         known_local_names=set(initial_known_local_names) if initial_known_local_names else set(),
-        idx_re=_idx_var_re(idx_var),
-        fanout_consumer_re=_fanout_consumer_opt_re(idx_var) if allow_fanout_consumer else None,
+        allow_fanout_consumer=allow_fanout_consumer,
     )
 
     i = 0
@@ -833,7 +828,12 @@ _ARRAY_HEADER_RES = [
     re.compile(r"^local\s+process_name=\$3$"),
     re.compile(r"^local\s+process_outdir=\$4$"),
 ]
-_ARRAY_FOR_RE = re.compile(r'^for\s+idx\s+in\s+"\$\{!array\[@\]\}"$')
+_ARRAY_FOR_RE = re.compile(rf'^for\s+{TASK_IDX_VAR}\s+in\s+"\$\{{!array\[@\]\}}"$')
+# The declaration that script generation writes right before that loop,
+# so that the loop variable is local to _define_opts. Optional: a
+# module written by hand may leave it out, and it is never part of
+# arrayCode either way.
+_ARRAY_LOCAL_IDX_RE = re.compile(rf"^local\s+{TASK_IDX_VAR}$")
 _ARRAY_DO_LINE = "do"
 _ARRAY_DONE_LINE = "done"
 
@@ -843,7 +843,7 @@ _ARRAY_DONE_LINE = "done"
 # authored source overwhelmingly writes it as a single "for ...; do"
 # line instead (see e.g. share/debasher/programs/debasher_array_example.
 # sh) -- so this optionally allows the same trailing "; do" inline.
-_VERBATIM_ARRAY_FOR_RE = re.compile(r'^for\s+idx\s+in\s+"\$\{!array\[@\]\}"\s*(?:;\s*do)?$')
+_VERBATIM_ARRAY_FOR_RE = re.compile(rf'^for\s+{TASK_IDX_VAR}\s+in\s+"\$\{{!array\[@\]\}}"\s*(?:;\s*do)?$')
 
 
 def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
@@ -870,19 +870,33 @@ def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     return locals_table, known_local_names
 
 
+def _array_code_end(lines: list[str], for_index: int, normalize) -> int:
+    """
+    Where arrayCode ends in `lines`, the part of an array-mode body after
+    its header: at the loop (`for_index`), or at the `local task_idx`
+    declaration right before it, skipping any blank or comment lines in
+    between. `normalize` turns a line into the form the regexes match.
+    """
+    i = for_index - 1
+    while i >= 0 and (not normalize(lines[i]) or normalize(lines[i]).startswith("#")):
+        i -= 1
+    if i >= 0 and _ARRAY_LOCAL_IDX_RE.match(normalize(lines[i])):
+        return i
+    return for_index
+
+
 def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     """
     Recognizes script_generation.py's exact array-mode shape (see
     _add_array_opts_func) in a _define_opts body: the standard header
     minus "local optlist=...", then arbitrary user code (kept verbatim
-    as the returned arrayCode), then `for idx in "${!array[@]}"; do`,
-    then a loop body that's itself just a plain option-definition body
-    — `local optlist=""`, a flat sequence of option-definition
-    primitives, `save_opt_list optlist` — parsed by _parse_primitive_calls
-    exactly like a standard/generator body (its own header/footer-
-    boilerplate skipping handles those two lines; "idx" replaces
-    "task_idx" as the task-index variable a connection may use), then
-    `done` and nothing else.
+    as the returned arrayCode), then an optional `local task_idx`, then
+    `for task_idx in "${!array[@]}"; do`, then a loop body that's itself
+    just a plain option-definition body (`local optlist=""`, a flat
+    sequence of option-definition primitives, `save_opt_list optlist`),
+    parsed by _parse_primitive_calls exactly like a standard/generator
+    body (its own header/footer-boilerplate skipping handles those two
+    lines), then `done` and nothing else.
 
     None for anything that deviates from that — a different loop shape,
     trailing statements after the loop, a stray non-primitive call in
@@ -907,7 +921,8 @@ def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     if rest[-1] != _ARRAY_DONE_LINE:
         return None
 
-    array_code = "\n".join(rest[:for_index]).strip()
+    code_end = _array_code_end(rest, for_index, lambda line: line)
+    array_code = "\n".join(rest[:code_end]).strip()
     loop_body = rest[for_index + 2:-1]
 
     # array_code precedes the loop and is otherwise kept opaque/verbatim
@@ -916,15 +931,14 @@ def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     # still be referenced by a loop-body option's own local (see
     # _resolve_embedded_refs), so its locals are scanned (not otherwise
     # parsed/validated) to seed the loop body's chasing state.
-    seed_locals, seed_known_local_names = _scan_locals(rest[:for_index])
+    seed_locals, seed_known_local_names = _scan_locals(rest[:code_end])
 
     # allow_fanout_consumer: the loop body may connect to a "standard"
-    # process's fanout family via "<base>${idx}" (see
-    # _fanout_consumer_opt_re) — array mode has no fanout family
+    # process's fanout family via "<base>${task_idx}" (see
+    # _FANOUT_CONSUMER_OPT_RE); array mode has no fanout family
     # options of its own, so allow_fanout_blocks stays off.
     facts = _parse_primitive_calls(
         loop_body,
-        idx_var="idx",
         allow_fanout_consumer=True,
         initial_locals=seed_locals,
         initial_known_local_names=seed_known_local_names,
@@ -1131,8 +1145,9 @@ def _verbatim_array_code(script_path: Path, code: str, debasher_mod_dir: str) ->
     """
     Best-effort verbatim counterpart to _parse_array_define_opts's own
     header/loop-boundary trim: same idea as _verbatim_header_stripped_body,
-    but additionally cuts off at the "for idx in ..." loop marker (see
-    _ARRAY_FOR_RE) -- arrayCode is only ever the code *before* that loop;
+    but additionally cuts off at the "for task_idx in ..." loop marker
+    (see _ARRAY_FOR_RE), and at the "local task_idx" right before it
+    when there is one: arrayCode is only ever the code *before* that loop;
     script_generation.py's _add_array_opts_func re-emits the loop itself
     fresh from the process's parsed options, never from stored text.
     """
@@ -1154,7 +1169,7 @@ def _verbatim_array_code(script_path: Path, code: str, debasher_mod_dir: str) ->
     for_index = _find_verbatim_array_for_index(rest)
     if for_index is None:
         return None
-    return join_verbatim_body_lines(rest[:for_index])
+    return join_verbatim_body_lines(rest[:_array_code_end(rest, for_index, str.strip)])
 
 
 def resolve_options_handler(
@@ -1208,7 +1223,7 @@ def _resolve_generator(
     generator_size_code = _extract_generator_size_code(generate_opts_size)
     # allow_fanout_consumer: like array mode, a generator's per-task body
     # may connect to a "standard" process's fanout family via
-    # "<base>${task_idx}" (see _fanout_consumer_opt_re and
+    # "<base>${task_idx}" (see _FANOUT_CONSUMER_OPT_RE and
     # script_generation.py's _FANOUT_PARTNER_MODES); generator mode has no
     # fanout family options of its own, so allow_fanout_blocks stays off.
     facts = _parse_function_source(generate_opts, allow_fanout_consumer=True) if generate_opts else None

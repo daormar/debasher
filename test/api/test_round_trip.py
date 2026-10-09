@@ -292,7 +292,7 @@ def test_standard_mode_options_survive_the_round_trip(tmp_path):
 def test_every_options_handler_mode_survives_the_round_trip(tmp_path):
     arrayproc = _process(
         "arrayproc",
-        [_option("-id", value="${array[$idx]}"), _option("-outf", value="${process_outdir}/out_${idx}")],
+        [_option("-id", value="${array[$task_idx]}"), _option("-outf", value="${process_outdir}/out_${task_idx}")],
         optionsHandler=OptionsHandler(mode="array", arrayCode="# One task per id\narray=(a b c)"),
     )
     genproc = _process(
@@ -346,7 +346,7 @@ def test_a_fanout_family_survives_the_round_trip(tmp_path):
     dispatch.options[1].countSourceOptionId = dispatch.options[0].id
     worker = _process(
         "worker",
-        [_option("-inf", value="[dispatch;-outfith]"), _option("-outf", value="${process_outdir}/out_${idx}")],
+        [_option("-inf", value="[dispatch;-outfith]"), _option("-outf", value="${process_outdir}/out_${task_idx}")],
         optionsHandler=OptionsHandler(mode="array", arrayCode="array=(0 1)"),
     )
     program = _program("rt_fanout", [dispatch, worker], [_edge("dispatch", "-outfith", "worker", "-inf")])
@@ -371,7 +371,7 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
         [
             _option("-w", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
             _option("-inf", value="[dispatch;-outfith]"),
-            _option("-outf", value="${process_outdir}/out_${idx}"),
+            _option("-outf", value="${process_outdir}/out_${task_idx}"),
         ],
         optionsHandler=OptionsHandler(
             mode="array",

@@ -159,7 +159,7 @@ def _fanout(with_supervisor=True, array_initiator=False):
         "FBPProcess",
         [
             _option("w-in", "-inf", "input", value="[start;-outfith]"),
-            _option("w-outf", "-outf", "output", channel="fifo", value="worker_out_${idx}"),
+            _option("w-outf", "-outf", "output", channel="fifo", value="worker_out_${task_idx}"),
         ],
         mode="array",
         initiator=array_initiator,
@@ -279,7 +279,7 @@ def test_the_supervisor_reads_the_heartbeats_of_an_array_as_a_fanout_family():
     script = generate_script(_fanout())
 
     worker = _function(script, "worker_define_opts")
-    assert 'debasher::define_fifo_opt "-outhb" "worker_hb_${idx}" optlist || return 1' in worker
+    assert 'debasher::define_fifo_opt "-outhb" "worker_hb_${task_idx}" optlist || return 1' in worker
     sup = _function(script, "sup_define_opts")
     assert 'local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")' in sup
     assert 'debasher::define_opt_from_proc_task_out "-worker_hb${i}" "worker" "${i}" "-outhb" optlist || return 1' in sup
@@ -291,7 +291,7 @@ def test_the_supervisor_sends_to_the_tasks_of_an_array_initiator_as_a_fanout_fam
     script = generate_script(_fanout(array_initiator=True))
 
     worker = _function(script, "worker_define_opts")
-    assert 'debasher::define_opt_from_proc_out "-trigger" "sup" "-outworker_trig${idx}" optlist || return 1' in worker
+    assert 'debasher::define_opt_from_proc_out "-trigger" "sup" "-outworker_trig${task_idx}" optlist || return 1' in worker
     sup = _function(script, "sup_define_opts")
     assert (
         'debasher::define_fifo_opt "-outworker_trig${i}" "sup_worker_trig_${i}" optlist --control || return 1'

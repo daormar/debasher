@@ -90,7 +90,7 @@ describe("nodeOptionRole", () => {
   it("tells the sort of each option of a node", () => {
     expect(nodeOptionRole(option("-outf", { channel: "fifo" }))).toBe("businessOutput");
     expect(nodeOptionRole(option("-inf"))).toBe("businessInput");
-    expect(nodeOptionRole(option("-id", { value: "${idx}" }))).toBe("businessInput");
+    expect(nodeOptionRole(option("-id", { value: "${task_idx}" }))).toBe("businessInput");
     expect(nodeOptionRole(option("-ext", { channel: "fifo", fifoTag: "external" }))).toBe("externalInput");
   });
 

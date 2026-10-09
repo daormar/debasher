@@ -178,7 +178,7 @@ an input, as the engine requires. Its editor sets:
   value descriptor, the path of a file where an output writes a value
   for the processes connected to it; a FIFO; or a shared directory;
 * its **value**, for a direct value, which is a Bash word such as
-  ``10`` or ``${idx}``, written into the generated script as it is.
+  ``10`` or ``${task_idx}``, written into the generated script as it is.
 
 The **code** of a process is written in Bash, Python, Perl, R or
 Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
@@ -207,9 +207,11 @@ so how many tasks it runs:
 * **standard**: one task.
 * **array**: one task for each element of a Bash array named ``array``,
   which code written with "Configure" builds; the values of the options
-  can use its index, ``${idx}``.
+  can use its index, ``${task_idx}``, and its element,
+  ``${array[$task_idx]}``.
 * **generator**: one task for each index from 0 to the number that
-  code written with "Configure" prints.
+  code written with "Configure" prints; the values of the options can
+  use that index, ``${task_idx}``.
 * **manual**: the option definition function is written whole, by
   hand (general programs only).
 
