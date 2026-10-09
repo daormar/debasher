@@ -534,14 +534,17 @@ A few combinations make no sense, and the model keeps them out. A flag is always
 an input. `mirror` only applies to a `fifo` output. `value_desc` and
 `process_outdir` only apply to an output: the consumer of a value descriptor, or
 of a process output directory, just connects to it. A `subpath` only applies to
-`shared_dir` and `process_outdir`. `fromProcessSpec` and `commandLine` exclude
-each other, and a command line option has option channel `none`, since its value
-comes only from the command line. A task shaping option is a mandatory command
-line input with a value, and not a fanout family. A fanout family only exists on
-a `standard` process, and names in `countSourceOptionId` a command line option
-of the same process that gives the count. The editor offers only the valid
-combinations, and script generation checks again those whose violation would
-produce a wrong module, refusing to generate it.
+`shared_dir` and `process_outdir`. `fromProcessSpec` only applies to an input,
+since an output names what the process produces, and `fromProcessSpec` and
+`commandLine` exclude each other, and a command line option has option channel
+`none`, since its value comes only from the command line. A task shaping option
+is a mandatory command line input with a value, and not a fanout family. A
+fanout family only exists on a `standard` process, and names in
+`countSourceOptionId` a command line option of the same process that gives the
+count. The editor offers only the valid combinations, the checks of the edits
+that an agent makes refuse the ones that concern an output or a directory
+channel (see "Edits from an agent"), and script generation checks again those
+whose violation would produce a wrong module, refusing to generate it.
 
 ## Connections
 
@@ -863,21 +866,21 @@ normally does not define the function it runs, and so is not written.
 
 Script generation raises an error, and writes no module, for a program that
 would produce a wrong one: an option both `fromProcessSpec` and a command line
-option; a command line option with an option channel other than `none`; an input
-with option channel `process_outdir`; a subpath on an option whose option
-channel is neither `shared_dir` nor `process_outdir`; a task shaping option that
-is not a mandatory command line input with a value, or that is a fanout family;
-a fanout family that is a flag, a command line option or taken from the process
-specifications, whose count option is missing, is not a command line option or
-is a task shaping option, whose output is connected, mirrored or uses an option
-channel other than `none` or `fifo`, or whose input is not connected to a
-process in `array` or `generator` mode; a connection to a fanout family from a
-process in another mode; and a sequential process in a resident program, or with
-the name of a process or of another sequential process (see "Generating and
-importing a sequential process"). The save generates the script before it writes
-anything, so a program that script generation refuses leaves the home directory
-as it was. The save answers with the reason of the refusal, which the frontend
-shows.
+option; an output taken from the process specifications; a command line option
+with an option channel other than `none`; an input with option channel
+`process_outdir`; a subpath on an option whose option channel is neither
+`shared_dir` nor `process_outdir`; a task shaping option that is not a mandatory
+command line input with a value, or that is a fanout family; a fanout family
+that is a flag, a command line option or taken from the process specifications,
+whose count option is missing, is not a command line option or is a task shaping
+option, whose output is connected, mirrored or uses an option channel other than
+`none` or `fifo`, or whose input is not connected to a process in `array` or
+`generator` mode; a connection to a fanout family from a process in another
+mode; and a sequential process in a resident program, or with the name of a
+process or of another sequential process (see "Generating and importing a
+sequential process"). The save generates the script before it writes anything,
+so a program that script generation refuses leaves the home directory as it was.
+The save answers with the reason of the refusal, which the frontend shows.
 
 ## Environment variables of a program
 

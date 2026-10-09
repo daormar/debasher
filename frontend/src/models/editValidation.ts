@@ -1,5 +1,7 @@
 import { isValidEdge } from "./connections";
 import { hasSupervisor } from "./node";
+import type { ProgramOption } from "./option";
+import { DIRECTORY_CHANNELS } from "./option";
 import type { ProgramProcess } from "./process";
 import { optionLabelProblem, processNameProblem } from "./process";
 import type { Program } from "./program";
@@ -89,7 +91,10 @@ function editProblem(program: Program, edit: EditOp): string | null {
       if (process.options.some(option => option.id === edit.option.id)) {
         return `Process "${process.name}" already has an option with id "${edit.option.id}".`;
       }
-      return optionLabelProblem(process, edit.option.label, program.programType);
+      return (
+        optionLabelProblem(process, edit.option.label, program.programType) ??
+        optionFieldsProblem(process, edit.option)
+      );
     }
 
     case "updateOption": {
@@ -97,11 +102,13 @@ function editProblem(program: Program, edit: EditOp): string | null {
       if (!process) {
         return missingProcess(edit.processId);
       }
+      const option = process.options.find(candidate => candidate.id === edit.optionId);
       return (
         missingOption(process, edit.optionId) ??
         (edit.changes.label === undefined
           ? null
-          : optionLabelProblem(process, edit.changes.label, program.programType, edit.optionId))
+          : optionLabelProblem(process, edit.changes.label, program.programType, edit.optionId)) ??
+        optionFieldsProblem(process, { ...option!, ...edit.changes })
       );
     }
 
@@ -160,4 +167,20 @@ function editProblem(program: Program, edit: EditOp): string | null {
 
   }
 
+}
+
+// The combinations of the fields of an option that make no sense, which the
+// editor of an option does not offer and script generation refuses.
+function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): string | null {
+  const where = `Option "${option.label}" of process "${process.name}"`;
+  if (option.direction === "output" && option.fromProcessSpec) {
+    return `${where} is an output, which cannot take its value from the process specifications.`;
+  }
+  if (option.direction !== "output" && option.channel === "process_outdir") {
+    return `${where} uses the channel "process_outdir", which only an output can use.`;
+  }
+  if (option.subpath && !DIRECTORY_CHANNELS.has(option.channel)) {
+    return `${where} has a subpath, which only the channels "shared_dir" and "process_outdir" take.`;
+  }
+  return null;
 }

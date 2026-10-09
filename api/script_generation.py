@@ -514,6 +514,13 @@ def _check_option_sources(process, option) -> None:
             f'Option "{option.label}" on "{process.name}" can\'t be both '
             '"from process spec" and command-line.'
         )
+    # An output names what the process produces, never an attribute of
+    # its specifications
+    if option.direction == "output" and option.fromProcessSpec:
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" is an output, which can\'t '
+            "take its value from the process specifications."
+        )
     # The process output directory is what the process produces: another
     # process reads it through an ordinary connection to that output
     if option.channel == "process_outdir" and option.direction != "output":

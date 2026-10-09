@@ -117,4 +117,17 @@ describe("validateEdits", () => {
     ]);
   });
 
+  it("refuses the combinations of the fields of an option that make no sense", () => {
+    expect(validateEdits(program(), [
+      { op: "addOption", processId: "id-a", option: createOption("x", "-outn", { direction: "output", fromProcessSpec: true, value: "cpus" }) },
+      { op: "addOption", processId: "id-a", option: createOption("y", "-ind", { channel: "process_outdir" }) },
+      { op: "addOption", processId: "id-a", option: createOption("z", "-outs", { direction: "output", subpath: "${task_idx}" }) },
+      { op: "addOption", processId: "id-a", option: createOption("w", "-outd", { direction: "output", channel: "process_outdir", subpath: "${task_idx}" }) },
+    ])).toEqual([
+      'Option "-outn" of process "a" is an output, which cannot take its value from the process specifications.',
+      'Option "-ind" of process "a" uses the channel "process_outdir", which only an output can use.',
+      'Option "-outs" of process "a" has a subpath, which only the channels "shared_dir" and "process_outdir" take.',
+    ]);
+  });
+
 });

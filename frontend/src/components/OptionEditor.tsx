@@ -264,9 +264,19 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     }
   }, [fromProcessSpec, channel]);
 
+  useEffect(() => {
+    // An output names what the process produces, never an attribute of its
+    // specifications (script_generation.py refuses the combination)
+    if (direction === "output" && fromProcessSpec) {
+      setFromProcessSpec(false);
+    }
+  }, [direction, fromProcessSpec]);
+
   function handleSave() {
 
-    const savedFromProcessSpec = !isFlag && fromProcessSpec;
+    // An output names what the process produces, never an attribute of
+    // its specifications
+    const savedFromProcessSpec = !isFlag && direction === "input" && fromProcessSpec;
 
     // A command-line option takes its value from the command line only,
     // never through a channel (script_generation.py refuses the
@@ -571,7 +581,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
                   checked={fromProcessSpec}
 
-                  disabled={isConnected && !fromProcessSpec}
+                  disabled={(isConnected && !fromProcessSpec) || direction === "output"}
 
                   onChange={(event) => {
                     const checked = event.target.checked;

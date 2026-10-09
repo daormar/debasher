@@ -393,3 +393,10 @@ def test_a_subpath_on_an_option_of_another_channel_is_refused():
     option = _make_dir_option("output", "-outf", "none", value="x", subpath="${task_idx}")
     with pytest.raises(ValueError, match="has a subpath"):
         _option_definition_line(_make_process([option]), option, {}, {})
+
+
+def test_an_output_taken_from_the_process_specifications_is_refused():
+    option = _make_dir_option("output", "-outn", "none", value="cpus")
+    option.fromProcessSpec = True
+    with pytest.raises(ValueError, match="is an output"):
+        _option_definition_line(_make_process([option]), option, {}, {})
