@@ -946,6 +946,16 @@ create_mod_shared_dirs()
 }
 
 ########
+check_task_subdirs()
+{
+    # Two tasks asking for the same task subdirectory, task subdirectories
+    # one below another, or an output option holding a subdivided process
+    # output directory stop the run, as soon as the options of every task
+    # are known, so that a validation finds them too
+    debasher::_check_task_subdirs
+}
+
+########
 print_command_line()
 {
     local outd=$1
@@ -984,6 +994,9 @@ prepare_files_and_dirs_for_process()
             debasher::_clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
         debasher::_prepare_fifos_owned_by_process "${processname}"
+
+        # Prepare the task subdirectories that its tasks ask for
+        debasher::_prepare_task_subdirs_for_process "${dirname}" "${processname}" || return 1
     fi
 }
 
@@ -998,7 +1011,7 @@ prepare_files_and_dirs_for_processes()
     local processname
     for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
         local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
-        prepare_files_and_dirs_for_process "${dirname}" "${processname}" "${process_spec}"
+        prepare_files_and_dirs_for_process "${dirname}" "${processname}" "${process_spec}" || return 1
     done
 
     echo "Preparation complete" >&2
@@ -1388,6 +1401,8 @@ gen_dependency_graph "${prg_file_pref}" "${depgraph_file_prefix}" || exit 1
 
 create_mod_shared_dirs "${validate}" || exit 1
 
+check_task_subdirs || exit 1
+
 if [ ${conda_support_given} -eq 1 ]; then
     debasher::_prepare_conda_envs || exit 1
 fi
@@ -1439,7 +1454,7 @@ else
         fi
     else
         revise_rerun_proc_status "${outd}" || exit 1
-        prepare_files_and_dirs_for_processes "${outd}"
+        prepare_files_and_dirs_for_processes "${outd}" || exit 1
         launch_program_processes "${command_line}" "${outd}" || exit 1
         if [ "${wait}" -eq 1 ]; then
             wait_for_program_processes "${outd}" || exit 1

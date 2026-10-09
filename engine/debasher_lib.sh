@@ -520,6 +520,13 @@ declare -A DEBASHER_PROGRAM_SHDIRS
 # each with the name of its shared directory
 declare -A DEBASHER_PROGRAM_SHSUBDIRS
 
+# Declare associative array to store the task subdirectories that the
+# options of the run ask for (see debasher::define_opt_from_process_outdir),
+# by task ("<process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><task index>"), each
+# with the subpaths of its task subdirectories, one per line. The
+# execution context carries it to every task, which empties its own
+declare -A DEBASHER_PROCESS_TASK_SUBDIRS
+
 # Declare associative arrays to store names of fifos
 declare -A DEBASHER_PROGRAM_FIFOS
 

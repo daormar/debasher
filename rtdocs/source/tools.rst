@@ -366,7 +366,7 @@ debasher_get_fifo_mirror
 ``debasher_get_fifo_mirror`` shows the mirrored content of a process's
 FIFO, i.e. a copy of everything the owning process wrote into it,
 provided the FIFO was declared with the mirroring option of
-``define_fifo_opt``/``define_fifo_opt_generator`` on an output option
+``define_fifo_opt`` on an output option
 (see the :ref:`implem` Section for more information about FIFOs) and
 the owning process has already run.
 

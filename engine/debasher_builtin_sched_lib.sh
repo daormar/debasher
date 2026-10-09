@@ -1351,10 +1351,15 @@ debasher_builtin_sched::_reset_outdir()
 
     if [ "${reset_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
-    elif [ "${opt_array_size}" -eq 1 ]; then
-        debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
     else
-        debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
+        if [ "${opt_array_size}" -eq 1 ]; then
+            debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}"
+        else
+            debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}"
+        fi
+        # Each task empties its own task subdirectories, as the output
+        # directory of a process with a single task is emptied
+        debasher::_reset_task_subdirs "${dirname}" "${processname}" "${task_idx}" || return 1
     fi
 }
 
@@ -1436,7 +1441,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
         return 0
     fi
 
-    debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
+    debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}" || return 1
 
     # Start mirror taps (if any) for fifos this process owns and writes
     # to (see debasher::_start_fifo_mirror_taps_for_process) — must run
@@ -1812,6 +1817,9 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_process()
 
         # Create output directory
         debasher::_create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }
+
+        # Prepare the task subdirectories that its tasks ask for
+        debasher::_prepare_task_subdirs_for_process "${dirname}" "${processname}" || return 1
     fi
 }
 
@@ -1822,7 +1830,7 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_processes()
 
     local processname
     for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
-        debasher_builtin_sched::_prepare_files_and_dirs_for_process "${dirname}" $processname
+        debasher_builtin_sched::_prepare_files_and_dirs_for_process "${dirname}" $processname || return 1
     done
 }
 
@@ -1871,7 +1879,7 @@ debasher_builtin_sched::execute_program_processes()
     debasher_builtin_sched::_init_curr_comp_resources || return 1
 
     # Prepare files and directories for processes
-    debasher_builtin_sched::_prepare_files_and_dirs_for_processes "${dirname}"
+    debasher_builtin_sched::_prepare_files_and_dirs_for_processes "${dirname}" || return 1
 
     echo "" >&2
 

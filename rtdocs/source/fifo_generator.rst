@@ -6,9 +6,9 @@ FIFO Array Example using Generators
     # This module combines the two previous examples: its processes
     # are arrays of tasks created with generators, and each pair of
     # tasks with the same index is connected by a FIFO. A generator
-    # cannot call define_fifo_opt, so "producer_generate_opts" uses
-    # define_fifo_opt_generator instead, which also takes the index of
-    # the task that owns the FIFO. Each task declares its own FIFO,
+    # declares a FIFO with define_fifo_opt, as define_opts does: the
+    # engine knows the task whose options the generator defines, which
+    # becomes the owner of the FIFO. Each task declares its own FIFO,
     # whose name includes the task index so that the names do not
     # clash. On the reading side, "consumer_generate_opts" connects
     # task i to the FIFO of producer task i with
@@ -67,7 +67,7 @@ FIFO Array Example using Generators
         define_opt "-id" "${task_idx}" optlist || return 1
 
         # -outf option (one fifo per task, owned by that task)
-        define_fifo_opt_generator "-outf" "producer_fifo_${task_idx}" "${task_idx}" optlist || return 1
+        define_fifo_opt "-outf" "producer_fifo_${task_idx}" optlist || return 1
 
         save_opt_list optlist
     }

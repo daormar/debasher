@@ -962,7 +962,7 @@ debasher::_gen_opts_for_process_and_task()
 
     # Call options generator (output stored into DEBASHER_DESERIALIZED_ARGS)
     local proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
-    ${generate_opts_funcname} "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
+    debasher::_call_generate_opts "${generate_opts_funcname}" "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
     # Resolve descriptors for connected processes
     debasher::_resolve_proc_out_descriptors "${cmdline}"
@@ -1060,7 +1060,7 @@ debasher::_define_opts_for_process()
         local task_idx
         for (( task_idx=0; task_idx<$array_size; task_idx++ )); do
             # Call option generator
-            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
+            debasher::_call_generate_opts "${generate_opts_funcname}" "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" "${task_idx}" || return 1
 
             # Update output options information
             debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
@@ -1235,7 +1235,7 @@ debasher::_get_actual_opt_names_for_first_task()
         local end_marker="__DEBASHER_END_OF_OPTS__"
         local -a fields=()
         mapfile -d '' -t fields < <(
-            ${generate_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" 0 >/dev/null || exit 1
+            debasher::_call_generate_opts "${generate_opts_funcname}" "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" 0 >/dev/null || exit 1
             set -- "${DEBASHER_DESERIALIZED_ARGS[@]}"
             while [ $# -gt 0 ]; do
                 local token="$1"
@@ -2170,7 +2170,9 @@ debasher::_default_reset_outfiles_for_process()
 
     if [ -d "${outd}" ]; then
         echo "* Resetting output directory for process...">&2
-        "${RM}" -rf "${outd}"/* || { echo "Error! could not clear output directory" >&2; return 1; }
+        # Everything goes, including the entries whose name starts with a
+        # dot, such as value descriptors
+        "${FIND}" "${outd}" -mindepth 1 -maxdepth 1 -exec "${RM}" -rf -- {} + || { echo "Error! could not clear output directory" >&2; return 1; }
     fi
 }
 

@@ -591,6 +591,48 @@ the task. The required code would be as follows:
         save_opt_list optlist
     }
 
+The ``define_*`` functions work the same in ``define_opts`` and in
+``generate_opts``: the engine knows the task whose options are being
+defined, so a generator declares a FIFO with ``define_fifo_opt`` and a
+value descriptor with ``define_value_desc_opt``, as ``define_opts``
+does, and each task gets its own. The older
+``define_fifo_opt_generator``, which takes the task index as an
+argument, still works, and ignores that argument.
+
+A Directory of Its Own for Each Task
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The implementation of a process should not depend on how many tasks it
+has: a process written to run once should also work as an array,
+without changes. A process with a single task finds its output
+directory empty when it starts, since DeBasher empties it, but the
+tasks of an array share the output directory of their process, which
+is not emptied before each of them. ``define_opt_from_process_outdir``
+gives an option the path of the output directory of the process and,
+with ``--subdir``, that of a subdirectory of it for the task, which
+DeBasher creates before the process runs and empties before each task
+runs:
+
+.. code-block:: bash
+
+    define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 1
+
+The process function then finds the directory given in ``-outd``
+there and empty, with one task or with many, and can write files of
+fixed names into it. A ``reset_outfiles`` method, when the process has
+one, replaces the emptying. Two tasks may not ask for the same
+subdirectory, and no subdirectory may be below another one of the same
+process.
+
+An output directory for which some task asks for a subdirectory
+belongs to those subdirectories: when the process is prepared to run,
+DeBasher removes from it everything that is neither a subdirectory that
+a task of the run asks for nor a path that an output option of the run
+names (such as a value descriptor), so that the subdirectories of tasks
+that the process no longer has go away. A task therefore writes only
+into its own subdirectories, or into paths that its output options
+name.
+
 Option Definition for ``debasher_file_example``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1189,9 +1231,10 @@ exists. The ``debasher_dynamic_fanout_stepdone`` module in
 Two things are left to the process:
 
 * **The markers have to survive.** A process with a single task has
-  its output directory emptied when it starts, unless it has a
-  ``reset_outfiles`` method that keeps them; the example defines one
-  that does nothing.
+  its output directory emptied when it starts, and a task its
+  subdirectory given with ``define_opt_from_process_outdir --subdir``,
+  unless the process has a ``reset_outfiles`` method that keeps them;
+  the example defines one that does nothing.
 * **A marker has to stop counting when the work changes.** A process
   that runs again because its options or its inputs changed still finds
   the markers of the earlier run. The example puts a checksum of the

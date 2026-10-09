@@ -407,5 +407,5 @@ now_ms() {
     run debasher::define_fifo_opt_generator "-outf" "somefifo" 0 optlist --mirror
 
     [ "${status}" -eq 1 ]
-    [[ "${output}" == *"define_fifo_opt_generator: Error, --mirror cannot be used in a 'resident' program"* ]]
+    [[ "${output}" == *"define_fifo_opt: Error, --mirror cannot be used in a 'resident' program"* ]]
 }

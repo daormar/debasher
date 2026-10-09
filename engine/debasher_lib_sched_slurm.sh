@@ -161,12 +161,16 @@ debasher::_print_script_body_slurm_sched()
         echo "fi"
     fi
 
-    # Reset output directory
+    # Reset output directory, and empty the task subdirectories of the
+    # task, as the output directory of a process with a single task is
+    # emptied
     if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
         if [ "${opt_array_size}" -eq 1 ]; then
             echo "debasher::_default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
+            echo "debasher::_reset_task_subdirs $(printf '%q' "${dirname}") ${processname} 0 || exit 1"
         else
             echo "debasher::_default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
+            echo "debasher::_reset_task_subdirs $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\" || exit 1"
         fi
     else
         echo "${reset_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\""

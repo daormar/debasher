@@ -935,6 +935,41 @@ debasher::_define_fifo_task_idx()
 # $4... - The flags.
 #
 # Returns 0 if every flag is valid; otherwise prints an error and returns 1.
+# Gets the process and the task whose options are being defined, into the
+# variables named $1 and $2: the process of the _define_opts method or
+# option generator in the call stack, and the task index that the engine
+# keeps while it calls the option generator (see
+# debasher::_call_generate_opts), or else the number of option lists that
+# _define_opts has registered so far for the process.
+debasher::_get_defining_task()
+{
+    local -n defining_task_proc_ref=$1
+    local -n defining_task_idx_ref=$2
+
+    # Not finding a method of a kind in the call stack is not an error here
+    defining_task_proc_ref=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}") || true
+    if [ -n "${defining_task_proc_ref}" ]; then
+        defining_task_idx_ref=${DEBASHER_GENERATING_TASK_IDX:-0}
+    else
+        defining_task_proc_ref=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}") || true
+        defining_task_idx_ref=${DEBASHER_PROCESS_OPT_LIST_LEN["${defining_task_proc_ref}"]:-0}
+    fi
+}
+
+########
+# Calls the option generator $1 with the arguments that follow it, the
+# fifth of them being the task index, and keeps that index while the
+# generator runs, so that the define_* functions that it calls know the
+# task whose options they define (see debasher::_get_defining_task).
+debasher::_call_generate_opts()
+{
+    local generate_opts_funcname=$1
+    shift
+    local DEBASHER_GENERATING_TASK_IDX=$5
+    "${generate_opts_funcname}" "$@"
+}
+
+########
 debasher::_read_fifo_opt_flags()
 {
     local funcname=$1
@@ -1005,18 +1040,10 @@ debasher::define_fifo_opt()
     local mirrored kind
     debasher::_read_fifo_opt_flags "define_fifo_opt" mirrored kind "${@:4}" || exit 1
 
-    # Check that the call is valid
-    local proc_generate=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
-    if [ -n "${proc_generate}" ]; then
-        echo "define_fifo_opt: Error, this function cannot be called from an option generator" >&2
-        exit 1
-    fi
-
-    # Get process name
-    local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
-
-    # Get task index
-    local task_idx=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
+    # Get the process and the task whose options are being defined, by
+    # _define_opts or by an option generator
+    local processname task_idx
+    debasher::_get_defining_task processname task_idx
 
     # Define FIFO
     debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
@@ -1058,10 +1085,10 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 # $5... - (optional) "--mirror", and "--control" or "--external" (see
 #      debasher::define_fifo_opt).
 #
-# This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option,
-# except for a tagged fifo whose writer is outside the program.
-# Additionally, the function should only be called from an option generator.
+# The same function as debasher::define_fifo_opt, which an option
+# generator may call too: it is kept for the modules that call it, and
+# ignores the task index it is given, since the engine knows the task
+# whose options are being defined.
 #
 # Examples
 #
@@ -1070,31 +1097,7 @@ define_fifo_opt() { debasher::define_fifo_opt "$@"; }
 # The function does not return any value
 debasher::define_fifo_opt_generator()
 {
-    local opt=$1
-    local fifoname=$2
-    local task_idx=$3
-    local varname=$4
-    local mirrored kind
-    debasher::_read_fifo_opt_flags "define_fifo_opt_generator" mirrored kind "${@:5}" || exit 1
-
-    # Check that the call is valid
-    local proc_define=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
-    if [ -n "${proc_define}" ]; then
-        echo "define_fifo_opt_generator: Error, this function should only be called from an option generator" >&2
-        exit 1
-    fi
-
-    # Get process name
-    local processname=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
-
-    # Define FIFO
-    debasher::_define_fifo_task_idx "${fifoname}" "${processname}" "${task_idx}" "${mirrored}" "${kind}" "${opt}" || exit 1
-
-    # Get absolute name of FIFO
-    local abs_fifoname=$(debasher::_get_absolute_fifoname "${processname}" "${fifoname}")
-
-    # Define option for FIFO
-    debasher::define_opt "${opt}" "${abs_fifoname}" "${varname}" || return 1
+    debasher::define_fifo_opt "$1" "$2" "$4" "${@:5}"
 }
 
 ########
@@ -1107,10 +1110,9 @@ debasher::define_fifo_opt_generator()
 # $5... - (optional) "--mirror", and "--control" or "--external" (see
 #      debasher::define_fifo_opt).
 #
-# This function should only be defined in one of the processes connected
-# by the FIFO. More specifically, in the process defining an output option,
-# except for a tagged fifo whose writer is outside the program.
-# Additionally, the function should only be called from an option generator.
+# The same function as define_fifo_opt, kept for the modules that call
+# it; it ignores the task index it is given (see
+# debasher::define_fifo_opt_generator).
 #
 # Examples
 #
@@ -1755,12 +1757,14 @@ debasher::_get_value_descriptor_name()
 {
     local process_name=$1
     local opt=$2
+    local task_idx=$3
 
     # Obtain output directory for process
     local process_outdir=$(debasher::_get_process_outdir "${process_name}")
 
-    # Obtain value descriptor name
-    local val_desc="${process_outdir}/${DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX}${opt}"
+    # Obtain value descriptor name, named after the task too, so that the
+    # tasks of an array never share one
+    local val_desc="${process_outdir}/${DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX}${opt}_${task_idx}"
 
     echo "${val_desc}"
 }
@@ -1786,14 +1790,12 @@ debasher::define_value_desc_opt()
     local opt=$1
     local varname=$2
 
-    # Obtain caller process name
-    local proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS}")
-    if [ -z "${proc_name}" ]; then
-        proc_name=$(debasher::_get_processname_from_caller "${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS}")
-    fi
+    # Get the process and the task whose options are being defined
+    local proc_name task_idx
+    debasher::_get_defining_task proc_name task_idx
 
     # Get name of value descriptor
-    local val_desc=$(debasher::_get_value_descriptor_name "${proc_name}" "${opt}")
+    local val_desc=$(debasher::_get_value_descriptor_name "${proc_name}" "${opt}" "${task_idx}")
 
     # Define option
     debasher::define_opt "${opt}" "${val_desc}" "${varname}"
@@ -1962,20 +1964,21 @@ debasher::get_absolute_shdirname()
 get_absolute_shdirname() { debasher::get_absolute_shdirname "$@"; }
 
 ########
-# Checks that a subpath given with --subdir stays below its shared
-# directory: it is not empty, does not start with "/", and has no empty
-# component and no component "." or "..".
-debasher::_check_shared_subpath()
+# Checks that a subpath given with --subdir to the function $1 stays below
+# its directory: it is not empty, does not start with "/", and has no
+# empty component and no component "." or "..".
+debasher::_check_subpath()
 {
-    local subpath=$1
+    local funcname=$1
+    local subpath=$2
 
     if [ -z "${subpath}" ]; then
-        echo "define_opt_from_shared_dir: Error, --subdir takes a non-empty subpath" >&2
+        echo "${funcname}: Error, --subdir takes a non-empty subpath" >&2
         return 1
     fi
 
     if [ "${subpath:0:1}" = "/" ]; then
-        echo "define_opt_from_shared_dir: Error, the subpath ${subpath} given with --subdir is absolute" >&2
+        echo "${funcname}: Error, the subpath ${subpath} given with --subdir is absolute" >&2
         return 1
     fi
 
@@ -1988,32 +1991,37 @@ debasher::_check_shared_subpath()
     local component
     for component in "${components[@]}"; do
         if [ -z "${component}" ] || [ "${component}" = "." ] || [ "${component}" = ".." ]; then
-            echo "define_opt_from_shared_dir: Error, the subpath ${subpath} given with --subdir has an empty, \".\" or \"..\" component" >&2
+            echo "${funcname}: Error, the subpath ${subpath} given with --subdir has an empty, \".\" or \"..\" component" >&2
             return 1
         fi
     done
 }
 
 ########
-debasher::_read_shared_dir_opt_flags()
+# Reads the flags of define_opt_from_shared_dir and
+# define_opt_from_process_outdir (named $1, for the messages), from the
+# arguments after $2, into the variable named $2: the subpath given with
+# --subdir, or nothing.
+debasher::_read_subdir_opt_flags()
 {
-    local -n shared_dir_flags_subpath_ref=$1
-    shift
+    local funcname=$1
+    local -n subdir_flags_subpath_ref=$2
+    shift 2
 
-    shared_dir_flags_subpath_ref=""
+    subdir_flags_subpath_ref=""
     while [ $# -gt 0 ]; do
         case "$1" in
             "--subdir")
                 if [ $# -lt 2 ]; then
-                    echo "define_opt_from_shared_dir: Error, --subdir takes a subpath" >&2
+                    echo "${funcname}: Error, --subdir takes a subpath" >&2
                     return 1
                 fi
-                debasher::_check_shared_subpath "$2" || return 1
-                shared_dir_flags_subpath_ref=$2
+                debasher::_check_subpath "${funcname}" "$2" || return 1
+                subdir_flags_subpath_ref=$2
                 shift 2
                 ;;
             *)
-                echo "define_opt_from_shared_dir: Error, unknown flag $1" >&2
+                echo "${funcname}: Error, unknown flag $1" >&2
                 return 1
                 ;;
         esac
@@ -2051,7 +2059,7 @@ debasher::define_opt_from_shared_dir()
     local shdirname=$2
     local varname=$3
     local subpath
-    debasher::_read_shared_dir_opt_flags subpath "${@:4}" || exit 1
+    debasher::_read_subdir_opt_flags "define_opt_from_shared_dir" subpath "${@:4}" || exit 1
 
     local abs_shdirname=$(debasher::get_absolute_shdirname "${shdirname}")
     if [ -z "${subpath}" ]; then
@@ -2135,71 +2143,105 @@ debasher::_check_left_processes_not_running()
 }
 
 ########
-# Creates the shared subdirectory $1 (a path relative to the output
-# directory, "<shared dir>/<subpath>") of the shared directory $2, unless
-# $3 is 1, after checking that no component of its subpath is a
-# symbolic link, so that it never leaves its shared directory.
-debasher::_create_shared_subdir()
+# Fails when a component of the subpath $2 below the directory $1, the
+# last one included, is a symbolic link, so that creating or emptying it
+# never leaves that directory. $3 names the subdirectory for the message.
+debasher::_check_subpath_has_no_link()
 {
-    local relpath=$1
-    local shdirname=$2
-    local only_report=$3
+    local absroot=$1
+    local subpath=$2
+    local what=$3
 
-    local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
-    local subpath=${relpath#"${shdirname}/"}
-    local path=${absdir}
+    local path=${absroot}
     local -a components
     IFS='/' read -r -a components <<< "${subpath}"
     local component
     for component in "${components[@]}"; do
         path="${path}/${component}"
         if [ -L "${path}" ]; then
-            echo "Error: the shared subdirectory ${relpath} goes through the symbolic link ${path}" >&2
+            echo "Error: ${what} goes through the symbolic link ${path}" >&2
             return 1
         fi
     done
-
-    if [ "${only_report}" -ne 1 ]; then
-        "${MKDIR}" -p "${absdir}/${subpath}" || { echo "Error: cannot create the shared subdirectory ${relpath}" >&2; return 1; }
-    fi
 }
 
 ########
-# Removes, from the directory $4 of the subdivided shared directory $2,
-# whose path relative to the shared directory is $3 (empty for the shared
-# directory itself), every entry that is neither a shared subdirectory of
-# the run nor a directory on the way to one, looking inside the
-# directories on the way to one. Nothing is removed when $1 is 1, and
-# each entry is only named. A symbolic link is never followed: removing
-# it removes the link (the shared directory itself may be one, which
+# Adds to the associative array named $2 the paths below the directory $1,
+# relative to it, that an output option of the run names, without their
+# trailing "/".
+debasher::_add_output_named_paths()
+{
+    local absroot=$1
+    local -n output_named_ref=$2
+
+    local value
+    for value in "${!DEBASHER_OUT_VALUE_TO_PROCESSES[@]}"; do
+        [[ "${value}" == "${absroot}/"* ]] || continue
+        local relpath=${value#"${absroot}/"}
+        while [ "${relpath: -1}" = "/" ]; do
+            relpath=${relpath%/}
+        done
+        [ -n "${relpath}" ] && output_named_ref["${relpath}"]=1
+    done
+}
+
+########
+# Adds to the associative array named $2 every directory on the way to a
+# path of the associative array named $1 (all of them relative to the same
+# directory): "a" and "a/b" for "a/b/c".
+debasher::_add_ways_to_paths()
+{
+    local -n ways_paths_ref=$1
+    local -n ways_ref=$2
+
+    local relpath
+    for relpath in "${!ways_paths_ref[@]}"; do
+        local parent=${relpath}
+        while [[ "${parent}" == */* ]]; do
+            parent=${parent%/*}
+            ways_ref["${parent}"]=1
+        done
+    done
+}
+
+########
+# Removes, from the directory $4 of a subdivided directory, whose path
+# relative to that subdivided directory is $3 (empty for the subdivided
+# directory itself), every entry that is neither kept whole (a key of the
+# associative array named $5) nor a directory on the way to one (a key of
+# the associative array named $6), looking inside the directories on the
+# way. Both arrays hold paths relative to the subdivided directory, which
+# $2 names for the messages. Nothing is removed when $1 is 1, and each
+# entry is only named. A symbolic link is never followed: removing it
+# removes the link (the subdivided directory itself may be one, which
 # find -H follows).
-debasher::_prune_subdivided_shdir()
+debasher::_prune_subdivided_dir()
 {
     local only_report=$1
-    local shdirname=$2
+    local what=$2
     local reldir=$3
     local absdir=$4
-    local -n prune_ancestors_ref=$5
+    local -n prune_kept_ref=$5
+    local -n prune_ways_ref=$6
 
     local entry
     while IFS= read -r -d '' entry; do
-        local name=${entry##*/}
-        local relpath="${shdirname}/${name}"
-        [ -n "${reldir}" ] && relpath="${shdirname}/${reldir}/${name}"
+        local relpath=${entry##*/}
+        [ -n "${reldir}" ] && relpath="${reldir}/${relpath}"
 
-        # A shared subdirectory of the run is kept whole
-        [[ -v DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"] ]] && continue
+        # What is kept whole is not looked inside
+        [[ -v prune_kept_ref["${relpath}"] ]] && continue
 
-        # A directory on the way to one is looked inside
-        if [[ -v prune_ancestors_ref["${relpath}"] ]] && [ -d "${entry}" ] && [ ! -L "${entry}" ]; then
-            debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" "${relpath#"${shdirname}/"}" "${entry}" "$5" || return 1
+        # A directory on the way to what is kept is looked inside
+        if [[ -v prune_ways_ref["${relpath}"] ]] && [ -d "${entry}" ] && [ ! -L "${entry}" ]; then
+            debasher::_prune_subdivided_dir "${only_report}" "${what}" "${relpath}" "${entry}" "$5" "$6" || return 1
             continue
         fi
 
         if [ "${only_report}" -eq 1 ]; then
-            echo "A run would remove ${entry}, which no option asks for, from the shared directory ${shdirname}" >&2
+            echo "A run would remove ${entry}, which no option asks for, from ${what}" >&2
         else
-            echo "Removing ${entry}, which no option asks for, from the shared directory ${shdirname}" >&2
+            echo "Removing ${entry}, which no option asks for, from ${what}" >&2
             "${RM}" -rf -- "${entry}" || { echo "Error: cannot remove ${entry}" >&2; return 1; }
         fi
     done < <("${FIND}" -H "${absdir}" -mindepth 1 -maxdepth 1 -print0)
@@ -2211,9 +2253,10 @@ debasher::_prune_subdivided_shdir()
 # option that holds a subdivided shared directory, checks that no process
 # that the program no longer has is still running, creates every shared
 # subdirectory, and removes from every subdivided shared directory each
-# entry that is neither a shared subdirectory of the run nor a directory
-# on the way to one. When $1 is 1, as in a validation, nothing is created
-# or removed, and the entries that a run would remove are only named.
+# entry that is neither a shared subdirectory of the run, nor a path that
+# an output option of the run names, nor a directory on the way to one of
+# them. When $1 is 1, as in a validation, nothing is created or removed,
+# and the entries that a run would remove are only named.
 #
 # Must be called once the options of every process are defined and the
 # shared directories created.
@@ -2223,10 +2266,8 @@ debasher::_prepare_shared_subdirs()
 
     [ ${#DEBASHER_PROGRAM_SHSUBDIRS[@]} -eq 0 ] && return 0
 
-    # Collect the subdivided shared directories, and the directories on
-    # the way to a shared subdirectory (relative to the output directory)
+    # Collect the subdivided shared directories
     local -A subdivided
-    local -A ancestors
     local relpath
     for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
         local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
@@ -2235,11 +2276,6 @@ debasher::_prepare_shared_subdirs()
             return 1
         fi
         subdivided["${shdirname}"]=1
-        local parent=${relpath%/*}
-        while [ "${parent}" != "${shdirname}" ]; do
-            ancestors["${parent}"]=1
-            parent=${parent%/*}
-        done
     done
 
     debasher::_check_no_output_opt_holds_subdivided_shdir subdivided || return 1
@@ -2249,15 +2285,244 @@ debasher::_prepare_shared_subdirs()
     fi
 
     for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
-        debasher::_create_shared_subdir "${relpath}" "${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}" "${only_report}" || return 1
+        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
+        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+        local subpath=${relpath#"${shdirname}/"}
+        debasher::_check_subpath_has_no_link "${absdir}" "${subpath}" "the shared subdirectory ${relpath}" || return 1
+        if [ "${only_report}" -ne 1 ]; then
+            "${MKDIR}" -p "${absdir}/${subpath}" || { echo "Error: cannot create the shared subdirectory ${relpath}" >&2; return 1; }
+        fi
     done
 
     local shdirname
     for shdirname in "${!subdivided[@]}"; do
         local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
         [ -d "${absdir}" ] || continue
-        debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" "" "${absdir}" ancestors || return 1
+
+        # What the shared directory keeps: its shared subdirectories and
+        # the paths that output options name, relative to it
+        local -A kept=()
+        local -A ways=()
+        for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+            [ "${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}" = "${shdirname}" ] && kept["${relpath#"${shdirname}/"}"]=1
+        done
+        debasher::_add_output_named_paths "${absdir}" kept
+        debasher::_add_ways_to_paths kept ways
+
+        debasher::_prune_subdivided_dir "${only_report}" "the shared directory ${shdirname}" "" "${absdir}" kept ways || return 1
     done
+}
+
+########
+# Public: Defines process option whose value is the absolute path of the
+# process output directory, or of a task subdirectory below it.
+#
+# $1 - Option name.
+# $2 - Name of variable that will store the information about the option to be added.
+# $3... - (optional) "--subdir <subpath>": the option gets the absolute
+#      path of the task subdirectory <subpath> instead, a directory below
+#      the process output directory that the engine creates when the
+#      process is prepared and that the task empties before it runs, as
+#      the process output directory of a process with a single task is
+#      emptied, so that the process function finds it there and empty
+#      whatever the number of tasks of its process. The subpath follows
+#      the rules of debasher::define_opt_from_shared_dir --subdir. Two
+#      tasks may not ask for the same task subdirectory, and no task
+#      subdirectory may be below another one of the same process. A
+#      process output directory for which some task asks for a task
+#      subdirectory belongs to its task subdirectories: when the process
+#      is prepared, every entry that is neither a task subdirectory of the
+#      run, nor a path that an output option of the run names, nor a
+#      directory on the way to one of them is removed from it (see
+#      debasher::_prepare_task_subdirs_for_process).
+#
+# Examples
+#
+#   debasher::define_opt_from_process_outdir "-outd" "optlist"
+#   debasher::define_opt_from_process_outdir "-outd" "optlist" --subdir "${task_idx}"
+#
+# The function does not return any value
+debasher::define_opt_from_process_outdir()
+{
+    local opt=$1
+    local varname=$2
+    local subpath
+    debasher::_read_subdir_opt_flags "define_opt_from_process_outdir" subpath "${@:3}" || exit 1
+
+    local processname task_idx
+    debasher::_get_defining_task processname task_idx
+    local process_outdir=$(debasher::_get_process_outdir "${processname}")
+
+    if [ -z "${subpath}" ]; then
+        debasher::define_opt "${opt}" "${process_outdir}" "${varname}"
+        return
+    fi
+
+    # Record the task subdirectory under its task; the execution context
+    # carries the record to every task, which empties its own
+    local key="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+    local recorded=${DEBASHER_PROCESS_TASK_SUBDIRS["${key}"]:-}
+    if [ -z "${recorded}" ]; then
+        DEBASHER_PROCESS_TASK_SUBDIRS["${key}"]=${subpath}
+    elif ! "${GREP}" -qxF -- "${subpath}" <<< "${recorded}"; then
+        DEBASHER_PROCESS_TASK_SUBDIRS["${key}"]="${recorded}"$'\n'"${subpath}"
+    fi
+
+    debasher::define_opt "${opt}" "${process_outdir}/${subpath}" "${varname}"
+}
+
+########
+# Public: Defines process option whose value is the absolute path of the
+# process output directory, or of a task subdirectory below it.
+#
+# $1 - Option name.
+# $2 - Name of variable that will store the information about the option to be added.
+# $3... - (optional) "--subdir <subpath>" (see
+#      debasher::define_opt_from_process_outdir).
+#
+# Examples
+#
+#   define_opt_from_process_outdir "-outd" "optlist"
+#   define_opt_from_process_outdir "-outd" "optlist" --subdir "${task_idx}"
+#
+# The function does not return any value
+define_opt_from_process_outdir() { debasher::define_opt_from_process_outdir "$@"; }
+
+########
+# Prints the task subdirectories that the tasks of the process $1 ask for,
+# one subpath per line, each with the index of its task before it and a
+# tab between them.
+debasher::_list_task_subdirs_of_process()
+{
+    local processname=$1
+
+    local prefix="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local key
+    for key in "${!DEBASHER_PROCESS_TASK_SUBDIRS[@]}"; do
+        [[ "${key}" == "${prefix}"* ]] || continue
+        local task_idx=${key#"${prefix}"}
+        local subpath
+        while IFS= read -r subpath; do
+            printf '%s\t%s\n' "${task_idx}" "${subpath}"
+        done <<< "${DEBASHER_PROCESS_TASK_SUBDIRS["${key}"]}"
+    done
+}
+
+########
+# Checks the task subdirectories of the run, once the options of every
+# task are defined: two tasks may not ask for the same one, no task
+# subdirectory may be below another one of the same process, since each
+# one is emptied on its own, and no output option may hold the path of a
+# subdivided process output directory, since it would name the whole
+# directory as something that a task produces.
+debasher::_check_task_subdirs()
+{
+    [ ${#DEBASHER_PROCESS_TASK_SUBDIRS[@]} -eq 0 ] && return 0
+
+    # Collect the processes that ask for task subdirectories
+    local -A processes
+    local key
+    for key in "${!DEBASHER_PROCESS_TASK_SUBDIRS[@]}"; do
+        processes["${key%"${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"*}"]=1
+    done
+
+    local processname
+    for processname in "${!processes[@]}"; do
+        local -A owner=()
+        local task_idx subpath
+        while IFS=$'\t' read -r task_idx subpath; do
+            if [[ -v owner["${subpath}"] ]] && [ "${owner["${subpath}"]}" != "${task_idx}" ]; then
+                echo "Error: tasks ${owner["${subpath}"]} and ${task_idx} of process ${processname} ask for the same task subdirectory ${subpath}" >&2
+                return 1
+            fi
+            owner["${subpath}"]=${task_idx}
+        done < <(debasher::_list_task_subdirs_of_process "${processname}")
+
+        for subpath in "${!owner[@]}"; do
+            local parent=${subpath}
+            while [[ "${parent}" == */* ]]; do
+                parent=${parent%/*}
+                if [[ -v owner["${parent}"] ]]; then
+                    echo "Error: the task subdirectory ${subpath} of process ${processname} is below another one, ${parent}" >&2
+                    return 1
+                fi
+            done
+        done
+
+        local outd=$(debasher::_get_process_outdir "${processname}")
+        local value
+        for value in "${outd}" "${outd}/"; do
+            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+                echo "Error: an output option holds the output directory of process ${processname}, which has task subdirectories; a task writes only into its own task subdirectories (define_opt_from_process_outdir --subdir)" >&2
+                return 1
+            fi
+        done
+    done
+}
+
+########
+# Prepares the task subdirectories of the process $2 in the output
+# directory $1, when the process is prepared: unless the process has a
+# _reset_outfiles method or belongs to a resident program, removes from
+# its subdivided process output directory every entry that is neither a
+# task subdirectory of the run, nor a path that an output option of the
+# run names, nor a directory on the way to one of them; then creates the
+# task subdirectories that do not exist, refusing one whose subpath goes
+# through a symbolic link.
+debasher::_prepare_task_subdirs_for_process()
+{
+    local dirname=$1
+    local processname=$2
+
+    local -A kept=()
+    local task_idx subpath
+    while IFS=$'\t' read -r task_idx subpath; do
+        kept["${subpath}"]=1
+    done < <(debasher::_list_task_subdirs_of_process "${processname}")
+    [ ${#kept[@]} -eq 0 ] && return 0
+
+    local outd=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
+    local -a subpaths=("${!kept[@]}")
+
+    # A symbolic link is refused before anything is removed, since removal
+    # would take the link for an entry to remove
+    for subpath in "${subpaths[@]}"; do
+        debasher::_check_subpath_has_no_link "${outd}" "${subpath}" "the task subdirectory ${subpath} of process ${processname}" || return 1
+    done
+
+    local reset_funct=$(debasher::_get_reset_funcname "${processname}")
+    if [ "${reset_funct}" = "${DEBASHER_FUNCT_NOT_FOUND}" ] && [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] && [ -d "${outd}" ]; then
+        local -A ways=()
+        debasher::_add_output_named_paths "${outd}" kept
+        debasher::_add_ways_to_paths kept ways
+        debasher::_prune_subdivided_dir 0 "the output directory of process ${processname}" "" "${outd}" kept ways || return 1
+    fi
+
+    for subpath in "${subpaths[@]}"; do
+        "${MKDIR}" -p "${outd}/${subpath}" || { echo "Error: cannot create the task subdirectory ${subpath} of process ${processname}" >&2; return 1; }
+    done
+}
+
+########
+# Empties, before the task $3 of the process $2 runs, the task
+# subdirectories that it asks for, in the output directory $1: removes
+# each of them with everything in it and creates it again.
+debasher::_reset_task_subdirs()
+{
+    local dirname=$1
+    local processname=$2
+    local task_idx=$3
+
+    local key="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+    [[ -v DEBASHER_PROCESS_TASK_SUBDIRS["${key}"] ]] || return 0
+
+    local outd=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
+    local subpath
+    while IFS= read -r subpath; do
+        debasher::_check_subpath_has_no_link "${outd}" "${subpath}" "the task subdirectory ${subpath} of process ${processname}" || return 1
+        "${RM}" -rf -- "${outd}/${subpath}" || { echo "Error: cannot empty the task subdirectory ${subpath} of process ${processname}" >&2; return 1; }
+        "${MKDIR}" -p "${outd}/${subpath}" || { echo "Error: cannot create the task subdirectory ${subpath} of process ${processname}" >&2; return 1; }
+    done <<< "${DEBASHER_PROCESS_TASK_SUBDIRS["${key}"]}"
 }
 
 ########
@@ -2569,7 +2834,7 @@ debasher::_load_curr_opt_list_loop()
             # Call options generator (output stored into DEBASHER_DESERIALIZED_ARGS)
             local connected_proc_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${connected_proc}"]}
             local connected_proc_outdir=$(debasher::_get_process_outdir "${connected_proc}")
-            ${generate_opts_funcname} "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${connected_proc_task_idx}" || return 1
+            debasher::_call_generate_opts "${generate_opts_funcname}" "${cmdline}" "${connected_proc_spec}" "${connected_proc}" "${connected_proc_outdir}" "${connected_proc_task_idx}" || return 1
 
             # Get option value from function arguments
             value=$(debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}")

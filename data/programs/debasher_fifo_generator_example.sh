@@ -93,7 +93,7 @@ producer_generate_opts()
     define_opt "-id" "${task_idx}" optlist || return 1
 
     # -outf option (one fifo per task, owned by that task)
-    define_fifo_opt_generator "-outf" "producer_fifo_${task_idx}" "${task_idx}" optlist || return 1
+    define_fifo_opt "-outf" "producer_fifo_${task_idx}" optlist || return 1
 
     save_opt_list optlist
 }
