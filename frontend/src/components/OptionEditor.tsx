@@ -683,15 +683,15 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
                       : "External input (FIFO written from outside the program)"}
                 </option>
 
-                {!isResident && (
-                  <option value="shared_dir">
-                    Shared directory
-                  </option>
-                )}
-
                 {direction === "output" && !isResident && (
                   <option value="process_outdir">
                     Process output directory
+                  </option>
+                )}
+
+                {!isResident && (
+                  <option value="shared_dir">
+                    Shared directory
                   </option>
                 )}
 
