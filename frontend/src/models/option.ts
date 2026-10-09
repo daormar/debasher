@@ -4,10 +4,14 @@ export type OptionDataType = "int" | "float" | "string" | "file" | "None";
 
 // How the value is delivered, independent of its type — see
 // api/models.py's ProgramOption.channel for the full rationale
-// (value_desc is output-only; fifo and shared_dir aren't
-// direction-restricted). A "shared_dir" option's value names one of
-// Program.sharedDirs rather than holding a literal value.
-export type OptionChannel = "none" | "value_desc" | "fifo" | "shared_dir";
+// (value_desc and process_outdir are output-only; fifo and shared_dir
+// aren't direction-restricted). A "shared_dir" option's value names one
+// of Program.sharedDirs rather than holding a literal value, and a
+// "process_outdir" option's value holds nothing.
+export type OptionChannel = "none" | "value_desc" | "fifo" | "shared_dir" | "process_outdir";
+
+// The option channels that name a directory, and so take a subpath.
+export const DIRECTORY_CHANNELS: ReadonlySet<OptionChannel> = new Set(["shared_dir", "process_outdir"]);
 
 export interface ProgramOption {
   id: string;
@@ -29,6 +33,12 @@ export interface ProgramOption {
   fifoTag?: "external";
   description: string;
   value: string;
+  // Only for channel "shared_dir" or "process_outdir": the subpath of the
+  // shared subdirectory or task subdirectory that the option names instead
+  // of the directory itself, a Bash word such as "${task_idx}"; empty, or
+  // absent, for the directory itself. See api/models.py's
+  // ProgramOption.subpath.
+  subpath?: string;
   commandLine: boolean;
   mandatory: boolean;
   // On a "standard"-mode process only, whether this option's value comes

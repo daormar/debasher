@@ -166,6 +166,13 @@ class OptionHandlerResult:
     # program_import.py can't confirm against a real shared directory
     # still round-trips as a plain value rather than vanishing.
     shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
+    # Labels defined via define_opt_from_process_outdir, whose option gets
+    # channel "process_outdir" (see program_import.py).
+    process_outdir_labels: set[str] = field(default_factory=set)
+    # Option label -> the subpath that its define_opt_from_shared_dir or
+    # define_opt_from_process_outdir call gives with --subdir, as written
+    # (a Bash word, carried through unevaluated, like a value).
+    subpaths: dict[str, str] = field(default_factory=dict)
 
 
 _HEADER_BOILERPLATE_RES = [
@@ -270,7 +277,8 @@ _DEFINE_OPTS_CALL_RE = re.compile(
     r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
     r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|"
-    r"define_opt_from_shared_dir|define_procspec_opt|define_infile_opt|define_opt)"
+    r"define_opt_from_shared_dir|define_opt_from_process_outdir|define_procspec_opt|"
+    r"define_infile_opt|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -289,7 +297,8 @@ _CALL_TOKEN_COUNTS = {
     "define_fifo_opt_generator": 4,  # <label> <fifoname> <task_idx> <optlist> [--mirror, stripped before this check]
     "define_opt_from_proc_out": 4,  # <label> <proc> <opt> <optlist>
     "define_opt_from_proc_task_out": 5,  # <label> <proc> <task_idx> <opt> <optlist>
-    "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist>
+    "define_opt_from_shared_dir": 3,  # <label> <shdirname> <optlist> [--subdir <subpath>, stripped before this check]
+    "define_opt_from_process_outdir": 2,  # <label> <optlist> [--subdir <subpath>, stripped before this check]
     "define_procspec_opt": 4,  # <process_spec> <label> <specname> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
     "define_infile_opt": 4,  # <label> <value> <optlist> <process_name>
@@ -409,6 +418,24 @@ _SHARED_DIR_SCAN_RE = re.compile(
 )
 
 
+_PROCESS_OUTDIR_SCAN_RE = re.compile(r'(?:debasher::)?define_opt_from_process_outdir\s+"(?P<label>[^"]+)"')
+# The same calls, and define_opt_from_shared_dir, when their line also
+# carries "--subdir" and a quoted subpath.
+_SUBPATH_SCAN_RE = re.compile(
+    r'(?:debasher::)?define_opt_from_(?:shared_dir|process_outdir)\s+"(?P<label>[^"]+)"[^\n]*--subdir\s+"(?P<subpath>[^"]*)"'
+)
+
+
+def scan_process_outdir_labels(source: str) -> set[str]:
+    """Best-effort companion to scan_connections/..., same reasoning."""
+    return {match.group("label") for match in _PROCESS_OUTDIR_SCAN_RE.finditer(source)}
+
+
+def scan_subpaths(source: str) -> dict[str, str]:
+    """Best-effort companion to scan_connections/..., same reasoning."""
+    return {match.group("label"): match.group("subpath") for match in _SUBPATH_SCAN_RE.finditer(source)}
+
+
 def scan_shared_dir_refs(source: str) -> dict[str, SharedDirRef]:
     """Best-effort companion to scan_connections/..., same reasoning."""
     return {
@@ -520,6 +547,8 @@ class _OptionFacts:
     procspec_labels: set[str] = field(default_factory=set)
     fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
     shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
+    process_outdir_labels: set[str] = field(default_factory=set)
+    subpaths: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -532,6 +561,9 @@ class _ParseState:
     locals_table: dict[str, str]
     known_local_names: set[str]
     allow_fanout_consumer: bool
+    # The subpath given with --subdir to the call being recorded, if any
+    # (see _strip_trailing_flags)
+    subpath: str | None = None
 
     def chase(self, text: str) -> tuple[str, bool]:
         return _chase_local_value(text, self.locals_table, self.known_local_names)
@@ -574,15 +606,30 @@ def _record_fanout_block(state: _ParseState, fanout_match) -> None:
             state.facts.fifo_labels.add(fanout_label)
 
 
-def _strip_trailing_fifo_flags(func: str, tokens: list) -> tuple[list, bool]:
+def _strip_trailing_flags(func: str, tokens: list) -> tuple[list, bool, str | None]:
     """
-    The positional arguments of a call, and whether it is mirrored. A
+    The positional arguments of a call, whether it is mirrored, and the
+    subpath that it gives with --subdir, if any. A
     define_fifo_opt[_generator] call may carry one extra trailing
     "--mirror" token beyond its ordinary positional args (see
     script_generation.py's _option_definition_line), or a fifo tag in the
-    same place (see scan_fifo_tags, which recovers it): both are stripped
-    before the exact positional-count check, same as every other primitive
-    here.
+    same place (see scan_fifo_tags, which recovers it); a
+    define_opt_from_shared_dir or define_opt_from_process_outdir call may
+    end with "--subdir <subpath>". All of them are stripped before the
+    exact positional-count check, same as every other primitive here.
+    """
+    if func in ("define_opt_from_shared_dir", "define_opt_from_process_outdir"):
+        if len(tokens) >= 2 and tokens[-2] == ("--subdir", False):
+            return tokens[:-2], False, tokens[-1][0]
+        return tokens, False, None
+    tokens, mirrored = _strip_trailing_fifo_flags(func, tokens)
+    return tokens, mirrored, None
+
+
+def _strip_trailing_fifo_flags(func: str, tokens: list) -> tuple[list, bool]:
+    """
+    The positional arguments of a define_fifo_opt[_generator] call, and
+    whether it is mirrored (see _strip_trailing_flags).
     """
     if func not in ("define_fifo_opt", "define_fifo_opt_generator"):
         return tokens, False
@@ -653,7 +700,24 @@ def _record_shared_dir(state: _ParseState, func: str, tokens: list, mirrored: bo
     # OptionHandlerResult.shared_dir_refs): a synthesized, behavior-
     # preserving expression, used only if program_import.py can't confirm
     # shared_dir_refs[label] against a real shared directory.
-    state.facts.values[label[0]] = f'$(debasher::get_absolute_shdirname "{shdirname[0]}")'
+    value = f'$(debasher::get_absolute_shdirname "{shdirname[0]}")'
+    if state.subpath:
+        state.facts.subpaths[label[0]] = state.subpath
+        value = f"{value}/{state.subpath}"
+    state.facts.values[label[0]] = value
+    return True
+
+
+def _record_process_outdir(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
+    # The process output directory, or a task subdirectory of it: nothing
+    # to capture but the label and the subpath, its option gets channel
+    # "process_outdir" (see program_import.py).
+    label = tokens[0]
+    if not label[1]:
+        return False
+    state.facts.process_outdir_labels.add(label[0])
+    if state.subpath:
+        state.facts.subpaths[label[0]] = state.subpath
     return True
 
 
@@ -714,6 +778,7 @@ _CALL_RECORDERS = {
     "define_opt": _record_literal,
     "define_infile_opt": _record_literal,
     "define_opt_from_shared_dir": _record_shared_dir,
+    "define_opt_from_process_outdir": _record_process_outdir,
     "define_value_desc_opt": _record_value_desc,
     "define_fifo_opt": _record_fifo,
     "define_fifo_opt_generator": _record_fifo,
@@ -793,7 +858,7 @@ def _parse_primitive_calls(
             return None
 
         func = call_match.group("func")
-        tokens, mirrored = _strip_trailing_fifo_flags(func, _tokenize(call_match.group("args") or ""))
+        tokens, mirrored, state.subpath = _strip_trailing_flags(func, _tokenize(call_match.group("args") or ""))
         if len(tokens) != _CALL_TOKEN_COUNTS[func]:
             return None
         if not _CALL_RECORDERS.get(func, _record_cmdline)(state, func, tokens, mirrored):
@@ -1194,6 +1259,8 @@ def _result(handler: OptionsHandler, facts: _OptionFacts | None = None) -> Optio
         procspec_labels=facts.procspec_labels,
         fanout_count_source_labels=facts.fanout_count_source_labels,
         shared_dir_refs=facts.shared_dir_refs,
+        process_outdir_labels=facts.process_outdir_labels,
+        subpaths=facts.subpaths,
     )
 
 
@@ -1214,6 +1281,8 @@ def _scanned_facts(source: str) -> _OptionFacts:
         mirrored_fifo_labels=scan_mirrored_fifo_labels(source),
         procspec_labels=scan_procspec_labels(source),
         shared_dir_refs=scan_shared_dir_refs(source),
+        process_outdir_labels=scan_process_outdir_labels(source),
+        subpaths=scan_subpaths(source),
     )
 
 

@@ -30,8 +30,10 @@ export const nodeKind = z.enum(["FBPProcess", "ProgramLauncher", "DirectoryWatch
 export const optionFields = z.object({
   dataType: z.enum(["int", "float", "string", "file", "None"]).optional()
     .describe('"None" for a flag, which takes no value.'),
-  channel: z.enum(["none", "value_desc", "fifo", "shared_dir"]).optional()
-    .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, or a shared directory."),
+  channel: z.enum(["none", "value_desc", "fifo", "shared_dir", "process_outdir"]).optional()
+    .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, a shared directory, or, for an output, the output directory of the process."),
+  subpath: z.string().optional()
+    .describe('With channel "shared_dir" or "process_outdir": a directory of the task\'s own below that directory, a Bash word such as "${task_idx}", which the engine creates (and, for the output directory of the process, empties before each task). Empty for the directory itself.'),
   mirror: z.boolean().optional().describe("On a FIFO output: keep a copy of what goes through it."),
   fifoTag: z.literal("external").optional()
     .describe("In a resident program, on a FIFO input: an external input, written from outside the program."),

@@ -346,3 +346,50 @@ def test_the_code_of_an_external_alias_is_never_written():
     script = generate_script(_seq_program([alias]), skip_redundant_check=True)
 
     assert "increment()" not in script
+
+
+def _make_dir_option(direction, label, channel, value="", subpath=""):
+    return ProgramOption(
+        id="o1",
+        label=label,
+        direction=direction,
+        dataType="string",
+        description="",
+        value=value,
+        commandLine=False,
+        channel=channel,
+        subpath=subpath,
+    )
+
+
+def test_a_shared_directory_and_a_process_output_directory_are_written_with_their_subpath():
+    shared = _make_dir_option("output", "-outd", "shared_dir", value="data", subpath="${task_idx}")
+    plain_shared = _make_dir_option("input", "-ind", "shared_dir", value="data")
+    outdir = _make_dir_option("output", "-outp", "process_outdir", subpath="${array[$task_idx]}")
+    plain_outdir = _make_dir_option("output", "-outq", "process_outdir")
+    process = _make_process([shared, plain_shared, outdir, plain_outdir])
+
+    assert _option_definition_line(process, shared, {}, {}) == [
+        'debasher::define_opt_from_shared_dir "-outd" "data" optlist --subdir "${task_idx}" || return 1'
+    ]
+    assert _option_definition_line(process, plain_shared, {}, {}) == [
+        'debasher::define_opt_from_shared_dir "-ind" "data" optlist || return 1'
+    ]
+    assert _option_definition_line(process, outdir, {}, {}) == [
+        'debasher::define_opt_from_process_outdir "-outp" optlist --subdir "${array[$task_idx]}" || return 1'
+    ]
+    assert _option_definition_line(process, plain_outdir, {}, {}) == [
+        'debasher::define_opt_from_process_outdir "-outq" optlist || return 1'
+    ]
+
+
+def test_a_process_output_directory_on_an_input_is_refused():
+    option = _make_dir_option("input", "-ind", "process_outdir")
+    with pytest.raises(ValueError, match="only an output"):
+        _option_definition_line(_make_process([option]), option, {}, {})
+
+
+def test_a_subpath_on_an_option_of_another_channel_is_refused():
+    option = _make_dir_option("output", "-outf", "none", value="x", subpath="${task_idx}")
+    with pytest.raises(ValueError, match="has a subpath"):
+        _option_definition_line(_make_process([option]), option, {}, {})

@@ -109,13 +109,26 @@ refer to it.
 - **option channel**: how an option's value is delivered, independent of its
   data type (`ProgramOption.channel`): `none` for a literal value or a
   connection, `value_desc` for a value descriptor the engine synthesizes, `fifo`
-  for a named pipe, `shared_dir` for a shared directory.
+  for a named pipe, `shared_dir` for a shared directory, `process_outdir` for
+  the process output directory of the option's own process.
 - **literal value**: the value of an option with option channel `none` that is
   not connected, not a command line option and not taken from the process
   specifications: the Bash word that the user writes in `ProgramOption.value`,
   such as `10` or `${task_idx}`, and that script generation writes as it is
   (see "Option definitions").
 - **shared directory**: as defined in the design of the engine.
+- **shared subdirectory**: as defined in the design of the engine.
+- **process output directory**: as defined in the design of the engine.
+- **task subdirectory**: as defined in the design of the engine.
+- **subdivided shared directory**: as defined in the design of the engine.
+- **subdivided process output directory**: as defined in the design of the
+  engine.
+- **subpath**: as defined in the design of the engine: the path, below the
+  directory that an option with option channel `shared_dir` or `process_outdir`
+  names, of the shared subdirectory or task subdirectory that the option gives
+  instead (`ProgramOption.subpath`), written by script generation with
+  `--subdir`; `ProgramOption.subpath` is empty when the option names the
+  directory itself (see "Directories and their subdirectories").
 - **value descriptor**: as defined in the design of the engine: the file,
   named by an output option with option channel `value_desc`, into which a
   task writes a value for the processes connected to it.
@@ -482,13 +495,13 @@ bodies of the other methods a process may define (`_post`, `_skip`,
 from the options and the options handler.
 
 An option has a `label`, a `direction`, a `dataType`, an option channel, a
-`description` and a `value`, and five flags: `commandLine` and `mandatory`,
-`taskShaping` (a task shaping option), `fromProcessSpec` (its value is an
-attribute of the process's own specifications, such as `cpus`) and `mirror` (a
-copy of what the process writes into a FIFO is kept in a log that the web UI can
-show without taking data from the reader). An option's direction always follows
-from its label, by the engine's convention: output if the label starts with
-`-out` or `--out`, input otherwise.
+`description`, a `value` and a `subpath`, and five flags: `commandLine` and
+`mandatory`, `taskShaping` (a task shaping option), `fromProcessSpec` (its value
+is an attribute of the process's own specifications, such as `cpus`) and
+`mirror` (a copy of what the process writes into a FIFO is kept in a log that
+the web UI can show without taking data from the reader). An option's direction
+always follows from its label, by the engine's convention: output if the label
+starts with `-out` or `--out`, input otherwise.
 
 The labels of the options of a process are distinct, compared without the spaces
 around them, case included. The engine treats a label as the key of an option of
@@ -509,22 +522,26 @@ receive at run time:
 - a connection sentinel, for a connected input, which script generation does
   not read (see "Connections");
 - the FIFO's name, for option channel `fifo`;
-- the shared directory's name, never a path, for option channel `shared_dir`;
+- the shared directory's name, never a path, for option channel `shared_dir`,
+  whose subpath, if any, is in `subpath`;
+- nothing, for option channel `process_outdir`, whose subpath, if any, is in
+  `subpath`;
 - the attribute's name, such as `cpus`, when `fromProcessSpec` is set;
 - nothing that script generation uses, for a command line option, whose value
   comes from the program options at run time.
 
 A few combinations make no sense, and the model keeps them out. A flag is always
-an input. `mirror` only applies to a `fifo` output. `value_desc` only applies to
-an output: the consumer of a value descriptor just connects to it.
-`fromProcessSpec` and `commandLine` exclude each other, and a command line
-option has option channel `none`, since its value comes only from the command
-line. A task shaping option is a mandatory command line input with a value, and
-not a fanout family. A fanout family only exists on a `standard` process, and
-names in `countSourceOptionId` a command line option of the same process that
-gives the count. The editor offers only the valid combinations, and script
-generation checks again those whose violation would produce a wrong module,
-refusing to generate it.
+an input. `mirror` only applies to a `fifo` output. `value_desc` and
+`process_outdir` only apply to an output: the consumer of a value descriptor, or
+of a process output directory, just connects to it. A `subpath` only applies to
+`shared_dir` and `process_outdir`. `fromProcessSpec` and `commandLine` exclude
+each other, and a command line option has option channel `none`, since its value
+comes only from the command line. A task shaping option is a mandatory command
+line input with a value, and not a fanout family. A fanout family only exists on
+a `standard` process, and names in `countSourceOptionId` a command line option
+of the same process that gives the count. The editor offers only the valid
+combinations, and script generation checks again those whose violation would
+produce a wrong module, refusing to generate it.
 
 ## Connections
 
@@ -541,8 +558,9 @@ computes it: import, which builds the edges, leaves the value of a connected
 input empty, and the normalization of the store (`normalizeProgram`, see
 "Screens and the store") derives the sentinel on every program the store loads.
 A `shared_dir` input is the exception: its value stays the name of its
-directory, and its edges only document on the canvas a dependency that the
-engine derives on its own from every writer resolving to the same path.
+directory, and its edges only document on the canvas how the processes share it,
+while the engine derives the dependencies on its own, from the paths (see
+"Directories and their subdirectories").
 
 The canvas accepts a new connection only when it keeps the program valid for
 the engine:
@@ -556,10 +574,11 @@ the engine:
   into any of them either.
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
-  exception is fan-in between `shared_dir` options that name the same
-  directory, which all resolve to the same path.
+  exception is fan-in between `shared_dir` options that name the same directory,
+  whose edges only document how the processes share it (see "Directories and
+  their subdirectories").
 - A `shared_dir` option pairs with another `shared_dir` option only when both
-  name the same directory.
+  name the same directory, whatever their subpaths.
 - A fanout family pairs only with a process in `array` or `generator` mode,
   and never with another fanout family.
 - It closes no cycle, a self-loop included, made only of edges that do not
@@ -579,6 +598,78 @@ the canvas, a self-loop included. The canvas routes such an edge around the
 processes instead of through them, and a self-loop around its own process. For
 two processes that answer each other through FIFOs, it instead moves the
 handles of the answering pair to the other side, so that the edge stays short.
+
+## Directories and their subdirectories
+
+Two option channels give an option a directory that the engine manages:
+`shared_dir`, a shared directory of the program, and `process_outdir`, the
+process output directory of the option's own process. Either may name, in
+`subpath`, a directory below it instead: a shared subdirectory or a task
+subdirectory, which the engine creates before the process runs and, for a task
+subdirectory, empties before each task, unless the process has a
+`_reset_outfiles` method. The subpath is a Bash word, like a literal value (see
+"Values are Bash words, descriptions are text"), so that it can name each task's
+own directory, such as `${task_idx}` or `${array[$task_idx]}`. Script generation
+writes a subpath with `--subdir` (see "Option definitions"), and the engine
+checks, when the run is prepared, that it stays below its directory; an empty
+`subpath` means no subdirectory: the option names the directory itself, and
+script generation writes no `--subdir`.
+
+A subpath serves the principle of the design of the engine that the code of a
+process does not depend on its number of tasks. A process in `array` or
+`generator` mode whose output option with option channel `process_outdir` has
+subpath `${task_idx}` finds in that option a directory that exists and is empty
+when each task starts, unless it has a `_reset_outfiles` method, as a process in
+`standard` mode finds its process output directory, and writes into it the same
+files under the same names.
+
+`process_outdir` only applies to an output: the directory that the process
+produces, which another process reads through an ordinary connection to that
+output. A reader in `array` or `generator` mode reads the task subdirectory of
+the task with the same index, and a fanout family of a process in `standard`
+mode reads the task subdirectory of every task, one option for each (see "Option
+definitions"); an ordinary input of any other reader gets the value of the first
+task of the source only (see "Options handler modes"). A process that gathers
+the results of every task therefore reads them through a fanout family, with
+either channel, which also makes it wait for every task, since each of its
+options holds the path of the output of one task. The editor of an option offers
+the subpath next to the directory name of a `shared_dir` option, and next to the
+channel of a `process_outdir` one, in `standard`, `array` and `generator` mode,
+with the variables that the mode provides as a hint. A subdivided shared
+directory or subdivided process output directory belongs to its subdirectories,
+as the design of the engine says: a task writes only into its own
+subdirectories, or into a path that one of its output options names, and an
+output option that holds the whole directory stops the run. The editor does not
+check these rules, which depend on the values of every task; the engine checks
+the last one, in a validation too, and removes what a task leaves elsewhere:
+from a subdivided shared directory on the next run, and from a subdivided
+process output directory when its process is next prepared, unless it has a
+`_reset_outfiles` method.
+
+**Connections.** Two `shared_dir` options pair when they name the same shared
+directory, whatever their subpaths: an output that writes the shared
+subdirectory `${task_idx}` of `data` may feed an input that reads the whole of
+`data`, as a process that gathers the results of every task does, or an input
+that reads the same subdirectory. Connecting a `shared_dir` output to an input
+gives the input the name of the directory, not the subpath, so it reads the
+whole directory until the user gives it a subpath of its own. The edge only
+documents how the processes share the directory: script generation writes the
+definition of each option from its name and subpath, whatever the edges, and the
+engine infers a dependency only between an output and an input that hold the
+same path. A process that reads, through an input with subpath `${task_idx}`,
+what another writes through an output with the same subpath, both in `array` or
+`generator` mode, thus depends on it task by task (`aftercorr`), while an input
+that reads the whole directory gets no dependency on the writers of its
+subdirectories: its process has to be ordered after them with explicit
+dependencies, which replace its inferred ones (see "Future work"). A fanout
+family that reads the shared subdirectory of every task is ordered after them
+without them.
+
+**Import.** Import recognizes `define_opt_from_shared_dir` and
+`define_opt_from_process_outdir` with an optional `--subdir`, and gives the
+option its channel and its subpath (see "Recovering the options handler"). The
+edges that it adds between `shared_dir` options join each writer of a shared
+directory to each of its readers, whatever their subpaths.
 
 ## Options handler modes
 
@@ -688,7 +779,9 @@ a fan-in), taken from the first rule that applies:
 3. Option channel `fifo`: `define_fifo_opt` with the FIFO's name, and
    `--mirror` if `mirror` is set.
 4. Option channel `shared_dir`: `define_opt_from_shared_dir` with the
-   directory's name, whatever its edges.
+   directory's name, whatever its edges; option channel `process_outdir`:
+   `define_opt_from_process_outdir`. Either takes `--subdir` and the subpath
+   when the option has one.
 5. `fromProcessSpec`: `define_procspec_opt` with the attribute's name.
 6. A command line option: `define_cmdline_opt`, or `define_cmdline_infile_opt`
    for a file, with the suffix `_if_given` when it is not mandatory.
@@ -728,14 +821,13 @@ do not apply.
 
 ## Values are Bash words, descriptions are text
 
-Option values are written between double quotes as they are, without
-escaping. This is deliberate: a value is a Bash word, evaluated when the
-options are defined, so it can use the variables that script generation
-provides (`${task_idx}` in `array` and `generator` mode, `${array[$task_idx]}`
-in `array` mode, `$i` in a fanout family) and those of the preamble. It also
-means that a double quote, a backslash or a `$` meant literally has to be
-escaped by the user, and script generation does not check that the result is
-valid Bash.
+Option values, and subpaths, are written between double quotes as they are,
+without escaping. This is deliberate: a value is a Bash word, evaluated when the
+options are defined, so it can use the variables that script generation provides
+(`${task_idx}` in `array` and `generator` mode, `${array[$task_idx]}` in `array`
+mode, `$i` in a fanout family) and those of the preamble. It also means that a
+double quote, a backslash or a `$` meant literally has to be escaped by the
+user, and script generation does not check that the result is valid Bash.
 
 Descriptions (of the program, of each process and of each option) are text,
 never expressions, and script generation escapes the characters that keep a
@@ -771,19 +863,21 @@ normally does not define the function it runs, and so is not written.
 
 Script generation raises an error, and writes no module, for a program that
 would produce a wrong one: an option both `fromProcessSpec` and a command line
-option; a command line option with an option channel other than `none`; a task
-shaping option that is not a mandatory command line input with a value, or that
-is a fanout family; a fanout family that is a flag, a command line option or
-taken from the process specifications, whose count option is missing, is not a
-command line option or is a task shaping option, whose output is connected,
-mirrored or uses an option channel other than `none` or `fifo`, or whose input
-is not connected to a process in `array` or `generator` mode; a connection to a
-fanout family from a process in another mode; and a sequential process in a
-resident program, or with the name of a process or of another sequential process
-(see "Generating and importing a sequential process"). The save generates the
-script before it writes anything, so a program that script generation refuses
-leaves the home directory as it was. The save answers with the reason of the
-refusal, which the frontend shows.
+option; a command line option with an option channel other than `none`; an input
+with option channel `process_outdir`; a subpath on an option whose option
+channel is neither `shared_dir` nor `process_outdir`; a task shaping option that
+is not a mandatory command line input with a value, or that is a fanout family;
+a fanout family that is a flag, a command line option or taken from the process
+specifications, whose count option is missing, is not a command line option or
+is a task shaping option, whose output is connected, mirrored or uses an option
+channel other than `none` or `fifo`, or whose input is not connected to a
+process in `array` or `generator` mode; a connection to a fanout family from a
+process in another mode; and a sequential process in a resident program, or with
+the name of a process or of another sequential process (see "Generating and
+importing a sequential process"). The save generates the script before it writes
+anything, so a program that script generation refuses leaves the home directory
+as it was. The save answers with the reason of the refusal, which the frontend
+shows.
 
 ## Environment variables of a program
 
@@ -842,12 +936,13 @@ generation indents it again when it writes the function back.
 
 ## Recovering the options handler
 
-The option definition functions are the one part of a module that import
-parses (`option_handler_import.py`). It matches them against a closed grammar:
-the calls that define an option (`define_opt`, `define_fifo_opt`,
-`define_opt_from_proc_out`, `define_cmdline_opt`, and the rest of that family)
-with literal arguments, between the fixed lines that open and close the
-function. From the shape of the functions it decides the mode:
+The option definition functions are the one part of a module that import parses
+(`option_handler_import.py`). It matches them against a closed grammar: the
+calls that define an option (`define_opt`, `define_fifo_opt`,
+`define_opt_from_proc_out`, `define_cmdline_opt`, `define_opt_from_shared_dir`
+and `define_opt_from_process_outdir` with their optional `--subdir`, and the
+rest of that family) with literal arguments, between the fixed lines that open
+and close the function. From the shape of the functions it decides the mode:
 
 - `_generate_opts_size` exists: `generator` mode. Its body, without its fixed
   opening lines, becomes `generatorSizeCode` as it is, and `_generate_opts` is
@@ -860,11 +955,11 @@ function. From the shape of the functions it decides the mode:
 - Anything else: `manual` mode, with the functions kept as their verbatim
   source.
 
-What the grammar recognizes gives the values, the option channels, the flags
-`mirror` and `fromProcessSpec`, and the connections. A function kept in
-`manual` mode is still scanned for connections anywhere in its text, so that
-the canvas can draw them; script generation writes that function as it is, so
-a connection that the scan misses or invents costs a wrong line on the canvas,
+What the grammar recognizes gives the values, the subpaths, the option channels,
+the flags `mirror` and `fromProcessSpec`, and the connections. A function kept
+in `manual` mode is still scanned for connections anywhere in its text, so that
+the canvas can draw them; script generation writes that function as it is, so a
+connection that the scan misses or invents costs a wrong line on the canvas,
 never a wrong module.
 
 ## Building the program
@@ -884,8 +979,9 @@ With the processes read, import assembles the program:
 - **Shared directories.** An option whose value names a shared directory,
   literally or through a variable that the engine resolves, becomes a
   `shared_dir` option when that directory is one the program can reach, and
-  import adds an edge from each writer of a directory to each of its readers.
-  `availableSharedDirs` is filled with every reachable shared directory.
+  import adds an edge from each writer of a directory to each of its readers,
+  whatever their subpaths. `availableSharedDirs` is filled with every reachable
+  shared directory.
 - **Preamble.** The module documentation has no notion of a preamble, so
   import takes the text of the module before its first function definition,
   leaving out the header line of a generated script.
@@ -911,14 +1007,14 @@ writes.
 script generation writes: the flat definitions of `standard` mode, the fixed
 loop of `array` mode, the pair of functions of `generator` mode, and the
 functions of `manual` mode, which come back as they went. The processes, their
-options with their values, option channels and flags, the connections, the
-modes, the code, the additional methods, the specifications, the descriptions
-and the sequential processes survive. The order of the processes, and of the
-options of a process, follows the module documentation and may differ from the
-original. What lives only in the program metadata does not survive: the ids,
-which are new; the positions, which are laid out again; which edges are label
-edges, since import draws every edge as a line; the groups, which come back
-flattened; the connection sentinels, derived again from the connections
+options with their values, subpaths, option channels and flags, the connections,
+the modes, the code, the additional methods, the specifications, the
+descriptions and the sequential processes survive. The order of the processes,
+and of the options of a process, follows the module documentation and may differ
+from the original. What lives only in the program metadata does not survive: the
+ids, which are new; the positions, which are laid out again; which edges are
+label edges, since import draws every edge as a line; the groups, which come
+back flattened; the connection sentinels, derived again from the connections
 when the program is loaded; the environment variables, except the
 `DEBASHER_MOD_DIR` given to import; the execution options and program options;
 and the home and output directories. A `manual` function that happens to fit the
@@ -1247,10 +1343,10 @@ output directory:
 - "Show options" shows the process's `.opts` file, the options it was given,
   one per line.
 - "Show inputs and outputs" parses that same file into the resolved value of
-  each option, which for a FIFO, a shared directory or a value descriptor is
-  the path the engine chose, not the model's `value`. Each value can be opened
-  as a path: the content of a file, or the listing of a directory, anywhere the
-  server's user can read.
+  each option, which for a FIFO, a shared directory, a process output directory
+  or a value descriptor is the path the engine chose, not the model's `value`.
+  Each value can be opened as a path: the content of a file, or the listing of a
+  directory, anywhere the server's user can read.
 
 A process that ran as several tasks has one set of files per task. The backend
 lists the task indices from the names of the files in the process's directory
@@ -1994,7 +2090,10 @@ writes it. The option channels `value_desc` and `shared_dir` and the flag
 `mirror` are not offered: the engine refuses `--mirror` in a resident program,
 and a connection that is not a FIFO makes the reader wait for the writer to
 finish, a dependency that the engine refuses in a resident program, whose
-processes it launches all at once.
+processes it launches all at once. Nor is `process_outdir`: the engine never
+resets the process output directory of a node, which holds what the node has
+done so far, so a task subdirectory would give a node nothing that its process
+output directory does not.
 
 **Connections.** The canvas accepts a connection in a resident program only
 from a business output to a business input, of another node or of the same
@@ -2197,16 +2296,16 @@ declares `program_type "general"` comes back as a general program without the
 function, which behaves the same.
 
 **What script generation refuses of a resident program.** Besides what it
-refuses in a general program, with the same answer (see "What script
-generation refuses"), script generation refuses a resident program with more
-than one `Supervisor`; a process with no node kind; a node in `manual` mode;
-an option of the user that takes a label of the Supervisor wiring, uses the
-option channel `value_desc` or `shared_dir`, is mirrored or has the fifo tag
-`control`; a `Supervisor` with options of its own, or in `array` or
-`generator` mode; and, in a program with a `Supervisor`, an `array` or
-`generator` node that reaches no fanout family counted by a command line
-option. The editor offers none of them, and script generation refuses them in
-program metadata written by hand or by another tool.
+refuses in a general program, with the same answer (see "What script generation
+refuses"), script generation refuses a resident program with more than one
+`Supervisor`; a process with no node kind; a node in `manual` mode; an option of
+the user that takes a label of the Supervisor wiring, uses the option channel
+`value_desc`, `shared_dir` or `process_outdir`, is mirrored or has the fifo tag
+`control`; a `Supervisor` with options of its own, or in `array` or `generator`
+mode; and, in a program with a `Supervisor`, an `array` or `generator` node that
+reaches no fanout family counted by a command line option. The editor offers
+none of them, and script generation refuses them in program metadata written by
+hand or by another tool.
 
 **A node of a module, reused.** In a general program the dialog that names a
 new process suggests the processes that the modules of the preamble define,
@@ -3019,7 +3118,8 @@ too.
   half done (see "The program model of a resident program").
 - **Only connections that the engine accepts.** The canvas joins a business
   output to a business input only, and offers neither `value_desc`,
-  `shared_dir` nor `--mirror` (see "The program model of a resident program").
+  `shared_dir`, `process_outdir` nor `--mirror` (see "The program model of a
+  resident program").
 - **The code of a node is imported exactly, or refused.** Import keeps the
   parts of a node, or refuses the program with an explanation for each node
   that does not fit; it never keeps an approximation (see "Script generation
@@ -3297,24 +3397,30 @@ under a heading of its own:
 3. **The process.** Its name, its description and its language, and, in any
    options handler mode but `standard`, that the code runs once for each task,
    with the option list of that task.
-4. **The options.** For each option of the process, in its order: its label,
-   its direction and data type, or that it is a flag, its description, whether
-   it is mandatory, a command line option or a task shaping option (which the
-   code cannot read, since no task receives it), and its literal value if it
-   has one, or where its value comes from: the specifications of the process or
-   a shared directory. An option channel other than `none` says what it means
-   for the code: a FIFO is closed once written or read until its end, and a
-   value descriptor is written as the language rules say. A connected input
-   names the process and the output option it reads from, with their
+4. **The options.** For each option of the process, in its order: its label, its
+   direction and data type, or that it is a flag, its description, whether it is
+   mandatory, a command line option or a task shaping option (which the code
+   cannot read, since no task receives it), and its literal value if it has one,
+   or where its value comes from: the specifications of the process, a shared
+   directory or the process output directory, with its subpath. An option
+   channel other than `none` says what it means for the code: a FIFO is closed
+   once written or read until its end, a value descriptor is written as the
+   language rules say, and a task subdirectory, or the process output directory
+   of a process in `standard` mode, exists and is empty when the code starts,
+   unless the process has a `_reset_outfiles` method, which the prompt then
+   says, so the code may write files of fixed names into it; the process output
+   directory of a process in `array` or `generator` mode, without a subpath, is
+   shared by its tasks and not emptied, which the prompt says too. A connected
+   input names the process and the output option it reads from, with their
    descriptions, and says what the output is: a FIFO, read as it arrives, a
-   value descriptor, or else a file whose writer has finished before the
-   process runs; a connected output names, likewise, the options that read
-   it; an unconnected FIFO says that someone outside the program is at its
-   other end. An option of a fanout family names the option that gives its
-   count. A value descriptor is written, in Bash, with `write_value_to_desc`,
-   and read with `read_opt_value_from_func_args`, which gives the value and
-   not the path; in another language it is written into the file that the
-   option names, and its reader gets the path of that file.
+   value descriptor, or else a file whose writer has finished before the process
+   runs; a connected output names, likewise, the options that read it; an
+   unconnected FIFO says that someone outside the program is at its other end.
+   An option of a fanout family names the option that gives its count. A value
+   descriptor is written, in Bash, with `write_value_to_desc`, and read with
+   `read_opt_value_from_func_args`, which gives the value and not the path; in
+   another language it is written into the file that the option names, and its
+   reader gets the path of that file.
 5. **The code to complete.** The draft of the code editor, which starts as the
    template while the code is still one, or the template when the user has
    emptied the draft, in a fenced code block tagged with the language and longer
@@ -4271,6 +4377,15 @@ then succeeds in the first one.
 
 # Future work
 
+- **Ordering a reader of a whole shared directory.** An input that reads the
+  whole of a shared directory gets no dependency on the processes that write
+  its shared subdirectories, and its process has to be ordered with explicit
+  dependencies, which replace all its inferred ones (see "Directories and their
+  subdirectories"). The edge that the canvas draws could order it, if the engine
+  inferred a dependency of an input that holds a directory on the outputs that
+  hold paths below it, or let a process add a dependency to its inferred ones
+  (see "Dependencies by containment" in the future work of the design of the
+  engine).
 - **The result of each test.** "Run tests" shows the reports of bats and
   pytest as text; parsing them would let the canvas mark the processes whose
   tests fail.

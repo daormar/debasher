@@ -118,6 +118,22 @@ describe("buildCodePrompt", () => {
     expect(prompt).toContain("A FIFO that this process writes: close it once everything is written.\n  Nothing in the program reads it: someone outside the program reads it.");
   });
 
+  it("says what a directory of the task's own gives the code", () => {
+    const worker = process("worker", [
+      createOption("outd", "-outd", { direction: "output", channel: "process_outdir", subpath: "${task_idx}" }),
+      createOption("outs", "-outs", { direction: "output", channel: "shared_dir", value: "data", subpath: "${task_idx}" }),
+      createOption("outp", "-outp", { direction: "output", channel: "process_outdir" }),
+    ], { optionsHandler: { mode: "array", arrayCode: "array=(0 1)" } });
+    const prompt = buildCodePrompt({ ...program, processes: [worker], edges: [] } as Program, worker, "", "");
+    expect(prompt).toContain("The absolute path of the directory `${task_idx}` below the output directory of the process, a directory of the task's own: it exists and is empty when the code starts");
+    expect(prompt).toContain("The absolute path of the directory `${task_idx}` below the shared directory `data`");
+    expect(prompt).toContain("which every task of the process shares and which is not emptied before each of them");
+
+    const resetting = { ...worker, additionalMethods: { resetOutfilesCode: "worker_reset_outfiles()\n{\n    :\n}" } } as ProgramProcess;
+    const resetPrompt = buildCodePrompt({ ...program, processes: [resetting], edges: [] } as Program, resetting, "", "");
+    expect(resetPrompt).toContain("its `reset_outfiles` method, not the engine, decides what is left in it");
+  });
+
   it("says that the code does not receive a task shaping option", () => {
     const worker = process("worker", [
       createOption("w", "-w", { dataType: "int", commandLine: true, mandatory: true, taskShaping: true }),

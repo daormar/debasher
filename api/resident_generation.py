@@ -61,6 +61,14 @@ def _check_program(program: Program) -> None:
                     "a connection that is not a FIFO makes the reader wait for the writer "
                     "to finish."
                 )
+            if option.channel == "process_outdir":
+                raise ValueError(
+                    f'Option "{option.label}" of process "{process.name}" uses the option '
+                    'channel "process_outdir", which a resident program does not offer: the '
+                    "engine never resets the process output directory of a node, so a task "
+                    "subdirectory gives a node nothing that its process output directory "
+                    "does not."
+                )
             if option.mirror:
                 raise ValueError(
                     f'Option "{option.label}" of process "{process.name}" is mirrored, and '

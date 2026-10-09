@@ -39,6 +39,7 @@ export function optionLine(process: ProgramProcess, option: ProgramOption): stri
     option.mandatory ? "mandatory" : null,
     option.countSourceOptionId ? `count from ${labelOf(process, option.countSourceOptionId)}` : null,
     option.value ? `value ${quoted(option.value)}` : null,
+    option.subpath ? `subpath ${quoted(option.subpath)}` : null,
   ].filter(Boolean);
   const description = option.description ? `: ${option.description}` : "";
   return `${option.label} (${traits.join(", ")})${description}`;

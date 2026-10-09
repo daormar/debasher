@@ -60,6 +60,23 @@ describe("connectionCandidates", () => {
     ]);
   });
 
+  it("joins two shared directory options by the name of the directory, whatever their subpaths", () => {
+    const program: Program = {
+      ...createEmptyProgram("p"),
+      processes: [
+        process("split", [
+          option("split-outd", "-outd", { channel: "shared_dir", value: "data", subpath: "${task_idx}" }),
+          option("split-outo", "-outo", { channel: "shared_dir", value: "other", subpath: "${task_idx}" }),
+        ]),
+        process("merge", [option("merge-ind", "-ind", { channel: "shared_dir", value: "data" })]),
+      ],
+      edges: [],
+    };
+    expect(connectionCandidates(program, "merge", "merge-ind")).toEqual([
+      { sourceProcessId: "split", sourceOptionId: "split-outd", text: "split -outd" },
+    ]);
+  });
+
   it("follows the rules of an edge drawn on the canvas", () => {
     expect(connectionCandidates(programWith(), "b", "b-flag")).toEqual([]);
     const connected = programWith([

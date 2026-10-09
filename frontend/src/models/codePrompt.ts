@@ -148,7 +148,11 @@ function channelNotes(process: ProgramProcess, option: ProgramOption, fanoutFami
         ? "A value descriptor: write the value with `write_value_to_desc <value> <path>`, not into a file of your own."
         : "A value descriptor: write the value, alone, into the file that the option names."];
     case "shared_dir":
-      return [`The absolute path of the shared directory \`${option.value}\`, which every process that names it shares.`];
+      return option.subpath?.trim()
+        ? [`The absolute path of the directory \`${option.subpath.trim()}\` below the shared directory \`${option.value}\`, a directory of the task's own that exists when the code starts: write only into it, never elsewhere in the shared directory.`]
+        : [`The absolute path of the shared directory \`${option.value}\`, which every process that names it shares.`];
+    case "process_outdir":
+      return processOutdirNotes(process, option);
     default:
       break;
   }
@@ -159,6 +163,26 @@ function channelNotes(process: ProgramProcess, option: ProgramOption, fanoutFami
     return [`Its value: \`${option.value}\`.`];
   }
   return [];
+}
+
+// What an option with option channel "process_outdir" gives the code: a
+// directory of the task's own, which the engine empties before the task
+// runs unless the process has a _reset_outfiles method, or, without a
+// subpath, the process output directory, which the tasks of an array or a
+// generator share.
+function processOutdirNotes(process: ProgramProcess, option: ProgramOption): string[] {
+  const resetByProcess = (process.additionalMethods?.resetOutfilesCode ?? "").trim() !== "";
+  const emptied = resetByProcess
+    ? "it exists when the code starts, and its `reset_outfiles` method, not the engine, decides what is left in it from an earlier run"
+    : "it exists and is empty when the code starts, so the code may write files of fixed names into it";
+  const subpath = option.subpath?.trim();
+  if (subpath) {
+    return [`The absolute path of the directory \`${subpath}\` below the output directory of the process, a directory of the task's own: ${emptied}.`];
+  }
+  if (process.optionsHandler.mode === "array" || process.optionsHandler.mode === "generator") {
+    return ["The absolute path of the output directory of the process, which every task of the process shares and which is not emptied before each of them: give each task files of names of its own."];
+  }
+  return [`The absolute path of the output directory of the process: ${emptied}.`];
 }
 
 // What the option is connected to: the outputs that an input reads, the

@@ -90,7 +90,14 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 - **channel**: `none` (a value or a connection), `fifo` (`value` is the name of
   the FIFO), `value_desc` (an output into which the task writes a value, which
   a reader gets as the value rather than a path), `shared_dir` (`value` names a
-  shared directory).
+  shared directory), `process_outdir` (an output: the output directory of the
+  process, `value` empty).
+- **subpath**: with `shared_dir` or `process_outdir`, a directory of the
+  task's own below that directory, a Bash word such as `${task_idx}`, which
+  the engine creates; below the output directory it is also emptied before
+  each task, so the same code works with one task and with many. A task writes
+  only into its own subdirectory. To gather the results of every task, read
+  them through a fanout family, one option per task.
 - **Where an input's value comes from**: a connection; a literal `value` (a
   Bash word, such as `10` or `${task_idx}`); `commandLine` (from the program
   options); or `fromProcessSpec` (`value` names a specification: `cpus`,
@@ -110,7 +117,8 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 ## Connections
 
 - From an output to an input (`connect`, `disconnect`); an input takes one
-  connection, except `shared_dir` options naming the same directory.
+  connection, except `shared_dir` options naming the same directory, whatever
+  their subpaths.
 - **A file connection** makes the reader wait until the writer finished
   (`afterok`, or task by task between two processes of several tasks). Use it
   for batch steps, results that have to stay, steps that may be skipped or run

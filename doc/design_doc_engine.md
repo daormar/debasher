@@ -2518,6 +2518,17 @@ What is known to be missing from the design, or left open by it:
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process and the external scripts of aliases.
+- **Dependencies by containment.** An input whose value is a directory gets no
+  dependency on the processes whose output options hold paths inside it, such
+  as a process that reads a whole shared directory and the tasks that write its
+  shared subdirectories, and has to be ordered with explicit dependencies,
+  which replace all its inferred ones (see "Explicit dependencies"). The engine
+  could infer an `afterok` dependency of such an input on those processes, so
+  that the options stay the one source of the dependencies; two processes that
+  each read the directory and write into it would then make a cycle, which
+  `processdeps=none` would still allow. Explicit dependencies that add to the
+  inferred ones, instead of replacing them, would serve too, at the cost of
+  declaring them by hand.
 - **Processes that left the program.** `debasher_exec` could refuse to start
   in every run, and not only in a run with a subdivided shared directory,
   while a process that an earlier run had, and that the program no longer has,

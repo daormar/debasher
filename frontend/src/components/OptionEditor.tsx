@@ -9,6 +9,7 @@ import type {
 import type { ProgramType } from "../models/program";
 import { optionLabelProblem } from "../models/process";
 import {
+  DIRECTORY_CHANNELS,
   getOptionDirection,
   isValidOptionLabel,
   isFanoutOption,
@@ -172,6 +173,12 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const isValueDescriptor = channel === "value_desc";
   const isFifo = channel === "fifo";
   const isSharedDir = channel === "shared_dir";
+  const isProcessOutdir = channel === "process_outdir";
+
+  // The subpath of a shared subdirectory or task subdirectory, for the two
+  // option channels that name a directory
+  const [subpath, setSubpath] =
+    useState(option.subpath ?? "");
 
   const [mirror, setMirror] =
     useState(option.mirror);
@@ -194,7 +201,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     // value_desc is always output-direction (see models.py); fifo isn't
     // restricted, a process can legitimately open an input on a fifo it
     // rendezvous on by name.
-    if (direction === "input" && channel === "value_desc") {
+    if (direction === "input" && (channel === "value_desc" || channel === "process_outdir")) {
       setChannel("none");
     }
   }, [direction, channel]);
@@ -279,7 +286,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
       mirror: !isResident && !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
       fifoTag: isResident && savedChannel === "fifo" && direction === "input" ? "external" : undefined,
       description,
-      value: isFlag || isValueDescriptor ? "" : value,
+      value: isFlag || isValueDescriptor || savedChannel === "process_outdir" ? "" : value,
+      subpath: DIRECTORY_CHANNELS.has(savedChannel) ? subpath.trim() : "",
       commandLine: savedCommandLine,
       fromProcessSpec: savedFromProcessSpec,
       mandatory: commandLine && !savedFromProcessSpec && (mandatory || savedTaskShaping) && !isFlag,
@@ -681,6 +689,12 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
                   </option>
                 )}
 
+                {direction === "output" && !isResident && (
+                  <option value="process_outdir">
+                    Process output directory
+                  </option>
+                )}
+
               </select>
 
             )}
@@ -733,7 +747,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
                 }}
               >
                 {isSharedDir
-                  ? `[${value}]`
+                  ? `[${subpath.trim() ? `${value}/${subpath.trim()}` : value}]`
                   : connectedSourceLabels.length === 1
                   ? connectedSourceLabels[0]
                   : connectedSourceLabels.map((sourceLabel, index) => (
@@ -777,9 +791,9 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
               <input
 
-                value={isValueDescriptor || fromProcessSpec || commandLine ? "" : value}
+                value={isValueDescriptor || isProcessOutdir || fromProcessSpec || commandLine ? "" : value}
 
-                disabled={commandLine || fromProcessSpec || isValueDescriptor || manualMode}
+                disabled={commandLine || fromProcessSpec || isValueDescriptor || isProcessOutdir || manualMode}
 
                 onChange={(event) =>
                   setValue(event.target.value)
@@ -792,6 +806,42 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
               />
 
             )}
+
+          </>
+
+        )}
+
+        {(isSharedDir || isProcessOutdir) && !commandLine && !fromProcessSpec && (
+
+          <>
+
+            <label style={{ color: manualMode ? "#999" : undefined }}>
+              Subdirectory (optional)
+            </label>
+
+            <input
+
+              value={subpath}
+
+              disabled={manualMode}
+
+              placeholder={subpathHint(ownerProcess?.optionsHandler.mode)}
+
+              onChange={(event) =>
+                setSubpath(event.target.value)
+              }
+
+              style={{
+                width: "100%",
+              }}
+
+            />
+
+            <div style={{ color: "#666", fontSize: 12 }}>
+              {isSharedDir
+                ? "A directory of this task's own below the shared directory, which the engine creates; a task writes only into its own."
+                : "A directory of this task's own below the output directory of the process, which the engine creates and empties before the task runs."}
+            </div>
 
           </>
 
@@ -825,4 +875,16 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   );
 
+}
+
+// The example subpaths that the subpath field suggests, with the variables
+// that the options handler mode provides
+function subpathHint(mode: string | undefined): string {
+  if (mode === "array") {
+    return "e.g. ${task_idx} or ${array[$task_idx]}";
+  }
+  if (mode === "generator") {
+    return "e.g. ${task_idx}";
+  }
+  return "e.g. results";
 }

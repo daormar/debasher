@@ -464,6 +464,37 @@ def test_shared_directories_survive_the_round_trip(tmp_path):
     assert reimported.availableSharedDirs == ["shared"]
 
 
+def test_shared_and_task_subdirectories_survive_the_round_trip(tmp_path):
+    split = _process(
+        "split",
+        [
+            _option("-outd", channel="shared_dir", value="shared", subpath="${task_idx}"),
+            _option("-outp", channel="process_outdir", subpath="${array[$task_idx]}"),
+        ],
+        optionsHandler=OptionsHandler(mode="array", arrayCode="array=(a b)"),
+    )
+    gen = _process(
+        "gen",
+        [_option("-outp", channel="process_outdir", subpath="part_${task_idx}")],
+        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode="echo 2"),
+    )
+    merge = _process(
+        "merge",
+        [
+            _option("-ind", channel="shared_dir", value="shared"),
+            _option("-outdir", channel="process_outdir"),
+        ],
+    )
+    program = _program(
+        "rt_subdirs",
+        [split, gen, merge],
+        [_edge("split", "-outd", "merge", "-ind")],
+        sharedDirs=["shared"],
+    )
+
+    _assert_model_round_trip(program, tmp_path)
+
+
 def test_code_methods_specs_and_texts_survive_the_round_trip(tmp_path):
     pyproc = _process(
         "pyproc",

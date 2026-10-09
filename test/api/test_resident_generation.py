@@ -354,6 +354,12 @@ def test_a_channel_that_is_not_a_fifo_is_refused():
     _refused(program, "value_desc")
 
 
+def test_the_process_output_directory_channel_is_refused():
+    program = _relay()
+    program.processes[1].options.append(_option("s-p", "-outp", "output", channel="process_outdir"))
+    _refused(program, "process_outdir")
+
+
 def test_a_supervisor_with_options_of_its_own_is_refused():
     program = _relay()
     program.processes[2].options.append(_option("x", "-x", "input"))

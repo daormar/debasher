@@ -514,6 +514,18 @@ def _check_option_sources(process, option) -> None:
             f'Option "{option.label}" on "{process.name}" can\'t be both '
             '"from process spec" and command-line.'
         )
+    # The process output directory is what the process produces: another
+    # process reads it through an ordinary connection to that output
+    if option.channel == "process_outdir" and option.direction != "output":
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" uses channel "process_outdir", '
+            "which only an output can use."
+        )
+    if option.subpath and option.channel not in ("shared_dir", "process_outdir"):
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" has a subpath, which only '
+            'the channels "shared_dir" and "process_outdir" take.'
+        )
 
 
 def _flag_lines(option) -> list[str]:
@@ -539,12 +551,21 @@ def _channel_lines(option) -> list[str]:
             f"{mirror_flag}{_fifo_tag_flag(option)} || return 1"
         ]
     # "shared_dir": always define_opt_from_shared_dir, regardless of any
-    # edges into/out of this option, those exist purely to document the
-    # dependency in the canvas (see the frontend's
-    # isValidEdge); the engine derives the real processdeps
-    # on its own, from every writer of the same directory resolving to an
-    # identical absolute path.
-    return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist || return 1']
+    # edges into/out of this option, those exist purely to document how
+    # the processes share the directory in the canvas (see the frontend's
+    # isValidEdge); the engine derives the dependencies on its own, from
+    # an output and an input holding the same path. A subpath is a Bash
+    # word, written as it is, like a literal value.
+    if option.channel == "shared_dir":
+        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist{_subdir_flag(option)} || return 1']
+    # "process_outdir": the process output directory of the option's own
+    # process, or a task subdirectory of it
+    return [f'debasher::define_opt_from_process_outdir "{option.label}" optlist{_subdir_flag(option)} || return 1']
+
+
+def _subdir_flag(option) -> str:
+    """The --subdir flag of an option with a subpath, or nothing."""
+    return f' --subdir "{option.subpath}"' if option.subpath else ""
 
 
 def _procspec_lines(option) -> list[str]:

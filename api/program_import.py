@@ -397,7 +397,8 @@ def _resolve_shared_dir_refs(
 def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge]:
     """
     Synthesizes one edge for every (output, input) pair of "shared_dir"
-    options naming the identical directory, across the whole program —
+    options naming the identical directory, whatever their subpaths,
+    across the whole program —
     mirrors what hand-connecting them in the canvas would produce (see
     frontend/src/models/connections.ts's isValidEdge's fan-in rule), so an
     imported program's canvas shows the same writer/reader relationships
@@ -520,6 +521,14 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
             # (the spec attribute's name, e.g. "cpus") came from.
             if option.label in result.procspec_labels:
                 option.fromProcessSpec = True
+            # The process output directory is what the process produces
+            if option.direction == "output" and option.label in result.process_outdir_labels:
+                option.channel = "process_outdir"
+                option.value = ""
+            # The subpath of a shared or task subdirectory; one of a shared
+            # directory that _resolve_shared_dir_refs cannot confirm is
+            # dropped below, the plain value already holding it
+            option.subpath = result.subpaths.get(option.label, "")
 
         # Resolve each recovered fanout family's count-source label (see
         # OptionHandlerResult.fanout_count_source_labels) into the
@@ -560,6 +569,12 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
     available_shared_dirs = _resolve_shared_dir_refs(
         processes, pending_shared_dir_refs, script_path, debasher_mod_dir
     )
+
+    # Only the two channels of a directory take a subpath
+    for process in processes:
+        for option in process.options:
+            if option.channel not in ("shared_dir", "process_outdir"):
+                option.subpath = ""
 
     edges = _build_edges(processes, pending_connections) + _build_shared_dir_edges(processes)
     return _ReadModule(

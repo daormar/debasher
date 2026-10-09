@@ -30,7 +30,15 @@ class ProgramOption(BaseModel):
     # from every writer resolving to the identical absolute path
     # (DEBASHER_OUT_VALUE_TO_PROCESSES in engine/debasher_lib_opts.sh),
     # independent of whether such a connection is drawn at all.
-    channel: Literal["none", "value_desc", "fifo", "shared_dir"] = "none"
+    # "process_outdir" is the process output directory of the option's own
+    # process (define_opt_from_process_outdir), output only, with nothing
+    # in `value`: another process reads it through an ordinary connection.
+    channel: Literal["none", "value_desc", "fifo", "shared_dir", "process_outdir"] = "none"
+    # Only for channel "shared_dir" or "process_outdir": the subpath of the
+    # shared subdirectory or task subdirectory that the option names
+    # instead of the directory itself, a Bash word written with --subdir,
+    # such as "${task_idx}". Empty for the directory itself.
+    subpath: str = ""
     # Only meaningful when channel == "fifo" and direction == "output"
     # (i.e. this process writes to the fifo): duplicates every line this
     # process writes into a separate, non-destructively readable mirror
