@@ -11,7 +11,50 @@ for the shapes that most programs take: one task per entry of an input,
 a chain of steps for each entry, a pool of workers, a step that gathers
 the results of every task, and tasks that stream data to each other.
 Each pattern says when it applies, how it is written, and which example
-of the ``data/programs`` folder shows it whole.
+of the ``data/programs`` folder shows it whole. A choice comes before
+all of them: whether the entries of an input go into a single run, or
+each into a run of its own.
+
+One run for all the entries, or one run for each
+------------------------------------------------
+
+A program that processes many entries, such as the samples of a
+sample sheet, can be written in two ways, which differ in what holds
+the state: the run, or the entry.
+
+* **One run for all the entries.** The program has one task for each
+  entry, through an array or an option generator, as in the patterns
+  below. A single output directory holds every entry, a single status
+  says how the whole run goes, and the tasks share the CPUs and the
+  memory given to the run. A step that combines the entries, such as a
+  joint analysis of every sample or a report over all of them, is one
+  more process of the program, and the engine makes it wait for the
+  tasks that it reads.
+* **One run for each entry.** The program processes a single entry, and
+  runs once for each, each run in an output directory of its own, with
+  its own status and its own reruns. A failed entry does not affect the
+  others and runs again alone, and an entry that comes later is one
+  more run, which changes nothing in the runs already done.
+
+One run for all the entries suits a set of entries known in advance
+and steps that combine them. One run for each entry suits entries that
+are independent of each other, or that arrive over time. To launch the
+runs of a batch, ``debasher_exec_batch`` takes a file with one
+``debasher_exec`` command per line and runs them, no more than a given
+number at the same time:
+
+.. code-block:: bash
+
+    debasher_exec_batch -f runs.txt -m 8
+
+Under the Slurm scheduler the cluster shares out the resources among
+the runs by itself. When the entries arrive over time, a launcher node
+of a resident program launches one run for each request that it
+receives (see :ref:`resident`).
+
+With one run for each entry, a step that combines the results of every
+entry is not part of any of them: it runs separately, as a program of
+its own, once every run of the batch has ended.
 
 Choosing between an array and an option generator
 -------------------------------------------------

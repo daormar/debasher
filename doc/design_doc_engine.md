@@ -2613,3 +2613,17 @@ What is known to be missing from the design, or left open by it:
   filter, so that it runs only some of the tests of a program.
 - **Sequential processes in the web UI.** The web UI neither shows the
   sequential processes of a program nor keeps them when it saves the program.
+- **Gathering the runs of a batch.** `debasher_exec_batch` executes a file of
+  `debasher_exec` commands, one per line, each a run with its own output
+  directory, at most a given number at the same time, such as one run of the
+  same program for each sample of a sample sheet. A step that combines the
+  results of every run, such as a report over all the samples, has to be
+  launched separately once the batch ends. `debasher_exec_batch` could take a
+  final command, like the hook of `-k` but run once for the whole batch, and
+  give it a manifest, a file with the output directory of every run of the batch
+  (where `-o` moved it, and those of the runs that an earlier launch of the
+  batch completed included), one per line. Left open: whether the manifest lists
+  only the runs that completed (within the tolerance of `-u`) or every run with
+  its status, whether the final command runs when some runs failed or the batch
+  stopped before launching them all, and whether its result counts in the exit
+  status of the batch.
