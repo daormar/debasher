@@ -750,6 +750,11 @@ check_process_opts()
     # known (see debasher::_validate_program_fifo_kinds)
     debasher::_validate_program_fifo_kinds || return 1
 
+    # Check that the fifos that the tasks of a process define through the
+    # same option are read inside the program for every task or for none
+    # (see debasher::_check_fifos_read_alike)
+    debasher::_check_fifos_read_alike || return 1
+
     # Give each node of a resident program its ports, which the checks above
     # guarantee are consistent (see debasher::_register_resident_task_ports)
     debasher::_register_resident_task_ports || return 1

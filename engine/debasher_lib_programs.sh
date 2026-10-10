@@ -783,6 +783,92 @@ debasher::_validate_program_fifo_kinds()
 }
 
 ########
+# Prints the task indices given, in increasing order and with runs of
+# consecutive ones joined, as "task 3" or as "tasks 0-2, 5".
+debasher::_describe_task_indices()
+{
+    # The indices of an indexed array come out in increasing order
+    local -a present=()
+    local idx
+    for idx in "$@"; do
+        present[idx]=1
+    done
+
+    local -a ranges=()
+    local first="" last=""
+    for idx in "${!present[@]}"; do
+        if [ -n "${last}" ] && [ "${idx}" -eq $((last + 1)) ]; then
+            last=${idx}
+            continue
+        fi
+        [ -z "${first}" ] || ranges+=("$(debasher::_describe_task_range "${first}" "${last}")")
+        first=${idx}
+        last=${idx}
+    done
+    [ -z "${first}" ] || ranges+=("$(debasher::_describe_task_range "${first}" "${last}")")
+
+    local joined
+    joined=$(printf '%s, ' "${ranges[@]}")
+    if [ "${#present[@]}" -eq 1 ]; then
+        echo "task ${joined%, }"
+    else
+        echo "tasks ${joined%, }"
+    fi
+}
+
+########
+# Prints the range of task indices from $1 to $2, as "3" or "0-2".
+debasher::_describe_task_range()
+{
+    if [ "$1" -eq "$2" ]; then
+        echo "$1"
+    else
+        echo "$1-$2"
+    fi
+}
+
+########
+# Checks that the fifos that the tasks of a process define through the same
+# option are read inside the program for every task or for none. When only
+# some of them are, the others are almost always a mistake (a reader with
+# fewer tasks than the process, or a connection made with
+# define_opt_from_proc_out, which takes only the first task), and their
+# owners would block for ever waiting for a reader. A fifo with a tag is
+# left out, since its owner reads it. Prints an error and returns 1 for the
+# first option found whose fifos are read for some tasks only.
+debasher::_check_fifos_read_alike()
+{
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    # The tasks whose fifo is read inside the program, and those whose fifo
+    # is not, for each process and option
+    local -A read_tasks=()
+    local -A unread_tasks=()
+    local augm_fifoname owner group
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        [ -z "${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}" ] || continue
+        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        group="${owner%%${sep}*}${sep}${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]:-}"
+        if [ "${DEBASHER_FIFO_READERS[${augm_fifoname}]:-${DEBASHER_EXTERNAL_FIFO_END}}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+            unread_tasks["${group}"]+=" ${owner##*${sep}}"
+        else
+            read_tasks["${group}"]+=" ${owner##*${sep}}"
+        fi
+    done
+
+    for group in "${!unread_tasks[@]}"; do
+        [[ -v read_tasks["${group}"] ]] || continue
+        local processname="${group%%${sep}*}"
+        local opt="${group#*${sep}}"
+        local -a unread=(${unread_tasks[${group}]})
+        local owners="whose owner"
+        [ "${#unread[@]}" -eq 1 ] || owners="whose owners"
+        echo "Error: the fifos that process ${processname} defines through ${opt} are read inside the program for $(debasher::_describe_task_indices ${read_tasks[${group}]}) but not for $(debasher::_describe_task_indices "${unread[@]}"), ${owners} would block waiting for a reader: a reader with fewer tasks than ${processname}, or a connection to ${processname} made with define_opt_from_proc_out, which takes only its first task" >&2
+        return 1
+    done
+}
+
+########
 # The name of a node for a message: the process name, or
 # <process>:<idx> for a task of an array (as debasher_stop_resident's -x
 # names it). $1 is a node as the fifo registries store it,

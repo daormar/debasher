@@ -601,6 +601,13 @@ exposes a violation.
   `--external` for data (see "Channel kinds declared with the fifo"). The
   engine reads the direction of every channel from this, and refuses a
   resident program that does not follow it when the program is loaded.
+- **The fifos without a fifo tag that the tasks of an array define through the
+  same option are read inside the program for every task or for none.** A fifo
+  without a fifo tag whose other end is outside the program is a channel to
+  someone outside, but when only some tasks of an array have one, the engine
+  takes it for a mistake (a reader with fewer tasks than the array, for
+  instance) and refuses the program when it is loaded (see "Declaring and owning
+  a FIFO" in `doc/design_doc_engine.md`).
 
 ## Guarantees
 

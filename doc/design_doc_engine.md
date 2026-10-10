@@ -1585,7 +1585,14 @@ array, or the owner itself through another option, a self-loop. A second
 reader is refused, since each line written into a FIFO reaches only one of the
 processes that read it, and the other would wait for lines that never come.
 A FIFO that no task of the program reads has an external end, left to someone
-outside the program, such as a person who reads it from a terminal.
+outside the program, such as a person who reads it from a terminal. The FIFOs
+that the tasks of a process declare through the same output option are read
+inside the program for every task or for none: when only some of them are, the
+preparation of the run stops, since the others are almost always a mistake (a
+reader with fewer tasks than the process, or a connection made with
+`define_opt_from_proc_out`, which takes only the first task), and their owners
+would block for ever waiting for a reader. A FIFO fed from outside the program,
+which its owner reads, is left out.
 
 A FIFO whose writer is outside the program is declared by its reader, through
 an input option, with a tag that says so (`--control` or `--external`). Tags
@@ -2488,6 +2495,9 @@ leaves, by design, to the program or to whoever runs it.
     an option generator, never on the order in which they define their options,
     and a number of tasks that depends on itself is refused (see "Arrays and
     option generators").
+20. The FIFOs that the tasks of a process declare through the same output option
+    are read inside the program for every task or for none, and a program in
+    which only some of them are is refused (see "Declaring and owning a FIFO").
 
 **Limits and non-goals.**
 
