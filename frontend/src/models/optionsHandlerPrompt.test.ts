@@ -69,6 +69,69 @@ describe("buildOptionsHandlerPrompt", () => {
     expect(prompt).toContain("Print the number of tasks that the description of the process and the values of its options call for.");
   });
 
+  it("asks an option generator to take its number of tasks from another process instead of computing it again", () => {
+    const generator = { ...count, optionsHandler: { mode: "generator" } } as ProgramProcess;
+    const prompt = buildOptionsHandlerPrompt(program, generator, "generator", "", "");
+    expect(prompt).toContain("print that number with `get_process_num_tasks \"<process>\"` instead of computing it again");
+    expect(prompt).toContain("Any process of the program can be asked.");
+    expect(prompt).toContain("`n=$(get_process_num_tasks \"<process>\") || return 1`, so that a failure stops the preparation of the run.");
+    expect(prompt).not.toContain("reads, task by task");
+  });
+
+  it("lets an array take its number of elements only from an option generator", () => {
+    const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
+    expect(prompt).toContain("read that number with `n=$(get_process_num_tasks \"<process>\") || return 1` instead of computing it again");
+    expect(prompt).toContain("Only a process in `generator` mode can be asked");
+  });
+
+  it("names the processes that the process reads task by task", () => {
+    const producer = { ...count, id: "producer", name: "producer", optionsHandler: { mode: "generator" } } as ProgramProcess;
+    const single = { ...count, id: "single", name: "single", optionsHandler: { mode: "standard" } } as ProgramProcess;
+    const consumer = { ...count, id: "consumer", name: "consumer", optionsHandler: { mode: "generator" } } as ProgramProcess;
+    const edge = (id: string, source: string) =>
+      ({ id, sourceProcessId: source, sourceOptionId: `${source}-outf`, targetProcessId: "consumer", targetOptionId: "inf" });
+    const connected = {
+      ...program,
+      processes: [producer, single, consumer],
+      edges: [edge("e1", "producer"), edge("e2", "single")],
+    } as unknown as Program;
+    const prompt = buildOptionsHandlerPrompt(connected, consumer, "generator", "", "");
+    expect(prompt).toContain("- This process reads, task by task, the tasks of: `producer` (`generator` mode).");
+  });
+
+  it("names for an array only the processes in generator mode that it reads task by task", () => {
+    const generated = { ...count, id: "generated", name: "generated", optionsHandler: { mode: "generator" } } as ProgramProcess;
+    const arrayed = { ...count, id: "arrayed", name: "arrayed", optionsHandler: { mode: "array" } } as ProgramProcess;
+    const reader = { ...count, id: "reader", name: "reader", optionsHandler: { mode: "array" } } as ProgramProcess;
+    const edge = (id: string, source: string) =>
+      ({ id, sourceProcessId: source, sourceOptionId: `${source}-outf`, targetProcessId: "reader", targetOptionId: "inf" });
+    const connected = {
+      ...program,
+      processes: [generated, arrayed, reader],
+      edges: [edge("e1", "generated"), edge("e2", "arrayed")],
+    } as unknown as Program;
+    const prompt = buildOptionsHandlerPrompt(connected, reader, "array", "", "");
+    expect(prompt).toContain("- This process reads, task by task, the tasks of: `generated` (`generator` mode).");
+    expect(prompt).not.toContain("`arrayed`");
+  });
+
+  it("does not take a connection between shared directories for one that pairs tasks", () => {
+    const writer = { ...count, id: "writer", name: "writer", optionsHandler: { mode: "array" } } as ProgramProcess;
+    const reader = {
+      ...count,
+      id: "reader",
+      name: "reader",
+      optionsHandler: { mode: "generator" },
+      options: [...count.options, createOption("data", "-data", { channel: "shared_dir", value: "data" })],
+    } as ProgramProcess;
+    const connected = {
+      ...program,
+      processes: [writer, reader],
+      edges: [{ id: "e1", sourceProcessId: "writer", sourceOptionId: "writer-data", targetProcessId: "reader", targetOptionId: "data" }],
+    } as unknown as Program;
+    expect(buildOptionsHandlerPrompt(connected, reader, "generator", "", "")).not.toContain("reads, task by task");
+  });
+
   it("shows the values of the options, which say what a task is", () => {
     const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
     expect(prompt).toContain("- `-inf` (input, string)\n  the file of the task\n  Its value: `${array[$task_idx]}`.");

@@ -41,7 +41,7 @@ export function buildOptionsHandlerPrompt(
       "",
       `DeBasher runs programs made of processes, each of which receives its options from the engine; a process can run as several tasks, each with options of its own. Write ${what} of the ${noun} described below.`,
     ],
-    rulesSection(process, mode),
+    rulesSection(program, process, mode),
     ["## The program", "", `- Name: \`${program.name}\``, ...describedAs(program.description)],
     [
       "## The process",
@@ -74,7 +74,7 @@ export function buildOptionsHandlerPrompt(
   return sections.map(lines => lines.join("\n")).join("\n\n") + "\n";
 }
 
-function rulesSection(process: ProgramProcess, mode: PromptedHandlerMode): string[] {
+function rulesSection(program: Program, process: ProgramProcess, mode: PromptedHandlerMode): string[] {
   const own = mode === "array"
     ? [
         `- The code is Bash, written into the function \`${process.name}_define_opts\`, which defines the options of every task of the process. It has to build a Bash array named \`array\`, with one element for each task. After it, a loop \`for task_idx in "\${!array[@]}"\` defines the options of each task, whose values can use \`\${array[$task_idx]}\`, the element of the task, \`\${task_idx}\`, its index, and any variable that the code sets.`,
@@ -96,7 +96,47 @@ function rulesSection(process: ProgramProcess, mode: PromptedHandlerMode): strin
     "",
     "- Read the value of a command line option of the program with `get_cmdline_opt \"$cmdline\" \"<label>\"`. `$process_outdir` is the output directory of the process.",
     "- The code runs while `debasher_exec` prepares the run, before any process of the program does. It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO. It cannot read what a process of the program produces either: a file left by an earlier run would hold old data. It may read what exists before the run, such as a file or a directory given on the command line; the number of tasks usually comes from a command line option.",
+    ...numTasksRules(program, process, mode),
   ];
+}
+
+// How the code takes its number of tasks from another process of the
+// program, with get_process_num_tasks, instead of computing it again with
+// the rule of that process, which two copies could apply differently. The
+// processes that this one reads task by task, and that it can ask, are the
+// usual candidates: any of them for an option generator, and only those in
+// generator mode for an array.
+function numTasksRules(program: Program, process: ProgramProcess, mode: PromptedHandlerMode): string[] {
+  const rule = mode === "array"
+    ? "- If the array has as many elements as another process of the program has tasks, read that number with `n=$(get_process_num_tasks \"<process>\") || return 1` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. Only a process in `generator` mode can be asked: the engine refuses a process in another mode, so that the answer never depends on the order in which the processes are defined."
+    : "- If the process has as many tasks as another process of the program, as when each task reads the task with the same index of that process, print that number with `get_process_num_tasks \"<process>\"` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. Any process of the program can be asked. Make it the last command of the code, or read it with `n=$(get_process_num_tasks \"<process>\") || return 1`, so that a failure stops the preparation of the run.";
+  const sources = taskByTaskSources(program, process)
+    .filter(source => mode === "generator" || source.optionsHandler.mode === "generator");
+  if (sources.length === 0) {
+    return [rule];
+  }
+  const listed = sources.map(source => `\`${source.name}\` (\`${source.optionsHandler.mode}\` mode)`).join(", ");
+  return [rule, `- This process reads, task by task, the tasks of: ${listed}.`];
+}
+
+// The processes in array or generator mode that an input of this process is
+// connected to: in array or generator mode too, each task of this process
+// reads the task of the same index of theirs. A connection between shared_dir
+// options only documents that the processes share a directory, and pairs no
+// tasks.
+function taskByTaskSources(program: Program, process: ProgramProcess): ProgramProcess[] {
+  const sharedDirInputs = new Set(
+    process.options.filter(option => option.channel === "shared_dir").map(option => option.id),
+  );
+  const sourceIds = new Set(
+    program.edges
+      .filter(edge => edge.targetProcessId === process.id && edge.sourceProcessId !== process.id)
+      .filter(edge => !sharedDirInputs.has(edge.targetOptionId))
+      .map(edge => edge.sourceProcessId),
+  );
+  return program.processes.filter(
+    other => sourceIds.has(other.id) && (other.optionsHandler.mode === "array" || other.optionsHandler.mode === "generator"),
+  );
 }
 
 // The code of the process, which says how a task uses its options; the

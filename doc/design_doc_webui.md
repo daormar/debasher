@@ -3613,7 +3613,14 @@ uses its options. After a title and a sentence on what a task is, it says:
    which a first run does not find and a later run finds as an earlier run left
    it. It may read what exists before the run, such as a file or a directory
    given on the command line; the number of tasks typically comes from a command
-   line option.
+   line option. And that a process with as many tasks as another one takes that
+   number with `get_process_num_tasks` instead of computing it again, which
+   would repeat the rule by which the other process counts its tasks (for
+   `array`, only from a process in `generator` mode, see "Arrays and option
+   generators" in `doc/design_doc_engine.md`). The prompt then names, with their
+   modes, the processes that this process reads task by task and can ask, the
+   usual candidates; a connection between `shared_dir` options pairs no tasks
+   and is left out.
 2. **The program** and **the process**, with its options handler mode.
 3. **The options**, as in the code prompt of a process: their values show
    what a task needs, such as an input option whose value is
