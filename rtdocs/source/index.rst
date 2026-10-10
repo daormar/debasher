@@ -36,6 +36,8 @@ Contents
 
    implem
 
+   design_patterns
+
    resident
 
    webui
