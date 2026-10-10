@@ -260,9 +260,11 @@ refer to it.
 - **process status**: as defined in the design of the engine, as
   `debasher_status` reports it for the output directory, whoever launched the
   run; it colors the canvas.
-- **run in progress**: the state of an output directory in which
-  `debasher_status` reports at least one process as `IN-PROGRESS`, whoever
-  launched the run.
+- **run in progress**: the state of an output directory for which
+  `debasher_status` ends with 2, whoever launched the run: at least one process
+  is `IN-PROGRESS`, or a `debasher_exec` holds the lock of the output
+  directory, preparing the run or, with the built-in scheduler for a general
+  program, running it.
 - **orderly stop**: the stop of a resident program with
   `debasher_stop_resident`, which halts every node in one round before stopping
   it, so that the next launch resumes the program with nothing lost.
@@ -1312,24 +1314,28 @@ a change, and the engine records state in files.
 per-process lines of `debasher_status` (`PROCESS: <name> ; STATUS: <status>`)
 and the canvas colors each canvas node by its process's status: `FINISHED`,
 `IN-PROGRESS`, `UNFINISHED`, `UNFINISHED_BUT_RUNNABLE` or `TO-DO`, and no color
-when there is nothing to report. A run in progress is defined from these
-statuses, not from the run phase, so the guards that depend on it (saving,
-resetting and changing the output directory) also hold for a run launched from
-another tab or from the command line.
+when there is nothing to report. With them comes whether `debasher_status`
+reports a run in progress, which it does from before any process is in
+progress, while `debasher_exec` prepares the run and every process may still
+show its status from the run before, or `TO-DO`. A run in progress is defined
+from that reading, not from the run phase, so the guards that depend on it
+(saving, resetting and changing the output directory) also hold for a run
+launched from another tab or from the command line.
 
 **The run phase** is derived from the same readings, and from the requests of
 the tab not answered yet:
 
 - `idle`: no process has a status to report, since the output directory holds no
   run.
-- `running`: at least one process is in progress.
+- `running`: the reading reports a run in progress.
 - `finished`: every process has finished.
-- `unfinished`: no process is in progress and not every one has finished, in two
-  readings in a row: a single reading of that kind also happens in the short gap
-  between one process ending and the next starting. After a stop of the tab, one
+- `unfinished`: no run is in progress and not every process has finished, in
+  two readings in a row: a single reading of that kind may also come in the
+  short gap between one process ending and the next starting, when no
+  `debasher_exec` holds the lock, as under Slurm. After a stop of the tab, one
   reading is enough, since no next process is about to start.
-- `launching`: from a launch of the tab until the first reading that shows a
-  process in progress, or two readings with none, when the run ended or failed
+- `launching`: from a launch of the tab until the first reading that reports a
+  run in progress, or two readings that do not, when the run ended or failed
   at once.
 - `stopping`: while a request of the tab to stop the program has not been
   answered.
@@ -1470,13 +1476,13 @@ program, and the editor. Opening a program in the editor creates a store with it
 (`ProgramProvider` in `store/ProgramContext.tsx`), and leaving the editor
 discards the store, which stops nothing (see "A run that outlives the tab"). The
 store holds the program, the selected process, the run phase with the last
-output of `debasher_status`, and the process statuses, from which it derives
-whether there is a run in progress. What follows the run (the polling of the
-process statuses, the run phase derived from them, and the requests to launch,
-stop or kill it and to reset the output directory or the program state) is
-kept apart from the edits of the program, in `store/useProgramRun.ts`. The
-dialogs edit a draft of their own and hand it to the store only when the user
-accepts it.
+output of `debasher_status`, and the process statuses with whether the last
+reading of `debasher_status` reports a run in progress. What follows the run
+(the polling of the process statuses, the run phase derived from them, and the
+requests to launch, stop or kill it and to reset the output directory or the
+program state) is kept apart from the edits of the program, in
+`store/useProgramRun.ts`. The dialogs edit a draft of their own and hand it to
+the store only when the user accepts it.
 
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
@@ -2640,15 +2646,15 @@ process ending and the next starting, and the processes of a resident program
 all start at once.
 
 **The guards.** The guards that depend on a run in progress apply unchanged,
-since they already read the process statuses and not the run phase: while the
-program is `live`, the frontend refuses to save, to reset the program state and
-to change the output directory, and the backend refuses them too and `/run`
-refuses to launch. What changes is which actions are offered only while the
-program is `live`: "Stop program", "Kill program", "Restart node", "Relaunch
-node" and "Take snapshot", while "Reset program state" is offered only while it
-is `stopped`. What the tab does with a live program when it is closed, reloaded
-or leaves the editor is in "A run that outlives the tab", and what a resident
-program adds to it in "A program that outlives the tab".
+since they read whether `debasher_status` reports a run in progress, and not the
+run phase: while the program is `live`, the frontend refuses to save, to reset
+the program state and to change the output directory, and the backend refuses
+them too and `/run` refuses to launch. What changes is which actions are offered
+only while the program is `live`: "Stop program", "Kill program", "Restart
+node", "Relaunch node" and "Take snapshot", while "Reset program state" is
+offered only while it is `stopped`. What the tab does with a live program when
+it is closed, reloaded or leaves the editor is in "A run that outlives the tab",
+and what a resident program adds to it in "A program that outlives the tab".
 
 ## Observing and talking to a live program
 

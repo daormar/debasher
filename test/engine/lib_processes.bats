@@ -840,6 +840,23 @@ hold_lock() {
     return 1
 }
 
+@test "debasher::_outdir_is_locked is true only while a debasher_exec holds the lock" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    ! debasher::_outdir_is_locked "${outd}" || false
+    # The check creates no lock file
+    [ ! -e "${outd}/lock" ]
+
+    hold_lock "${outd}"
+    local pid=$(cat "${outd}/lock")
+    debasher::_outdir_is_locked "${outd}"
+
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+    ! debasher::_outdir_is_locked "${outd}" || false
+}
+
 @test "debasher::_stop_run_scheduler does nothing when no debasher_exec holds the lock" {
     FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
     local outd="${BATS_TEST_TMPDIR}/outd"

@@ -81,11 +81,6 @@ check_pars()
             echo "Error! program directory does not exist" >&2
             exit 1
         fi
-
-        if [ ! -f "${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}" ]; then
-            echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
-            exit 1
-        fi
     fi
 }
 
@@ -109,6 +104,11 @@ process_status_for_pfile()
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    if [ ! -f "${command_line_file}" ]; then
+        echo "Error! ${command_line_file} file is missing" >&2
+        return 1
+    fi
 
     # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file
     local sched
@@ -200,6 +200,21 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_status_for_pfile "${pdir}"
+# Without -p, the program is in progress while a debasher_exec holds the
+# lock of the output directory, whatever the processes say: it may still be
+# preparing the run, before the files that the statuses come from are
+# written, or waiting between one process ending and the next starting
+exec_holds_lock=0
+if [ ${p_given} -eq 0 ] && debasher::_outdir_is_locked "$(debasher::_get_absolute_path "${pdir}")"; then
+    exec_holds_lock=1
+fi
 
-exit $?
+process_status_for_pfile "${pdir}"
+exit_code=$?
+
+if [ ${exec_holds_lock} -eq 1 ]; then
+    echo "* debasher_exec is preparing or running the program" >&2
+    exit ${DEBASHER_PROGRAM_IN_PROGRESS_EXIT_CODE}
+fi
+
+exit ${exit_code}

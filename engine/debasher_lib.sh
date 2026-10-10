@@ -250,6 +250,12 @@ DEBASHER_FIFO_MIRROR_STOP_TOKEN="__FIFO_MIRROR_TAP_STOP__"
 # token, and then again for it to end on SIGTERM, before going further.
 DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS=2
 
+# How long debasher_exec waits for the lock of the output directory before
+# refusing it: a tool that checks whether the lock is held (see
+# debasher::_outdir_is_locked) holds it for an instant, while another
+# debasher_exec holds it for as long as it runs.
+DEBASHER_EXEC_LOCK_WAIT_SECS=2
+
 # How long debasher::_stop_run_scheduler waits for a debasher_exec to stop on
 # SIGTERM, and then again on SIGKILL, before giving up.
 DEBASHER_EXEC_STOP_GRACE_SECS=30

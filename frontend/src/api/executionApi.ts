@@ -224,6 +224,11 @@ export interface ProcessStatusesResult {
   // "IN-PROGRESS", "UNFINISHED", "UNFINISHED_BUT_RUNNABLE", "TO-DO"),
   // keyed by process name.
   statuses: Record<string, string>;
+  // Whether debasher_status reports the run in progress: some process is
+  // in progress, or debasher_exec is preparing the run or launching its
+  // processes, while every process may still show the statuses of the run
+  // before.
+  runInProgress: boolean;
   // Only for a resident program: whether its output directory holds
   // program state, which the next launch resumes. False otherwise.
   hasProgramState: boolean;
@@ -247,8 +252,14 @@ export async function getProcessStatuses(program: Program): Promise<ProcessStatu
     throw new Error(`Failed to get process statuses (${response.status})`);
   }
 
-  const { statuses, hasProgramState, output, notices } = await response.json();
-  return { statuses, hasProgramState: hasProgramState ?? false, output: output ?? "", notices: notices ?? [] };
+  const { statuses, runInProgress, hasProgramState, output, notices } = await response.json();
+  return {
+    statuses,
+    runInProgress: runInProgress ?? false,
+    hasProgramState: hasProgramState ?? false,
+    output: output ?? "",
+    notices: notices ?? [],
+  };
 }
 
 async function fetchProcessOutput(

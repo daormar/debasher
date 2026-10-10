@@ -134,6 +134,24 @@ debasher::_get_scheduler_throttle()
 }
 
 ########
+# Whether a debasher_exec holds the lock of an output directory, which it
+# does for as long as it prepares or runs a program there: with the
+# built-in scheduler, until the program ends. The check takes the lock for
+# an instant, which debasher_exec waits for (see
+# DEBASHER_EXEC_LOCK_WAIT_SECS), and creates no lock file where there is
+# none.
+#
+# $1 - Absolute path of the output directory.
+debasher::_outdir_is_locked()
+{
+    local dirname=$1
+    local lockfile="${dirname}/${DEBASHER_LOCK_BASENAME}"
+
+    [ -f "${lockfile}" ] || return 1
+    ! "${FLOCK}" -n "${lockfile}" true
+}
+
+########
 # Stops the debasher_exec that is preparing or running a program in an
 # output directory, if any, and waits until it has ended. That
 # debasher_exec holds the lock of the directory for as long as it runs, and
@@ -151,8 +169,7 @@ debasher::_stop_run_scheduler()
     local dirname=$1
     local lockfile="${dirname}/${DEBASHER_LOCK_BASENAME}"
 
-    [ -f "${lockfile}" ] || return 0
-    "${FLOCK}" -n "${lockfile}" true && return 0
+    debasher::_outdir_is_locked "${dirname}" || return 0
 
     local pid
     pid=$("${CAT}" "${lockfile}")

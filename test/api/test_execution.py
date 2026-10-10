@@ -317,6 +317,33 @@ def _is_alive(pid):
         return True
 
 
+# --- /process-statuses ------------------------------------------------------------
+
+
+def _fake_debasher_status(tmp_path, monkeypatch, body):
+    tool = tmp_path / "debasher_status"
+    tool.write_text(f"#!/bin/sh\n{body}\n")
+    tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    monkeypatch.setattr(paths, "find_bin_tool", lambda name: tool if name == "debasher_status" else None)
+
+
+def test_a_run_whose_debasher_exec_prepares_it_is_in_progress_with_no_process_in_progress(tmp_path, monkeypatch):
+    # debasher_exec holds the lock while it prepares the run, and the
+    # processes still show the statuses of the run before
+    _fake_debasher_status(tmp_path, monkeypatch, 'echo "PROCESS: Step ; STATUS: TO-DO"\nexit 2')
+
+    statuses = execution.get_process_statuses(_general(tmp_path))
+
+    assert statuses.statuses == {"Step": "TO-DO"}
+    assert statuses.runInProgress
+
+
+def test_a_run_that_did_not_finish_is_not_in_progress(tmp_path, monkeypatch):
+    _fake_debasher_status(tmp_path, monkeypatch, 'echo "PROCESS: Step ; STATUS: UNFINISHED"\nexit 3')
+
+    assert not execution.get_process_statuses(_general(tmp_path)).runInProgress
+
+
 # --- /run-tests -------------------------------------------------------------------
 
 

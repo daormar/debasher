@@ -400,7 +400,7 @@ describe("running a program", () => {
     const readings = [{ a: "FINISHED" }, { a: "FINISHED" }, { a: "FINISHED" }, { a: "IN-PROGRESS" }];
     const backend = fakeBackend([program()], {
       fetchProgramStatus: async () => ({ state: "finished", output: "" }),
-      getProcessStatuses: async () => ({ statuses: readings.shift()!, hasProgramState: false, output: "", notices: [] }),
+      getProcessStatuses: async () => ({ statuses: readings.shift()!, runInProgress: false, hasProgramState: false, output: "", notices: [] }),
       runProgram: async () => ({ started: true, exitCode: null, output: null, revision: 1 }),
     });
 

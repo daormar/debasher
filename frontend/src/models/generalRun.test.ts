@@ -10,18 +10,31 @@ import {
   showsGeneralIndicator,
 } from "./generalRun";
 
-function readAll(start: GeneralRunTracking, readings: Record<string, string>[]): GeneralRunTracking {
-  return readings.reduce(nextGeneralTracking, start);
+// A reading of debasher_status: the process statuses, and whether it
+// reported the run in progress.
+interface Reading {
+  statuses: Record<string, string>;
+  runInProgress: boolean;
 }
 
-const RUNNING = { A: "FINISHED", B: "IN-PROGRESS" };
-const GAP = { A: "FINISHED", B: "TO-DO" };
-const DONE = { A: "FINISHED", B: "FINISHED" };
-const FAILED = { A: "FINISHED", B: "UNFINISHED" };
+function readAll(start: GeneralRunTracking, readings: Reading[]): GeneralRunTracking {
+  return readings.reduce(
+    (tracking, { statuses, runInProgress }) => nextGeneralTracking(tracking, statuses, runInProgress),
+    start
+  );
+}
+
+const NOTHING: Reading = { statuses: {}, runInProgress: false };
+const RUNNING: Reading = { statuses: { A: "FINISHED", B: "IN-PROGRESS" }, runInProgress: true };
+const GAP: Reading = { statuses: { A: "FINISHED", B: "TO-DO" }, runInProgress: false };
+const DONE: Reading = { statuses: { A: "FINISHED", B: "FINISHED" }, runInProgress: false };
+const FAILED: Reading = { statuses: { A: "FINISHED", B: "UNFINISHED" }, runInProgress: false };
+// debasher_exec preparing the run: no process in progress yet.
+const PREPARING: Reading = { statuses: { A: "TO-DO", B: "TO-DO" }, runInProgress: true };
 
 describe("nextGeneralTracking", () => {
   it("is idle with nothing to report, and running while a process is in progress", () => {
-    expect(readAll(INITIAL_GENERAL_TRACKING, [{}, {}]).phase).toBe("idle");
+    expect(readAll(INITIAL_GENERAL_TRACKING, [NOTHING, NOTHING]).phase).toBe("idle");
     expect(readAll(INITIAL_GENERAL_TRACKING, [RUNNING]).phase).toBe("running");
   });
 
@@ -42,12 +55,18 @@ describe("nextGeneralTracking", () => {
     expect(readAll(LAUNCHED_GENERAL_TRACKING, [DONE, RUNNING]).phase).toBe("running");
     // A run that ended, or failed, at once.
     expect(readAll(LAUNCHED_GENERAL_TRACKING, [DONE, DONE]).phase).toBe("finished");
-    expect(readAll(LAUNCHED_GENERAL_TRACKING, [{}, FAILED]).phase).toBe("unfinished");
+    expect(readAll(LAUNCHED_GENERAL_TRACKING, [NOTHING, FAILED]).phase).toBe("unfinished");
+  });
+
+  it("stays in a run for as long as debasher_exec prepares it, with no process in progress", () => {
+    const tracking = readAll(LAUNCHED_GENERAL_TRACKING, [PREPARING, PREPARING, PREPARING]);
+    expect(tracking.phase).toBe("running");
+    expect(readAll(tracking, [RUNNING, DONE]).phase).toBe("finished");
   });
 
   it("settles at the first quiet reading after a stop of the tab", () => {
     const running = readAll(INITIAL_GENERAL_TRACKING, [RUNNING]);
-    const stopped = nextGeneralTracking(stoppedGeneralTracking(running), FAILED);
+    const stopped = readAll(stoppedGeneralTracking(running), [FAILED]);
     expect(stopped.phase).toBe("unfinished");
     expect(stopped.sawEnd).toBe(true);
   });
@@ -60,7 +79,7 @@ describe("nextGeneralTracking", () => {
     expect(readAll(INITIAL_GENERAL_TRACKING, [DONE, DONE]).sawEnd).toBe(false);
     expect(readAll(INITIAL_GENERAL_TRACKING, [FAILED, FAILED]).sawEnd).toBe(false);
     // The output directory emptied after the end.
-    expect(readAll(INITIAL_GENERAL_TRACKING, [RUNNING, DONE, {}]).sawEnd).toBe(false);
+    expect(readAll(INITIAL_GENERAL_TRACKING, [RUNNING, DONE, NOTHING]).sawEnd).toBe(false);
   });
 });
 

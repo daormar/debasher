@@ -530,6 +530,36 @@ def test_status_of_one_process_gives_its_own_exit_code_and_refuses_an_unknown_on
     assert "nosuch is not a process of the program" in unknown.stderr
 
 
+def test_status_reports_the_run_in_progress_while_a_debasher_exec_holds_the_lock(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    assert run_tool(DEBASHER_STATUS, "-d", str(outdir)).returncode == 0
+
+    # A debasher_exec preparing a run again, before any process is in
+    # progress; with -p, the status is that of the process alone
+    with open(outdir / "lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+        one_process = run_tool(DEBASHER_STATUS, "-d", str(outdir), "-p", "hello_world")
+
+    assert status.returncode == 2, status.stdout + status.stderr
+    assert "PROCESS: hello_world ; STATUS: FINISHED" in status.stdout
+    assert "debasher_exec is preparing or running the program" in status.stderr
+    assert one_process.returncode == 0
+
+
+def test_status_reports_the_run_in_progress_before_debasher_exec_writes_the_command_line(tmp_path):
+    outdir = tmp_path / "out"
+    outdir.mkdir()
+    with open(outdir / "lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+
+    assert status.returncode == 2, status.stdout + status.stderr
+    assert run_tool(DEBASHER_STATUS, "-d", str(outdir)).returncode == 1
+
+
 def test_get_sched_out_fails_for_a_missing_file(tmp_path):
     outdir = tmp_path / "out"
     result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))

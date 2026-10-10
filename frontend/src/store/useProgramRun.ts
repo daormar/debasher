@@ -27,6 +27,15 @@ import type { ResidentRequest } from "../models/residentRun";
 import { residentRunPhase } from "../models/residentRun";
 import type { NodeNotice } from "../models/nodeState";
 
+// What a reading gives when there is nothing to report.
+const NO_PROCESS_STATUSES: ProcessStatusesResult = {
+  statuses: {},
+  runInProgress: false,
+  hasProgramState: false,
+  output: "",
+  notices: [],
+};
+
 // How often to poll debasher_status for the process statuses, from which
 // the canvas colors the nodes and the run phase is derived, in
 // milliseconds. Runs continuously whenever an output directory is set,
@@ -165,14 +174,17 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
   const [processStatuses, setProcessStatuses] =
     useState<Record<string, string>>({});
 
+  // Whether debasher_status reported the run in progress at the last
+  // reading, which it does from before any process is in progress, while
+  // debasher_exec prepares the run.
+  const [isRunInProgress, setIsRunInProgress] =
+    useState(false);
+
   const [hasProgramState, setHasProgramState] =
     useState(false);
 
   const [nodeNotices, setNodeNotices] =
     useState<NodeNotice[]>([]);
-
-  const isRunInProgress =
-    Object.values(processStatuses).includes("IN-PROGRESS");
 
   const residentPhase =
     residentRunPhase(processStatuses, hasProgramState, runRequest);
@@ -185,10 +197,11 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
 
   function applyProcessStatuses(result: ProcessStatusesResult) {
     setProcessStatuses(result.statuses);
+    setIsRunInProgress(result.runInProgress);
     setHasProgramState(result.hasProgramState);
     setNodeNotices(result.notices);
     setStatusOutput(result.output);
-    setGeneralTracking(prev => nextGeneralTracking(prev, result.statuses));
+    setGeneralTracking(prev => nextGeneralTracking(prev, result.statuses, result.runInProgress));
   }
 
   async function readProcessStatuses(current: Program): Promise<ProcessStatusesResult> {
@@ -197,7 +210,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     } catch {
       // Nothing to show while debasher_status can't be run (e.g. the
       // output directory hasn't been initialized by a run yet).
-      return { statuses: {}, hasProgramState: false, output: "", notices: [] };
+      return NO_PROCESS_STATUSES;
     }
   }
 
@@ -221,7 +234,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     setGeneralTracking(INITIAL_GENERAL_TRACKING);
 
     if (!program.outputDir.trim()) {
-      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "", notices: [] });
+      applyProcessStatuses(NO_PROCESS_STATUSES);
       return;
     }
 
@@ -285,7 +298,7 @@ export function useProgramRun(program: Program, programRef: RefObject<Program>, 
     if (cleared) {
       // Don't wait for the next poll tick, every node's background
       // should go back to white as soon as the reset is confirmed.
-      applyProcessStatuses({ statuses: {}, hasProgramState: false, output: "", notices: [] });
+      applyProcessStatuses(NO_PROCESS_STATUSES);
     }
 
     return cleared;

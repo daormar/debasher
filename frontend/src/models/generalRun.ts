@@ -15,7 +15,7 @@ export type GeneralRunPhase =
 // needs to know.
 export interface GeneralRunTracking {
   phase: Exclude<GeneralRunPhase, "stopping">;
-  // Readings in a row with no process in progress.
+  // Readings in a row that do not report the run in progress.
   quietReadings: number;
   // Whether the tab saw the run end, going from "launching" or "running" to
   // "finished" or "unfinished": only then is the end shown.
@@ -29,18 +29,20 @@ export const INITIAL_GENERAL_TRACKING: GeneralRunTracking = {
 };
 
 // A launch of the tab has started a run: "launching" until the first reading
-// that shows a process in progress, or two readings with none, when the run
+// that reports the run in progress, or two readings that do not, when the run
 // ended or failed at once. Until then a reading may still show the statuses
-// of the run before.
+// of the run before, from before debasher_exec takes the lock of the output
+// directory.
 export const LAUNCHED_GENERAL_TRACKING: GeneralRunTracking = {
   phase: "launching",
   quietReadings: 0,
   sawEnd: false,
 };
 
-// How many readings in a row with no process in progress it takes to say that
-// a run did not finish: a single one also happens in the short gap between
-// one process ending and the next starting.
+// How many readings in a row that do not report the run in progress it takes
+// to say that a run did not finish: a single one may also come in the short
+// gap between one process ending and the next starting, when no debasher_exec
+// holds the lock, as under Slurm.
 const QUIET_READINGS = 2;
 
 // A stop of the tab has been answered: the next reading with no process in
@@ -57,12 +59,16 @@ function settledPhase(statuses: Record<string, string>): GeneralRunTracking["pha
   return values.every(status => status === "FINISHED") ? "finished" : "unfinished";
 }
 
+// `runInProgress` is whether debasher_status reported the run in progress,
+// which it does while some process is in progress and also while
+// debasher_exec prepares the run, before any process is launched.
 export function nextGeneralTracking(
   prev: GeneralRunTracking,
-  statuses: Record<string, string>
+  statuses: Record<string, string>,
+  runInProgress: boolean
 ): GeneralRunTracking {
 
-  if (Object.values(statuses).includes("IN-PROGRESS")) {
+  if (runInProgress) {
     return { phase: "running", quietReadings: 0, sawEnd: false };
   }
 

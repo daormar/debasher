@@ -639,6 +639,11 @@ class NodeNotice(BaseModel):
 
 class ProcessStatusesResponse(BaseModel):
     statuses: dict[str, str]
+    # Whether debasher_status reports the run in progress: some process is
+    # in progress, or a debasher_exec holds the lock of the output
+    # directory, preparing the run or launching its processes, when every
+    # process may still show the statuses of the run before.
+    runInProgress: bool = False
     # What debasher_status printed, shown when a run did not finish.
     output: str = ""
     # Only for a resident program: whether its output directory holds
@@ -683,11 +688,12 @@ def get_process_statuses(program: Program) -> ProcessStatusesResponse:
     the tool isn't found) rather than raising, so the frontend can poll
     this unconditionally and simply show no color in that case.
     """
-    output, _ = _run_debasher_dir_tool(program, "debasher_status")
+    output, exit_code = _run_debasher_dir_tool(program, "debasher_status")
     statuses = _parse_process_statuses(output)
     resident = _is_resident(program)
     return ProcessStatusesResponse(
         statuses=statuses,
+        runInProgress=exit_code == run_guard.STATUS_IN_PROGRESS,
         output=output,
         hasProgramState=resident and program_state.has_program_state(program.outputDir),
         # A program never launched has no node, and so no notice.

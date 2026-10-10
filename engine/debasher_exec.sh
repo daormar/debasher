@@ -846,7 +846,7 @@ ensure_exclusive_execution()
     local lockfile="${outd}/${DEBASHER_LOCK_BASENAME}"
 
     prepare_lock LOCKFD "$lockfile" || return 1
-    if ! "$FLOCK" -xn "$LOCKFD"; then
+    if ! "$FLOCK" -x -w "${DEBASHER_EXEC_LOCK_WAIT_SECS}" "$LOCKFD"; then
         echo "Error: another debasher_exec is preparing or running a program in ${outd}" >&2
         return 1
     fi

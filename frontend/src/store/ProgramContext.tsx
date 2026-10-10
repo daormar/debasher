@@ -73,9 +73,9 @@ interface ProgramContextType {
   // not from what it draws.
   diskLoads: number;
 
-  // True whenever processStatuses reports at least one process as
-  // "IN-PROGRESS", i.e. a run is going for program.outputDir, whether
-  // launched from this tab or not. Drives SaveDialog's proactive
+  // True whenever debasher_status reports a run in progress for
+  // program.outputDir (some process "IN-PROGRESS", or debasher_exec
+  // preparing the run), whether launched from this tab or not. Drives SaveDialog's proactive
   // disable, see save()'s own guard below for why saving mid-run is
   // unsafe.
   isRunInProgress: boolean;
