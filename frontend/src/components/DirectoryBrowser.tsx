@@ -17,12 +17,30 @@ interface Props {
   // Case-insensitive suffix filter for files, e.g. [".sh"]. Never
   // filters out directories.
   fileExtensions?: string[];
+  // Only in "directories" mode: a path that cannot be listed (most
+  // likely because it does not exist yet) is still a valid pick, for a
+  // directory that is created when it is first used, such as an output
+  // directory or the directory a program is saved into.
+  allowMissing?: boolean;
   // Fired on every click: the clicked entry's path when it matches
   // `mode` (a valid pick), or "" when it doesn't (clicked entry
-  // highlights for feedback, but isn't a usable selection) — a caller
+  // highlights for feedback, but isn't a usable selection); a caller
   // with its own confirm button should treat "" as falsy/disabled,
-  // same as no selection at all.
+  // same as no selection at all. In "directories" mode it also fires on
+  // every edit of the path field, whose text is then the selection:
+  // what the user typed is what a confirm button takes, Enter or not.
   onPathChange: (path: string) => void;
+}
+
+// The directory that holds `path`, from its text alone (it may not
+// exist), or null for a path with no directory above it.
+export function textualParent(path: string): string | null {
+  const trimmed = path.replace(/\/+$/, "");
+  const slash = trimmed.lastIndexOf("/");
+  if (slash < 0) {
+    return null;
+  }
+  return slash === 0 ? "/" : trimmed.slice(0, slash);
 }
 
 function isSelectable(entry: FsEntry, mode: "directories" | "files"): boolean {
@@ -37,6 +55,7 @@ export default function DirectoryBrowser({
   initialPath,
   mode = "directories",
   fileExtensions,
+  allowMissing = false,
   onPathChange,
 }: Props) {
 
@@ -61,9 +80,15 @@ export default function DirectoryBrowser({
   const [error, setError] =
     useState<string | null>(null);
 
+  // Shown instead of an error when allowMissing keeps a path that
+  // cannot be listed as the selection.
+  const [missingNote, setMissingNote] =
+    useState<string | null>(null);
+
   async function navigateTo(path: string) {
     setLoading(true);
     setError(null);
+    setMissingNote(null);
 
     try {
       const result = await listDirs(path, {
@@ -80,9 +105,21 @@ export default function DirectoryBrowser({
       // whatever was selected before this navigation.
       onPathChange(mode === "directories" ? result.path : "");
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to list directories."
-      );
+      if (mode === "directories" && allowMissing && path.trim()) {
+        setPathInput(path);
+        setParentPath(textualParent(path.trim()));
+        setEntries([]);
+        setSelectedPath(null);
+        onPathChange(path.trim());
+        setMissingNote(
+          `${path.trim()} cannot be listed. If it does not exist yet, it ` +
+          "is created when it is first used."
+        );
+      } else {
+        setError(
+          err instanceof Error ? err.message : "Failed to list directories."
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -144,6 +181,9 @@ export default function DirectoryBrowser({
           onChange={(event) => {
             setPathInput(event.target.value);
             setSelectedPath(null);
+            if (mode === "directories") {
+              onPathChange(event.target.value.trim());
+            }
           }}
 
           onKeyDown={(event) => {
@@ -212,6 +252,12 @@ export default function DirectoryBrowser({
       {error && (
         <div style={{ color: "#b00020", fontSize: 14 }}>
           {error}
+        </div>
+      )}
+
+      {missingNote && (
+        <div style={{ color: "#8a6d00", fontSize: 14 }}>
+          {missingNote}
         </div>
       )}
 

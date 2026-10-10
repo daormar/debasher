@@ -69,7 +69,7 @@ export default function OutputDirEditor({ onClose }: Props) {
           Output directory
         </h3>
 
-        <DirectoryBrowser initialPath={draft} onPathChange={setDraft} />
+        <DirectoryBrowser initialPath={draft} onPathChange={setDraft} allowMissing />
 
         {conflictsWithHomeDir && (
           <div style={{ color: "#8a6d00", fontSize: 14 }}>

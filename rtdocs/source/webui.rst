@@ -80,8 +80,10 @@ A program built with the web interface uses two directories:
 * Its **output directory**, where the engine writes when the program
   runs (see the :ref:`outdstruct` Section).
 
-The two must be different directories. A program is saved with the
-"Save" button, and loaded again from its home directory with "Load
+The two must be different directories. Each is chosen in a dialog that
+browses the file system, or by typing its path in the field at the top
+of the dialog; the directory need not exist yet, since it is created
+when it is first used. A program is saved with the "Save" button, and loaded again from its home directory with "Load
 program". Nothing is kept in the browser: changes that have not been
 saved are lost when the tab is closed, and "Close", or closing or
 reloading the tab of the browser, asks first.

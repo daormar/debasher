@@ -84,7 +84,7 @@ export default function SaveDialog({ onClose }: Props) {
           Save program
         </h3>
 
-        <DirectoryBrowser initialPath={outputDir} onPathChange={setOutputDir} />
+        <DirectoryBrowser initialPath={outputDir} onPathChange={setOutputDir} allowMissing />
 
         {isRunInProgress && (
           <div style={{ color: "#8a6d00", fontSize: 14 }}>
