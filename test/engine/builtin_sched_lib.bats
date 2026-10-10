@@ -388,13 +388,13 @@ EOF
 
 # --- aftercorr task by task -------------------------------------------------
 
-# Marks the task with the given index of the given process as finished, as
-# the script of the task does
+# Marks the task with the given index of the given process, an array of
+# three tasks, as finished, as the script of the task does
 mark_task_finished() {
     local finished_file
     finished_file=$(debasher::_get_task_finished_filename "${OUTDIR}" "$1" "$2")
     mkdir -p "$(dirname "${finished_file}")"
-    touch "${finished_file}"
+    debasher::_signal_process_completion "${OUTDIR}" "$1" "$2" 3
 }
 
 # A producer p with three tasks, still running, and an array c of the given
@@ -519,6 +519,89 @@ setup_aftercorr() {
     debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
 
     [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]}" = "1" ]
+}
+
+# --- status of an array -----------------------------------------------------
+
+# An array arr of three tasks, launched under the built-in scheduler, whose
+# script has its header after a context with a function that sets
+# DEBASHER_NUM_TASKS, as the engine functions of a real one do; no task runs
+setup_array_status() {
+    declare -g GREP="$(command -v grep)" AWK="$(command -v awk)"
+    declare -g DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    debasher::_id_exists() { return 1; }
+    ARR_EXECDIR="${OUTDIR}/__exec__/arr"
+    mkdir -p "${ARR_EXECDIR}"
+    {
+        echo "some_engine_func () "
+        echo "{ "
+        echo "    DEBASHER_NUM_TASKS=7"
+        echo "}"
+        echo "DEBASHER_PROCESS_NAME=arr"
+        echo "DEBASHER_NUM_TASKS=3"
+    } > "${ARR_EXECDIR}/arr"
+}
+
+# Leaves the .id file of the task with the given index, as its launch does
+launch_arr_task() {
+    echo "$((900000 + $1))" > "$(debasher::_get_array_taskid_filename "${OUTDIR}" arr "$1")"
+}
+
+@test "_get_num_array_tasks reads the number of tasks from the header of the process script, before any task has finished" {
+    setup_array_status
+
+    run debasher::_get_num_array_tasks "${OUTDIR}" arr
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "3" ]
+
+    run debasher::_get_num_array_tasks "${OUTDIR}" never_launched
+    [ "${output}" = "0" ]
+}
+
+@test "an array whose every task was launched and failed is UNFINISHED, not UNFINISHED_BUT_RUNNABLE" {
+    setup_array_status
+    launch_arr_task 0
+    launch_arr_task 1
+    launch_arr_task 2
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ]
+}
+
+@test "an array with tasks not launched yet and none running is UNFINISHED_BUT_RUNNABLE, whether or not one has finished" {
+    setup_array_status
+    launch_arr_task 0
+    launch_arr_task 1
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+
+    mark_task_finished arr 0
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+}
+
+@test "an array with every task launched, some finished and the others failed is UNFINISHED" {
+    setup_array_status
+    launch_arr_task 0
+    launch_arr_task 1
+    launch_arr_task 2
+    mark_task_finished arr 1
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ]
+}
+
+@test "an array whose every task has finished is FINISHED" {
+    setup_array_status
+    local idx
+    for idx in 0 1 2; do
+        launch_arr_task "${idx}"
+        mark_task_finished arr "${idx}"
+    done
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
 }
 
 # --- skipping a task --------------------------------------------------------

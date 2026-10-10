@@ -133,19 +133,23 @@ debasher::_get_list_of_pending_tasks_in_array()
 }
 
 ########
+# The number of tasks of a process, from the header of its process script
+# (its DEBASHER_NUM_TASKS line), so that it is known whether or not any task
+# has finished; 0 when the process has no script, never having been launched
 debasher::_get_num_array_tasks()
 {
     local dirname=$1
     local processname=$2
-    local finished_filename_pref=$(debasher::_get_process_finished_filename_prefix "${dirname}" ${processname})
+    local script_filename=$(debasher::_get_script_filename "${dirname}" ${processname})
 
     local num_tasks=0
-    for file in "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}; do
-        if [ -f "${file}" ]; then
-            num_tasks=$("${AWK}" '{print $NF}' "${file}")
-            break
+    if [ -f "${script_filename}" ]; then
+        local line
+        line=$("${GREP}" -m1 "^DEBASHER_NUM_TASKS=" "${script_filename}")
+        if [ -n "${line}" ]; then
+            num_tasks=${line#DEBASHER_NUM_TASKS=}
         fi
-    done
+    fi
 
     echo "${num_tasks}"
 }

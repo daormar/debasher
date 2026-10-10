@@ -2156,16 +2156,22 @@ directory and from the scheduler, and is kept nowhere:
 
 A task writes its completion marker only when it ends well (see "Executing a
 task"), so a process is `FINISHED` only when every task succeeded or was
-skipped. An id runs when the process with that id exists, for the built-in
-scheduler, or when Slurm still lists the job, for the Slurm scheduler; a process
-id that the system gives again to an unrelated process after the task has ended
-can make the process look `IN-PROGRESS`. `UNFINISHED_BUT_RUNNABLE` is the state
-of an array that the built-in scheduler was launching a few tasks at a time,
-under a throttle or a budget of CPUs and memory, when its run stopped, or whose
-remaining tasks wait for dependencies that can no longer hold in the run, such
-as counterparts that failed under `aftercorr` (see "The built-in scheduler"):
-the next run launches the tasks that are left. Under the Slurm scheduler the
-tasks of an array are submitted together, and the state does not arise.
+skipped. The number of tasks against which the completion markers and the
+launched tasks are counted comes from the header of the process script (see "The
+process script: how code travels"), so that it is known before any task has
+finished: an array whose every task was launched and failed is `UNFINISHED`, not
+`UNFINISHED_BUT_RUNNABLE`, and the built-in scheduler takes it as failed in the
+run where its tasks ran. An id runs when the process with that id exists, for
+the built-in scheduler, or when Slurm still lists the job, for the Slurm
+scheduler; a process id that the system gives again to an unrelated process
+after the task has ended can make the process look `IN-PROGRESS`.
+`UNFINISHED_BUT_RUNNABLE` is the state of an array that the built-in scheduler
+was launching a few tasks at a time, under a throttle or a budget of CPUs and
+memory, when its run stopped, or whose remaining tasks wait for dependencies
+that can no longer hold in the run, such as counterparts that failed under
+`aftercorr` (see "The built-in scheduler"): the next run launches the tasks that
+are left. Under the Slurm scheduler the tasks of an array are submitted
+together, and the state does not arise.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,

@@ -68,14 +68,12 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
     else
         # Process is array with some tasks already launched
 
-        # Check that not all array tasks were launched
-
-        local num_tasks_completed=$(debasher::_get_num_tasks_completed "${dirname}" ${processname})
-        if [ "${num_tasks_completed}" -gt 0 ]; then
-            local num_array_tasks_to_finish=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
-            if [ ${num_launched_tasks} -eq ${num_array_tasks_to_finish} ]; then
-                return 1
-            fi
+        # Check that not all array tasks were launched, whether or not any
+        # of them has finished: an array whose every task was launched and
+        # failed is not runnable, and the scheduler takes it as failed
+        local num_array_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
+        if [ ${num_launched_tasks} -ge ${num_array_tasks} ]; then
+            return 1
         fi
 
         # Check there are no tasks in progress

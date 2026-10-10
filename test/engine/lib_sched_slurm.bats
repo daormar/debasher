@@ -141,7 +141,10 @@ setup() {
 
 @test "_get_elapsed_time_for_process_slurm computes the time of an array, whose markers carry the task index" {
     AWK="$(command -v awk)"
+    GREP="$(command -v grep)"
     declare -g DEBASHER_FINISHED_PROCESS_FEXT="${DEBASHER_FINISHED_PROCESS_FEXT:-finished}"
+    # The process script, whose header gives the number of tasks
+    echo "DEBASHER_NUM_TASKS=2" > "${EXECDIR}/proc"
     echo "Finished task idx: 0 ; Total: 2" > "${EXECDIR}/proc_0.${DEBASHER_FINISHED_PROCESS_FEXT}"
     echo "Finished task idx: 1 ; Total: 2" > "${EXECDIR}/proc_1.${DEBASHER_FINISHED_PROCESS_FEXT}"
     debasher::_get_elapsed_time_for_array_process() {
