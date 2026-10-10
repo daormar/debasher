@@ -110,6 +110,12 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
 // ProcessTaskPicker, see fanoutIndexPicker) instead.
 const MAX_FANOUT_INLINE = 10;
 
+// The run indicators sit at the bottom right, just left of the
+// minimap: its panel margin (15px) plus its default width (200px) plus
+// a small gap, so they cover neither the minimap nor the legend that
+// grows down from the top right.
+const RUN_INDICATOR_PANEL_STYLE = { marginRight: 15 + 200 + 8 };
+
 // True if `option` itself is fifo-channel, or is a plain ("none"-
 // channel) connection whose upstream source is: a "-inf"-style input
 // on a "standard"-mode process is never itself channel === "fifo":
@@ -992,7 +998,7 @@ export default function ProgramCanvas() {
 
           {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&
             hiddenIndicator !== indicatorKey && (
-            <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+            <Panel position="bottom-right" style={RUN_INDICATOR_PANEL_STYLE}>
               <RunStatusIndicator
                 phase={runPhase}
                 output={runOutput}
@@ -1003,7 +1009,7 @@ export default function ProgramCanvas() {
 
           {isResident && residentPhase !== "new" &&
             hiddenIndicator !== indicatorKey && (
-            <Panel position="bottom-right" style={{ marginBottom: 170 }}>
+            <Panel position="bottom-right" style={RUN_INDICATOR_PANEL_STYLE}>
               <ResidentRunIndicator
                 phase={residentPhase}
                 inOrder={inOrder}
