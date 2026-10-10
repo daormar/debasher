@@ -1527,10 +1527,11 @@ debasher::_opt_is_mandatory_valued_for_process()
 ########
 # True if a command-line option defined for a task holds the value that
 # the define_cmdline_* functions give it: the value given on the command
-# line, or its absolute path (define_cmdline_infile_opt[_if_given]), or
-# no value at all for a flag given on the command line. False when the
-# option was not given on the command line (so its value must have
-# come from somewhere else) or holds a different value.
+# line, or its absolute path (define_cmdline_infile_opt[_if_given] and
+# define_cmdline_indir_opt[_if_given]), or no value at all for a flag
+# given on the command line. False when the option was not given on the
+# command line (so its value must have come from somewhere else) or
+# holds a different value.
 #
 # $1 - Command line.
 # $2 - Option name.

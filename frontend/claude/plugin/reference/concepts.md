@@ -85,8 +85,10 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 
 - **Label** starting with `-`, unique in its process. A label starting with
   `-out` is an output; any other is an input.
-- **dataType**: `int`, `float`, `string` (the default), `file`, or `None` for a
-  flag (always an input).
+- **dataType**: `int`, `float`, `string` (the default), `file`, `dir`, or
+  `None` for a flag (always an input). An input of type `file` or `dir`, given
+  on the command line or as a value, has to name an existing regular file or
+  directory, and the engine makes its path absolute.
 - **channel**: `none` (a value or a connection), `fifo` (`value` is the name of
   the FIFO), `value_desc` (an output into which the task writes a value, which
   a reader gets as the value rather than a path), `shared_dir` (`value` names a

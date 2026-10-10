@@ -329,7 +329,8 @@ command line and from nowhere else. When the process defines its options
 ``opt_is_non_mandatory_cmdline`` can only be defined with
 ``define_cmdline_opt`` or one of its variants
 (``define_cmdline_opt_if_given``, ``define_cmdline_infile_opt``,
-``define_cmdline_infile_opt_if_given``,
+``define_cmdline_infile_opt_if_given``, ``define_cmdline_indir_opt``,
+``define_cmdline_indir_opt_if_given``,
 ``define_cmdline_flag_if_given``), or not be defined at all when it is
 optional and not given. ``debasher_exec`` stops with an error when a
 process gives a command-line option a value of its own, and also when

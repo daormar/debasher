@@ -31,8 +31,9 @@ interface Props {
 
 // A fifo's value is only ever shown as a path (no content view, for
 // now) — reading a fifo isn't safe the way reading a regular file is.
-// Anything else backed by a real path on disk (a "file" option, or a
-// "shared_dir" or "process_outdir" option, which always names a directory)
+// Anything else backed by a real path on disk (a "file" or "dir" option,
+// or a "shared_dir" or "process_outdir" option, which always names a
+// directory)
 // gets a "View" button, wired up in ProgramCanvas to
 // /api/execution/inspect-path.
 //
@@ -44,7 +45,8 @@ interface Props {
 // they correctly inherit the family's real channel.
 function optionHasPathButton(option: ProgramOption, fifoBackedOptionIds: Set<string>): boolean {
   return option.channel !== "fifo" && !fifoBackedOptionIds.has(option.id) &&
-    (option.dataType === "file" || option.channel === "shared_dir" || option.channel === "process_outdir");
+    (option.dataType === "file" || option.dataType === "dir" ||
+      option.channel === "shared_dir" || option.channel === "process_outdir");
 }
 
 // Mirrors ProgramOptionsEditor's ("Run" > "Set program options") own

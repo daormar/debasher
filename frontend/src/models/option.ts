@@ -1,6 +1,6 @@
 export type OptionDirection = "input" | "output";
 
-export type OptionDataType = "int" | "float" | "string" | "file" | "None";
+export type OptionDataType = "int" | "float" | "string" | "file" | "dir" | "None";
 
 // How the value is delivered, independent of its type — see
 // api/models.py's ProgramOption.channel for the full rationale

@@ -1496,15 +1496,18 @@ debasher::_create_process_func_ext_alias()
 #      on whether the caller runs while that stack still holds it).
 # $3 - Short description of what this path is, used only in the
 #      absolute-path warning (e.g. "external alias for process foo").
+# $4 - Kind of path that has to exist: "file" (the default) or "dir".
 #
 # Echoes the resolved, canonical path and returns 0. Returns 1 and
-# echoes nothing if the file doesn't exist, the caller is responsible
-# for reporting that failure with a message fitting its own context.
+# echoes nothing if no path of that kind exists, the caller is
+# responsible for reporting that failure with a message fitting its own
+# context.
 debasher::_resolve_path_relative_to_pfile_dir()
 {
     local value=$1
     local pfile_dir=$2
     local description=$3
+    local kind=${4:-file}
     local resolved="${value}"
 
     if debasher::_is_absolute_path "${value}"; then
@@ -1513,7 +1516,7 @@ debasher::_resolve_path_relative_to_pfile_dir()
         resolved="${pfile_dir}/${value}"
     fi
 
-    [ -f "${resolved}" ] || return 1
+    debasher::_path_of_kind_exists "${resolved}" "${kind}" || return 1
 
     "${REALPATH}" "${resolved}"
 }

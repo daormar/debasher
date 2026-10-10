@@ -520,3 +520,81 @@ define_worker_opts() {
     [ -f "${data}/reports/report.txt" ]
     [ ! -e "${data}/stray.txt" ]
 }
+
+# --- Paths that have to exist: files and directories -----------------------
+
+# The command line of debasher_exec with the given options, the way the
+# define_cmdline_* functions receive it
+cmdline_of() {
+    debasher::_serialize_args "debasher_exec" "$@"
+}
+
+# Makes, below the temporary directory of the test, a file "data.txt" and a
+# directory "ref", and goes there, so that both can be named by a relative path
+init_paths() {
+    REALPATH="$(command -v realpath)"
+    declare -gA DEBASHER_MEMOIZED_OPTS
+    cd "${BATS_TEST_TMPDIR}"
+    touch data.txt
+    mkdir ref
+}
+
+@test "define_cmdline_indir_opt takes a directory and makes its path absolute" {
+    init_paths
+    local optlist=""
+
+    debasher::define_cmdline_indir_opt "$(cmdline_of -ind ref)" "-ind" optlist
+
+    [[ "${optlist}" == *"${BATS_TEST_TMPDIR}/ref"* ]]
+}
+
+@test "define_cmdline_indir_opt refuses a file, and define_cmdline_infile_opt a directory" {
+    init_paths
+    local optlist=""
+
+    run debasher::define_cmdline_indir_opt "$(cmdline_of -ind data.txt)" "-ind" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"directory data.txt does not exist (-ind option)"* ]]
+
+    run debasher::define_cmdline_infile_opt "$(cmdline_of -inf ref)" "-inf" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"file ref does not exist (-inf option)"* ]]
+}
+
+@test "define_cmdline_indir_opt_if_given defines nothing when the option is not given, and checks it when it is" {
+    init_paths
+    local optlist=""
+
+    # Looking up an option that is not given returns 1 on the way, which
+    # bats's errexit would treat as a failure
+    set +e
+    debasher::define_cmdline_indir_opt_if_given "$(cmdline_of -other 1)" "-ind" optlist
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ -z "${optlist}" ]
+
+    debasher::define_cmdline_indir_opt_if_given "$(cmdline_of -ind ref)" "-ind" optlist
+    [[ "${optlist}" == *"${BATS_TEST_TMPDIR}/ref"* ]]
+
+    run debasher::define_cmdline_indir_opt_if_given "$(cmdline_of -ind missing)" "-ind" optlist
+    [ "${status}" -ne 0 ]
+}
+
+@test "define_indir_opt resolves a relative directory against the directory of the module, and refuses a file" {
+    init_paths
+    declare -gA DEBASHER_PROCESS_PFILE_DIR
+    DEBASHER_PROCESS_PFILE_DIR["proc"]="${BATS_TEST_TMPDIR}"
+    cd /
+    local optlist=""
+
+    debasher::define_indir_opt "-ref" "ref" optlist proc
+    [[ "${optlist}" == *"${BATS_TEST_TMPDIR}/ref"* ]]
+
+    run debasher::define_indir_opt "-ref" "data.txt" optlist proc
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"directory data.txt does not exist (-ref option)"* ]]
+
+    debasher::define_infile_opt "-data" "data.txt" optlist proc
+    [[ "${optlist}" == *"${BATS_TEST_TMPDIR}/data.txt"* ]]
+}

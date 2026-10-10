@@ -29,8 +29,9 @@ import):
   back to "manual" with the pair kept verbatim.
 - _define_opts is matched against the grammar of option-definition
   primitives (define_opt[_from_proc_out[_task_out]|_from_shared_dir],
-  define_infile_opt,
+  define_infile_opt, define_indir_opt,
   define_cmdline_opt[_if_given], define_cmdline_infile_opt[_if_given],
+  define_cmdline_indir_opt[_if_given],
   define_cmdline_flag_if_given, define_flag, define_value_desc_opt,
   define_fifo_opt[_generator] — all of them just other ways to define
   an option's value, not something exotic). A body that's exactly the
@@ -274,11 +275,12 @@ def _chase_local_value(
 
 _DEFINE_OPTS_CALL_RE = re.compile(
     r"^(?:debasher::)?(?P<func>define_cmdline_flag_if_given|define_cmdline_infile_opt_if_given|"
-    r"define_cmdline_opt_if_given|define_cmdline_infile_opt|"
+    r"define_cmdline_indir_opt_if_given|define_cmdline_opt_if_given|define_cmdline_infile_opt|"
+    r"define_cmdline_indir_opt|"
     r"define_cmdline_opt|define_value_desc_opt|define_fifo_opt_generator|define_fifo_opt|"
     r"define_flag|define_opt_from_proc_task_out|define_opt_from_proc_out|"
     r"define_opt_from_shared_dir|define_opt_from_process_outdir|define_procspec_opt|"
-    r"define_infile_opt|define_opt)"
+    r"define_infile_opt|define_indir_opt|define_opt)"
     r"(?:\s+(?P<args>.*?))?\s*(?:\|\|.*)?$"
 )
 _TOKEN_RE = re.compile(r'"(?P<q>[^"]*)"|(?P<bare>\S+)')
@@ -291,6 +293,8 @@ _CALL_TOKEN_COUNTS = {
     "define_cmdline_opt": 3,
     "define_cmdline_infile_opt": 3,  # <cmdline> <label> <optlist>
     "define_cmdline_infile_opt_if_given": 3,
+    "define_cmdline_indir_opt": 3,
+    "define_cmdline_indir_opt_if_given": 3,
     "define_flag": 2,  # <label> <optlist>
     "define_value_desc_opt": 2,  # <label> <optlist>
     "define_fifo_opt": 3,  # <label> <fifoname> <optlist> [--mirror, stripped before this check]
@@ -302,6 +306,7 @@ _CALL_TOKEN_COUNTS = {
     "define_procspec_opt": 4,  # <process_spec> <label> <specname> <optlist>
     "define_opt": 3,  # <label> <value> <optlist>
     "define_infile_opt": 4,  # <label> <value> <optlist> <process_name>
+    "define_indir_opt": 4,
 }
 
 # The only task index a define_opt_from_proc_task_out call round-trips
@@ -677,10 +682,11 @@ def _record_connection(state: _ParseState, func: str, tokens: list, mirrored: bo
 
 
 def _record_literal(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
-    # define_infile_opt is define_opt for an input file, whose value the
-    # engine resolves against the module's directory; script_generation.py
-    # writes it for every "file"-typed input given as a literal, so it holds
-    # a value exactly like define_opt's.
+    # define_infile_opt (define_indir_opt) is define_opt for an input file
+    # (directory), whose value the engine resolves against the module's
+    # directory; script_generation.py writes it for every "file"-typed
+    # ("dir"-typed) input given as a literal, so it holds a value exactly
+    # like define_opt's.
     label, value = tokens[0], tokens[1]
     if not label[1]:
         return False
@@ -768,7 +774,7 @@ def _record_flag(state: _ParseState, func: str, tokens: list, mirrored: bool) ->
 
 
 def _record_cmdline(state: _ParseState, func: str, tokens: list, mirrored: bool) -> bool:
-    # The five define_cmdline_* variants: <cmdline_ref> <label> <optlist>.
+    # The seven define_cmdline_* variants: <cmdline_ref> <label> <optlist>.
     return tokens[1][1]
 
 
@@ -777,6 +783,7 @@ _CALL_RECORDERS = {
     "define_opt_from_proc_task_out": _record_connection,
     "define_opt": _record_literal,
     "define_infile_opt": _record_literal,
+    "define_indir_opt": _record_literal,
     "define_opt_from_shared_dir": _record_shared_dir,
     "define_opt_from_process_outdir": _record_process_outdir,
     "define_value_desc_opt": _record_value_desc,

@@ -1336,6 +1336,60 @@ debasher::define_cmdline_opt_if_given()
 define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
 
 ########
+# Defines process option from a command-line option, verifying that it
+# names an existing path of the given kind and normalizing it to an
+# absolute path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+# $4 - Kind of path: "file" or "dir".
+debasher::_define_cmdline_path_opt()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+    local kind=$4
+
+    # Get value for option
+    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    local value="${_OPT_VALUE_}"
+
+    # Verify the path exists and normalize it to an absolute path
+    debasher::_path_of_kind_exists "$value" "$kind" || { debasher::errmsg "$(debasher::_path_kind_noun "$kind") $value does not exist ($opt option)" ; return 1; }
+    value=$(debasher::_get_absolute_path "$value")
+
+    # Add option
+    debasher::define_opt "$opt" "$value" "$varname"
+}
+
+########
+# Defines process option from a command-line option that names an
+# existing path of the given kind, only if the option was given through
+# the command line; verifies the path exists and normalizes it to an
+# absolute path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+# $4 - Kind of path: "file" or "dir".
+debasher::_define_cmdline_path_opt_if_given()
+{
+    local cmdline=$1
+    local opt=$2
+    local varname=$3
+    local kind=$4
+
+    # Get value for option
+    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    local value=${_OPT_VALUE_}
+
+    if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
+        debasher::_define_cmdline_path_opt "$cmdline" "$opt" "$varname" "$kind"
+    fi
+}
+
+########
 # Public: Defines process option from a command-line option, verifying
 # that it names an existing file and normalizing it to an absolute
 # path.
@@ -1351,20 +1405,7 @@ define_cmdline_opt_if_given() { debasher::define_cmdline_opt_if_given "$@"; }
 # The function does not return any value
 debasher::define_cmdline_infile_opt()
 {
-    local cmdline=$1
-    local opt=$2
-    local varname=$3
-
-    # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
-    local value="${_OPT_VALUE_}"
-
-    # Verify file exists and normalize to an absolute path
-    debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-    value=$(debasher::_get_absolute_path "$value")
-
-    # Add option
-    debasher::define_opt "$opt" "$value" "$varname"
+    debasher::_define_cmdline_path_opt "$1" "$2" "$3" file
 }
 
 ########
@@ -1400,22 +1441,7 @@ define_cmdline_infile_opt() { debasher::define_cmdline_infile_opt "$@"; }
 # The function does not return any value
 debasher::define_cmdline_infile_opt_if_given()
 {
-    local cmdline=$1
-    local opt=$2
-    local varname=$3
-
-    # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
-    local value=${_OPT_VALUE_}
-
-    if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # Verify file exists and normalize to an absolute path
-        debasher::_file_exists "$value" || { debasher::errmsg "file $value does not exist ($opt option)" ; return 1; }
-        value=$(debasher::_get_absolute_path "$value")
-
-        # Add option
-        debasher::define_opt "$opt" "$value" "$varname"
-    fi
+    debasher::_define_cmdline_path_opt_if_given "$1" "$2" "$3" file
 }
 
 ########
@@ -1434,6 +1460,78 @@ debasher::define_cmdline_infile_opt_if_given()
 #
 # The function does not return any value
 define_cmdline_infile_opt_if_given() { debasher::define_cmdline_infile_opt_if_given "$@"; }
+
+########
+# Public: Defines process option from a command-line option, verifying
+# that it names an existing directory and normalizing it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_indir_opt "${cmdline}" "-d" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_indir_opt()
+{
+    debasher::_define_cmdline_path_opt "$1" "$2" "$3" dir
+}
+
+########
+# Public: Defines process option from a command-line option, verifying
+# that it names an existing directory and normalizing it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_indir_opt "${cmdline}" "-d" "optlist"
+#
+# The function does not return any value
+define_cmdline_indir_opt() { debasher::define_cmdline_indir_opt "$@"; }
+
+########
+# Public: Defines process option from a command-line option that names
+# an existing directory, only if the option was given through the command
+# line; verifies the directory exists and normalizes it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   debasher::define_cmdline_indir_opt_if_given "${cmdline}" "-d" "optlist"
+#
+# The function does not return any value
+debasher::define_cmdline_indir_opt_if_given()
+{
+    debasher::_define_cmdline_path_opt_if_given "$1" "$2" "$3" dir
+}
+
+########
+# Public: Defines process option from a command-line option that names
+# an existing directory, only if the option was given through the command
+# line; verifies the directory exists and normalizes it to an absolute
+# path.
+#
+# $1 - Command-line options taken as input of the `define_opts` or `generate_opts` method.
+# $2 - Name of option given in the command line.
+# $3 - Name of the variable that will store the newly added option.
+#
+# Examples
+#
+#   define_cmdline_indir_opt_if_given "${cmdline}" "-d" "optlist"
+#
+# The function does not return any value
+define_cmdline_indir_opt_if_given() { debasher::define_cmdline_indir_opt_if_given "$@"; }
 
 ########
 # Public: Defines flag only if it was given through the command-line.
@@ -1785,13 +1883,13 @@ debasher::define_opt()
 define_opt() { debasher::define_opt "$@"; }
 
 ########
-# Defines process option whose value is a file path, resolving it
-# relative to the directory of the .sh that defines the process if
-# it's relative (or verifying it as an absolute path otherwise):
-# same resolution debasher::_add_debasher_ext_alias_process uses for
-# an external alias script, so a "file" option's value can likewise
-# point at a file shipped alongside the program (e.g. via the
-# webui's program-files browser) using a portable, relative path.
+# Defines process option whose value is a path, resolving it relative
+# to the directory of the .sh that defines the process if it's relative
+# (or verifying it as an absolute path otherwise): same resolution
+# debasher::_add_debasher_ext_alias_process uses for an external alias
+# script, so a "file" or "dir" option's value can likewise point at
+# something shipped alongside the program (e.g. via the webui's
+# program-files browser) using a portable, relative path.
 #
 # Looks up DEBASHER_PROCESS_PFILE_DIR[process_name] rather than
 # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK directly: unlike
@@ -1803,21 +1901,23 @@ define_opt() { debasher::define_opt "$@"; }
 # DEBASHER_PROCESS_PFILE_DIR's declaration in debasher_lib.sh.
 #
 # $1 - Option name.
-# $2 - File path associated to the option being defined (relative or
+# $2 - Path associated to the option being defined (relative or
 #      absolute).
 # $3 - Name of variable that will store the information about the option to be added.
 # $4 - Name of the process this option is being defined for.
-debasher::define_infile_opt()
+# $5 - Kind of path: "file" or "dir".
+debasher::_define_path_opt()
 {
     local opt=$1
     local value=$2
     local varname=$3
     local process_name=$4
+    local kind=$5
     local pfile_dir="${DEBASHER_PROCESS_PFILE_DIR[${process_name}]}"
 
     local resolved
-    if ! resolved=$(debasher::_resolve_path_relative_to_pfile_dir "${value}" "${pfile_dir}" "value for option ${opt}"); then
-        debasher::errmsg "file ${value} does not exist (${opt} option)"
+    if ! resolved=$(debasher::_resolve_path_relative_to_pfile_dir "${value}" "${pfile_dir}" "value for option ${opt}" "${kind}"); then
+        debasher::errmsg "$(debasher::_path_kind_noun "${kind}") ${value} does not exist (${opt} option)"
         return 1
     fi
 
@@ -1836,10 +1936,67 @@ debasher::define_infile_opt()
 #
 # Examples
 #
+#   debasher::define_infile_opt "-f" "config/settings.txt" "optlist" "${process_name}"
+#
+# The function does not return any value
+debasher::define_infile_opt()
+{
+    debasher::_define_path_opt "$1" "$2" "$3" "$4" file
+}
+
+########
+# Public: Defines process option whose value is a file path, resolved
+# relative to the .sh defining the process.
+#
+# $1 - Option name.
+# $2 - File path associated to the option being defined (relative or
+#      absolute).
+# $3 - Name of variable that will store the information about the option to be added.
+# $4 - Name of the process this option is being defined for.
+#
+# Examples
+#
 #   define_infile_opt "-f" "config/settings.txt" "optlist" "${process_name}"
 #
 # The function does not return any value
 define_infile_opt() { debasher::define_infile_opt "$@"; }
+
+########
+# Public: Defines process option whose value is a directory path,
+# resolved relative to the .sh defining the process.
+#
+# $1 - Option name.
+# $2 - Directory path associated to the option being defined (relative
+#      or absolute).
+# $3 - Name of variable that will store the information about the option to be added.
+# $4 - Name of the process this option is being defined for.
+#
+# Examples
+#
+#   debasher::define_indir_opt "-d" "reference" "optlist" "${process_name}"
+#
+# The function does not return any value
+debasher::define_indir_opt()
+{
+    debasher::_define_path_opt "$1" "$2" "$3" "$4" dir
+}
+
+########
+# Public: Defines process option whose value is a directory path,
+# resolved relative to the .sh defining the process.
+#
+# $1 - Option name.
+# $2 - Directory path associated to the option being defined (relative
+#      or absolute).
+# $3 - Name of variable that will store the information about the option to be added.
+# $4 - Name of the process this option is being defined for.
+#
+# Examples
+#
+#   define_indir_opt "-d" "reference" "optlist" "${process_name}"
+#
+# The function does not return any value
+define_indir_opt() { debasher::define_indir_opt "$@"; }
 
 ########
 debasher::_get_value_descriptor_name()

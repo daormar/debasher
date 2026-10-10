@@ -704,9 +704,10 @@ the program either.
 While a `_program` method runs, the engine records, for each process and each
 sequential process it adds, the directory of the module that the method belongs
 to. A relative path that belongs to a process, that of an external alias or the
-value of an option defined with `define_infile_opt`, is resolved against that
-directory, which is the directory of the module that added the process to the
-program, not necessarily the one that defines its functions.
+value of an option defined with `define_infile_opt` or `define_indir_opt`, is
+resolved against that directory, which is the directory of the module that
+added the process to the program, not necessarily the one that defines its
+functions.
 
 The type of the program comes from the `_program_type` method of the program
 file alone, called before its `_program` method; the `_program_type` method of
@@ -931,13 +932,14 @@ file_writer_define_opts()
 ```
 
 Each `define_*` function adds one option, and they differ in where the value
-comes from: a literal (`define_opt`, `define_flag`), a file shipped with the
-program (`define_infile_opt`), the command line (`define_cmdline_opt` and its
-variants), the process specification (`define_procspec_opt`), an output option
-of another process (`define_opt_from_proc_out`), a value descriptor
-(`define_value_desc_opt`), a shared directory (`define_opt_from_shared_dir`),
-the process output directory (`define_opt_from_process_outdir`) or a FIFO
-(`define_fifo_opt`, see "Declaring and owning a FIFO").
+comes from: a literal (`define_opt`, `define_flag`), a file or a directory
+shipped with the program (`define_infile_opt`, `define_indir_opt`), the command
+line (`define_cmdline_opt` and its variants), the process specification
+(`define_procspec_opt`), an output option of another process
+(`define_opt_from_proc_out`), a value descriptor (`define_value_desc_opt`), a
+shared directory (`define_opt_from_shared_dir`), the process output directory
+(`define_opt_from_process_outdir`) or a FIFO (`define_fifo_opt`, see "Declaring
+and owning a FIFO").
 
 **Options and values.** A word of an option list is an option when it is `-` or
 `--` followed by a letter or an underscore, and a value otherwise, so `-5` is a
@@ -987,12 +989,13 @@ an output option. The path is absolute, so the reading task depends on the
 writing one like on any file it produced, and reads the value only once it has
 been written.
 
-**Input files and shared directories.** `define_infile_opt` gives an option the
+**Input paths and shared directories.** `define_infile_opt` gives an option the
 path of a file shipped with the program, resolved against the directory of the
 module that added the process (see "Programs and subprograms") and required to
-exist. A shared directory is declared by a module, with `define_shared_dir` in
-its `_shared_dirs` method and never from a process method, and created in the
-output directory before any process runs. The `_shared_dirs` method of every
+exist as a regular file; `define_indir_opt` does the same for a directory. A
+shared directory is declared by a module, with `define_shared_dir` in its
+`_shared_dirs` method and never from a process method, and created in the output
+directory before any process runs. The `_shared_dirs` method of every
 loaded module is called, whether or not the module adds processes to the
 program. `define_opt_from_shared_dir` gives an option its absolute path, or
 that of a shared subdirectory (see "Shared subdirectories"). A shared directory
@@ -1227,8 +1230,10 @@ know. A process takes a value from it in its `_define_opts` method:
 preparation of the run otherwise; `define_cmdline_opt_if_given` and
 `define_cmdline_flag_if_given` add the option only when it is given;
 `define_cmdline_infile_opt` and its `_if_given` variant also require the value
-to name an existing file and make its path absolute; and `get_cmdline_opt`
-returns the value for the method to compute with.
+to name an existing regular file and make its path absolute, and
+`define_cmdline_indir_opt` and its `_if_given` variant do the same for an
+existing directory; and `get_cmdline_opt` returns the value for the method to
+compute with.
 
 The command line is a single set of names shared by every process of the
 program and by `debasher_exec`: every process that reads `-s` gets the same

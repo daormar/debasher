@@ -170,8 +170,10 @@ An option is added by its label, which starts with a dash: a label
 that starts with ``-out`` or ``--out`` makes an output, and any other
 an input, as the engine requires. Its editor sets:
 
-* its **data type** (int, float, string or file, or "None (flag)" for
-  an input that takes no value);
+* its **data type** (int, float, string, file or dir, or "None (flag)"
+  for an input that takes no value); an input of type file or dir,
+  given on the command line or as a value, has to name an existing
+  file or directory, and the engine makes its path absolute;
 * whether it is a **command line** option, given when the program is
   run (and whether it is mandatory, and whether it is a **task
   shaping** option, see below), or whether its value is taken from an

@@ -12,7 +12,7 @@ class ProgramOption(BaseModel):
     id: str
     label: str
     direction: Literal["input", "output"]
-    dataType: Literal["int", "float", "string", "file", "None"]
+    dataType: Literal["int", "float", "string", "file", "dir", "None"]
     # How the value is delivered, independent of its type: "none" is a
     # literal/computed value (or a connection, via the value's own
     # "[proc;opt]" sentinel), "value_desc" is an engine-synthesized

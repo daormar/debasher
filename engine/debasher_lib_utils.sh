@@ -395,6 +395,40 @@ debasher::_dir_exists()
 }
 
 ########
+# True if a path names an existing file (kind "file") or an existing
+# directory (kind "dir").
+#
+# $1 - Path.
+# $2 - Kind of path: "file" or "dir".
+debasher::_path_of_kind_exists()
+{
+    local path=$1
+    local kind=$2
+
+    case "${kind}" in
+        file) debasher::_file_exists "${path}" ;;
+        dir) debasher::_dir_exists "${path}" ;;
+        *) return 1 ;;
+    esac
+}
+
+########
+# Prints the word that names a kind of path in a message: "file" for
+# kind "file", "directory" for kind "dir".
+#
+# $1 - Kind of path: "file" or "dir".
+debasher::_path_kind_noun()
+{
+    local kind=$1
+
+    if [ "${kind}" = "dir" ]; then
+        echo "directory"
+    else
+        echo "file"
+    fi
+}
+
+########
 debasher::_convert_mem_value_to_mb()
 {
     local mem_value=$1

@@ -257,6 +257,7 @@ def _assert_model_round_trip(program: Program, tmp_path: Path) -> None:
 
 def test_standard_mode_options_survive_the_round_trip(tmp_path):
     (tmp_path / "data.txt").write_text("x\n")
+    (tmp_path / "refdir").mkdir()
     writer = _process(
         "writer",
         [
@@ -265,6 +266,8 @@ def test_standard_mode_options_survive_the_round_trip(tmp_path):
             _option("-opt", commandLine=True),
             _option("-inf", dataType="file", commandLine=True, mandatory=True),
             _option("-data", dataType="file", value="data.txt"),
+            _option("-ind", dataType="dir", commandLine=True),
+            _option("-ref", dataType="dir", value="refdir"),
             _option("-v", dataType="None"),
             _option("-verbose", dataType="None", commandLine=True),
             _option("-cpus", value="cpus", fromProcessSpec=True),

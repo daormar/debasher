@@ -582,12 +582,16 @@ def _procspec_lines(option) -> list[str]:
     return [f'debasher::define_procspec_opt "${{process_spec}}" "{option.label}" "{option.value}" optlist || return 1']
 
 
+# The validating variant of a command-line or literal option of a path
+# type, which checks that the path exists and makes it absolute (see
+# debasher::define_cmdline_infile_opt and debasher::define_infile_opt in
+# engine/debasher_lib_opts.sh): the path names a file or a directory.
+_CMDLINE_PATH_FUNCS = {"file": "define_cmdline_infile_opt", "dir": "define_cmdline_indir_opt"}
+_LITERAL_PATH_FUNCS = {"file": "define_infile_opt", "dir": "define_indir_opt"}
+
+
 def _cmdline_lines(option) -> list[str]:
-    # A file-typed command-line option gets the validating variant
-    # (checks the path exists and normalizes it to absolute), see
-    # debasher::define_cmdline_infile_opt[_if_given] in
-    # engine/debasher_lib_opts.sh.
-    base = "define_cmdline_infile_opt" if option.dataType == "file" else "define_cmdline_opt"
+    base = _CMDLINE_PATH_FUNCS.get(option.dataType, "define_cmdline_opt")
     if option.mandatory:
         return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
     return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
@@ -639,10 +643,10 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
 
 
 def _literal_lines(process, option) -> list[str]:
-    if option.dataType == "file" and option.direction == "input":
+    if option.dataType in _LITERAL_PATH_FUNCS and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
         # debasher::define_infile_opt in engine/debasher_lib_opts.sh); lets
-        # a baked-in file value point at something shipped alongside the
+        # a baked-in path value point at something shipped alongside the
         # program (e.g. via the webui's program-files browser) with a
         # portable, relative path, the same way
         # AdditionalSpecs.externalAlias already does for process scripts.
@@ -651,7 +655,7 @@ def _literal_lines(process, option) -> list[str]:
         # exist on disk, which a "file"-typed output (e.g. "-outf") never
         # does until the process itself creates it at run time.
         return [
-            f'debasher::define_infile_opt "{option.label}" "{option.value}" optlist '
+            f'debasher::{_LITERAL_PATH_FUNCS[option.dataType]} "{option.label}" "{option.value}" optlist '
             f'"{process.name}" || return 1'
         ]
     return [f'debasher::define_opt "{option.label}" "{option.value}" optlist || return 1']

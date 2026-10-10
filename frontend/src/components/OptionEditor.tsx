@@ -448,6 +448,10 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             file
           </option>
 
+          <option value="dir">
+            dir
+          </option>
+
           {/* A flag takes no connection (see isValidEdge), nor
               does a command line option or one from the process spec. */}
           {direction === "input" && !isConnected && (

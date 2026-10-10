@@ -105,7 +105,8 @@ refer to it.
   engine, such as `-infile`.
 - **direction**: whether an option is an `input` or an `output` of its process.
 - **data type**: the type of an option's value: `int`, `float`, `string`,
-  `file`, or `None` for a flag, an option that takes no value.
+  `file` for the path of a regular file, `dir` for the path of a directory, or
+  `None` for a flag, an option that takes no value.
 - **option channel**: how an option's value is delivered, independent of its
   data type (`ProgramOption.channel`): `none` for a literal value or a
   connection, `value_desc` for a value descriptor the engine synthesizes, `fifo`
@@ -791,14 +792,15 @@ a fan-in), taken from the first rule that applies:
    `define_opt_from_process_outdir`. Either takes `--subdir` and the subpath
    when the option has one.
 5. `fromProcessSpec`: `define_procspec_opt` with the attribute's name.
-6. A command line option: `define_cmdline_opt`, or `define_cmdline_infile_opt`
-   for a file, with the suffix `_if_given` when it is not mandatory.
+6. A command line option: `define_cmdline_opt`, `define_cmdline_infile_opt`
+   for a file, or `define_cmdline_indir_opt` for a directory, with the suffix
+   `_if_given` when it is not mandatory.
 7. A connected option: `define_opt_from_proc_out` for each of its edges, or
    `define_opt_from_proc_task_out` with the task index when both ends run in
    `array` or `generator` mode.
-8. An input file: `define_infile_opt`, which resolves a relative path against
-   the module's own directory, so that a file shipped with the program can be
-   named portably.
+8. An input file or directory: `define_infile_opt` or `define_indir_opt`, which
+   resolve a relative path against the module's own directory, so that a file
+   or a directory shipped with the program can be named portably.
 9. Anything else: `define_opt` with the literal value.
 
 A command line option always gets its definition from rule 6, or from rule 1

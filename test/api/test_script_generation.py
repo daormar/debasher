@@ -68,6 +68,35 @@ def test_input_file_option_still_uses_define_infile_opt():
     assert "debasher::define_infile_opt " in lines[0]
 
 
+def test_a_dir_option_uses_the_directory_variants():
+    # A "dir" input is checked to name an existing directory, which the
+    # "file" variants would refuse, given as a value or on the command
+    # line, and an optional one only when it is given.
+    literal = _make_file_option("input", label="-ref", value="refdir").model_copy(update={"dataType": "dir"})
+    mandatory = literal.model_copy(update={"label": "-ind", "commandLine": True, "mandatory": True})
+    optional = mandatory.model_copy(update={"label": "-opt", "mandatory": False})
+    process = _make_process([literal, mandatory, optional])
+
+    assert _option_definition_line(process, literal, {}, {}) == [
+        'debasher::define_indir_opt "-ref" "refdir" optlist "count" || return 1'
+    ]
+    assert _option_definition_line(process, mandatory, {}, {}) == [
+        'debasher::define_cmdline_indir_opt "${cmdline}" "-ind" optlist || return 1'
+    ]
+    assert _option_definition_line(process, optional, {}, {}) == [
+        'debasher::define_cmdline_indir_opt_if_given "${cmdline}" "-opt" optlist || return 1'
+    ]
+
+
+def test_an_output_dir_option_uses_plain_define_opt():
+    option = _make_file_option("output", label="-outd", value="${process_outdir}/d").model_copy(update={"dataType": "dir"})
+    process = _make_process([option])
+
+    assert _option_definition_line(process, option, {}, {}) == [
+        'debasher::define_opt "-outd" "${process_outdir}/d" optlist || return 1'
+    ]
+
+
 def test_the_edges_alone_say_what_is_connected():
     # The value of an input is not looked at to tell whether it is
     # connected: an edge into it connects it, even with no connection

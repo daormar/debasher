@@ -28,8 +28,8 @@ const language = z.enum(["bash", "python", "perl", "r", "groovy"]);
 export const nodeKind = z.enum(["FBPProcess", "ProgramLauncher", "DirectoryWatcher", "Supervisor"]);
 
 export const optionFields = z.object({
-  dataType: z.enum(["int", "float", "string", "file", "None"]).optional()
-    .describe('"None" for a flag, which takes no value.'),
+  dataType: z.enum(["int", "float", "string", "file", "dir", "None"]).optional()
+    .describe('"file" or "dir" for an input path that has to exist (a regular file or a directory); "None" for a flag, which takes no value.'),
   channel: z.enum(["none", "value_desc", "fifo", "shared_dir", "process_outdir"]).optional()
     .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, a shared directory, or, for an output, the output directory of the process."),
   subpath: z.string().optional()
