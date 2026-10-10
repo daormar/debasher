@@ -402,12 +402,13 @@ fails, before any process is launched:
    programs").
 4. It refuses to go on while a process of the program is still in progress
    from a previous run on the same output directory.
-5. It builds the option list of every task, through the `_define_opts` method
-   or the option generator of each process, and resolves the output
-   descriptors of the connections. It writes the option list of every task of
-   a process without an option generator into `.sched_opts`, and registers the
-   owner and the reader of every FIFO (see "Options" and "Declaring and owning
-   a FIFO").
+5. It builds the option list of every task, first through the `_define_opts`
+   method of each process without an option generator, then through the
+   option generator of each of the others (see "Arrays and option
+   generators"), and resolves the output descriptors of the connections. It
+   writes the option list of every task of a process without an option
+   generator into `.sched_opts`, and registers the owner and the reader of
+   every FIFO (see "Options" and "Declaring and owning a FIFO").
 6. It infers the dependencies of every process, writes the final process
    specification into `program.procspec` and sorts the processes in
    topological order, which fails if the dependency graph has a cycle (see
@@ -1198,13 +1199,14 @@ given index. The option being defined may not be an output option, and the
 connected one has to be.
 
 The option does not get its value when it is defined, since the other process
-may not have defined its options yet: `_define_opts` is called for the
-processes in no particular order. It holds an output descriptor instead, a
-placeholder that names the process, the task and the option. Once every process
-has defined its options, the engine replaces each output descriptor with the
-value of the connected option, taken from the option list of that task, or by
-calling the option generator of the connected process for that task. A
-connection to a process, task or option that does not exist resolves to
+may not have defined its options yet: the processes define their options in no
+particular order, except that those with an option generator come after the
+others (see "Arrays and option generators"). It holds an output descriptor
+instead, a placeholder that names the process, the task and the option. Once
+every process has defined its options, the engine replaces each output
+descriptor with the value of the connected option, taken from the option list of
+that task, or by calling the option generator of the connected process for that
+task. A connection to a process, task or option that does not exist resolves to
 nothing and stops the preparation of the run.
 
 Once resolved, the value of a connection is a value like any other. The engine
@@ -1307,14 +1309,51 @@ option lists in advance. Its `_generate_opts_size` method, called with the same
 arguments as `_define_opts`, prints the number of tasks, and its
 `_generate_opts` method, called with those arguments and a task index, builds
 the option list of that one task and hands it to `save_opt_list`, which returns
-it instead of registering it. The engine calls the generator whenever it needs
-the options of a task: while the run is prepared, to record the values that the
-task produces, to find its FIFOs, to infer its dependencies and to resolve the
-connections of other processes to it, and again inside the task itself (see "How
-option values reach a task"). A generator is therefore called several times for
-each task, in different shells, and has to give the same option list every time
-for the same command line and task index. A generator declares a FIFO with
-`define_fifo_opt`, as `_define_opts` does (see "Declaring and owning a FIFO").
+it instead of registering it. A `_generate_opts_size` method that fails, or that
+prints anything but a number, stops the preparation of the run. The engine calls
+the generator whenever it needs the options of a task: while the run is
+prepared, to record the values that the task produces, to find its FIFOs, to
+infer its dependencies and to resolve the connections of other processes to it,
+and again inside the task itself (see "How option values reach a task"). A
+generator is therefore called several times for each task, in different shells,
+and has to give the same option list every time for the same command line and
+task index. A generator declares a FIFO with `define_fifo_opt`, as
+`_define_opts` does (see "Declaring and owning a FIFO").
+
+**The number of tasks of another process.** A process whose tasks match, one by
+one, those of another process, or whose task reads every task of another
+process, needs the number of tasks of that process. Computing it again would
+repeat the rule by which the other process computes it, such as counting the
+entries of a file given on the command line, and two copies of a rule can drift
+apart. `get_process_num_tasks` prints it instead, from the `_define_opts`,
+`_generate_opts_size` or `_generate_opts` method that calls it. The processes
+without an option generator define their options first, and those with one
+afterwards, each group in no particular order, so that the answer depends on
+which of the two processes have an option generator, and never on the order in
+which they happen to be defined:
+
+- The number of tasks of a process with an option generator is known at any
+  time. Once its options are defined, the engine has recorded it; before that,
+  its `_generate_opts_size` method gives it, once the engine has checked that
+  the task shaping options of that process are given.
+- The number of tasks of a process without an option generator is known only
+  once its `_define_opts` method has run. A process with an option generator can
+  ask for it, and a process without one cannot, even when the process it asks
+  about happens to be defined already. The rule holds along the whole chain:
+  while a process without an option generator defines its options, nothing that
+  it asks, the `_generate_opts_size` method of a process with an option
+  generator included, can ask for the number of tasks of a process without one.
+- Inside a task, the number of tasks of every process is in the execution
+  context, and asking for it reads it from there.
+
+A process that takes its number of tasks from another and has no data of its own
+to build its option lists from is thus written with an option generator. A
+number of tasks that depends on itself, through `get_process_num_tasks` and the
+`_generate_opts_size` methods of one or more processes, stops the preparation of
+the run. `get_process_num_tasks` prints the number on its standard output, so it
+is read in a command substitution, and a failure, which prints nothing, has to
+stop the method that reads it, as in
+`n=$(get_process_num_tasks worker) || return 1`.
 
 **Checking the options against their declaration.** The options of the first
 task of every process are checked against the declared ones while the run is
@@ -2443,6 +2482,12 @@ leaves, by design, to the program or to whoever runs it.
     the run names, nor a directory on the way to one of them; never the process
     output directory itself or anything outside it. The tasks of an array never
     share a value descriptor (see "Task subdirectories" and "Output options").
+19. While the run is prepared, `get_process_num_tasks` gives for a process the
+    number of tasks that the process has in the run, or stops the preparation:
+    whether a process can ask for it depends on which of the two processes have
+    an option generator, never on the order in which they define their options,
+    and a number of tasks that depends on itself is refused (see "Arrays and
+    option generators").
 
 **Limits and non-goals.**
 
@@ -2490,6 +2535,9 @@ leaves, by design, to the program or to whoever runs it.
   its output options name is removed when the process is prepared again, unless
   it has a `_reset_outfiles` method, though the task does not run again (see
   "Run resources and their life cycle").
+- **The number of tasks of another process.** A process without an option
+  generator cannot ask, while it defines its options, for the number of tasks of
+  another process without one (see "Arrays and option generators").
 - **Steps.** The engine keeps no record of a step: it has no status, no log
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step

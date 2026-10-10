@@ -112,7 +112,7 @@ producer()
 ########
 consumer_document()
 {
-    document_process "Executes an array of n tasks. Each task adds up the numbers read from the FIFO of the producer task with the same index."
+    document_process "Executes an array with as many tasks as the producer. Each task adds up the numbers read from the FIFO of the producer task with the same index."
 }
 
 ########
@@ -132,14 +132,6 @@ consumer_explain_opts()
 }
 
 ########
-consumer_explain_task_shaping_opts()
-{
-    # -n option
-    local description="Number of tasks"
-    explain_task_shaping_opt "-n" "<int>" "$description"
-}
-
-########
 consumer_identify_cmdline_opts()
 {
     :
@@ -154,7 +146,8 @@ consumer_generate_opts_size()
     local process_name=$3
     local process_outdir=$4
 
-    debasher::read_opt_value_from_line "${cmdline}" "-n"
+    # As many tasks as the producer, whose task i each task i reads
+    get_process_num_tasks "producer"
 }
 
 ########

@@ -12,7 +12,9 @@ FIFO Array Example using Generators
     # whose name includes the task index so that the names do not
     # clash. On the reading side, "consumer_generate_opts" connects
     # task i to the FIFO of producer task i with
-    # define_opt_from_proc_task_out.
+    # define_opt_from_proc_task_out, and "consumer_generate_opts_size"
+    # asks for the number of tasks of the producer with
+    # get_process_num_tasks, so that only the producer reads -n.
 
     producer_document()
     {
@@ -84,7 +86,7 @@ FIFO Array Example using Generators
 
     consumer_document()
     {
-        document_process "Executes an array of n tasks. Each task adds up the numbers read from the FIFO of the producer task with the same index."
+        document_process "Executes an array with as many tasks as the producer. Each task adds up the numbers read from the FIFO of the producer task with the same index."
     }
 
     consumer_explain_opts()
@@ -102,13 +104,6 @@ FIFO Array Example using Generators
         explain_opt "-outf" "<file>" "$description"
     }
 
-    consumer_explain_task_shaping_opts()
-    {
-        # -n option
-        local description="Number of tasks"
-        explain_task_shaping_opt "-n" "<int>" "$description"
-    }
-
     consumer_identify_cmdline_opts()
     {
         :
@@ -122,7 +117,8 @@ FIFO Array Example using Generators
         local process_name=$3
         local process_outdir=$4
 
-        debasher::read_opt_value_from_line "${cmdline}" "-n"
+        # As many tasks as the producer, whose task i each task i reads
+        get_process_num_tasks "producer"
     }
 
     consumer_generate_opts()

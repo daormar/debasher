@@ -1573,6 +1573,95 @@ debasher::define_opt_from_proc_task_out()
 define_opt_from_proc_task_out() { debasher::define_opt_from_proc_task_out "$@"; }
 
 ########
+# Public: Gets the number of tasks of a process of the program.
+#
+# $1 - Name of the process.
+#
+# A process whose number of tasks is that of another process, or whose
+# task reads every task of another process, asks for it instead of
+# computing it again. The options of the processes without an option
+# generator are defined before those of the processes with one, so an
+# option generator can ask for the number of tasks of any process, and a
+# process without one only for that of an option generator. When the
+# answer is not known yet, the _generate_opts_size method of the process
+# gives it, so its task shaping options have to be given. The number of
+# tasks is usually read in a command substitution, whose failure has to
+# stop the method that reads it.
+#
+# Examples
+#
+#   debasher::get_process_num_tasks "producer"
+#
+#   local n
+#   n=$(debasher::get_process_num_tasks "worker") || return 1
+#
+# The function prints the number of tasks of the process, or nothing,
+# returning 1, if it cannot be known.
+debasher::get_process_num_tasks()
+{
+    local processname=$1
+
+    if [[ ! -v DEBASHER_PROGRAM_PROCESSES["${processname}"] ]]; then
+        echo "Error: get_process_num_tasks: ${processname} is not a process of the program" >&2
+        return 1
+    fi
+
+    if ! debasher::_uses_option_generator "${processname}"; then
+        # Decided by whether the process has an option generator, not by
+        # whether its options happen to be defined already, which depends on
+        # the order in which the processes are defined
+        if [ "${DEBASHER_DEFINING_NON_GENERATOR_OPTS:-0}" -eq 1 ]; then
+            echo "Error: get_process_num_tasks: process ${processname} has no option generator, so its number of tasks is only known once its options are defined, and only a process with an option generator can ask for it" >&2
+            return 1
+        fi
+        echo "${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}"
+        return 0
+    fi
+
+    if [[ -v DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"] ]]; then
+        echo "${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}"
+        return 0
+    fi
+
+    # An option generator whose options are not defined yet, which only
+    # happens while the run is prepared
+    if [ -z "${DEBASHER_DEFINING_OPTS_CMDLINE+x}" ]; then
+        echo "Error: get_process_num_tasks: the number of tasks of process ${processname} is not known yet" >&2
+        return 1
+    fi
+    local cmdline=${DEBASHER_DEFINING_OPTS_CMDLINE}
+    debasher::_check_task_shaping_opts_given "${cmdline}" "${processname}" || return 1
+    debasher::_compute_generator_num_tasks "${cmdline}" "${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}" "${processname}"
+}
+
+########
+# Public: Gets the number of tasks of a process of the program.
+#
+# $1 - Name of the process.
+#
+# A process whose number of tasks is that of another process, or whose
+# task reads every task of another process, asks for it instead of
+# computing it again. The options of the processes without an option
+# generator are defined before those of the processes with one, so an
+# option generator can ask for the number of tasks of any process, and a
+# process without one only for that of an option generator. When the
+# answer is not known yet, the _generate_opts_size method of the process
+# gives it, so its task shaping options have to be given. The number of
+# tasks is usually read in a command substitution, whose failure has to
+# stop the method that reads it.
+#
+# Examples
+#
+#   get_process_num_tasks "producer"
+#
+#   local n
+#   n=$(get_process_num_tasks "worker") || return 1
+#
+# The function prints the number of tasks of the process, or nothing,
+# returning 1, if it cannot be known.
+get_process_num_tasks() { debasher::get_process_num_tasks "$@"; }
+
+########
 debasher::_optname_is_correct()
 {
     local funcname=$1

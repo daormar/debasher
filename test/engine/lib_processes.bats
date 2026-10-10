@@ -1531,6 +1531,263 @@ hold_lock() {
     [[ "${output}" != *"-id"* ]]
 }
 
+# --- the number of tasks of another process -------------------------------
+
+# Empties the registries that defining the options of a program fills, and
+# makes the processes given the processes of the program
+init_num_tasks_program() {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    declare -gA DEBASHER_PROGRAM_PROCESSES=() DEBASHER_INITIAL_PROCESS_SPEC=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local processname
+    for processname in "$@"; do
+        DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]="${processname} cpus=1 mem=32 time=00:01:00"
+        DEBASHER_PROGRAM_PROCESSES["${processname}"]=1
+    done
+}
+
+# Defines the option list of one task, with the given task index as -id,
+# and records the process whose options are being defined
+record_definition() {
+    local processname=$1
+    local task_idx=$2
+    local optlist=""
+
+    echo "${processname}" >> "${BATS_TEST_TMPDIR}/order"
+    define_opt "-id" "${task_idx}" optlist || return 1
+    save_opt_list optlist
+}
+
+@test "debasher::_define_opts_for_program_processes defines every process without an option generator before any with one" {
+    # Names whose order in an associative array mixes the two kinds, so that
+    # a single loop over the processes would define a generator first
+    init_num_tasks_program "one_arr" "one_gen" "two_arr" "two_gen" "three_arr" "three_gen"
+    local name
+    for name in one_arr two_arr three_arr; do
+        eval "${name}_define_opts() { record_definition ${name} 0; }"
+    done
+    for name in one_gen two_gen three_gen; do
+        eval "${name}_generate_opts_size() { echo 1; }"
+        eval "${name}_generate_opts() { record_definition ${name} \"\$5\"; }"
+    done
+
+    set +e
+    debasher::_define_opts_for_program_processes ""
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+
+    run cat "${BATS_TEST_TMPDIR}/order"
+    [ "${#lines[@]}" -eq 6 ]
+    local i
+    for i in 0 1 2; do
+        [[ "${lines[$i]}" == *_arr ]]
+    done
+    for i in 3 4 5; do
+        [[ "${lines[$i]}" == *_gen ]]
+    done
+}
+
+@test "debasher::get_process_num_tasks gives an option generator the number of tasks of a process without one" {
+    init_num_tasks_program "countedarrproc" "askinggenproc"
+    countedarrproc_define_opts()
+    {
+        local task_idx
+        for task_idx in 0 1 2; do
+            record_definition "countedarrproc" "${task_idx}" || return 1
+        done
+    }
+    askinggenproc_generate_opts_size()
+    {
+        get_process_num_tasks "countedarrproc"
+    }
+    askinggenproc_generate_opts()
+    {
+        record_definition "askinggenproc" "$5"
+    }
+
+    set +e
+    debasher::_define_opts_for_program_processes ""
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["askinggenproc"]}" -eq 3 ]
+}
+
+@test "debasher::get_process_num_tasks takes the number of tasks of an option generator not defined yet from its _generate_opts_size method" {
+    init_num_tasks_program "sizedgenproc" "gatherproc"
+    sizedgenproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-n" "<int>" "number of tasks"
+    }
+    sizedgenproc_generate_opts_size()
+    {
+        read_opt_value_from_line "$1" "-n"
+    }
+    sizedgenproc_generate_opts()
+    {
+        record_definition "sizedgenproc" "$5"
+    }
+    gatherproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "sizedgenproc") || return 1
+        echo "${n}" > "${BATS_TEST_TMPDIR}/gathered"
+        record_definition "gatherproc" 0
+    }
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-n" "4")
+
+    set +e
+    debasher::_define_opts_for_program_processes "${cmdline}"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/gathered")" -eq 4 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["sizedgenproc"]}" -eq 4 ]
+}
+
+@test "debasher::get_process_num_tasks needs the task shaping options of the option generator whose number of tasks it computes" {
+    init_num_tasks_program "shapedgenproc" "gatherproc"
+    shapedgenproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-n" "<int>" "number of tasks"
+    }
+    shapedgenproc_generate_opts_size()
+    {
+        touch "${BATS_TEST_TMPDIR}/size_called"
+        echo 2
+    }
+    shapedgenproc_generate_opts()
+    {
+        record_definition "shapedgenproc" "$5"
+    }
+    gatherproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "shapedgenproc") || return 1
+        record_definition "gatherproc" 0
+    }
+
+    run debasher::_define_opts_for_program_processes "$(debasher::_serialize_args "debasher_exec")"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapedgenproc needs the task shaping option -n"* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/size_called" ]
+}
+
+@test "debasher::get_process_num_tasks refuses the number of tasks of a process without an option generator while those are defined, even when its options are" {
+    init_num_tasks_program "definedarrproc"
+    definedarrproc_define_opts()
+    {
+        record_definition "definedarrproc" 0
+    }
+    DEBASHER_PROCESS_OPT_LIST_LEN["definedarrproc"]=2
+    local DEBASHER_DEFINING_NON_GENERATOR_OPTS=1
+
+    run debasher::get_process_num_tasks "definedarrproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process definedarrproc has no option generator"* ]]
+}
+
+@test "debasher::get_process_num_tasks reads the number of tasks of any process once the options of the program are defined" {
+    init_num_tasks_program "readarrproc" "readgenproc"
+    readarrproc_define_opts()
+    {
+        record_definition "readarrproc" 0
+    }
+    readgenproc_generate_opts_size()
+    {
+        echo 99
+    }
+    DEBASHER_PROCESS_OPT_LIST_LEN["readarrproc"]=2
+    DEBASHER_PROCESS_OPT_LIST_LEN["readgenproc"]=5
+
+    run debasher::get_process_num_tasks "readarrproc"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "2" ]
+
+    run debasher::get_process_num_tasks "readgenproc"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "5" ]
+}
+
+@test "debasher::get_process_num_tasks fails for an option generator not defined yet once the run is no longer prepared" {
+    init_num_tasks_program "latergenproc"
+    latergenproc_generate_opts_size()
+    {
+        echo 3
+    }
+
+    run debasher::get_process_num_tasks "latergenproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"the number of tasks of process latergenproc is not known yet"* ]]
+}
+
+@test "debasher::get_process_num_tasks fails for a process that is not a process of the program" {
+    init_num_tasks_program "knownproc"
+
+    run debasher::get_process_num_tasks "unknownproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"unknownproc is not a process of the program"* ]]
+}
+
+@test "debasher::get_process_num_tasks stops a number of tasks that depends on itself" {
+    init_num_tasks_program "cyclegena" "cyclegenb"
+    cyclegena_generate_opts_size()
+    {
+        get_process_num_tasks "cyclegenb"
+    }
+    cyclegena_generate_opts()
+    {
+        record_definition "cyclegena" "$5"
+    }
+    cyclegenb_generate_opts_size()
+    {
+        get_process_num_tasks "cyclegena"
+    }
+    cyclegenb_generate_opts()
+    {
+        record_definition "cyclegenb" "$5"
+    }
+
+    run debasher::_define_opts_for_program_processes ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"depends on itself (cyclegena -> cyclegenb -> cyclegena)"* || "${output}" == *"depends on itself (cyclegenb -> cyclegena -> cyclegenb)"* ]]
+}
+
+@test "debasher::_define_opts_for_process stops when the _generate_opts_size method prints something else than a number" {
+    init_num_tasks_program "wordgenproc"
+    wordgenproc_generate_opts_size()
+    {
+        echo "three"
+    }
+    wordgenproc_generate_opts()
+    {
+        record_definition "wordgenproc" "$5"
+    }
+
+    run debasher::_define_opts_for_process "" "${DEBASHER_INITIAL_PROCESS_SPEC["wordgenproc"]}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *'printed "three" instead of a number of tasks'* ]]
+}
+
+@test "debasher::_define_opts_for_process stops when the _generate_opts_size method fails" {
+    init_num_tasks_program "failgenproc"
+    failgenproc_generate_opts_size()
+    {
+        echo 2
+        return 1
+    }
+    failgenproc_generate_opts()
+    {
+        record_definition "failgenproc" "$5"
+    }
+
+    run debasher::_define_opts_for_process "" "${DEBASHER_INITIAL_PROCESS_SPEC["failgenproc"]}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"the _generate_opts_size method of process failgenproc failed"* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/order" ]
+}
+
 # --- debasher::_show_proc_implem_heredoc ---------------------------------
 
 @test "debasher::_show_proc_implem_heredoc shows the source of a heredoc function" {

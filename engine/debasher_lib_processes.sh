@@ -1045,11 +1045,10 @@ debasher::_define_opts_for_process()
         local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
         local process_outdir=$(debasher::_get_process_outdir "${processname}")
 
-        # Obtain the generator functions and the number of tasks
-        local define_opts_generator_gen_opts_size_fname
-        debasher::_get_generate_opts_size_funcname "${processname}" define_opts_generator_gen_opts_size_fname
+        # Obtain the generator function and the number of tasks
         local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
-        local array_size=$(${define_opts_generator_gen_opts_size_fname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}")
+        local array_size
+        array_size=$(debasher::_compute_generator_num_tasks "${cmdline}" "${process_spec}" "${processname}") || return 1
 
         # Iterate over array tasks. This is done even when all process
         # dependencies were given, as save_opt_list does for a process
@@ -1085,6 +1084,83 @@ debasher::_define_opts_for_process()
     else
         debasher::_define_opts_loop "${cmdline}" "${process_spec}"
     fi
+}
+
+########
+# Defines the options of every process of the program: first those of the
+# processes without an option generator, then those of the processes with
+# one. An option generator can thus ask for the number of tasks of any
+# process (see debasher::get_process_num_tasks), and a process without one
+# only for that of an option generator, which its _generate_opts_size
+# method gives at any time. Keeps the command line, and whether the
+# processes without an option generator are being defined, while it runs,
+# for get_process_num_tasks.
+#
+# $1 - Command line.
+#
+# Returns 1 if the options of some process cannot be defined.
+debasher::_define_opts_for_program_processes()
+{
+    local cmdline=$1
+    local DEBASHER_DEFINING_OPTS_CMDLINE=${cmdline}
+    local DEBASHER_DEFINING_NON_GENERATOR_OPTS
+
+    local with_generator processname
+    for with_generator in 0 1; do
+        DEBASHER_DEFINING_NON_GENERATOR_OPTS=$((1 - with_generator))
+        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+            if debasher::_uses_option_generator "${processname}"; then
+                [ "${with_generator}" -eq 1 ] || continue
+            else
+                [ "${with_generator}" -eq 0 ] || continue
+            fi
+            local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
+            debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
+        done
+    done
+}
+
+########
+# Prints the number of tasks that the _generate_opts_size method of the
+# option generator $3 gives, after checking that it succeeded and printed
+# a number. Keeps the processes whose number of tasks is being computed,
+# so that one whose number of tasks depends on itself, through
+# get_process_num_tasks, stops the preparation instead of recursing for
+# ever.
+#
+# $1 - Command line.
+# $2 - Process specification of the process.
+# $3 - Process name.
+#
+# Returns 1, printing nothing, if the number of tasks cannot be computed.
+debasher::_compute_generator_num_tasks()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local processname=$3
+
+    case " ${DEBASHER_COMPUTING_NUM_TASKS:-} " in
+        *" ${processname} "*)
+            local chain="${DEBASHER_COMPUTING_NUM_TASKS# } ${processname}"
+            echo "Error: the number of tasks of process ${processname} depends on itself (${chain// / -> })" >&2
+            return 1
+            ;;
+    esac
+    local DEBASHER_COMPUTING_NUM_TASKS="${DEBASHER_COMPUTING_NUM_TASKS:-} ${processname}"
+
+    local size_funcname
+    debasher::_get_generate_opts_size_funcname "${processname}" size_funcname
+    local process_outdir=$(debasher::_get_process_outdir "${processname}")
+    local num_tasks
+    num_tasks=$("${size_funcname}" "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}") || {
+        echo "Error: the _generate_opts_size method of process ${processname} failed" >&2
+        return 1
+    }
+    if [[ ! "${num_tasks}" =~ ^[0-9]+$ ]]; then
+        echo "Error: the _generate_opts_size method of process ${processname} printed \"${num_tasks}\" instead of a number of tasks" >&2
+        return 1
+    fi
+    echo "${num_tasks}"
 }
 
 ########

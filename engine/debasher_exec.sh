@@ -633,13 +633,7 @@ check_process_opts()
     {
         local cmdline=$1
 
-        # Iterate over the processes to be executed
-        local processname
-        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            # Define options for process
-            local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
-            debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
-        done
+        debasher::_define_opts_for_program_processes "${cmdline}"
     }
 
     create_option_arrays()
