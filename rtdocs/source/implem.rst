@@ -1117,7 +1117,14 @@ third argument):
   other tasks of the other array still run or after some of them have
   failed (see the ``aftercorr`` example). A task with no counterpart,
   because one of the two processes is not an array or the other array
-  has fewer tasks, waits for every task of the other process.
+  has fewer tasks, waits for every task of the other process. A task
+  whose dependencies can no longer hold in the run (for instance
+  ``afterok`` on a process that failed, or ``aftercorr`` on a task that
+  failed) is cancelled instead of left waiting: it counts as a failed
+  task, so that its process ends and ``afterany`` and ``afternotok`` on
+  it hold, and the next run tries it again. Under the built-in scheduler,
+  a ``.cancelled`` file in the exec directory of its process
+  (``__exec__/<process>``) says which dependency could not hold.
 * ``alias``/``ext_alias``: reuse another process's implementation (one
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one

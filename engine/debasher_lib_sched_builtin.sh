@@ -46,13 +46,13 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
     # Processes where the following is true are assigned this status:
     #  - process is an array of tasks
     #  - there are no tasks in progres (otherwise, it would be an in-progress process)
-    #  - at least one task has been launched
-    #  - at least one task can start execution
+    #  - at least one task has been launched or cancelled
+    #  - at least one task has been neither, and can start execution
 
     local dirname=$1
     local processname=$2
 
-    # Get .id files of finished tasks
+    # Get .id files of launched tasks
     local ids=$(debasher::_get_launched_array_task_ids "$dirname" $processname)
     local -A launched_array_tids
     local id
@@ -60,19 +60,24 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
         launched_array_tids[${id}]=1
     done
 
-    # If no launched array tasks were found, process is not array or it is
-    # not an unfinished one
+    # A cancelled task counts with the launched ones
     local num_launched_tasks=${#launched_array_tids[@]}
-    if [ ${num_launched_tasks} -eq 0 ]; then
+    local num_cancelled_tasks=$(debasher::_get_num_array_tasks_cancelled "${dirname}" "${processname}")
+    local num_handled_tasks=$((num_launched_tasks + num_cancelled_tasks))
+
+    # If no array task was launched or cancelled, process is not array or
+    # it is not an unfinished one
+    if [ ${num_handled_tasks} -eq 0 ]; then
         return 1
     else
-        # Process is array with some tasks already launched
+        # Process is array with some tasks already launched or cancelled
 
-        # Check that not all array tasks were launched, whether or not any
-        # of them has finished: an array whose every task was launched and
-        # failed is not runnable, and the scheduler takes it as failed
+        # Check that not all array tasks were launched or cancelled,
+        # whether or not any of them has finished: an array whose every
+        # task was launched or cancelled, and some failed or were
+        # cancelled, is not runnable, and the scheduler takes it as failed
         local num_array_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
-        if [ ${num_launched_tasks} -ge ${num_array_tasks} ]; then
+        if [ ${num_handled_tasks} -ge ${num_array_tasks} ]; then
             return 1
         fi
 

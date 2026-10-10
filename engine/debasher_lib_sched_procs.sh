@@ -96,6 +96,88 @@ debasher::_get_task_finished_filename()
 }
 
 ########
+# The cancellation marker of a process with a single task, which the
+# built-in scheduler writes when the task will not be launched in the run
+# because its dependencies can no longer hold
+debasher::_get_process_cancelled_filename()
+{
+    local dirname=$1
+    local processname=$2
+
+    # Get prefix
+    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
+
+    echo "${prefix}.${DEBASHER_CANCELLED_TASK_FEXT}"
+}
+
+########
+# The cancellation marker of the task with the given index of an array
+# process (see debasher::_get_process_cancelled_filename)
+debasher::_get_task_cancelled_filename()
+{
+    local dirname=$1
+    local processname=$2
+    local idx=$3
+
+    # Get prefix
+    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
+
+    echo "${prefix}_${idx}.${DEBASHER_CANCELLED_TASK_FEXT}"
+}
+
+########
+# Writes the cancellation marker of a task, with the cause that keeps it
+# from being launched: the dependency that can no longer hold, or the
+# cancelled task at the other end of one of its fifos
+debasher::_signal_task_cancellation()
+{
+    local dirname=$1
+    local processname=$2
+    local idx=$3
+    local num_tasks=$4
+    local cause=$5
+
+    local cancelled_filename
+    if [ "${num_tasks}" -eq 1 ]; then
+        cancelled_filename=$(debasher::_get_process_cancelled_filename "${dirname}" "${processname}")
+    else
+        cancelled_filename=$(debasher::_get_task_cancelled_filename "${dirname}" "${processname}" "${idx}")
+    fi
+    echo "Cancelled task idx: ${idx} ; Total: ${num_tasks} ; Cause: ${cause}" > "${cancelled_filename}"
+}
+
+########
+# Removes the cancellation markers of a process, so that its cancelled
+# tasks are launched in the run that prepares it
+debasher::_reset_task_cancellations()
+{
+    local dirname=$1
+    local processname=$2
+
+    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
+    "${RM}" -f "${prefix}.${DEBASHER_CANCELLED_TASK_FEXT}" "${prefix}"_*.${DEBASHER_CANCELLED_TASK_FEXT}
+}
+
+########
+# The number of cancelled tasks of an array process
+debasher::_get_num_array_tasks_cancelled()
+{
+    local dirname=$1
+    local processname=$2
+    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
+
+    local num_tasks_cancelled=0
+    local file
+    for file in "${prefix}"_*.${DEBASHER_CANCELLED_TASK_FEXT}; do
+        if [ -f "${file}" ]; then
+            num_tasks_cancelled=$((num_tasks_cancelled + 1))
+        fi
+    done
+
+    echo "${num_tasks_cancelled}"
+}
+
+########
 debasher::_get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending task here is just one that is not finished

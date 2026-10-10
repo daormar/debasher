@@ -53,9 +53,9 @@ export function residentProcessStatus(
 export const GENERAL_STATUS_MEANINGS: { status: ProcessRunStatus; meaning: string }[] = [
   { status: "IN-PROGRESS", meaning: "some task still runs" },
   { status: "FINISHED", meaning: "every task ended well or was skipped" },
-  { status: "UNFINISHED", meaning: "launched, nothing runs, and some task did not end well" },
+  { status: "UNFINISHED", meaning: "launched or cancelled, nothing runs, and some task did not end well" },
   { status: "UNFINISHED_BUT_RUNNABLE", meaning: "an array stopped partway; the next run launches the tasks left" },
-  { status: "TO-DO", meaning: "never launched" },
+  { status: "TO-DO", meaning: "nothing launched or cancelled yet" },
 ];
 
 // What each process status means in a resident program, as the legend of the

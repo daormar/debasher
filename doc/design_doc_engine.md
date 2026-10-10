@@ -74,14 +74,15 @@ modules load, what a process is made of, how a program is composed and how a
 task runs steps of its own. "Options" describes how a task gets its options and
 how options connect processes, and "The dependency graph" how the engine derives
 the order of the processes from them. "FIFOs" describes streaming between
-processes. "Scheduling" presents the scheduler abstraction and its two
-implementations, and "Running a process" what happens from the launch of a
-process to the end of its tasks. "The state of a run" describes the output
-directory, the life cycle of the run resources, the status of a process, reruns
-and the tools that read a run. "Business tests of a program" describes how the
-processes of a program are tested one at a time, outside any run. "Guarantees
-and non-goals" gathers the guarantees stated along the way, and "Future work"
-lists what is known to be missing.
+processes. "Scheduling" presents the scheduler abstraction, its two
+implementations and what happens to a task that will not be launched, and
+"Running a process" what happens from the launch of a process to the end of its
+tasks. "The state of a run" describes the output directory, the life cycle of
+the run resources, the status of a process, reruns and the tools that read a
+run. "Business tests of a program" describes how the processes of a program are
+tested one at a time, outside any run. "Guarantees and non-goals" gathers the
+guarantees stated along the way, and "Future work" lists what is known to be
+missing.
 
 # Glossary
 
@@ -214,10 +215,11 @@ relative to the output directory of the run.
 - **dependency**: a condition on another process, the **producer**, that the
   tasks of a process wait for before they are launched.
 - **dependency type**: what a dependency waits for: `none`, nothing; `after`,
-  the producer has started; `afterok`, every task of the producer has succeeded;
-  `afternotok`, the producer has failed; `afterany`, the producer has ended,
-  whatever its result; `aftercorr`, the counterpart of the waiting task has
-  succeeded, or every task of the producer has, for a task with no counterpart.
+  the producer has started, or every task of it was cancelled; `afterok`, every
+  task of the producer has succeeded; `afternotok`, the producer has failed;
+  `afterany`, the producer has ended, whatever its result; `aftercorr`, the
+  counterpart of the waiting task has succeeded, or every task of the producer
+  has, for a task with no counterpart.
 - **counterpart**: of a task of an array process, the task of the producer
   with the same task index, when the producer is an array process too and has
   a task with that index; any other task has none.
@@ -290,7 +292,8 @@ relative to the output directory of the run.
   an output option of the run names, nor a directory on the way to one of
   them.
 - **exec directory**: `__exec__/<process>`, where the engine keeps the process
-  script, the logs, the ids and the completion markers of a process.
+  script, the logs, the ids, the completion markers and the cancellation markers
+  of a process.
 - **run resource**: a directory or a FIFO that the engine creates for a task or
   hands to it, or a file of a task whose name the engine gives, such as a value
   descriptor or a step marker, with an owner and a life cycle: when it is
@@ -337,11 +340,19 @@ relative to the output directory of the run.
 - **completion marker**: the `.finished` file that a task writes in the exec
   directory when it ends successfully, or when the `_skip` method of its process
   skips it.
+- **cancelled task**: a task that will not be launched in a run, because its
+  dependencies can no longer hold in it, or because the task at the other end of
+  one of its FIFOs is cancelled. For the dependencies it counts as a task that
+  failed, and in a later run it waits to be launched again.
+- **cancellation marker**: the `.cancelled` file that the built-in scheduler
+  writes in the exec directory for a cancelled task, with the dependency that
+  can no longer hold, or the cancelled task at the other end of its FIFO.
 - **process status**: the state of a process that the engine derives from its
   exec directory: `TO-DO`, no process script yet; `IN-PROGRESS`, the scheduler
   still holds one of its ids; `FINISHED`, every task has a completion marker;
   `UNFINISHED_BUT_RUNNABLE`, for the built-in scheduler only, an array process
-  with tasks still to launch and none running; `UNFINISHED`, any other case.
+  with some tasks launched or cancelled, some neither, and none running;
+  `UNFINISHED`, any other case.
 - **rerun mark**: the decision to run a process again although it has run
   before, for a reason (forced, changed input, outdated code, the other end of
   one of its FIFOs runs again), propagated to the processes that depend on it
@@ -484,11 +495,12 @@ is written into the output directory before the first process is launched:
   (`program.fifos`) and the command line file describe the run to the tools
   that read it later.
 
-What changes while the program runs is written to disk too, by the scheduler
-and the tasks: the ids of the launched tasks, their logs and their completion
-markers, all in the exec directory of each process. The status of a process
-is derived from them whenever it is asked for, with no other record to consult
-(see "Process status").
+What changes while the program runs is written to disk too, by the scheduler and
+the tasks: the ids of the launched tasks, their logs and their completion
+markers, and, under the built-in scheduler, the cancellation markers of the
+cancelled tasks, all in the exec directory of each process. The status of a
+process is derived from them whenever it is asked for, with no other record to
+consult (see "Process status").
 
 **The output directory as the source of truth.** Once a process is launched,
 it belongs to the scheduler, not to `debasher_exec`. With the Slurm scheduler,
@@ -1474,17 +1486,17 @@ A dependency asks for something about the producer:
 | Type | Holds when |
 |---|---|
 | `none` | always: it is no dependency |
-| `after` | the producer has started |
+| `after` | the producer has started, or every task of it was cancelled |
 | `afterok` | every task of the producer has succeeded |
 | `afternotok` | the producer has failed |
 | `afterany` | the producer has ended, whether it succeeded or failed |
 | `aftercorr` | the counterpart of the task has succeeded; for a task with no counterpart, every task of the producer has |
 
 The types are not independent: every type but `none` implies `after`, since a
-producer that has ended has started, and `afterok` implies both `afterany` and
-`aftercorr`. When a process has two dependencies on the same producer, from two
-options or from two tasks, the engine merges them into the weakest type that
-asks for everything both of them ask for:
+producer that has ended has started or had every task cancelled, and `afterok`
+implies both `afterany` and `aftercorr`. When a process has two dependencies on
+the same producer, from two options or from two tasks, the engine merges them
+into the weakest type that asks for everything both of them ask for:
 
 - Two equal types give that type, and `none` or `after` with any type gives the
   other type.
@@ -1498,14 +1510,16 @@ asks for everything both of them ask for:
 
 The table gives the meaning that a program relies on. Two schedulers carry it
 out: the built-in scheduler follows it, and the Slurm scheduler departs from it
-in one known place, described in "The Slurm scheduler": a Slurm older than
-16.05, which has no `aftercorr`, gets `afterok` in its place. This only makes
-the tasks of an array wait longer than the program asked for, never less. The
-two also differ on a task whose dependencies can no longer hold, which Slurm
-cancels and the built-in scheduler leaves for a later run (see "The built-in
-scheduler"). A program run with `--builtinsched-oneshot`, which never waits for
-a process to end, is refused when it has any dependency other than `none` and
-`after`.
+in the known places described in "The Slurm scheduler". A Slurm older than
+16.05, which has no `aftercorr`, gets `afterok` in its place, which makes the
+tasks of an array wait longer than the program asked for, never less, and has a
+task cancelled when another task of the producer fails, though its counterpart
+succeeded. Both schedulers cancel a task whose dependencies can no longer hold
+in the run, except that the Slurm scheduler does not submit a process whose
+dependency on a process that the run does not launch can no longer hold (see
+"Tasks that will not be launched"). A program run with `--builtinsched-oneshot`,
+which never waits for a process to end, is refused when it has any dependency
+other than `none` and `after`.
 
 ## Explicit dependencies
 
@@ -1633,16 +1647,18 @@ time.
 The built-in scheduler keeps an end of a FIFO out of a round until its other end
 can start with it. In each round, a task at one end of a FIFO is launched only
 when the other end, a task of the program, already runs, has finished, is
-launched in the same round, or waits only for processes to start, as a reader
-with an `after` dependency on the owner of its FIFO does, which then starts in
-the next round. Chains of FIFOs are followed to the end. An end that went first
-while its other end waited for another process to end would block on opening the
-FIFO and hold its CPUs and memory, possibly the ones that process needs, and the
-program would never finish. When resources are limited, the knapsack solver
-takes the ends of a FIFO, and every end of a chain of FIFOs, all together or
-none of them, and a round in which no group of ends fits in the free resources,
-with nothing else to launch, stops the run with an error (see "The built-in
-scheduler").
+launched in the same round, or waits only for processes to start or to have
+every task cancelled, as a reader with an `after` dependency on the owner of its
+FIFO does, which then starts in the next round. Chains of FIFOs are followed to
+the end. An end that went first while its other end waited for another process
+to end would block on opening the FIFO and hold its CPUs and memory, possibly
+the ones that process needs, and the program would never finish. When resources
+are limited, the knapsack solver takes the ends of a FIFO, and every end of a
+chain of FIFOs, all together or none of them, and a round in which no group of
+ends fits in the free resources, with nothing else to launch, stops the run with
+an error (see "The built-in scheduler"). An end whose other end is cancelled is
+cancelled too, instead of being kept out of every round (see "Tasks that will
+not be launched").
 
 One case remains open. An end that goes first because its other end only waits
 for it to start holds its resources while it waits, and if they are what the
@@ -1759,7 +1775,8 @@ launches the tasks of each process when their dependencies hold and keeps the
 ids that tell whether they still run. The engine has two schedulers: the
 built-in scheduler, which runs the tasks on the local machine, and the Slurm
 scheduler, which submits them to a Slurm cluster. This section describes what
-the rest of the engine asks of a scheduler, and how each of the two answers.
+the rest of the engine asks of a scheduler, what happens to a task that will not
+be launched, and how each of the two schedulers answers.
 
 ## The scheduler abstraction
 
@@ -1781,37 +1798,96 @@ through the same operation, whatever its scheduler.
 
 Both schedulers take the dependencies of each process from the final process
 specification, and give them the meaning described in "Dependency types and
-how they merge", with the departure described in "The Slurm scheduler". One
-case is common to both: a dependency on a process that is not launched in this
-run. Such a process has either finished in an earlier run, and a dependency on
-it holds, except `afternotok`, which asks for it to have failed; or it has not
-finished and is not launched either, and a dependency on it never holds. A
-process whose dependencies cannot hold for this reason is not launched, and
-neither are the processes that depend on it: they are left for a later run.
+how they merge", with the departures described in "The Slurm scheduler". A
+dependency on a process that has finished in an earlier run, which the run does
+not launch again, holds, except `afternotok`, which asks for it to have failed
+and so can no longer hold.
+
+## Tasks that will not be launched
+
+A dependency that does not hold yet may hold later in the run, as long as its
+producer can still do what the dependency waits for. Once it cannot, the task
+that waits for it will never be launched in the run, and leaving it to wait
+would keep its process from ever ending: `afterany` and `afternotok` on that
+process, which only ask for it to end, would never hold either. Such a task is
+cancelled instead. The dependencies on a whole producer are judged when the
+producer ends, the moment at which `afterany` and `afternotok` are judged too,
+even when a task of it that failed already rules out `afterok`; `aftercorr` is
+judged on the counterpart of the task alone, when it has one. A dependency can
+no longer hold when:
+
+| Type | Can no longer hold when |
+|---|---|
+| `after` | never: a producer that starts, or whose every task is cancelled, satisfies it |
+| `afterok` | the producer has ended in this run without finishing |
+| `aftercorr` | the counterpart has failed or was cancelled; for a task with no counterpart, as `afterok` |
+| `afternotok` | the producer has finished, in this run or in an earlier one |
+| `afterany` | never: a producer that ends, whether it finished or not, satisfies it |
+| `none` | never |
+
+With `,` a task is cancelled when one of its dependencies can no longer hold,
+and with `?` when none of them holds or can still hold.
+
+For the dependencies, a cancelled task counts as one that failed: a process
+whose tasks have all finished, failed or been cancelled, and not all of them
+finished, has ended without finishing, so that `afterok` on it can no longer
+hold, and `afterany` and `afternotok` on it hold. Cancellations therefore follow
+the dependency graph: cancelling a task can end its process, which can rule out
+dependencies of other processes, whose tasks are cancelled in turn. A task at
+one end of a FIFO whose other end is cancelled is cancelled too, since it would
+block on opening the FIFO (see "Running both ends together"). An end that went
+first never sees its other end cancelled: it went first because that end waited
+only for processes to start, and `after` never makes a task cancelled.
+
+Under the built-in scheduler, a cancelled task gets a cancellation marker,
+`<process>.cancelled` or `<process>_<index>.cancelled` in the exec directory,
+which records the dependency that can no longer hold, or the cancelled task at
+the other end of its FIFO, so that whoever reads it there is sent to the cause,
+the producer or the other end of the FIFO, and not to the task. A cancelled task
+is never launched in the run: it holds no CPUs or memory, and has no id,
+options, standard output, log or completion marker. When the first task of a
+process that has no process script yet is cancelled, the scheduler writes the
+script, as it does when it launches one, so that the header gives the number of
+tasks against which the status of the process is counted (see "Process status").
+The marker lasts until the built-in scheduler prepares the process for a later
+run (see "Preparing a run"), where the task waits to be launched again, as a
+task that failed does. Under the Slurm scheduler, Slurm cancels the task itself,
+and the engine writes no marker: a run of the Slurm scheduler leaves an older
+marker without reading it, and a task that has its completion marker counts as
+finished whatever an older cancellation marker says. The Slurm scheduler departs
+from the rest of this section for a dependency on a process that the run does
+not launch, and a Slurm older than 16.05, which runs `aftercorr` as `afterok`,
+cancels a task whose counterpart succeeded once another task of the producer
+fails (see "The Slurm scheduler").
 
 ## The built-in scheduler
 
 The built-in scheduler is `debasher_exec` itself, which stays in a loop of
 rounds until no task can be launched and none still runs. In each round it:
 
-1. Reads the status of every process from its exec directory, and returns to
-   the budget the CPUs and memory of the processes that have ended. A process
-   that was running in this run and has ended without finishing is taken as
-   failed, which is what `afternotok` and `afterany` look for.
-2. Finds the candidates of the round: the tasks that are not running and have
-   not finished or failed, whose dependencies hold and that fit on their own
-   in the free CPUs and memory. In an array process, the throttle of the
-   process then limits how many of them are candidates.
-3. Leaves out the tasks at one end of a FIFO whose other end cannot start with
+1. Reads the status of every process from its exec directory, and returns to the
+   budget the CPUs and memory of the processes that have ended. A process that
+   has ended in this run without finishing, because a task of it failed or was
+   cancelled, is taken as failed, which is what `afternotok` and `afterany` look
+   for.
+2. Cancels the tasks whose dependencies can no longer hold, and the tasks at the
+   other end of their FIFOs, writing a cancellation marker for each, and the
+   process script of a process that has none yet, and repeats until it cancels
+   no more (see "Tasks that will not be launched").
+3. Finds the candidates of the round: the tasks that are not running and have
+   not finished, failed or been cancelled, whose dependencies hold and that fit
+   on their own in the free CPUs and memory. In an array process, the throttle
+   of the process then limits how many of them are candidates.
+4. Leaves out the tasks at one end of a FIFO whose other end cannot start with
    them (see "Running both ends together").
-4. Chooses the tasks to launch. With no limit on CPUs or memory, every
+5. Chooses the tasks to launch. With no limit on CPUs or memory, every
    candidate is chosen. With a limit, the choice is a knapsack problem, which
    a greedy solver answers: each task is an item whose weights are its CPUs
    and its memory, whose value is 1, divided among the tasks of an array
    process, and the ends of a FIFO, or of a chain of FIFOs, are chosen all
    together or none of them. A round that has candidates but can choose none
    of them stops the run with an error.
-5. Launches the chosen tasks, writing the process script of a process when
+6. Launches the chosen tasks, writing the process script of a process when
    its first task is launched (see "Running a process"), and waits one second
    before the next round, or five when the program has more than ten
    processes.
@@ -1830,24 +1906,20 @@ everything it started. The script of the task ignores `SIGTERM` itself, so
 that a graceful stop sent to its whole group ends what it runs but lets it
 finish its own bookkeeping; `debasher_stop` sends `SIGKILL` to the group.
 
-The built-in scheduler gives the dependency types the meaning of the table.
-A dependency holds when the status of the producer says so: `after` once the
-producer has started, `afterok` once it has finished, and `afternotok` and
-`afterany` once it has failed in this run or, for `afterany`, finished. These
-hold or not for every task of the process at once. `aftercorr` is the exception,
-and holds for each task of an array on its own, once its counterpart has
-finished: a task can be launched while other tasks of the producer still run,
-or after they have failed. A task with no counterpart waits for the producer to
-finish, as with `afterok`.
+The built-in scheduler gives the dependency types the meaning of the table. A
+dependency holds when the status of the producer says so: `after` once the
+producer has started or every task of it was cancelled, `afterok` once it has
+finished, and `afternotok` and `afterany` once it has failed in this run or, for
+`afterany`, finished. These hold or not for every task of the process at once.
+`aftercorr` is the exception, and holds for each task of an array on its own,
+once its counterpart has finished: a task can be launched while other tasks of
+the producer still run, or after they have failed. A task with no counterpart
+waits for the producer to finish, as with `afterok`.
 
-A task whose dependencies can no longer hold, because a producer, or the
-counterpart of the task, has failed where it had to finish, a producer has
-finished where it had to fail, or a producer has not finished and will not be
-launched in this run, is never a candidate, and the loop ends without it. It is
-left for a later run, and its process does not end in this one: it stays `TO-DO`
-when none of its tasks was launched, and `UNFINISHED_BUT_RUNNABLE` otherwise
-(see "Process status"), so that `afterany` and `afternotok` on it do not hold
-either, and the processes that depend on it are left for a later run too.
+A task whose dependencies can no longer hold is cancelled in the round, before
+the candidates are found, instead of waiting, so that no task is left waiting
+when the loop ends, and a process that does not finish ends in the run, as
+failed (see "Tasks that will not be launched").
 
 With `--builtinsched-oneshot`, `debasher_exec` goes through its rounds with no
 pause, launching whatever can start, and ends as soon as nothing more can start
@@ -1877,6 +1949,17 @@ gets `afterok` in its place; a newer one gets `aftercorr` as it is. Every job
 is submitted with `--kill-on-invalid-dep=yes`, so that Slurm cancels a task
 whose dependencies can no longer hold; the task then ends, as cancelled, and
 `afterany` and `afternotok` on its process hold.
+
+The Slurm scheduler checks, before submitting a process, its dependencies on
+processes that have no job id in the run, since it has none to give Slurm: such
+a dependency can hold only when its producer finished in an earlier run and its
+type is not `afternotok`, while a dependency on a submitted process is left to
+Slurm. A process whose dependencies cannot hold this way, one of them with `,`
+or all of them with `?`, is not submitted. It then has no job id either, so that
+the same check applies to the processes that depend on it, whatever the type of
+their dependency on it: unlike the built-in scheduler, which cancels the tasks
+and lets `afterany` and `afternotok` on their process hold (see "Tasks that will
+not be launched"), the Slurm scheduler leaves them for a later run.
 
 When `mem` or `time` is a list of values separated by commas, the process is
 submitted once for each attempt, as many attempts as the longer of the two lists
@@ -1909,11 +1992,13 @@ that is not marked to rerun is left exactly as it is, with its outputs, logs
 and completion markers. For a process that is prepared:
 
 - A process that has never run gets its exec directory, `__exec__/<process>`.
-- A process that has run before loses the ids and the logs of its previous
-  run, and, for an array process, only those of the tasks that have not
-  finished, so that the finished tasks of an array are not run again. A
-  process marked to rerun has already lost its completion markers (see
-  "Reruns"), so none of its tasks counts as finished.
+- A process that has run before, or had tasks cancelled, loses the ids and the
+  logs of its previous run, for an array process only those of the tasks that
+  have not finished, so that the finished tasks of an array are not run again.
+  Under the built-in scheduler it also loses all its cancellation markers, so
+  that its cancelled tasks wait to be launched again. A process marked to rerun
+  has already lost its completion markers (see "Reruns"), so none of its tasks
+  counts as finished.
 - The FIFOs that the process owns are created again, empty (see "Declaring
   and owning a FIFO").
 - Its process output directory is created if it does not exist; under the Slurm
@@ -1931,9 +2016,10 @@ and completion markers. For a process that is prepared:
 
 A task runs in a shell of its own, on the local machine or on a node of a
 cluster, which has not loaded any module and may not be able to. What it needs
-of the program travels in its process script, which the engine writes into
-the exec directory of the process when the process is launched. The script
-has three parts:
+of the program travels in its process script, which the engine writes into the
+exec directory of the process when the process is launched, or, under the
+built-in scheduler, when its first task is cancelled. The script has three
+parts:
 
 - **The execution context**, a copy of `.exec_context.sh`, which
   `debasher_exec` writes once the program is defined (see "Architecture"). It
@@ -2093,10 +2179,12 @@ fixed:
 
 The exec directory of a process holds its process script, named after the
 process, and, for each task, its id, its options, its standard output, its log
-and its completion marker: `<process>.id`, `.opts`, `.stdout`, `.sched_out`
-and `.finished` for a process with a single task, and `<process>_<index>.id`
-and so on for the tasks of an array process. Under the Slurm scheduler, the
-logs are those that Slurm writes, one for each attempt.
+and its completion marker: `<process>.id`, `.opts`, `.stdout`, `.sched_out` and
+`.finished` for a process with a single task, and `<process>_<index>.id` and so
+on for the tasks of an array process. Under the built-in scheduler, a cancelled
+task has a cancellation marker, `.cancelled`, instead of all of these (see
+"Tasks that will not be launched"). Under the Slurm scheduler, the logs are
+those that Slurm writes, one for each attempt.
 
 Everything else at the top of the directory belongs to the processes: the
 process output directory of each process, named after it or after what its
@@ -2125,7 +2213,7 @@ resource as a process with a single task, as the principle stated in the
 | FIFO, with its shim FIFO and mirror log | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO") | created again, empty, each time the process of its owner is prepared | never | alike: each task declares a FIFO of its own |
 | shared directory | the module that declares it | before any process is launched, if missing (see "Output options") | never, except a subdivided shared directory, from which every entry that is neither a shared subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them is removed before any process is launched (see "Shared subdirectories") | never | alike |
 | shared subdirectory | the tasks that ask for it | before any process is launched, if missing (see "Shared subdirectories") | never | before any process is launched, when no option asks for it while another asks for a shared subdirectory of the same shared directory (see "Shared subdirectories") | alike |
-| exec directory | the engine | when a process that has never run is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished, and, for a process marked to rerun, of its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker |
+| exec directory | the engine | when a process that has never run is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker, or, when cancelled, its own cancellation marker |
 
 **Where one task and many still differ.** The process output directory itself is
 the one run resource that one task and many do not get alike: the tasks of an
@@ -2148,30 +2236,32 @@ directory and from the scheduler, and is kept nowhere:
 
 | Status | When |
 |---|---|
-| `TO-DO` | the process has no process script: it has never been launched |
+| `TO-DO` | the process has no process script: none of its tasks has been launched or cancelled |
 | `IN-PROGRESS` | one of the ids of the process still runs, as the scheduler says |
 | `FINISHED` | every task of the process has its completion marker |
-| `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched, none running, and some not launched yet |
-| `UNFINISHED` | any other case: the process was launched, nothing of it runs, and some task has no completion marker |
+| `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched or cancelled, none running, and some neither launched nor cancelled |
+| `UNFINISHED` | any other case: some task of the process was launched or cancelled, nothing of it runs, and some task has no completion marker |
 
 A task writes its completion marker only when it ends well (see "Executing a
 task"), so a process is `FINISHED` only when every task succeeded or was
 skipped. The number of tasks against which the completion markers and the
-launched tasks are counted comes from the header of the process script (see "The
-process script: how code travels"), so that it is known before any task has
-finished: an array whose every task was launched and failed is `UNFINISHED`, not
-`UNFINISHED_BUT_RUNNABLE`, and the built-in scheduler takes it as failed in the
-run where its tasks ran. An id runs when the process with that id exists, for
-the built-in scheduler, or when Slurm still lists the job, for the Slurm
-scheduler; a process id that the system gives again to an unrelated process
-after the task has ended can make the process look `IN-PROGRESS`.
-`UNFINISHED_BUT_RUNNABLE` is the state of an array that the built-in scheduler
-was launching a few tasks at a time, under a throttle or a budget of CPUs and
-memory, when its run stopped, or whose remaining tasks wait for dependencies
-that can no longer hold in the run, such as counterparts that failed under
-`aftercorr` (see "The built-in scheduler"): the next run launches the tasks that
-are left. Under the Slurm scheduler the tasks of an array are submitted
-together, and the state does not arise.
+launched and cancelled tasks are counted comes from the header of the process
+script (see "The process script: how code travels"), so that it is known before
+any task has finished: an array whose every task was launched and failed is
+`UNFINISHED`, not `UNFINISHED_BUT_RUNNABLE`, and the built-in scheduler takes it
+as failed in the run where its tasks ran. A cancelled task counts with the
+launched ones, and gives its process a process script, so that a process whose
+every task was cancelled is `UNFINISHED` too, and not `TO-DO` (see "Tasks that
+will not be launched"). An id runs when the process with that id exists, for the
+built-in scheduler, or when Slurm still lists the job, for the Slurm scheduler;
+a process id that the system gives again to an unrelated process after the task
+has ended can make the process look `IN-PROGRESS`. `UNFINISHED_BUT_RUNNABLE` is
+the state of an array that the built-in scheduler was launching a few tasks at a
+time, under a throttle or a budget of CPUs and memory, when its run stopped, and
+the next run launches the tasks that are left. During a run, it is also the
+state of an array whose remaining tasks still wait for their dependencies, such
+as counterparts that still run under `aftercorr`. Under the Slurm scheduler the
+tasks of an array are submitted together, and the state does not arise.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
@@ -2226,20 +2316,24 @@ directories, and they neither load a module nor need the program file.
   with `-i` their ids.
 - `debasher_stop` stops the run. Without `-p`, it first stops the
   `debasher_exec` of the run if it still runs, whose process id is in the lock
-  file: it sends it `SIGTERM`, which makes the built-in scheduler, or the
-  Slurm scheduler while it submits jobs, launch nothing more from the next
-  round or process on, and `SIGKILL` if it has not ended within thirty
-  seconds, and waits until the lock is free. Only then does it stop every
-  process that is running, killing the process group of each task under the
-  built-in scheduler and cancelling its jobs under the Slurm scheduler. After
-  it, no task of the run runs and nothing is left that could launch one. With
-  `-p`, it stops the running tasks of that one process, and the rest of the
-  run goes on.
+  file: it sends it `SIGTERM`, which makes the built-in scheduler, or the Slurm
+  scheduler while it submits jobs, launch nothing more from the next round or
+  process on, and `SIGKILL` if it has not ended within thirty seconds, and waits
+  until the lock is free. Only then does it stop every process that is running,
+  killing the process group of each task under the built-in scheduler and ending
+  its jobs with `scancel` under the Slurm scheduler. After it, no task of the
+  run runs and nothing is left that could launch one. With `-p`, it stops the
+  running tasks of that one process, and the rest of the run goes on.
 - `debasher_stats` gives the time that each process, and each task of an
   array, took, from the start and end times in their logs.
 - `debasher_get_stdout`, `debasher_get_sched_out` and
   `debasher_get_fifo_mirror` print the standard output, the log, or the mirror
   log of a process or of one of its tasks, or follow it as it grows.
+
+Under the built-in scheduler, a cancelled task has no id, log or standard
+output: these tools show it only through the status of its process, and its
+cancellation marker is read in the exec directory of the process (see "Tasks
+that will not be launched").
 
 Two tools run processes of a run rather than read it, and refuse an output
 directory that has been moved: `debasher_exec` itself, and
@@ -2480,17 +2574,18 @@ leaves, by design, to the program or to whoever runs it.
    refused (see "The dependency graph").
 7. A task is never launched before the dependencies of its process hold for
    it, with the meaning of "Dependency types and how they merge": a scheduler
-   may make it wait longer, never less. A dependency on a process that is not
-   launched in the run holds only when that process has finished and the type
-   is not `afternotok`; otherwise the process, and those that depend on it,
-   are left for a later run (see "The scheduler abstraction").
+   may make it wait longer, never less. A dependency on a process that finished
+   in an earlier run and does not run again holds unless its type is
+   `afternotok` (see "The scheduler abstraction"); a process that the Slurm
+   scheduler does not submit is described in "The Slurm scheduler".
 8. Every FIFO has one owner and at most one reader in the program, and it is
    created again, empty, before its owner runs (see "Declaring and owning a
    FIFO").
-9. Under the built-in scheduler, the two ends of a FIFO are launched in the
-   same round, or one once the other runs, or once the other only waits for it
-   to start; a program with FIFOs is refused under the Slurm scheduler (see
-   "Running both ends together").
+9. Under the built-in scheduler, the two ends of a FIFO are launched in the same
+   round, or one once the other runs, or once the other only waits for processes
+   to start or to have every task cancelled, or both are cancelled; a program
+   with FIFOs is refused under the Slurm scheduler (see "Running both ends
+   together" and "Tasks that will not be launched").
 10. At the start of a run, the two ends of every FIFO are in the same state:
     no run launches an end whose other end has finished and will not run again
     (see "Running both ends together").
@@ -2536,6 +2631,12 @@ leaves, by design, to the program or to whoever runs it.
 20. The FIFOs that the tasks of a process declare through the same output option
     are read inside the program for every task or for none, and a program in
     which only some of them are is refused (see "Declaring and owning a FIFO").
+21. No task waits for a dependency that can no longer hold in its run: it is
+    cancelled, or, under the Slurm scheduler and for a dependency on a process
+    that the run does not launch, its process is not submitted. Under the
+    built-in scheduler, a process ends in the run once none of its tasks runs or
+    can still be launched, as failed if not all of them finished (see "Tasks
+    that will not be launched").
 
 **Limits and non-goals.**
 
@@ -2557,10 +2658,10 @@ leaves, by design, to the program or to whoever runs it.
 - **An end that goes first.** An end of a FIFO launched before the other,
   because the other only waits for it to start, holds its resources while it
   waits, and the other may then never fit (see "Running both ends together").
-- **Dependencies that can no longer hold.** Under the built-in scheduler, a
-  task whose dependencies can no longer hold in the run is left for a later
-  run, and its process does not end in this one, so that `afterany` and
-  `afternotok` on it never hold in the run (see "The built-in scheduler").
+- **Dependencies on processes that the run does not launch, under Slurm.** A
+  process that the Slurm scheduler does not submit, because such a dependency
+  can no longer hold, does not end in the run, so that `afterany` and
+  `afternotok` on it do not hold in it either (see "The Slurm scheduler").
 - **Ending a task.** A process function that calls `exit`, or that a signal
   kills, ends its whole task, with no `_post` method and no error message from
   the engine (see "Executing a task").
@@ -2618,11 +2719,6 @@ What is known to be missing from the design, or left open by it:
   before the other could have the resources of both reserved, or both could be
   launched in the same round in dependency order, so that the other end always
   fits.
-- **Tasks that will not be launched.** The built-in scheduler could give a
-  task whose dependencies can no longer hold a status of its own, so that its
-  process ends in the run and `afterany` and `afternotok` on it hold, as under
-  the Slurm scheduler (see "The Slurm scheduler"). Every tool that reads the
-  status of a run, and the reruns, would have to know that status.
 - **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
   for reading and writing, which POSIX leaves undefined, so that mirror taps
   work on other systems than those on which the engine is checked (Linux,

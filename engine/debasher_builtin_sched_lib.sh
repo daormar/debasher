@@ -41,6 +41,7 @@ DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS="FINISHED"
 DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS="IN-PROGRESS"
 DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS="FAILED"
 DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS="TO-DO"
+DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS="CANCELLED"
 
 ####################
 # GLOBAL VARIABLES #
@@ -59,6 +60,7 @@ declare -A DEBASHER_BUILTIN_SCHED_PROCESS_ALLOC_CPUS
 declare -A DEBASHER_BUILTIN_SCHED_PROCESS_MEM
 declare -A DEBASHER_BUILTIN_SCHED_PROCESS_ALLOC_MEM
 declare -A DEBASHER_BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS
+declare -A DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS
 declare -A DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS
 declare DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES
 declare DEBASHER_BUILTIN_SCHED_CPUS
@@ -319,22 +321,26 @@ debasher_builtin_sched::_get_array_task_status()
     local task_idx=$3
     local processdirname=$(debasher::_get_process_outdir_given_dirname "${dirname}" ${processname})
     local array_taskid_file=$(debasher::_get_array_taskid_filename "${dirname}" ${processname} ${task_idx})
+    local cancelled_file=$(debasher::_get_task_cancelled_filename "${dirname}" "${processname}" "${task_idx}")
 
-    if [ ! -f ${array_taskid_file} ]; then
+    if debasher::_array_task_is_finished "${dirname}" ${processname} ${task_idx}; then
+        # A finished task is finished, whatever an older cancellation
+        # marker, such as one that a run of the built-in scheduler left
+        # before a run of the Slurm scheduler finished the task, says
+        echo ${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}
+    elif [ -f "${cancelled_file}" ]; then
+        # Task will not be launched in this run
+        echo ${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS}
+    elif [ ! -f ${array_taskid_file} ]; then
         # Task is not started
         echo ${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}
     else
-        # Task was started
-        if debasher::_array_task_is_finished "${dirname}" ${processname} ${task_idx}; then
-            echo ${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}
+        # Task was started and is not finished
+        local id=$("${CAT}" "${array_taskid_file}")
+        if debasher::_id_exists $id; then
+            echo ${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}
         else
-            # Task is not finished
-            local id=$("${CAT}" "${array_taskid_file}")
-            if debasher::_id_exists $id; then
-                echo ${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}
-            else
-                echo ${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS}
-            fi
+            echo ${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS}
         fi
     fi
 }
@@ -557,6 +563,26 @@ debasher_builtin_sched::_update_comp_resources()
 }
 
 ########
+# The current status of a process given its previous one and the one just
+# read from its exec directory: a process that has ended in this run
+# without finishing, after running or having tasks cancelled, is taken as
+# failed
+debasher_builtin_sched::_get_fixed_process_status()
+{
+    local processname=$1
+    local prev_status=$2
+    local updated_status=$3
+
+    if [ ${updated_status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_FINISHED_PROCESS_STATUS} ] \
+           && { [ ${prev_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ] \
+                    || [ -n "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]; }; then
+        echo ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}
+    else
+        echo ${updated_status}
+    fi
+}
+
+########
 debasher_builtin_sched::_fix_updated_process_status()
 {
     # Copy updated status into current status
@@ -565,13 +591,7 @@ debasher_builtin_sched::_fix_updated_process_status()
         prev_status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
         updated_status=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
         if [ "${updated_status}" != "" ]; then
-            if [ ${prev_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS} -a ${updated_status} != ${DEBASHER_FINISHED_PROCESS_STATUS} ]; then
-                # Status will be set to failed if previous status was
-                # in-progress and new status is unfinished
-                DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}
-            else
-                DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED[${processname}]}
-            fi
+            DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=$(debasher_builtin_sched::_get_fixed_process_status "${processname}" "${prev_status}" "${updated_status}")
         fi
     done
 }
@@ -783,6 +803,311 @@ debasher_builtin_sched::_filter_tasks_with_deps()
         fi
     done
     echo "${result}"
+}
+
+########
+# Whether a dependency of the given type on the given process can no longer
+# hold in this run for the given task of the dependent process (see
+# debasher_builtin_sched::_dep_holds): afterok once the producer has ended
+# without finishing, aftercorr once the counterpart of the task has failed
+# or was cancelled (or as afterok, for a task with no counterpart), and
+# afternotok once the producer has finished. after, afterany and none
+# always can
+debasher_builtin_sched::_dep_can_no_longer_hold()
+{
+    local dirname=$1
+    local deptype=$2
+    local depsname=$3
+    local processname=$4
+    local task_idx=$5
+    local depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
+
+    case ${deptype} in
+        ${DEBASHER_AFTEROK_PROCESSDEP_TYPE})
+            [ "${depstatus}" = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            ;;
+        ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
+            [ "${depstatus}" = ${DEBASHER_FINISHED_PROCESS_STATUS} ] && return 1
+            if [ -n "${task_idx}" ] \
+                   && debasher_builtin_sched::_task_has_counterpart "${processname}" "${task_idx}" "${depsname}"; then
+                local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${depsname}" "${task_idx}")
+                [ ${task_status} = ${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS} -o ${task_status} = ${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS} ]
+            else
+                [ "${depstatus}" = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
+            fi
+            ;;
+        ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE})
+            [ "${depstatus}" = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+########
+# Whether the dependencies of a process include one that can come to be
+# unable to hold (afterok, aftercorr or afternotok), so that its tasks may
+# have to be cancelled
+debasher_builtin_sched::_has_deps_that_can_be_ruled_out()
+{
+    local processname=$1
+    local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
+
+    local deptype
+    for deptype in ${DEBASHER_AFTEROK_PROCESSDEP_TYPE} ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE} ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}; do
+        local dep="${deptype}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}"
+        if [[ "${processdeps}" == "${dep}"* ]] \
+               || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"* ]] \
+               || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}${dep}"* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+########
+# Whether the dependencies of a process can no longer hold in this run, for
+# the given task of the process when there is one: with "," when one of
+# them cannot, with "?" when none of them can. Prints the cause, the
+# dependencies that can no longer hold
+debasher_builtin_sched::_deps_can_no_longer_hold()
+{
+    local dirname=$1
+    local processname=$2
+    local task_idx=$3
+    local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
+
+    local separator=$(debasher::_get_processdeps_separator ${processdeps})
+    local processdeps_blanks
+    if [ "${separator}" = "" ]; then
+        processdeps_blanks=${processdeps}
+    else
+        processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
+    fi
+
+    local dep cause="" num_deps=0 num_ruled_out=0
+    for dep in ${processdeps_blanks}; do
+        local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
+        local depsname=$(debasher::_get_processname_part_in_dep ${dep})
+        num_deps=$((num_deps + 1))
+        if debasher_builtin_sched::_dep_can_no_longer_hold "${dirname}" "${deptype}" "${depsname}" "${processname}" "${task_idx}"; then
+            num_ruled_out=$((num_ruled_out + 1))
+            local dep_cause=${dep}
+            if [ "${deptype}" = "${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}" ] && [ -n "${task_idx}" ] \
+                   && debasher_builtin_sched::_task_has_counterpart "${processname}" "${task_idx}" "${depsname}"; then
+                dep_cause="${dep} (task ${task_idx})"
+            fi
+            if [ "${separator}" != "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ]; then
+                echo "${dep_cause}"
+                return 0
+            fi
+            cause="${cause:+${cause}${DEBASHER_PROCESSDEPS_SEP_INTERR}}${dep_cause}"
+        fi
+    done
+
+    if [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ] && [ ${num_deps} -gt 0 ] && [ ${num_ruled_out} -eq ${num_deps} ]; then
+        echo "${cause}"
+        return 0
+    fi
+    return 1
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>,
+# waits to be launched in this run: it has not been launched in it, nor
+# cancelled, and its process has not ended
+debasher_builtin_sched::_task_waits()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        { [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ] || [ "${status}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ]; } \
+            && [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]
+    else
+        [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
+            && [ "${status}" != "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] \
+            && [ "$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ]
+    fi
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>,
+# was cancelled in this run
+debasher_builtin_sched::_task_is_cancelled()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        [ -n "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]
+    else
+        [[ " ${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]} " == *" ${task_idx} "* ]]
+    fi
+}
+
+########
+# Cancels a task of a process: writes its cancellation marker with the
+# cause, and the process script when the process has none from this run
+# yet, so that its header gives the number of tasks of the process
+debasher_builtin_sched::_cancel_task()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local task_idx=$4
+    local cause=$5
+    local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+
+    echo "PROCESS: ${processname} (TASK_IDX: ${task_idx}) ; CANCELLED: ${cause}" >&2
+
+    if [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS[${processname}]}" ] \
+           && [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]; then
+        local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
+        debasher_builtin_sched::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" || return 1
+    fi
+
+    debasher::_signal_task_cancellation "${dirname}" "${processname}" "${task_idx}" "${array_size}" "${cause}" || return 1
+
+    DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]="${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]:+${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]} }${task_idx}"
+}
+
+########
+# Reads again the status of a process whose tasks were just cancelled,
+# unless some task of it runs, whose end the next round takes care of
+debasher_builtin_sched::_refresh_status_after_cancellation()
+{
+    local dirname=$1
+    local processname=$2
+    local prev_status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
+    [ "${prev_status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] && return 0
+
+    local updated_status=$(debasher::_get_process_status "${dirname}" "${processname}")
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=$(debasher_builtin_sched::_get_fixed_process_status "${processname}" "${prev_status}" "${updated_status}")
+}
+
+########
+# Cancels the tasks of a process that wait to be launched and whose
+# dependencies can no longer hold. Returns 0 when it cancels some, 1 when
+# it cancels none, and 2 on error
+debasher_builtin_sched::_cancel_tasks_of_process()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
+    [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && return 1
+    [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+    debasher_builtin_sched::_has_deps_that_can_be_ruled_out "${processname}" || return 1
+
+    local cancelled=1 cause
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        if debasher_builtin_sched::_task_waits "${dirname}" "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0" \
+               && cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}"); then
+            debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" 0 "${cause}" || return 2
+            cancelled=0
+        fi
+    else
+        local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}")
+        [ -z "${todo_task_indices}" ] && return 1
+        local task_idx
+        if debasher_builtin_sched::_has_aftercorr_dep "${processname}"; then
+            # aftercorr is judged for each task on its own
+            for task_idx in ${todo_task_indices}; do
+                if cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}" "${task_idx}"); then
+                    debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+                    cancelled=0
+                fi
+            done
+        elif cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}"); then
+            # The other types hold or not for every task at once
+            for task_idx in ${todo_task_indices}; do
+                debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+            done
+            cancelled=0
+        fi
+    fi
+
+    [ ${cancelled} -eq 0 ] && debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
+    return ${cancelled}
+}
+
+########
+# Cancels every task at one end of a fifo that waits to be launched and
+# whose other end, a task of the program, was cancelled: it would block on
+# opening the fifo. Returns 0 when it cancels some, 1 when it cancels none,
+# and 2 on error
+debasher_builtin_sched::_cancel_fifo_ends_without_peer()
+{
+    local cmdline=$1
+    local dirname=$2
+
+    local cancelled=1
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+        [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+        [ -z "${reader}" ] && continue
+        [ "${owner}" = "${reader}" ] && continue
+
+        local end peer
+        for end in "${owner}" "${reader}"; do
+            if [ "${end}" = "${owner}" ]; then
+                peer=${reader}
+            else
+                peer=${owner}
+            fi
+            if debasher_builtin_sched::_task_is_cancelled "${peer}" \
+                   && debasher_builtin_sched::_task_waits "${dirname}" "${end}"; then
+                local processname="${end%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                local task_idx="${end#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+                local peer_processname="${peer%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+                local peer_task_idx="${peer#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+                local cause="fifo ${augm_fifoname} (other end ${peer_processname}, task ${peer_task_idx}, cancelled)"
+                debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+                debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
+                cancelled=0
+            fi
+        done
+    done
+
+    return ${cancelled}
+}
+
+########
+# Cancels every task that waits to be launched and can no longer be, and
+# repeats until it cancels no more, since a cancellation can end a process
+# and rule out the dependencies of others (see "Tasks that will not be
+# launched" in the engine design document)
+debasher_builtin_sched::_cancel_tasks_that_cannot_launch()
+{
+    local cmdline=$1
+    local dirname=$2
+
+    local changed=1 ret
+    while [ ${changed} -eq 1 ]; do
+        changed=0
+        local processname
+        for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+            ret=0
+            debasher_builtin_sched::_cancel_tasks_of_process "${cmdline}" "${dirname}" "${processname}" || ret=$?
+            [ ${ret} -eq 2 ] && return 1
+            [ ${ret} -eq 0 ] && changed=1
+        done
+        ret=0
+        debasher_builtin_sched::_cancel_fifo_ends_without_peer "${cmdline}" "${dirname}" || ret=$?
+        [ ${ret} -eq 2 ] && return 1
+        [ ${ret} -eq 0 ] && changed=1
+    done
+    return 0
 }
 
 ########
@@ -1304,7 +1629,8 @@ debasher_builtin_sched::_get_debug_sel_processes_info()
 ########
 debasher_builtin_sched::_select_processes_to_be_exec()
 {
-    local dirname=$1
+    local cmdline=$1
+    local dirname=$2
 
     # Obtain updated status for processes
     local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
@@ -1315,6 +1641,9 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 
     # Set updated status as current one
     debasher_builtin_sched::_fix_updated_process_status
+
+    # Cancel the tasks that can no longer be launched in this run
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "${cmdline}" "${dirname}" || return 2
 
     # Obtain set of processes that can be executed
     local -A BUILTIN_SCHED_EXECUTABLE_PROCESSES
@@ -1716,7 +2045,7 @@ debasher_builtin_sched::_execute_process()
 
     # Create script
     local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
-    if [ "${launched_tasks}" = "" ]; then
+    if [ "${launched_tasks}" = "" ] && [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]; then
         debasher_builtin_sched::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
     fi
 
@@ -1842,6 +2171,10 @@ debasher_builtin_sched::_clean_process_files()
     local dirname=$1
     local processname=$2
     local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+
+    # Remove the cancellation markers of an earlier run, so that its
+    # cancelled tasks are launched
+    debasher::_reset_task_cancellations "${dirname}" "${processname}"
 
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
@@ -1974,7 +2307,14 @@ debasher_builtin_sched::execute_program_processes()
         fi
 
         # Select processes that should be executed
-        if debasher_builtin_sched::_select_processes_to_be_exec "${dirname}"; then
+        local select_status=0
+        debasher_builtin_sched::_select_processes_to_be_exec "${cmdline}" "${dirname}" || select_status=$?
+        if [ ${select_status} -eq 2 ]; then
+            echo "Error while cancelling the tasks that can no longer be launched. Aborting..." >&2
+            trap - TERM
+            return 1
+        fi
+        if [ ${select_status} -eq 0 ]; then
             # In oneshot mode, nothing ever waits for a process to finish
             # (see below), so a later iteration can never end up with
             # *more* available resources than this first one has right

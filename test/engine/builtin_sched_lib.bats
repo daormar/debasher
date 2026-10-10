@@ -604,6 +604,220 @@ launch_arr_task() {
     [ "${output}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
 }
 
+# --- tasks that will not be launched ----------------------------------------
+
+# A run of the built-in scheduler with no task running and no fifo, in which
+# a test registers processes with register_process; launching or
+# cancelling a task writes a process script with just its header
+setup_cancellation() {
+    declare -g GREP="$(command -v grep)" AWK="$(command -v awk)" SEQ="$(command -v seq)"
+    declare -g DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    declare -g DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=() DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=()
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE=() DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=()
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS=() DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS=()
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=()
+    debasher::_id_exists() { return 1; }
+    debasher::_get_numtasks_for_process() { echo "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[$1]}"; }
+    debasher_builtin_sched::_create_script() {
+        mkdir -p "$2/__exec__/$3"
+        echo "DEBASHER_NUM_TASKS=$4" > "$2/__exec__/$3/$3"
+    }
+}
+
+# Registers a process with the given number of tasks, dependencies and
+# status
+register_process() {
+    DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE["$1"]=$2
+    DEBASHER_BUILTIN_SCHED_PROCESS_DEPS["$1"]=$3
+    DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE["$1"]=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["$1"]=$4
+    mkdir -p "${OUTDIR}/__exec__/$1"
+}
+
+# Leaves a task of an array process as one that was launched and failed
+fail_task() {
+    debasher_builtin_sched::_create_script "" "${OUTDIR}" "$1" "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[$1]}"
+    echo "$((800000 + $2))" > "$(debasher::_get_array_taskid_filename "${OUTDIR}" "$1" "$2")"
+}
+
+@test "_dep_can_no_longer_hold rules out afterok on a failed producer and afternotok on a finished one, never after, afterany or none" {
+    setup_cancellation
+    register_process failed 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process finished 1 "" "${DEBASHER_FINISHED_PROCESS_STATUS}"
+    register_process running 1 "" "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+    register_process c 1 "" "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" afterok failed c
+    debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" afternotok finished c
+    local deptype producer
+    for deptype in after afterany none; do
+        for producer in failed finished running; do
+            run debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" "${deptype}" "${producer}" c
+            [ "${status}" -ne 0 ]
+        done
+    done
+    run debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" afterok running c
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" afternotok failed c
+    [ "${status}" -ne 0 ]
+}
+
+@test "_dep_can_no_longer_hold rules out aftercorr for a task whose counterpart failed or was cancelled, and on a failed producer for a task with no counterpart" {
+    setup_cancellation
+    register_process p 3 "" "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+    register_process c 4 "aftercorr:p" "${DEBASHER_TODO_PROCESS_STATUS}"
+    fail_task p 1
+    debasher::_signal_task_cancellation "${OUTDIR}" p 2 3 "afterok:x"
+
+    run debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" aftercorr p c 0
+    [ "${status}" -ne 0 ]
+    debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" aftercorr p c 1
+    debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" aftercorr p c 2
+    # Task 3 has no counterpart: it waits for the whole producer, still running
+    run debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" aftercorr p c 3
+    [ "${status}" -ne 0 ]
+
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["p"]=${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}
+    debasher_builtin_sched::_dep_can_no_longer_hold "${OUTDIR}" aftercorr p c 3
+}
+
+@test "_deps_can_no_longer_hold needs one dependency ruled out with a comma, and all of them with a question mark, and prints the cause" {
+    setup_cancellation
+    register_process failed 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process finished 1 "" "${DEBASHER_FINISHED_PROCESS_STATUS}"
+    register_process all 1 "afterok:finished,afterok:failed" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process any 1 "afterok:finished?afterok:failed" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process none_left 1 "afternotok:finished?afterok:failed" "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    run debasher_builtin_sched::_deps_can_no_longer_hold "${OUTDIR}" all
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afterok:failed" ]
+
+    run debasher_builtin_sched::_deps_can_no_longer_hold "${OUTDIR}" any
+    [ "${status}" -ne 0 ]
+
+    run debasher_builtin_sched::_deps_can_no_longer_hold "${OUTDIR}" none_left
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afternotok:finished?afterok:failed" ]
+}
+
+@test "_cancel_tasks_that_cannot_launch cancels only the task whose counterpart failed, records the cause and keeps the array runnable" {
+    setup_cancellation
+    register_process p 3 "" "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+    register_process c 3 "aftercorr:p" "${DEBASHER_TODO_PROCESS_STATUS}"
+    fail_task p 1
+
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "" "${OUTDIR}" 2> "${BATS_TEST_TMPDIR}/stderr"
+
+    [ "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[c]}" = "1" ]
+    [ "$(cat "$(debasher::_get_task_cancelled_filename "${OUTDIR}" c 1)")" = "Cancelled task idx: 1 ; Total: 3 ; Cause: aftercorr:p (task 1)" ]
+    [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" c 1)" = "${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS}" ]
+    [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" c 0)" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[c]}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+    grep -q "PROCESS: c (TASK_IDX: 1) ; CANCELLED: aftercorr:p (task 1)" "${BATS_TEST_TMPDIR}/stderr"
+}
+
+@test "_cancel_tasks_that_cannot_launch follows a chain: a process whose every task is cancelled fails, and so rules out afterok on it but lets afterany hold" {
+    setup_cancellation
+    register_process p 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process c 2 "afterok:p" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process d 1 "afterok:c" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process e 1 "afterany:c" "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "" "${OUTDIR}" 2> /dev/null
+
+    [ "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[c]}" = "0 1" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[c]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[d]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+    [ "$(cat "$(debasher::_get_process_cancelled_filename "${OUTDIR}" d)")" = "Cancelled task idx: 0 ; Total: 1 ; Cause: afterok:c" ]
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[e]}" ]
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" afterany c e
+    # after holds once every task of the producer was cancelled
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" after c e
+}
+
+@test "_cancel_tasks_that_cannot_launch cancels the end of a fifo whose other end is cancelled" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    setup_cancellation
+    register_process x 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process w 1 "" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process r 1 "afterok:x" "${DEBASHER_TODO_PROCESS_STATUS}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "" "${OUTDIR}" 2> /dev/null
+
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[r]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[w]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+    [ "$(cat "$(debasher::_get_process_cancelled_filename "${OUTDIR}" w)")" = "Cancelled task idx: 0 ; Total: 1 ; Cause: fifo w/f (other end r, task 0, cancelled)" ]
+}
+
+@test "_cancel_tasks_that_cannot_launch leaves alone a task that waits for a producer still running, and processes that ended" {
+    setup_cancellation
+    register_process p 1 "" "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+    register_process c 1 "afterok:p" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process f 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process done_already 1 "afterok:f" "${DEBASHER_FINISHED_PROCESS_STATUS}"
+
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "" "${OUTDIR}" 2> /dev/null
+
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[c]}" ]
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[done_already]}" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[c]}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]
+}
+
+@test "_get_fixed_process_status takes as failed a process that ended without finishing after running or having tasks cancelled, and only then" {
+    setup_cancellation
+    local unf="${DEBASHER_UNFINISHED_PROCESS_STATUS}" failed="${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+
+    [ "$(debasher_builtin_sched::_get_fixed_process_status p "${DEBASHER_INPROGRESS_PROCESS_STATUS}" "${unf}")" = "${failed}" ]
+    # Unfinished from an earlier run, and nothing of it handled in this one
+    [ "$(debasher_builtin_sched::_get_fixed_process_status p "${unf}" "${unf}")" = "${unf}" ]
+    DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS["p"]="0"
+    [ "$(debasher_builtin_sched::_get_fixed_process_status p "${DEBASHER_TODO_PROCESS_STATUS}" "${unf}")" = "${failed}" ]
+    [ "$(debasher_builtin_sched::_get_fixed_process_status p "${DEBASHER_TODO_PROCESS_STATUS}" "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}")" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+}
+
+@test "an array whose tasks were all launched or cancelled is UNFINISHED, and runnable while some are neither" {
+    setup_array_status
+    launch_arr_task 0
+    mark_task_finished arr 0
+    debasher::_signal_task_cancellation "${OUTDIR}" arr 1 3 "afterok:x"
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+
+    debasher::_signal_task_cancellation "${OUTDIR}" arr 2 3 "afterok:x"
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ]
+}
+
+@test "a finished task counts as finished whatever an older cancellation marker says" {
+    setup_cancellation
+    register_process arr 3 "" "${DEBASHER_FINISHED_PROCESS_STATUS}"
+    debasher::_signal_task_cancellation "${OUTDIR}" arr 1 3 "afterok:x"
+    mark_task_finished arr 1
+
+    [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" arr 1)" = "${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}" ]
+}
+
+@test "_reset_task_cancellations removes the cancellation markers of a process, so that its tasks wait to be launched again" {
+    setup_cancellation
+    register_process arr 3 "" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process single 1 "" "${DEBASHER_TODO_PROCESS_STATUS}"
+    debasher::_signal_task_cancellation "${OUTDIR}" arr 1 3 "afterok:x"
+    debasher::_signal_task_cancellation "${OUTDIR}" single 0 1 "afterok:x"
+
+    debasher::_reset_task_cancellations "${OUTDIR}" arr
+    debasher::_reset_task_cancellations "${OUTDIR}" single
+
+    [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" arr 1)" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ]
+    [ ! -e "$(debasher::_get_process_cancelled_filename "${OUTDIR}" single)" ]
+}
+
 # --- skipping a task --------------------------------------------------------
 
 @test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {
