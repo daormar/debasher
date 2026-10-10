@@ -395,12 +395,35 @@ describe("running a program", () => {
     await expect(call(backend, "run_program", { home_dir: HOME })).rejects.toThrow("already in progress");
   });
 
+  it("answers a launch once the run is in progress, without the statuses of the run before", async () => {
+    RUN_START_WAIT.everyMs = 1;
+    // debasher_exec takes the lock at the third reading, and prepares the
+    // run for long after
+    const readings = [false, false, true].map(runInProgress => ({
+      statuses: { a: "FINISHED" }, runInProgress, hasProgramState: false, output: "", notices: [],
+    }));
+    const backend = fakeBackend([program()], {
+      fetchProgramStatus: async () => ({ state: "finished", output: "" }),
+      getProcessStatuses: async () => readings.shift()!,
+      runProgram: async () => ({ started: true, exitCode: null, output: null, revision: 1 }),
+    });
+
+    const answer = await text(backend, "run_program", { home_dir: HOME });
+
+    expect(readings).toEqual([]);
+    expect(answer).toContain("no process is running yet");
+    expect(answer).not.toContain("a: FINISHED");
+  });
+
   it("answers a launch once the statuses show the new run, not the run before", async () => {
     RUN_START_WAIT.everyMs = 1;
     const readings = [{ a: "FINISHED" }, { a: "FINISHED" }, { a: "FINISHED" }, { a: "IN-PROGRESS" }];
     const backend = fakeBackend([program()], {
       fetchProgramStatus: async () => ({ state: "finished", output: "" }),
-      getProcessStatuses: async () => ({ statuses: readings.shift()!, runInProgress: false, hasProgramState: false, output: "", notices: [] }),
+      getProcessStatuses: async () => {
+        const statuses = readings.shift()!;
+        return { statuses, runInProgress: statuses.a === "IN-PROGRESS", hasProgramState: false, output: "", notices: [] };
+      },
       runProgram: async () => ({ started: true, exitCode: null, output: null, revision: 1 }),
     });
 

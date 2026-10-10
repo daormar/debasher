@@ -3894,17 +3894,21 @@ fails, answers with the reason as an error.
   and for a resident program the notices of its nodes), `get_process_output`
   (the standard output, the scheduler output, the options or the resolved
   options of a process, or of one of its tasks) and `get_process_tasks`. The
-  launch of a general program runs in the background, and the first readings
-  of the process statuses after it may still show the run before, so
-  `run_program` answers once they show a process in progress, or statuses
-  other than those before the launch, or after a few seconds. A resident
-  program whose output directory holds program state that this program did
-  not produce, or that no launch record describes, is launched only when the
-  call says `resume_changed_program`, as the Run menu asks; the answer of the
-  refusal says so, and that `reset_program_state` starts afresh instead.
-  `reset_output_dir` deletes what a run left, `reset_program_state` sets the
-  program state aside or deletes it, and a hard kill loses what the FIFOs
-  held, so they are refused unless the call says `confirm`.
+  launch of a general program runs in the background, and the first readings of
+  the process statuses after it may still show the run before, so `run_program`
+  answers once they report a run in progress, or show statuses other than those
+  before the launch (mostly of a run that already ended), or after a few
+  seconds. A run in progress with no process `IN-PROGRESS` usually means that
+  `debasher_exec` is still preparing it, and the statuses may still be those of
+  the run before; the answer then says that no process is running yet, instead
+  of listing them. A resident program whose output directory holds program state
+  that this program did not produce, or that no launch record describes, is
+  launched only when the call says `resume_changed_program`, as the Run menu
+  asks; the answer of the refusal says so, and that `reset_program_state` starts
+  afresh instead. `reset_output_dir` deletes what a run left,
+  `reset_program_state` sets the program state aside or deletes it, and a hard
+  kill loses what the FIFOs held, so they are refused unless the call says
+  `confirm`.
 - **Resident programs.** `inspect_node` (the summary of a node, a checkpoint,
   its input log, or the batch runs of a launcher node), `snapshot`,
   `restart_node` (refused unless the call says `confirm`, with the warning

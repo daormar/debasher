@@ -510,12 +510,17 @@ const outputKinds = {
   options: "getProcessOpts",
 } as const;
 
-// The process statuses, none while the output directory holds no run.
-async function processStatuses(backend: Backend, program: Program): Promise<Record<string, string>> {
+// The process statuses, none while the output directory holds no run, with
+// whether debasher_status reports the run in progress.
+async function processStatuses(
+  backend: Backend,
+  program: Program
+): Promise<{ statuses: Record<string, string>; runInProgress: boolean }> {
   try {
-    return (await backend.getProcessStatuses(program)).statuses;
+    const { statuses, runInProgress } = await backend.getProcessStatuses(program);
+    return { statuses, runInProgress };
   } catch {
-    return {};
+    return { statuses: {}, runInProgress: false };
   }
 }
 
@@ -528,25 +533,38 @@ function statusLines(statuses: Record<string, string>): string[] {
 export const RUN_START_WAIT = { totalMs: 10000, everyMs: 500 };
 
 /**
- * The process statuses once they show the run just launched in the
- * background: a process in progress, or statuses other than those `before`
- * it. The first readings after a launch may still show the run before; past
- * the wait, the last reading.
+ * The reading of the process statuses once it shows the run just launched
+ * in the background: the run reported in progress, which it is from the
+ * moment debasher_exec takes the lock of the output directory, or statuses
+ * other than those `before` it (mostly of a run that already ended). The first
+ * readings after a launch may still show the run before; past the wait, the
+ * last reading.
  */
-async function statusesOfLaunchedRun(
+async function readingOfLaunchedRun(
   backend: Backend,
   program: Program,
   before: Record<string, string>
-): Promise<Record<string, string>> {
+): Promise<{ statuses: Record<string, string>; runInProgress: boolean }> {
   const deadline = Date.now() + RUN_START_WAIT.totalMs;
   for (;;) {
-    const statuses = await processStatuses(backend, program);
-    const shown = Object.values(statuses).includes("IN-PROGRESS") || JSON.stringify(statuses) !== JSON.stringify(before);
+    const reading = await processStatuses(backend, program);
+    const shown = reading.runInProgress || JSON.stringify(reading.statuses) !== JSON.stringify(before);
     if (shown || Date.now() >= deadline) {
-      return statuses;
+      return reading;
     }
     await new Promise(resolve => setTimeout(resolve, RUN_START_WAIT.everyMs));
   }
+}
+
+// The answer to the launch of a general program. A run in progress with no
+// process IN-PROGRESS usually means that debasher_exec is still preparing it,
+// and the statuses may still be those of the run before: the answer says so
+// rather than listing them as if they were the new run's.
+function launchedRunAnswer({ statuses, runInProgress }: { statuses: Record<string, string>; runInProgress: boolean }): string {
+  if (runInProgress && !Object.values(statuses).includes("IN-PROGRESS")) {
+    return "Launched: the run is in progress, but no process is running yet (debasher_exec may still be preparing it). Follow the run with get_status.";
+  }
+  return ["Launched. Follow the run with get_status.", "Processes:", ...statusLines(statuses)].join("\n");
 }
 
 const runningTools = [
@@ -581,7 +599,7 @@ const runningTools = [
       if ((await backend.fetchProgramStatus(program)).state === "in-progress") {
         throw new Refusal("A run is already in progress for this output directory.");
       }
-      const before = await processStatuses(backend, program);
+      const { statuses: before } = await processStatuses(backend, program);
       let result;
       try {
         result = await savingFirst(() => backend.runProgram(program, resume_changed_program ?? false));
@@ -605,8 +623,7 @@ const runningTools = [
       if (program.programType === "resident") {
         return "Launched. Follow the program with get_status.";
       }
-      const statuses = await statusesOfLaunchedRun(backend, program, before);
-      return ["Launched. Follow the run with get_status.", "Processes:", ...statusLines(statuses)].join("\n");
+      return launchedRunAnswer(await readingOfLaunchedRun(backend, program, before));
     }
   ),
 
