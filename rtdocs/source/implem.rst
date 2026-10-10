@@ -1000,8 +1000,10 @@ missing.
   receives the name of the option and the name of that process, and
   prints the type to use instead, ``none`` to have no dependency, or
   nothing to keep the inferred one. By default, an option connected to
-  a file gives ``afterok`` and an option connected to a FIFO gives no
-  dependency, so that both ends of a FIFO start together:
+  a file gives ``afterok`` (``aftercorr`` when both processes are arrays
+  and the option reads the task with the same index), and an option
+  connected to a FIFO gives no dependency, so that both ends of a FIFO
+  start together:
 
   .. code-block:: bash
 
@@ -1110,10 +1112,12 @@ third argument):
   (it finished successfully), ``afternotok`` (it failed), ``afterany``
   (it finished either way) and ``aftercorr`` (between two arrays, each
   task waits for the task with the same index of the other process to
-  finish successfully). The built-in scheduler runs ``aftercorr`` as
-  ``afterok``, waiting for every task of the other array, which is
-  safe but gives up starting a task as soon as its own counterpart is
-  done; Slurm runs it task by task.
+  finish successfully). Both schedulers run ``aftercorr`` task by task:
+  a task starts as soon as its own counterpart has finished, while
+  other tasks of the other array still run or after some of them have
+  failed (see the ``aftercorr`` example). A task with no counterpart,
+  because one of the two processes is not an array or the other array
+  has fewer tasks, waits for every task of the other process.
 * ``alias``/``ext_alias``: reuse another process's implementation (one
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one
@@ -1423,6 +1427,8 @@ repository.
    fifo_generator
 
    shared_subdir
+
+   aftercorr
 
    subprogram
 

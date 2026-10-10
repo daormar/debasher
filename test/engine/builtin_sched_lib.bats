@@ -386,6 +386,141 @@ EOF
     [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]+x}" ]
 }
 
+# --- aftercorr task by task -------------------------------------------------
+
+# Marks the task with the given index of the given process as finished, as
+# the script of the task does
+mark_task_finished() {
+    local finished_file
+    finished_file=$(debasher::_get_task_finished_filename "${OUTDIR}" "$1" "$2")
+    mkdir -p "$(dirname "${finished_file}")"
+    touch "${finished_file}"
+}
+
+# A producer p with three tasks, still running, and an array c of the given
+# size that depends on it with the given dependencies
+setup_aftercorr() {
+    local c_size=$1
+    local c_deps=$2
+    declare -g SEQ="$(command -v seq)"
+    declare -g DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["p"]=3 ["c"]=${c_size} ["s"]=1 ["x"]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE=(["c"]=${DEBASHER_ARRAY_TASK_NOTHROTTLE})
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["c"]="${c_deps}" ["s"]="aftercorr:p")
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(["p"]="${DEBASHER_INPROGRESS_PROCESS_STATUS}" ["c"]="${DEBASHER_TODO_PROCESS_STATUS}" ["s"]="${DEBASHER_TODO_PROCESS_STATUS}" ["x"]="${DEBASHER_FINISHED_PROCESS_STATUS}")
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=()
+}
+
+@test "_dep_holds holds aftercorr for a task once the task of the producer with its index has finished" {
+    setup_aftercorr 3 "aftercorr:p"
+    mark_task_finished p 1
+
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p c 1
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p c 0
+    [ "${status}" -ne 0 ]
+    # Without a task, it waits for the whole producer, as afterok
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p c
+    [ "${status}" -ne 0 ]
+}
+
+@test "_dep_holds makes a task with no counterpart wait for the whole producer under aftercorr" {
+    setup_aftercorr 5 "aftercorr:p"
+    mark_task_finished p 0
+
+    # The producer has no task 4, and s is not an array
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p c 4
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p s 0
+    [ "${status}" -ne 0 ]
+
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["p"]=${DEBASHER_FINISHED_PROCESS_STATUS}
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p c 4
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" aftercorr p s 0
+}
+
+@test "_dep_holds keeps afterok on the whole producer even for a task whose counterpart has finished" {
+    setup_aftercorr 3 "afterok:p"
+    mark_task_finished p 1
+
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afterok p c 1
+
+    [ "${status}" -ne 0 ]
+}
+
+@test "_has_aftercorr_dep finds an aftercorr dependency in any position of the dependencies" {
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["a"]="aftercorr:p" ["b"]="afterok:x,aftercorr:p" ["c"]="afterok:x?aftercorr:p" ["d"]="afterok:x,afterany:p" ["e"]="none")
+
+    debasher_builtin_sched::_has_aftercorr_dep a
+    debasher_builtin_sched::_has_aftercorr_dep b
+    debasher_builtin_sched::_has_aftercorr_dep c
+    run debasher_builtin_sched::_has_aftercorr_dep d
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_has_aftercorr_dep e
+    [ "${status}" -ne 0 ]
+}
+
+@test "_update_executable_array_process offers only the tasks whose counterpart has finished" {
+    setup_aftercorr 3 "aftercorr:p"
+    mark_task_finished p 0
+    mark_task_finished p 2
+
+    debasher_builtin_sched::_update_executable_array_process "${OUTDIR}" c "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[c]}" = "0 2" ]
+}
+
+@test "_update_executable_array_process applies the throttle to the tasks whose dependencies hold" {
+    setup_aftercorr 3 "aftercorr:p"
+    DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE["c"]=1
+    mark_task_finished p 2
+
+    debasher_builtin_sched::_update_executable_array_process "${OUTDIR}" c "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[c]}" = "2" ]
+}
+
+@test "_update_executable_array_process checks the other dependencies of a task along with aftercorr" {
+    setup_aftercorr 3 "aftercorr:p,afterok:x"
+    mark_task_finished p 1
+
+    debasher_builtin_sched::_update_executable_array_process "${OUTDIR}" c "${DEBASHER_TODO_PROCESS_STATUS}"
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[c]}" = "1" ]
+
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["x"]=${DEBASHER_TODO_PROCESS_STATUS}
+    BUILTIN_SCHED_EXECUTABLE_PROCESSES=()
+    debasher_builtin_sched::_update_executable_array_process "${OUTDIR}" c "${DEBASHER_TODO_PROCESS_STATUS}"
+    [ -z "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[c]+x}" ]
+}
+
+@test "_update_executable_array_process launches the tasks of a producer that has failed whose counterpart finished" {
+    setup_aftercorr 3 "aftercorr:p"
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["p"]=${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}
+    mark_task_finished p 0
+    mark_task_finished p 1
+
+    debasher_builtin_sched::_update_executable_array_process "${OUTDIR}" c "${DEBASHER_TODO_PROCESS_STATUS}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[c]}" = "0 1" ]
+}
+
+@test "_hold_back_fifo_ends_without_peer keeps an end whose other end is a task whose counterpart has finished" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    setup_aftercorr 3 "aftercorr:p"
+    mark_task_finished p 1
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f0"]="w${sep}0" ["w/f1"]="w${sep}1")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f0"]="c${sep}0" ["w/f1"]="c${sep}1")
+    DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE["w"]=2
+    DEBASHER_BUILTIN_SCHED_PROCESS_THROTTLE["w"]=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["w"]=${DEBASHER_TODO_PROCESS_STATUS}
+    BUILTIN_SCHED_EXECUTABLE_PROCESSES=(["w"]="0 1")
+
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer "${OUTDIR}"
+
+    [ "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[w]}" = "1" ]
+}
+
 # --- skipping a task --------------------------------------------------------
 
 @test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {

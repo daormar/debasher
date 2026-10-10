@@ -621,12 +621,33 @@ debasher_builtin_sched::_check_comp_res()
 }
 
 ########
+# Whether the task with the given index of the given array process has a
+# task with the same index in the given producer, which an aftercorr
+# dependency waits for instead of the whole producer
+debasher_builtin_sched::_task_has_counterpart()
+{
+    local processname=$1
+    local task_idx=$2
+    local depsname=$3
+
+    [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -gt 1 ] \
+        && [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${depsname}]}" -gt 1 ] \
+        && [ "${task_idx}" -lt "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${depsname}]}" ]
+}
+
+########
 # Whether a dependency of the given type on the given process holds, from
-# the current status of that process
+# the current status of that process. Given a task of the dependent
+# process, an aftercorr dependency holds for that task alone, once the task
+# of the producer with the same index has finished; without a task, or for
+# a task with no counterpart, it waits for the whole producer, as afterok
 debasher_builtin_sched::_dep_holds()
 {
-    local deptype=$1
-    local depsname=$2
+    local dirname=$1
+    local deptype=$2
+    local depsname=$3
+    local processname=$4
+    local task_idx=$5
     local depstatus=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${depsname}]}
 
     case ${deptype} in
@@ -643,10 +664,10 @@ debasher_builtin_sched::_dep_holds()
             [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} -o ${depstatus} = ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]
             ;;
         ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE})
-            # NOTE: DEBASHER_AFTERCORR_PROCESSDEP_TYPE dependency type currently
-            # treated in the same way as DEBASHER_AFTEROK_PROCESSDEP_TYPE
-            # dependency
-            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ]
+            [ ${depstatus} = ${DEBASHER_FINISHED_PROCESS_STATUS} ] && return 0
+            [ -n "${task_idx}" ] \
+                && debasher_builtin_sched::_task_has_counterpart "${processname}" "${task_idx}" "${depsname}" \
+                && debasher::_array_task_is_finished "${dirname}" "${depsname}" "${task_idx}"
             ;;
         *)
             return 0
@@ -655,9 +676,13 @@ debasher_builtin_sched::_dep_holds()
 }
 
 ########
+# Whether the dependencies of a process hold, for the given task of the
+# process when there is one (see debasher_builtin_sched::_dep_holds)
 debasher_builtin_sched::_check_process_deps()
 {
-    local processname=$1
+    local dirname=$1
+    local processname=$2
+    local task_idx=$3
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
 
     # Iterate over dependencies
@@ -676,7 +701,7 @@ debasher_builtin_sched::_check_process_deps()
 
         # Process exit code
         local dep_ok=1
-        debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}" || dep_ok=0
+        debasher_builtin_sched::_dep_holds "${dirname}" "${deptype}" "${depsname}" "${processname}" "${task_idx}" || dep_ok=0
 
         # Return value depending on the dependency separator used
         case "${separator}" in
@@ -717,14 +742,47 @@ debasher_builtin_sched::_check_process_deps()
 ########
 debasher_builtin_sched::_process_can_be_executed()
 {
-    local processname=$1
+    local dirname=$1
+    local processname=$2
 
     # Check there are enough computational resources
     debasher_builtin_sched::_check_comp_res $processname || return 1
     # Check process dependencies are satisfied
-    debasher_builtin_sched::_check_process_deps $processname || return 1
+    debasher_builtin_sched::_check_process_deps "${dirname}" $processname || return 1
 
     return 0
+}
+
+########
+# Whether the dependencies of a process include an aftercorr one, which
+# holds for each task of an array on its own
+debasher_builtin_sched::_has_aftercorr_dep()
+{
+    local processname=$1
+    local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
+    local aftercorr_dep="${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}"
+
+    [[ "${processdeps}" == "${aftercorr_dep}"* ]] \
+        || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}${aftercorr_dep}"* ]] \
+        || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}${aftercorr_dep}"* ]]
+}
+
+########
+# The tasks among the given indices of an array process whose dependencies
+# hold, each checked on its own
+debasher_builtin_sched::_filter_tasks_with_deps()
+{
+    local dirname=$1
+    local processname=$2
+    local task_indices=$3
+
+    local result="" task_idx
+    for task_idx in ${task_indices}; do
+        if debasher_builtin_sched::_check_process_deps "${dirname}" "${processname}" "${task_idx}"; then
+            result="${result:+${result} }${task_idx}"
+        fi
+    done
+    echo "${result}"
 }
 
 ########
@@ -747,13 +805,14 @@ debasher_builtin_sched::_get_max_num_tasks()
 ########
 debasher_builtin_sched::_update_executable_non_array_process()
 {
-    local processname=$1
-    local status=$2
+    local dirname=$1
+    local processname=$2
+    local status=$3
 
     if [ ${status} != ${DEBASHER_INPROGRESS_PROCESS_STATUS} -a \
          ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-        if debasher_builtin_sched::_process_can_be_executed ${processname}; then
+        if debasher_builtin_sched::_process_can_be_executed "${dirname}" ${processname}; then
             BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}
         fi
     fi
@@ -768,10 +827,21 @@ debasher_builtin_sched::_update_executable_array_process()
 
     if [ ${status} != ${DEBASHER_FINISHED_PROCESS_STATUS} -a \
          ${status} != ${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS} ]; then
-        if debasher_builtin_sched::_process_can_be_executed ${processname}; then
+        # Without an aftercorr dependency, the dependencies hold for every
+        # task at once, and are checked before the tasks are listed; with
+        # one, they are checked for each task, and the throttle is applied
+        # to the tasks whose dependencies hold, so that a task that waits
+        # leaves its place to another
+        local deps_per_task=0
+        debasher_builtin_sched::_has_aftercorr_dep ${processname} && deps_per_task=1
+        if debasher_builtin_sched::_check_comp_res ${processname} \
+               && { [ ${deps_per_task} -eq 1 ] || debasher_builtin_sched::_check_process_deps "${dirname}" ${processname}; }; then
             local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" ${processname})
             if [ ${max_task_num} -gt 0 ]; then
                 local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
+                if [ ${deps_per_task} -eq 1 ]; then
+                    todo_task_indices=$(debasher_builtin_sched::_filter_tasks_with_deps "${dirname}" ${processname} "${todo_task_indices}")
+                fi
                 local todo_task_indices_truncated=$(debasher::_get_first_n_fields_of_str "${todo_task_indices}" ${max_task_num})
                 if [ "${todo_task_indices_truncated}" != "" ]; then
                     BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]=${todo_task_indices_truncated}
@@ -793,7 +863,7 @@ debasher_builtin_sched::_get_executable_processes()
         local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
         if [ ${array_size} -eq 1 ]; then
             # process is not an array
-            debasher_builtin_sched::_update_executable_non_array_process ${processname} ${status}
+            debasher_builtin_sched::_update_executable_non_array_process "${dirname}" ${processname} ${status}
         else
             # process is an array
             debasher_builtin_sched::_update_executable_array_process "${dirname}" ${processname} ${status}
@@ -856,9 +926,9 @@ debasher_builtin_sched::_process_starts_or_runs()
 # start once the candidates of this round have started: it runs, has
 # finished or is a candidate; or it waits to be launched, fits in the free
 # cpus and memory, and every dependency of its process that does not hold
-# yet is an after dependency on a process that starts in this round or runs
-# already. A task in held_back, which the caller keeps, was left out of this
-# round and cannot.
+# yet for the task is an after dependency on a process that starts in this
+# round or runs already. A task in held_back, which the caller keeps, was
+# left out of this round and cannot.
 debasher_builtin_sched::_task_can_start_soon()
 {
     local dirname=$1
@@ -899,7 +969,7 @@ debasher_builtin_sched::_task_can_start_soon()
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
         local dep_ok=0
-        if debasher_builtin_sched::_dep_holds "${deptype}" "${depsname}"; then
+        if debasher_builtin_sched::_dep_holds "${dirname}" "${deptype}" "${depsname}" "${processname}" "${task_idx}"; then
             dep_ok=1
         elif [ "${deptype}" = "${DEBASHER_AFTER_PROCESSDEP_TYPE}" ] && debasher_builtin_sched::_process_starts_or_runs "${depsname}"; then
             dep_ok=1

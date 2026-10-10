@@ -216,8 +216,11 @@ relative to the output directory of the run.
 - **dependency type**: what a dependency waits for: `none`, nothing; `after`,
   the producer has started; `afterok`, every task of the producer has succeeded;
   `afternotok`, the producer has failed; `afterany`, the producer has ended,
-  whatever its result; `aftercorr`, the task of the producer with the same task
-  index has succeeded.
+  whatever its result; `aftercorr`, the counterpart of the waiting task has
+  succeeded, or every task of the producer has, for a task with no counterpart.
+- **counterpart**: of a task of an array process, the task of the producer
+  with the same task index, when the producer is an array process too and has
+  a task with that index; any other task has none.
 - **inferred dependency**: a dependency that the engine derives from an input
   option whose value is an absolute path that an output option of another
   process holds: `afterok`, or `aftercorr` between two array processes at the
@@ -1457,11 +1460,12 @@ started, for example, gets `after` this way.
 A process never depends on itself: a value that it both produces and reads makes
 no dependency on it, so that a process can read what it writes. The dependencies
 of the tasks of a process are then merged into one dependency on each producer
-(see "Dependency types and how they merge"): the scheduler launches the tasks of
-a process when the dependencies of the process hold, and `aftercorr` is the one
-type that relates single tasks. An array whose tasks read the task of the same
-index of another array keeps `aftercorr`; if some task reads another index, the
-merge gives `afterok`, and the whole array waits for the whole producer.
+(see "Dependency types and how they merge"): the scheduler launches a task of a
+process when the dependencies of the process hold, and `aftercorr` is the one
+type that relates single tasks, holding for each task of an array on its own.
+An array whose tasks read the task of the same index of another array keeps
+`aftercorr`; if some task reads another index, the merge gives `afterok`, and
+the whole array waits for the whole producer.
 
 ## Dependency types and how they merge
 
@@ -1474,7 +1478,7 @@ A dependency asks for something about the producer:
 | `afterok` | every task of the producer has succeeded |
 | `afternotok` | the producer has failed |
 | `afterany` | the producer has ended, whether it succeeded or failed |
-| `aftercorr` | the task of the producer with the same task index has succeeded |
+| `aftercorr` | the counterpart of the task has succeeded; for a task with no counterpart, every task of the producer has |
 
 The types are not independent: every type but `none` implies `after`, since a
 producer that has ended has started, and `afterok` implies both `afterany` and
@@ -1485,7 +1489,7 @@ asks for everything both of them ask for:
 - Two equal types give that type, and `none` or `after` with any type gives the
   other type.
 - Any two of `afterok`, `afterany` and `aftercorr` give `afterok`: every task
-  finished and the corresponding one successful is only covered by all of them
+  finished and each counterpart successful is only covered by all of them
   successful.
 - `afternotok` with `afterany` gives `afternotok`.
 - `afternotok` with `afterok` or `aftercorr` cannot hold in any run of the
@@ -1493,13 +1497,15 @@ asks for everything both of them ask for:
   the run, as does a type the engine does not know.
 
 The table gives the meaning that a program relies on. Two schedulers carry it
-out, and each departs from it in one known place, described in "Scheduling": the
-built-in scheduler treats `aftercorr` as `afterok`, so the tasks of an array
-wait for the whole producer, and a Slurm older than 16.05, which has no
-`aftercorr`, gets `afterok` in its place. Both only make a process wait longer
-than the program asked for, never less. A program run with
-`--builtinsched-oneshot`, which never waits for a process to end, is refused
-when it has any dependency other than `none` and `after`.
+out: the built-in scheduler follows it, and the Slurm scheduler departs from it
+in one known place, described in "The Slurm scheduler": a Slurm older than
+16.05, which has no `aftercorr`, gets `afterok` in its place. This only makes
+the tasks of an array wait longer than the program asked for, never less. The
+two also differ on a task whose dependencies can no longer hold, which Slurm
+cancels and the built-in scheduler leaves for a later run (see "The built-in
+scheduler"). A program run with `--builtinsched-oneshot`, which never waits for
+a process to end, is refused when it has any dependency other than `none` and
+`after`.
 
 ## Explicit dependencies
 
@@ -1775,27 +1781,27 @@ through the same operation, whatever its scheduler.
 
 Both schedulers take the dependencies of each process from the final process
 specification, and give them the meaning described in "Dependency types and
-how they merge", with the departures listed below. One case is common to both:
-a dependency on a process that is not launched in this run. Such a process has
-either finished in an earlier run, and a dependency on it holds, except
-`afternotok`, which asks for it to have failed; or it has not finished and is
-not launched either, and a dependency on it never holds. A process whose
-dependencies cannot hold for this reason is not launched, and neither are the
-processes that depend on it: they are left for a later run.
+how they merge", with the departure described in "The Slurm scheduler". One
+case is common to both: a dependency on a process that is not launched in this
+run. Such a process has either finished in an earlier run, and a dependency on
+it holds, except `afternotok`, which asks for it to have failed; or it has not
+finished and is not launched either, and a dependency on it never holds. A
+process whose dependencies cannot hold for this reason is not launched, and
+neither are the processes that depend on it: they are left for a later run.
 
 ## The built-in scheduler
 
 The built-in scheduler is `debasher_exec` itself, which stays in a loop of
-rounds until no task is left to launch and none still runs. In each round it:
+rounds until no task can be launched and none still runs. In each round it:
 
 1. Reads the status of every process from its exec directory, and returns to
    the budget the CPUs and memory of the processes that have ended. A process
    that was running in this run and has ended without finishing is taken as
    failed, which is what `afternotok` and `afterany` look for.
 2. Finds the candidates of the round: the tasks that are not running and have
-   not finished or failed, whose process has its dependencies satisfied, that
-   fit on their own in the free CPUs and memory, and, in an array process,
-   that the throttle of the process allows.
+   not finished or failed, whose dependencies hold and that fit on their own
+   in the free CPUs and memory. In an array process, the throttle of the
+   process then limits how many of them are candidates.
 3. Leaves out the tasks at one end of a FIFO whose other end cannot start with
    them (see "Running both ends together").
 4. Chooses the tasks to launch. With no limit on CPUs or memory, every
@@ -1824,13 +1830,24 @@ everything it started. The script of the task ignores `SIGTERM` itself, so
 that a graceful stop sent to its whole group ends what it runs but lets it
 finish its own bookkeeping; `debasher_stop` sends `SIGKILL` to the group.
 
-The built-in scheduler gives the dependency types the meaning of the table,
-with one departure: it treats `aftercorr` as `afterok`, so the tasks of an
-array wait for every task of the producer, not only for their own
-counterpart. A dependency holds when the status of the producer says so:
-`after` once the producer has started, `afterok` once it has finished, and
-`afternotok` and `afterany` once it has failed in this run or, for
-`afterany`, finished.
+The built-in scheduler gives the dependency types the meaning of the table.
+A dependency holds when the status of the producer says so: `after` once the
+producer has started, `afterok` once it has finished, and `afternotok` and
+`afterany` once it has failed in this run or, for `afterany`, finished. These
+hold or not for every task of the process at once. `aftercorr` is the exception,
+and holds for each task of an array on its own, once its counterpart has
+finished: a task can be launched while other tasks of the producer still run,
+or after they have failed. A task with no counterpart waits for the producer to
+finish, as with `afterok`.
+
+A task whose dependencies can no longer hold, because a producer, or the
+counterpart of the task, has failed where it had to finish, a producer has
+finished where it had to fail, or a producer has not finished and will not be
+launched in this run, is never a candidate, and the loop ends without it. It is
+left for a later run, and its process does not end in this one: it stays `TO-DO`
+when none of its tasks was launched, and `UNFINISHED_BUT_RUNNABLE` otherwise
+(see "Process status"), so that `afterany` and `afternotok` on it do not hold
+either, and the processes that depend on it are left for a later run too.
 
 With `--builtinsched-oneshot`, `debasher_exec` goes through its rounds with no
 pause, launching whatever can start, and ends as soon as nothing more can start
@@ -1856,7 +1873,10 @@ so that the dependencies of each task of a job array can be set before any of
 them starts. The dependencies of a process become Slurm dependencies on the
 job ids of its producers, with `,` and `?` kept as Slurm reads them, every
 dependency or any of them. A Slurm older than 16.05, which has no `aftercorr`,
-gets `afterok` in its place; a newer one gets `aftercorr` as it is.
+gets `afterok` in its place; a newer one gets `aftercorr` as it is. Every job
+is submitted with `--kill-on-invalid-dep=yes`, so that Slurm cancels a task
+whose dependencies can no longer hold; the task then ends, as cancelled, and
+`afterany` and `afternotok` on its process hold.
 
 When `mem` or `time` is a list of values separated by commas, the process is
 submitted once for each attempt, as many attempts as the longer of the two lists
@@ -2141,9 +2161,11 @@ scheduler, or when Slurm still lists the job, for the Slurm scheduler; a process
 id that the system gives again to an unrelated process after the task has ended
 can make the process look `IN-PROGRESS`. `UNFINISHED_BUT_RUNNABLE` is the state
 of an array that the built-in scheduler was launching a few tasks at a time,
-under a throttle or a budget of CPUs and memory, when its run stopped: the next
-run launches the tasks that are left. Under the Slurm scheduler the tasks of an
-array are submitted together, and the state does not arise.
+under a throttle or a budget of CPUs and memory, when its run stopped, or whose
+remaining tasks wait for dependencies that can no longer hold in the run, such
+as counterparts that failed under `aftercorr` (see "The built-in scheduler"):
+the next run launches the tasks that are left. Under the Slurm scheduler the
+tasks of an array are submitted together, and the state does not arise.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
@@ -2450,12 +2472,12 @@ leaves, by design, to the program or to whoever runs it.
 6. The dependency graph has no cycle, and explicit dependencies are well
    formed and name processes of the program; a program that breaks either is
    refused (see "The dependency graph").
-7. A process is never launched before its dependencies hold, with the meaning
-   of "Dependency types and how they merge": a scheduler may make it wait
-   longer, never less. A dependency on a process that is not launched in the
-   run holds only when that process has finished and the type is not
-   `afternotok`; otherwise the process, and those that depend on it, are left
-   for a later run (see "The scheduler abstraction").
+7. A task is never launched before the dependencies of its process hold for
+   it, with the meaning of "Dependency types and how they merge": a scheduler
+   may make it wait longer, never less. A dependency on a process that is not
+   launched in the run holds only when that process has finished and the type
+   is not `afternotok`; otherwise the process, and those that depend on it,
+   are left for a later run (see "The scheduler abstraction").
 8. Every FIFO has one owner and at most one reader in the program, and it is
    created again, empty, before its owner runs (see "Declaring and owning a
    FIFO").
@@ -2529,8 +2551,10 @@ leaves, by design, to the program or to whoever runs it.
 - **An end that goes first.** An end of a FIFO launched before the other,
   because the other only waits for it to start, holds its resources while it
   waits, and the other may then never fit (see "Running both ends together").
-- **`aftercorr` in the built-in scheduler.** It is run as `afterok`: the tasks
-  of an array wait for the whole producer (see "The built-in scheduler").
+- **Dependencies that can no longer hold.** Under the built-in scheduler, a
+  task whose dependencies can no longer hold in the run is left for a later
+  run, and its process does not end in this one, so that `afterany` and
+  `afternotok` on it never hold in the run (see "The built-in scheduler").
 - **Ending a task.** A process function that calls `exit`, or that a signal
   kills, ends its whole task, with no `_post` method and no error message from
   the engine (see "Executing a task").
@@ -2588,8 +2612,11 @@ What is known to be missing from the design, or left open by it:
   before the other could have the resources of both reserved, or both could be
   launched in the same round in dependency order, so that the other end always
   fits.
-- **`aftercorr` task by task.** The built-in scheduler could launch each task
-  of an array as soon as its counterpart has succeeded, as Slurm does.
+- **Tasks that will not be launched.** The built-in scheduler could give a
+  task whose dependencies can no longer hold a status of its own, so that its
+  process ends in the run and `afterany` and `afternotok` on it hold, as under
+  the Slurm scheduler (see "The Slurm scheduler"). Every tool that reads the
+  status of a run, and the reruns, would have to know that status.
 - **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
   for reading and writing, which POSIX leaves undefined, so that mirror taps
   work on other systems than those on which the engine is checked (Linux,
