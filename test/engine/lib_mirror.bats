@@ -268,7 +268,7 @@ now_ms() {
     [ "${status}" -eq 0 ]
     [ "${elapsed}" -lt 1000 ]
     [ ! -s "${BATS_TEST_TMPDIR}/stderr" ]
-    ! kill -0 "${tap_pid}" 2>/dev/null
+    ! kill -0 "${tap_pid}" 2>/dev/null || false
     wait "${reader_pid}"
     [ "$(cat "${readerout}")" = "one" ]
 }
@@ -312,7 +312,7 @@ now_ms() {
     [ "$?" -eq 0 ]
     [ $(( $(now_ms) - start )) -lt $(stuck_tap_stop_bound_ms) ]
 
-    ! kill -0 "${tap_pid}" 2>/dev/null
+    ! kill -0 "${tap_pid}" 2>/dev/null || false
     grep -q "Warning: fifo mirror tap for ${shimfifo} did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
     run cat "${mirrorfile}"
     [ "${output}" = $'one\ntwo' ]
@@ -329,7 +329,7 @@ now_ms() {
     [ "$?" -eq 0 ]
     [ $(( $(now_ms) - start )) -lt $(stuck_tap_stop_bound_ms) ]
 
-    ! kill -0 "${tap_pid}" 2>/dev/null
+    ! kill -0 "${tap_pid}" 2>/dev/null || false
     grep -q "did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
 }
 
@@ -354,7 +354,7 @@ now_ms() {
     debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
     [ "$?" -eq 0 ]
 
-    ! kill -0 "${tap_pid}" 2>/dev/null
+    ! kill -0 "${tap_pid}" 2>/dev/null || false
     grep -q "did not stop within 1s" "${BATS_TEST_TMPDIR}/stderr"
 }
 

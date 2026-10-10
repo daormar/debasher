@@ -49,14 +49,14 @@ EOM
 @test "_write_exec_context leaves out bash's own, read-only and exported variables, and the options of each task" {
     write_context
 
-    ! grep -q ' FOREIGN_VAR=' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q ' HOME=' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q ' UID=' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q ' BASH_VERSINFO=' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q ' RANDOM=' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q 'DEBASHER_OPT_LIST_proc_0' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q '^exported_func ()' "${BATS_TEST_TMPDIR}/ctx.sh"
-    ! grep -q '^declare -[-a-zA-Z]* _ctx_' "${BATS_TEST_TMPDIR}/ctx.sh"
+    ! grep -q ' FOREIGN_VAR=' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q ' HOME=' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q ' UID=' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q ' BASH_VERSINFO=' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q ' RANDOM=' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q 'DEBASHER_OPT_LIST_proc_0' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q '^exported_func ()' "${BATS_TEST_TMPDIR}/ctx.sh" || false
+    ! grep -q '^declare -[-a-zA-Z]* _ctx_' "${BATS_TEST_TMPDIR}/ctx.sh" || false
 }
 
 @test "_write_exec_context writes a context that a clean bash loads without errors" {

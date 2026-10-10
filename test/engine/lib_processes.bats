@@ -229,7 +229,7 @@ EOF
 
 @test "debasher::_get_explained_opt_names returns 1 and leaves the set empty when the process declares no explain function" {
     local -A explained=()
-    ! debasher::_get_explained_opt_names "noexplainproc" explained
+    ! debasher::_get_explained_opt_names "noexplainproc" explained || false
     [ "${#explained[@]}" -eq 0 ]
 }
 
@@ -328,7 +328,7 @@ EOF
     DEBASHER_PROGRAM_OUTDIR="/tmp/bats-debasher-outdir"
 
     local -A actual=()
-    ! debasher::_get_actual_opt_names_for_first_task "" "genfailproc" actual
+    ! debasher::_get_actual_opt_names_for_first_task "" "genfailproc" actual || false
 }
 
 @test "debasher::_get_actual_opt_names_for_first_task keeps generator option names that echo would take as its own flags" {
@@ -388,7 +388,7 @@ EOF
     local -A actual=()
     debasher::_get_actual_opt_names_for_first_task "" "genproc2" actual
 
-    ! declare -p DEBASHER_OPT_LIST_genproc2_0 >/dev/null 2>&1
+    ! declare -p DEBASHER_OPT_LIST_genproc2_0 >/dev/null 2>&1 || false
 }
 
 # --- debasher::_check_opt_names_vs_explain -------------------------------
@@ -860,7 +860,7 @@ hold_lock() {
     [ "${status}" -eq 0 ]
     [[ "${output}" != *"Warning"* ]]
     flock -n "${outd}/lock" true
-    ! kill -0 "${pid}" 2>/dev/null
+    ! kill -0 "${pid}" 2>/dev/null || false
 }
 
 @test "debasher::_stop_run_scheduler kills a holder of the lock that does not stop on SIGTERM" {
@@ -893,10 +893,10 @@ hold_lock() {
     local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
 
     DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
-    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=none"
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=none" || false
 
     DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=3
-    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none" || false
 }
 
 @test "debasher::_deps_without_ids_can_hold takes a dependency on a launched process, or on a finished one but afternotok" {
@@ -906,8 +906,8 @@ hold_lock() {
     debasher::_deps_without_ids_can_hold "none" "/o" ids
     debasher::_deps_without_ids_can_hold "afternotok:a" "/o" ids
     debasher::_deps_without_ids_can_hold "afterok:done,after:done,afterany:done,aftercorr:done" "/o" ids
-    ! debasher::_deps_without_ids_can_hold "afternotok:done" "/o" ids
-    ! debasher::_deps_without_ids_can_hold "afterok:a,afterok:pending" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done" "/o" ids || false
+    ! debasher::_deps_without_ids_can_hold "afterok:a,afterok:pending" "/o" ids || false
 }
 
 @test "debasher::_deps_without_ids_can_hold needs one dependency that can hold with ?" {
@@ -915,7 +915,7 @@ hold_lock() {
     debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
 
     debasher::_deps_without_ids_can_hold "afternotok:done?afterok:done" "/o" ids
-    ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids || false
 }
 
 @test "debasher::_check_explicit_processdeps accepts none and lists with one separator" {

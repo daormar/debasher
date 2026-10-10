@@ -38,7 +38,7 @@ setup() {
 
     [ "${DEBASHER_RERUN_PROCESSES["oldproc"]}" = "${DEBASHER_OUTDATED_CODE_RERUN_REASON}" ]
     [ -z "${DEBASHER_RERUN_PROCESSES["newproc"]+x}" ]
-    ! grep -q "command not found" "${BATS_TEST_TMPDIR}/stderr"
+    ! grep -q "command not found" "${BATS_TEST_TMPDIR}/stderr" || false
 }
 
 # --- forced rerun ---------------------------------------------------------
