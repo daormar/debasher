@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { modDirFromLines, modDirToLines } from "../models/modDir";
 import { getAllEnvVars } from "../storage/programStorage";
 import { useProgram } from "../store/ProgramContext";
+import ModDirField from "./ModDirField";
 
 interface Props {
   onClose: () => void;
@@ -15,7 +17,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
   } = useProgram();
 
   const [draft, setDraft] =
-    useState(program.envVars.DEBASHER_MOD_DIR ?? "");
+    useState(modDirToLines(program.envVars.DEBASHER_MOD_DIR ?? ""));
 
   const [filter, setFilter] = useState("");
 
@@ -70,7 +72,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
   const hasInheritedVars = Object.keys(inheritedVars).length > 0;
 
   function handleSave() {
-    setEnvVar("DEBASHER_MOD_DIR", draft);
+    setEnvVar("DEBASHER_MOD_DIR", modDirFromLines(draft));
     onClose();
   }
 
@@ -109,31 +111,7 @@ export default function EnvVarsEditor({ onClose }: Props) {
           Session variables
         </h4>
 
-        <label style={{ fontSize: 14 }}>
-          DEBASHER_MOD_DIR
-        </label>
-
-        <textarea
-
-          value={draft}
-
-          onChange={(event) =>
-            setDraft(event.target.value)
-          }
-
-          rows={8}
-
-          spellCheck={false}
-
-          placeholder="/path/to/modules"
-
-          style={{
-            width: "100%",
-            fontFamily: "ui-monospace, Consolas, monospace",
-            resize: "vertical",
-          }}
-
-        />
+        <ModDirField value={draft} onChange={setDraft} />
 
         <h4 style={{ margin: 0 }}>
           Module-defined (inherited) variables

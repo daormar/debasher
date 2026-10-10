@@ -106,8 +106,8 @@ The home screen offers three ways to open a program:
 * **Import program** opens a DeBasher module written by hand (a
   ``.sh`` file), which the engine loads and describes. The
   ``DEBASHER_MOD_DIR`` field says where to find the modules that it
-  loads. The imported program opens in the editor, and is saved into a
-  home directory of its own.
+  loads, one directory per line. The imported program opens in the
+  editor, and is saved into a home directory of its own.
 
 Import keeps the processes, their options and connections, their code,
 methods and specifications, and the descriptions, but not the layout,
@@ -130,7 +130,9 @@ edits the selected process, and a toolbar above:
 
 * **Env vars**: the environment of the engine's tools, in particular
   ``DEBASHER_MOD_DIR``, where the modules that the preamble loads are
-  looked for.
+  looked for. Write one directory per line; they are searched in that
+  order, and saved as a colon-separated list, the form in which the
+  engine reads the variable.
 * **Preamble**: Bash code written at the top of the generated script,
   typically ``load_debasher_module`` lines for the modules whose
   processes the program uses.

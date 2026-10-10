@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { modDirFromLines } from "../models/modDir";
 import type { Program } from "../models/program";
 import { importProgram } from "../storage/programStorage";
 import FileBrowserModal from "./FileBrowserModal";
+import ModDirField from "./ModDirField";
 
 interface Props {
   onImport: (program: Program) => void;
@@ -43,7 +45,7 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
     setError(null);
 
     try {
-      const program = await importProgram(scriptPath.trim(), debasherModDir.trim());
+      const program = await importProgram(scriptPath.trim(), modDirFromLines(debasherModDir));
       onImport(program);
     } catch (err) {
       setError(
@@ -86,29 +88,13 @@ export default function ImportProgramDialog({ onImport, onClose }: Props) {
           Import program
         </h3>
 
-        <label style={{ fontSize: 14 }}>
-          DEBASHER_MOD_DIR (optional)
-        </label>
-
-        <textarea
+        <ModDirField
 
           value={debasherModDir}
 
-          onChange={(event) =>
-            setDebasherModDir(event.target.value)
-          }
+          onChange={setDebasherModDir}
 
-          rows={8}
-
-          spellCheck={false}
-
-          placeholder="/path/to/modules"
-
-          style={{
-            width: "100%",
-            fontFamily: "ui-monospace, Consolas, monospace",
-            resize: "vertical",
-          }}
+          optional
 
         />
 

@@ -1,5 +1,6 @@
 import type { EdgeDisplay, ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
+import { MOD_DIR_SEP, splitModDir } from "./modDir";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
 import type { Position } from "./position";
@@ -357,9 +358,6 @@ export function setEdgeDisplay(program: Program, edgeIds: string[], display: Edg
 
 }
 
-// Matches engine/debasher_lib.sh's DEBASHER_MOD_DIR_SEP.
-const MOD_DIR_SEP = ":";
-
 /**
  * Why "Add program" cannot bring `loaded` into `program`, or null if it can.
  * Only a program of the same type is added, a program has at most one
@@ -501,10 +499,7 @@ export function prepareMerge(
 // it is there already.
 export function addGroup(program: Program, group: MergedGroup): Program {
 
-  const modDirEntries = (program.envVars.DEBASHER_MOD_DIR ?? "")
-    .split(MOD_DIR_SEP)
-    .map(entry => entry.trim())
-    .filter(Boolean);
+  const modDirEntries = splitModDir(program.envVars.DEBASHER_MOD_DIR ?? "");
 
   const envVars = group.modDir === null || modDirEntries.includes(group.modDir)
     ? program.envVars

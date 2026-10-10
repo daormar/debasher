@@ -471,7 +471,12 @@ A program carries, besides its processes and edges:
 - `description` and `preamble`.
 - `envVars`, the environment the backend gives the engine's tools, of which only
   `DEBASHER_MOD_DIR` is used today: where to look for the modules the preamble
-  loads.
+  loads. It is kept the way the engine reads it, the directories separated by
+  colons. The environment variables editor and the import dialog show it one
+  directory per line and save it back joined with colons, without blanks
+  around a directory and without empty entries: an empty entry would make the
+  engine look for modules in the root directory. "Add program", which appends
+  the directory of the program it adds, keeps the same form.
 - `homeDir`, `outputDir`, and `sourceDir`, the directory of the module the
   program was imported from (empty if it was not imported).
 - `executionOptions`, the scheduler and the other flags given to
