@@ -281,7 +281,7 @@ dispatch_explain_opts()
 
     # -outfi option
     local description="i'th output file"
-    explain_opt "-outfith" "<file>" "$description"
+    explain_opt "-outf-ith" "<file>" "$description"
 }
 
 ########
@@ -452,7 +452,7 @@ aggregate_explain_opts()
 
     # -indi option
     local description="i'th input directory"
-    explain_opt "-indith" "<file>" "$description"
+    explain_opt "-ind-ith" "<file>" "$description"
 
     # -outf option
     local description="output file"

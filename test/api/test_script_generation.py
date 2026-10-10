@@ -169,7 +169,7 @@ def test_explain_opts_of_a_process_with_only_task_shaping_options_is_empty():
         (dict(dataType="None"), "can't be a flag"),
         (dict(label="-outw", direction="output"), "can't be an output"),
         (dict(fromProcessSpec=True), "from the command line only"),
-        (dict(label="-with"), "can't be a fanout family"),
+        (dict(label="-w-ith"), "can't be a fanout family"),
     ],
 )
 def test_a_task_shaping_option_that_the_engine_would_not_take_is_refused(fields, message):
@@ -185,7 +185,7 @@ def test_a_task_shaping_option_cannot_count_a_fanout_family():
     count = _shaping_option()
     family = ProgramOption(
         id="of",
-        label="-outfith",
+        label="-outf-ith",
         direction="output",
         dataType="file",
         description="",

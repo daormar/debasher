@@ -148,7 +148,7 @@ describe("buildCodePrompt", () => {
   it("names the count of a fanout family", () => {
     const dispatch = process("dispatch", [
       createOption("w", "-w", { dataType: "int", commandLine: true }),
-      createOption("outf", "-outfith", { direction: "output", channel: "fifo", countSourceOptionId: "w" }),
+      createOption("outf", "-outf-ith", { direction: "output", channel: "fifo", countSourceOptionId: "w" }),
     ]);
     const prompt = buildCodePrompt({ ...program, processes: [dispatch], edges: [] } as Program, dispatch, "", "");
     expect(prompt).toContain("A fanout family: the options `-outf0`, `-outf1`, ..., as many as the value of `-w`.");

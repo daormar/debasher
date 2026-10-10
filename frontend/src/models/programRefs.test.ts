@@ -96,7 +96,7 @@ describe("resolveNamedEdits", () => {
 
   it("resolves the count source of a fanout family by its label", () => {
     const [edit] = resolved([
-      { op: "addProcess", name: "c", options: [{ label: "-w", commandLine: true }, { label: "-outfith", countSource: "-w" }] },
+      { op: "addProcess", name: "c", options: [{ label: "-w", commandLine: true }, { label: "-outf-ith", countSource: "-w" }] },
     ]);
 
     if (edit.op !== "addProcess") {

@@ -340,16 +340,16 @@ def test_a_fanout_family_survives_the_round_trip(tmp_path):
         "dispatch",
         [
             _option("-w", dataType="int", commandLine=True, mandatory=True),
-            _option("-outfith", value="${process_outdir}/part_${i}"),
+            _option("-outf-ith", value="${process_outdir}/part_${i}"),
         ],
     )
     dispatch.options[1].countSourceOptionId = dispatch.options[0].id
     worker = _process(
         "worker",
-        [_option("-inf", value="[dispatch;-outfith]"), _option("-outf", value="${process_outdir}/out_${task_idx}")],
+        [_option("-inf", value="[dispatch;-outf-ith]"), _option("-outf", value="${process_outdir}/out_${task_idx}")],
         optionsHandler=OptionsHandler(mode="array", arrayCode="array=(0 1)"),
     )
-    program = _program("rt_fanout", [dispatch, worker], [_edge("dispatch", "-outfith", "worker", "-inf")])
+    program = _program("rt_fanout", [dispatch, worker], [_edge("dispatch", "-outf-ith", "worker", "-inf")])
 
     _assert_model_round_trip(program, tmp_path)
 
@@ -362,7 +362,7 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
         "dispatch",
         [
             _option("-w", dataType="int", commandLine=True, mandatory=True),
-            _option("-outfith", value="${process_outdir}/part_${i}"),
+            _option("-outf-ith", value="${process_outdir}/part_${i}"),
         ],
     )
     dispatch.options[1].countSourceOptionId = dispatch.options[0].id
@@ -370,7 +370,7 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
         "worker",
         [
             _option("-w", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
-            _option("-inf", value="[dispatch;-outfith]"),
+            _option("-inf", value="[dispatch;-outf-ith]"),
             _option("-outf", value="${process_outdir}/out_${task_idx}"),
         ],
         optionsHandler=OptionsHandler(
@@ -387,7 +387,7 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
         optionsHandler=OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"'),
     )
     program = _program(
-        "rt_shaping", [dispatch, worker, counter], [_edge("dispatch", "-outfith", "worker", "-inf")]
+        "rt_shaping", [dispatch, worker, counter], [_edge("dispatch", "-outf-ith", "worker", "-inf")]
     )
 
     _assert_model_round_trip(program, tmp_path)

@@ -55,7 +55,7 @@ export interface ProgramOption {
   // On a "standard"-mode process only (see isFanoutOption), the id of
   // another option on the SAME process (with commandLine=true) whose
   // value supplies the runtime count for this fanout family — e.g.
-  // "-outfith"'s countSourceOptionId points at that process's own "-w".
+  // "-outf-ith"'s countSourceOptionId points at that process's own "-w".
   countSourceOptionId?: string;
   // A task shaping option: a mandatory command line option that only the
   // options handler of the process reads (the code that builds the array,
@@ -118,12 +118,12 @@ export function isValidOptionLabel(label: string): boolean {
 }
 
 // debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)
-// for a dynamic-count family of options: a label ending in "ith" (e.g.
-// "-outfith" standing for "-outf0", "-outf1", ...). Only meaningful on a
+// for a dynamic-count family of options: a label ending in "-ith" (e.g.
+// "-outf-ith" standing for "-outf0", "-outf1", ...). Only meaningful on a
 // "standard"-mode process — callers must check optionsHandler.mode
 // themselves, since the same label on array/generator/manual is just an
 // ordinary option.
-const FANOUT_SUFFIX = "ith";
+const FANOUT_SUFFIX = "-ith";
 
 export function fanoutBaseLabel(label: string): string {
   return label.slice(0, -FANOUT_SUFFIX.length);

@@ -109,8 +109,8 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 - `mandatory`; `mirror` (a FIFO output keeps a copy readable without taking
   data from the reader; general programs only); `fifoTag: "external"` (a FIFO
   input of a resident program fed from outside).
-- **Fanout family.** On a `standard` process, a label ending in `ith`
-  (`-outfith`) stands for `-outf0`, `-outf1`, ..., as many as the command-line
+- **Fanout family.** On a `standard` process, a label ending in `-ith`
+  (`-outf-ith`) stands for `-outf0`, `-outf1`, ..., as many as the command-line
   option named by `countSource` says; it connects only to an array or
   generator process, one option per task.
 

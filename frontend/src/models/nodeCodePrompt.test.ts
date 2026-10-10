@@ -118,7 +118,7 @@ describe("buildNodeCodePrompt", () => {
   it("names the ports of a fanout family", () => {
     const dispatch = node("Dispatch", "FBPProcess", [
       createOption("w", "-w", { dataType: "int", commandLine: true }),
-      createOption("outw", "-outwith", { direction: "output", channel: "fifo", countSourceOptionId: "w" }),
+      createOption("outw", "-outw-ith", { direction: "output", channel: "fifo", countSourceOptionId: "w" }),
     ]);
     const prompt = buildNodeCodePrompt({ ...program, processes: [dispatch], edges: [] } as Program, dispatch, emptyNodeCode(), "", library);
     expect(prompt).toContain("A fanout family: the ports `outw0`, `outw1`, ..., as many as the value of `-w` says; send on one with `self.send_data(f\"outw{i}\", payload)`.");

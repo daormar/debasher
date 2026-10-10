@@ -355,11 +355,11 @@ _FANOUT_PARTNER_MODES = {"array", "generator"}
 
 # debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)
 # for a dynamic-count family of options on a "standard"-mode process: a
-# label ending in "ith" (e.g. "-outfith" standing for "-outf0", "-outf1",
+# label ending in "-ith" (e.g. "-outf-ith" standing for "-outf0", "-outf1",
 # ...), mirrored from frontend/src/models/option.ts's isFanoutOption/
 # fanoutBaseLabel. Only meaningful on a "standard"-mode process, the
 # same label on array/generator/manual is just an ordinary option.
-_FANOUT_SUFFIX = "ith"
+_FANOUT_SUFFIX = "-ith"
 
 
 def _fanout_base_label(label: str) -> str:
@@ -602,7 +602,7 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
     conn_proc, conn_opt, _ = connections[0]
     if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
         # Consumer side of a scatter connection: conn_opt is a fanout
-        # family declared on a "standard" process (e.g. "-outfith"), so it
+        # family declared on a "standard" process (e.g. "-outf-ith"), so it
         # isn't a real option name by itself, the member this option
         # actually reads is picked by this (_FANOUT_PARTNER_MODES, i.e.
         # "array"- or "generator"-mode) process's own per-task loop

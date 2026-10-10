@@ -150,7 +150,7 @@ class OptionHandlerResult:
     # value, which only the process_spec the engine passes in at
     # schedule time can resolve.
     procspec_labels: set[str] = field(default_factory=set)
-    # Fanout family option label (e.g. "-outfith") -> the label of the
+    # Fanout family option label (e.g. "-outf-ith") -> the label of the
     # command-line option on the SAME process that supplies its runtime
     # count (e.g. "-w") — see script_generation.py's
     # _fanout_definition_lines/_FANOUT_SUFFIX. Only ever populated for
@@ -463,8 +463,8 @@ def _try_parse_fanout_block(
     """
     Recognizes one fanout-family block (see the comment above
     _FANOUT_COUNT_RE) starting at body[start]. Returns (lines consumed,
-    fanout option label — e.g. "-outfith", count-source option label —
-    e.g. "-w", literal value text or None, ConnectionRef or None, is a
+    fanout option label (e.g. "-outf-ith"), count-source option label
+    (e.g. "-w"), literal value text or None, ConnectionRef or None, is a
     fifo name rather than a plain value); the value/connection pair is
     mutually exclusive, matching define_opt/define_fifo_opt (scatter,
     unconnected) vs define_opt_from_proc_task_out (gather, connected to
@@ -507,7 +507,7 @@ def _try_parse_fanout_block(
         label_match = _FANOUT_BLOCK_LABEL_RE.match(tokens[0][0])
         if label_match is None or tokens[-1][0] != "optlist":
             return None
-        fanout_label = f"{label_match.group('base')}ith"
+        fanout_label = f"{label_match.group('base')}-ith"
         return (5, fanout_label, count_label, tokens[1][0], None, func == "define_fifo_opt")
 
     if func == "define_opt_from_proc_task_out":
@@ -520,7 +520,7 @@ def _try_parse_fanout_block(
             or tokens[-1][0] != "optlist"
         ):
             return None
-        fanout_label = f"{label_match.group('base')}ith"
+        fanout_label = f"{label_match.group('base')}-ith"
         connection = ConnectionRef(
             option_label=fanout_label,
             source_process=tokens[1][0],
@@ -669,7 +669,7 @@ def _record_connection(state: _ParseState, func: str, tokens: list, mirrored: bo
         ConnectionRef(
             option_label=label[0],
             source_process=proc[0],
-            source_option=f"{fanout_consumer_base}ith" if fanout_consumer_base is not None else opt[0],
+            source_option=f"{fanout_consumer_base}-ith" if fanout_consumer_base is not None else opt[0],
             task_indexed=func == "define_opt_from_proc_task_out",
         )
     )
@@ -812,7 +812,7 @@ def _parse_primitive_calls(
     _resolve_generator) additionally accepts a define_opt_from_proc_out
     whose connected option name is "<base>${task_idx}" instead of a
     plain literal, reconstructing it as a connection to that "standard"
-    process's "<base>ith" fanout family.
+    process's "<base>-ith" fanout family.
 
     `initial_locals`/`initial_known_local_names` seed the local-chasing
     state (see _resolve_embedded_refs/_chase_local_value) — only ever
@@ -1045,13 +1045,13 @@ def scan_fifo_tags(source: str) -> dict[str, str]:
     """
     The fifo tag of every define_fifo_opt[_generator] call of `source` that
     carries one, by option label. A call in a fanout-family block, whose
-    label is "<base>${i}", gives the tag to the family, "<base>ith".
+    label is "<base>${i}", gives the tag to the family, "<base>-ith".
     """
     tags = {}
     for match in _TAGGED_FIFO_SCAN_RE.finditer(source):
         label = match.group("label")
         family = _FANOUT_BLOCK_LABEL_RE.match(label)
-        tags[f"{family.group('base')}ith" if family else label] = match.group("tag")
+        tags[f"{family.group('base')}-ith" if family else label] = match.group("tag")
     return tags
 
 

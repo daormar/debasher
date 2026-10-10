@@ -439,14 +439,14 @@ EOF
 # A process whose number of "-foo0", "-foo1", ... "-foo<N-1>" options
 # depends on a run-time value (N, e.g. a worker count) cannot
 # explain_opt each instance by its literal name, so by convention it
-# documents the whole family once, as "-fooith" (see
+# documents the whole family once, as "-foo-ith" (see
 # dispatch_define_opts/aggregate_define_opts in
 # debasher_dynamic_fanout.sh for the real pattern this mirrors).
 
 @test "debasher::_check_opt_names_vs_explain does not error on an actual option that is a concrete instance of a declared ith family" {
     ithproc_explain_opts()
     {
-        explain_opt "-outfith" "<file>" "desc, one per worker"
+        explain_opt "-outf-ith" "<file>" "desc, one per worker"
     }
     declare -gA DEBASHER_OPT_LIST_ithproc_0=(["-outf0"]="a" ["-outf1"]="b")
     DEBASHER_PROGRAM_PROCESSES["ithproc"]=1
@@ -459,10 +459,36 @@ EOF
 @test "debasher::_check_opt_names_vs_explain does not warn about a declared ith family that has a concrete instance" {
     ithwarnproc_explain_opts()
     {
-        explain_opt "-outfith" "<file>" "desc, one per worker"
+        explain_opt "-outf-ith" "<file>" "desc, one per worker"
     }
     declare -gA DEBASHER_OPT_LIST_ithwarnproc_0=(["-outf0"]="a")
     DEBASHER_PROGRAM_PROCESSES["ithwarnproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_opt_names_vs_explain takes an option ending in ith without the dash for an ordinary option, not a family" {
+    noithproc_explain_opts()
+    {
+        explain_opt "-outfith" "<file>" "desc"
+    }
+    declare -gA DEBASHER_OPT_LIST_noithproc_0=(["-outf0"]="a")
+    DEBASHER_PROGRAM_PROCESSES["noithproc"]=1
+
+    run debasher::_check_opt_names_vs_explain ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process noithproc defines option -outf0, which is not declared in its explain_opts"* ]]
+}
+
+@test "debasher::_check_opt_names_vs_explain takes an option ending in ith that the tasks define for an ordinary one" {
+    withproc_explain_opts()
+    {
+        explain_opt "-with" "<string>" "desc"
+    }
+    declare -gA DEBASHER_OPT_LIST_withproc_0=(["-with"]="x")
+    DEBASHER_PROGRAM_PROCESSES["withproc"]=1
 
     run debasher::_check_opt_names_vs_explain ""
     [ "${status}" -eq 0 ]

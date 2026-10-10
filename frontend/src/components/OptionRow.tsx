@@ -66,7 +66,7 @@ export default function OptionRow({
           {isFanoutMode && isFanoutOption(option.label) ? (
             <>
               {fanoutBaseLabel(option.label)}
-              <span style={{ color: "#c0392b" }}>ith</span>
+              <span style={{ color: "#c0392b" }}>-ith</span>
             </>
           ) : (
             option.label

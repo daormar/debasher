@@ -26,7 +26,7 @@ start_document()
 start_explain_opts()
 {
     explain_opt "-trigger" "<fifo>" "externally fed control fifo"
-    explain_opt "-outfith" "<fifo>" "output fifo to the i'th task of worker"
+    explain_opt "-outf-ith" "<fifo>" "output fifo to the i'th task of worker"
 }
 
 start_identify_cmdline_opts()
@@ -137,7 +137,7 @@ collect_document()
 
 collect_explain_opts()
 {
-    explain_opt "-indith" "<fifo>" "input fifo from the i'th task of worker"
+    explain_opt "-ind-ith" "<fifo>" "input fifo from the i'th task of worker"
 }
 
 collect_identify_cmdline_opts()

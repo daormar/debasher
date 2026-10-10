@@ -13,11 +13,11 @@ function process(language: ProcessLanguage, options: ProgramOption[]): ProgramPr
 const fanoutOptions = [
   createOption("w", "-w", { dataType: "int", commandLine: true, mandatory: true }),
   createOption("v", "-v", { dataType: "None" }),
-  createOption("outf", "-outfith", { direction: "output", dataType: "file", countSourceOptionId: "w" }),
+  createOption("outf", "-outf-ith", { direction: "output", dataType: "file", countSourceOptionId: "w" }),
 ];
 
 describe("generateCodeTemplate with a fanout family", () => {
-  // What each language reads the family with: never the "-outfith" label
+  // What each language reads the family with: never the "-outf-ith" label
   // itself, always "-outf<i>" for each i below the count.
   const reads: Record<ProcessLanguage, string[]> = {
     bash: [
@@ -57,7 +57,7 @@ describe("generateCodeTemplate with a fanout family", () => {
       for (const line of lines) {
         expect(template).toContain(line);
       }
-      expect(template).not.toContain("-outfith");
+      expect(template).not.toContain("-outf-ith");
       expect(template).not.toContain("TODO");
       expect(template).toContain(TEMPLATE_MARKER);
     });
@@ -65,7 +65,7 @@ describe("generateCodeTemplate with a fanout family", () => {
     it(`marks a family without a count source with a TODO in ${language}`, () => {
       const options = fanoutOptions.map(o => (o.id === "outf" ? { ...o, countSourceOptionId: undefined } : o));
       const template = generateCodeTemplate(process(language, options));
-      expect(template).toContain('TODO: fanout option "-outfith" has no count source configured yet');
+      expect(template).toContain('TODO: fanout option "-outf-ith" has no count source configured yet');
       expect(template).not.toContain("-outf0");
     });
   }

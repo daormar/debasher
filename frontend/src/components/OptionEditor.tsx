@@ -150,7 +150,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     : null;
 
   // Reactive to the label as it's being typed, so the "Count source"
-  // field appears/disappears live as the user adds/removes the "ith"
+  // field appears/disappears live as the user adds/removes the "-ith"
   // suffix, rather than only after saving.
   const isFanout = isFanoutOption(label) && ownerProcess?.optionsHandler.mode === "standard";
 

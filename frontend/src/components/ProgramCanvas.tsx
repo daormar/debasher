@@ -144,7 +144,7 @@ function isFifoBackedOption(
 }
 
 // On a "standard"-mode process, a fanout/fanin option's label (e.g.
-// "-outfith", "-indith", see isFanoutOption) is only a template: the
+// "-outf-ith", "-ind-ith", see isFanoutOption) is only a template: the
 // process actually runs with one concrete option per index ("-outf0",
 // "-outf1", ..., "-ind0", "-ind1", ...), one per its countSourceOptionId
 // sibling's value (e.g. "-w"). Splits each template into either its
@@ -597,7 +597,7 @@ export default function ProgramCanvas() {
 
     // isFanoutOption/countSourceOptionId are only meaningful on a
     // "standard"-mode process (see models/option.ts), elsewhere a
-    // label ending in "ith" is just an ordinary option.
+    // label ending in "-ith" is just an ordinary option.
     const { options, families } = process.optionsHandler.mode === "standard"
       ? expandFanoutOptions(candidates, resolvedValues)
       : { options: candidates, families: [] };

@@ -1388,7 +1388,7 @@ debasher::_get_actual_opt_names_for_first_task()
 # debasher::_actual_opt_is_ith_instance below: a process whose number
 # of "-foo0", "-foo1", ... "-foo<N-1>" options depends on a run-time
 # value (N) cannot explain_opt each instance by its literal name, so
-# by convention it documents the whole family once, as "-fooith" (see
+# by convention it documents the whole family once, as "-foo-ith" (see
 # dispatch_define_opts/aggregate_define_opts in
 # debasher_dynamic_fanout.sh for the actual pattern this mirrors).
 #
@@ -1555,23 +1555,29 @@ debasher::_cmdline_opt_value_is_from_cmdline()
 }
 
 ########
-# True if actual_opt_name (e.g. "-outf3") is a concrete instance of an
-# "ith" option family the process documents once, as "<prefix>ith"
-# (e.g. "-outfith"), in explained_opt_names. See
+# Prints the name of the fanout family of which actual_opt_name (e.g.
+# "-outf3") would be an instance, as the process declares it once:
+# "<prefix>-ith" (e.g. "-outf-ith"). See
 # debasher::_check_opt_names_vs_explain's own comment for why this
 # convention exists.
 #
 # $1 - Actual option name.
-# $2 - Name of an associative array of explained option names.
+#
+# Returns 1 if the option name does not end in a number.
 debasher::_ith_family_name_for()
 {
     local actual_opt_name=$1
 
     [[ "${actual_opt_name}" =~ ^(.+[^0-9])[0-9]+$ ]] || return 1
-    echo "${BASH_REMATCH[1]}ith"
+    echo "${BASH_REMATCH[1]}-ith"
 }
 
 ########
+# True if actual_opt_name (e.g. "-outf3") is an instance of a fanout family
+# that the process declares in explained_opt_names.
+#
+# $1 - Actual option name.
+# $2 - Name of an associative array of explained option names.
 debasher::_actual_opt_is_ith_instance()
 {
     local actual_opt_name=$1
@@ -1583,9 +1589,9 @@ debasher::_actual_opt_is_ith_instance()
 }
 
 ########
-# True if some name in actual_opt_names (e.g. "-outf3") is a concrete
-# instance of the "ith" family explained_opt_name documents (e.g.
-# explained_opt_name "-outfith" matches actual "-outf3", "-outf0", ...).
+# True if some name in actual_opt_names (e.g. "-outf3") is an instance of
+# the fanout family that explained_opt_name declares (e.g.
+# explained_opt_name "-outf-ith" matches actual "-outf3", "-outf0", ...).
 #
 # $1 - Explained option name.
 # $2 - Name of an associative array of actual option names.
@@ -1594,7 +1600,7 @@ debasher::_ith_family_has_instance()
     local explained_opt_name=$1
     local -n ith_actual_ref=$2
 
-    [[ "${explained_opt_name}" == *ith ]] || return 1
+    [[ "${explained_opt_name}" == *-ith ]] || return 1
 
     local a a_family
     for a in "${!ith_actual_ref[@]}"; do

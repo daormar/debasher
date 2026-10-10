@@ -278,7 +278,7 @@ describe("programToReactFlowEdges", () => {
   it("gives a fanout edge that goes back up the detour of a back edge", () => {
     const scatter = process("scatter", [
       option("scatter-w", "-w", { commandLine: true }),
-      option("scatter-out", "-outfith", { countSourceOptionId: "scatter-w" }),
+      option("scatter-out", "-outf-ith", { countSourceOptionId: "scatter-w" }),
     ], 400);
     const worker = { ...process("worker", [option("worker-in", "-inf")]), optionsHandler: { mode: "array" as const } };
     const edges = [edge("fan", "scatter", "scatter-out", "worker", "worker-in")];

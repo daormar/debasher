@@ -3491,11 +3491,11 @@ Design ideas from Future work move here once they are actually built.
   `Supervisor`. `test/engine/debasher_array_gen_ref.sh` is the same program with
   the tasks produced by an option generator: only the number of tasks matters
   to the rest of the engine.
-- **Fan-out and fan-in sized from the command line (the `ith` convention of
+- **Fan-out and fan-in sized from the command line (the `-ith` convention of
   general programs).** A node can have as many input or output ports as an
   option of the command line says, written as in a general program
   (`data/programs/debasher_dynamic_fanout_fifos.sh`): a process documents the
-  family once, as `-outfith`, and defines `-outf0` to `-outf<w-1>` in a loop
+  family once, as `-outf-ith`, and defines `-outf0` to `-outf<w-1>` in a loop
   over its `-w` option; an array process of `w` tasks takes one each (see
   "Array processes" above), and a fan-in node defines `-ind0` to `-ind<w-1>`
   from the tasks. The engine's check of option names recognizes the family

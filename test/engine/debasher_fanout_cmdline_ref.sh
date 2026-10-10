@@ -3,7 +3,7 @@
 # command line, for a real debasher_exec run: start sends what arrives from
 # outside to the -w tasks of worker, one after another, and collect fans in
 # from them, with as many ports as -w says, written with the "ith"
-# convention of general programs (-outfith, -indith). A Supervisor watches
+# convention of general programs (-outf-ith, -ind-ith). A Supervisor watches
 # every node, every task of worker included, and relays a manual trigger to
 # start. It declares no port: the engine gives it its ports from the options
 # of its module, as it gives each node its own, so the number of nodes it
@@ -30,7 +30,7 @@ start_explain_opts()
     explain_opt "-w" "<int>" "number of tasks of worker"
     explain_opt "-ext" "<fifo>" "externally fed input fifo"
     explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
-    explain_opt "-outfith" "<fifo>" "output fifo to the i'th task of worker"
+    explain_opt "-outf-ith" "<fifo>" "output fifo to the i'th task of worker"
     explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
@@ -158,7 +158,7 @@ collect_document()
 collect_explain_opts()
 {
     explain_opt "-w" "<int>" "number of tasks of worker"
-    explain_opt "-indith" "<fifo>" "input fifo from the i'th task of worker"
+    explain_opt "-ind-ith" "<fifo>" "input fifo from the i'th task of worker"
     explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
 }
 
@@ -222,7 +222,7 @@ sup_explain_opts()
 {
     explain_opt "-w" "<int>" "number of tasks of worker"
     explain_opt "-hb_start" "<fifo>" "start's heartbeat fifo"
-    explain_opt "-hbith" "<fifo>" "heartbeat fifo of the i'th task of worker"
+    explain_opt "-hb-ith" "<fifo>" "heartbeat fifo of the i'th task of worker"
     explain_opt "-hb_collect" "<fifo>" "collect's heartbeat fifo"
     explain_opt "-outtrig" "<fifo>" "trigger fifo to start"
     explain_opt "-manual" "<fifo>" "externally fed manual trigger fifo"

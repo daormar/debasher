@@ -274,7 +274,7 @@ Dynamic Fanout Example Using FIFOs
 
         # -outfi option
         local description="i'th output fifo"
-        explain_opt "-outfith" "<file>" "$description"
+        explain_opt "-outf-ith" "<file>" "$description"
     }
 
     dispatch_identify_cmdline_opts()
@@ -403,7 +403,7 @@ Dynamic Fanout Example Using FIFOs
 
         # -indi option
         local description="i'th input directory"
-        explain_opt "-indith" "<file>" "$description"
+        explain_opt "-ind-ith" "<file>" "$description"
 
         # -outf option
         local description="output file"

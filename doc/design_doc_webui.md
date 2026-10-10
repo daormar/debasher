@@ -164,9 +164,9 @@ refer to it.
   index, and one in `manual` mode as many as its option definition function
   defines.
 - **fanout family**: as defined in the design of the engine. In the web UI, an
-  option of a `standard` process whose label ends in `ith`, such as `-outfith`,
-  which stands for as many numbered options (`-outf0`, `-outf1`, ...) as another
-  option of the same process says at run time.
+  option of a `standard` process whose label ends in `-ith`, such as
+  `-outf-ith`, which stands for as many numbered options (`-outf0`, `-outf1`,
+  ...) as another option of the same process says at run time.
 - **preamble**: Bash code that the generated module carries verbatim before its
   own functions, typically the `load_debasher_module` lines of the modules it
   builds on.
@@ -2221,20 +2221,16 @@ the Supervisor wiring with fixed labels, which no option of the user may take:
 - on every node of a program with a `Supervisor`, `-outhb`, the output of its
   heartbeat channel, which nothing would read in a program without one;
 - on the `Supervisor`, `-<process>_hb`, the input that reads the heartbeat
-  channel of a node, or the fanout family `-<process>_hbith` for an `array` or
+  channel of a node, or the fanout family `-<process>_hb-ith` for an `array` or
   `generator` process;
 - on the `Supervisor`, `-out<process>_trig`, the trigger port to an
-  initiator, or the fanout family `-out<process>_trigith`;
+  initiator, or the fanout family `-out<process>_trig-ith`;
 - on every initiator, `-trigger`, the input of its control port, connected to
   the trigger port of the `Supervisor` or, without one, written from outside
   the program;
 - on the `Supervisor`, `-manual`, its manual trigger port, and the flag
   `-no-hold-fifos`, together with the command line options that count its
   fanout families.
-
-The name of the process comes first in a label of the `Supervisor`, never
-last: a process named `smith` would otherwise give `-hb_smith`, which ends in
-`ith` and would be taken for a fanout family.
 
 **The Supervisor wiring, imported.** Import recognizes the Supervisor wiring of
 a module by the rules with which the engine gives each process its ports (see

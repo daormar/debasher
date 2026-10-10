@@ -204,9 +204,10 @@ relative to the output directory of the run.
   `sample1/bam`. A directory on the way to a path is a directory below the
   shared directory or the process output directory that the path passes through,
   such as `sample1` for `sample1/bam`.
-- **fanout family**: an option name ending in `ith` in the `_explain_opts`
-  method of a process, such as `-outfith`, which stands for the numbered options
-  `-outf0`, `-outf1`, ... that its tasks define.
+- **fanout family**: an option name ending in `-ith` in the `_explain_opts`
+  method of a process, such as `-outf-ith`, which stands for the numbered
+  options `-outf0`, `-outf1`, ... that its tasks define. A name that ends in
+  `ith` without the dash, such as `-with`, is an ordinary option.
 
 ## Dependencies
 
@@ -1374,8 +1375,8 @@ marks but `_explain_opts` does not declare: it is usually a typo that leaves the
 intended option unmarked, or a leftover. Only the first task is checked, and the
 check assumes that the tasks of an array have the same option names. A process
 whose number of options depends on the run, such as `-outf0`, `-outf1`, and so
-on, declares the whole fanout family once, as `-outfith`, and any option made of
-the prefix and a number matches it.
+on, declares the whole fanout family once, as `-outf-ith`, and any option made
+of the prefix and a number matches it.
 
 ## How option values reach a task
 

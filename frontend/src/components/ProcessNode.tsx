@@ -49,7 +49,7 @@ function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) 
   return (
     <>
       {fanoutBaseLabel(label)}
-      <span style={{ color: "#c0392b" }}>ith</span>
+      <span style={{ color: "#c0392b" }}>-ith</span>
     </>
   );
 

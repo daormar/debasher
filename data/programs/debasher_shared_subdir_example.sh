@@ -24,7 +24,7 @@
 # into a file of a fixed name, square.txt, in its shared subdirectory
 # "squares/<task index>", which the engine creates before the task runs.
 # "total" reads the shared subdirectory of every task through a fanout
-# family, "-indith", one option per task: since each of those options
+# family, "-ind-ith", one option per task: since each of those options
 # holds the path of an output of one task, "total" also waits for every
 # task of "square" to finish.
 
@@ -141,9 +141,9 @@ total_explain_opts()
     local description="Number of numbers to square."
     explain_opt "-n" "<int>" "$description"
 
-    # -indith option
+    # -ind-ith option
     local description="i'th directory of a task of square"
-    explain_opt "-indith" "<file>" "$description"
+    explain_opt "-ind-ith" "<file>" "$description"
 
     # -outf option
     local description="output file"
@@ -169,7 +169,7 @@ total_define_opts()
     # -n option
     define_cmdline_opt "$cmdline" "-n" optlist || return 1
 
-    # -indith options: the shared subdirectory of every task of square
+    # -ind-ith options: the shared subdirectory of every task of square
     local n=$(debasher::read_opt_value_from_line "${cmdline}" "-n")
     for ((i=0; i<n; i++)); do
         define_opt_from_proc_task_out "-ind${i}" "square" "${i}" "-outd" optlist || return 1

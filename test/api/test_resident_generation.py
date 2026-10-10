@@ -150,7 +150,7 @@ def _fanout(with_supervisor=True, array_initiator=False):
         [
             _option("s-w", "-w", "input", dataType="int", commandLine=True, mandatory=True),
             _option("s-ext", "-ext", "input", channel="fifo", fifoTag="external", value="start_ext"),
-            _option("s-outf", "-outfith", "output", channel="fifo", value="start_out_${i}", countSourceOptionId="s-w"),
+            _option("s-outf", "-outf-ith", "output", channel="fifo", value="start_out_${i}", countSourceOptionId="s-w"),
         ],
         initiator=True,
     )
@@ -158,7 +158,7 @@ def _fanout(with_supervisor=True, array_initiator=False):
         "worker",
         "FBPProcess",
         [
-            _option("w-in", "-inf", "input", value="[start;-outfith]"),
+            _option("w-in", "-inf", "input", value="[start;-outf-ith]"),
             _option("w-outf", "-outf", "output", channel="fifo", value="worker_out_${task_idx}"),
         ],
         mode="array",
@@ -169,7 +169,7 @@ def _fanout(with_supervisor=True, array_initiator=False):
         "FBPProcess",
         [
             _option("k-w", "-w", "input", dataType="int", commandLine=True, mandatory=True),
-            _option("k-in", "-indith", "input", value="[worker;-outf]", countSourceOptionId="k-w"),
+            _option("k-in", "-ind-ith", "input", value="[worker;-outf]", countSourceOptionId="k-w"),
         ],
     )
     processes = [start, worker, collect]

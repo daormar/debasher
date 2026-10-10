@@ -40,7 +40,7 @@ function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
     : [];
 }
 
-// A fanout family as a template reads it: the engine passes "<base>0", "<base>1", ... (never the "-outfith"
+// A fanout family as a template reads it: the engine passes "<base>0", "<base>1", ... (never the "-outf-ith"
 // label itself), as many as the value of the count source option, which
 // the template has already read into the identifier countId. Null when
 // the family has no count source configured yet.

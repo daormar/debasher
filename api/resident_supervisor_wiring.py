@@ -30,9 +30,7 @@ _TASK_INDEXED_MODES = {"array", "generator"}
 
 
 def heartbeat_label(process_name: str) -> str:
-    """The input of the Supervisor that reads the heartbeat channel of a node.
-    The name of the process comes first, never last: "-hb_smith" would end
-    in "ith" and be taken for a fanout family."""
+    """The input of the Supervisor that reads the heartbeat channel of a node."""
     return f"-{process_name}_hb"
 
 
@@ -76,7 +74,7 @@ def _connect(edges, source_process, source_option, target_process, target_option
 
 
 def _is_fanout_label(label: str) -> bool:
-    return label.endswith("ith") and label[: -len("ith")].lstrip("-") != ""
+    return label.endswith("-ith") and label[: -len("-ith")].lstrip("-") != ""
 
 
 def _count_source(program: Program, node: ProgramProcess) -> ProgramOption:
@@ -174,7 +172,7 @@ class SupervisorWiring:
         node.options.append(heartbeat)
         if node.optionsHandler.mode in _TASK_INDEXED_MODES:
             reader = _option(
-                heartbeat_label(node.name) + "ith",
+                heartbeat_label(node.name) + "-ith",
                 "input",
                 f"heartbeat channel of the i'th task of {node.name}",
                 countSourceOptionId=self.count_option(node).id,
@@ -206,7 +204,7 @@ class SupervisorWiring:
         node.options.append(control)
         if node.optionsHandler.mode in _TASK_INDEXED_MODES:
             trigger = _option(
-                trigger_label(node.name) + "ith",
+                trigger_label(node.name) + "-ith",
                 "output",
                 f"trigger port to the i'th task of {node.name}",
                 channel="fifo",

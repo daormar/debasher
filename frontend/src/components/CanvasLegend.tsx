@@ -164,7 +164,7 @@ function GeneralLegend() {
       </LegendRow>
       <LabelEdgeRow />
       <LegendRow
-        mark={<span style={{ fontSize: 10 }}>-out<span style={{ color: "#c0392b" }}>ith</span></span>}
+        mark={<span style={{ fontSize: 10 }}>-outf<span style={{ color: "#c0392b" }}>-ith</span></span>}
       >
         A fanout family: as many options as another option says.
       </LegendRow>

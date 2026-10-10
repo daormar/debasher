@@ -221,8 +221,8 @@ of the process with their values, which show what each task needs, and
 the code of the process, if it is written; it lets the AI tool ask
 what a task is when nothing says so.
 
-An option of a standard process whose label ends in ``ith``, such as
-``-outfith``, is a *fanout family*: it stands for as many numbered
+An option of a standard process whose label ends in ``-ith``, such as
+``-outf-ith``, is a *fanout family*: it stands for as many numbered
 options (``-outf0``, ``-outf1``, ...) as a command line option of the
 same process says, and it connects to an array or generator process,
 one option for each task.

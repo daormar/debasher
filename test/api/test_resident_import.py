@@ -147,7 +147,7 @@ def test_the_fifo_tags_are_read_back_for_single_options_and_fanout_families():
         'debasher::define_fifo_opt "-outworker_trig${i}" "t_${i}" optlist --control || return 1;\n'
     )
 
-    assert scan_fifo_tags(source) == {"-ext": "external", "-outworker_trigith": "control"}
+    assert scan_fifo_tags(source) == {"-ext": "external", "-outworker_trig-ith": "control"}
 
 
 def test_the_program_type_is_read_from_the_module_documentation():
