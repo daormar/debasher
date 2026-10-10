@@ -599,6 +599,46 @@ does, and each task gets its own. The older
 ``define_fifo_opt_generator``, which takes the task index as an
 argument, still works, and ignores that argument.
 
+The two alternatives differ in when the options are computed.
+``define_opts`` runs once, when the run is prepared, and the engine
+keeps the option list of every task until the task runs. A generator
+keeps nothing: the engine calls ``generate_opts`` again whenever it
+needs the options of a task, inside the task too, so it has to give
+the same option list every time for the same command line and task
+index. The engine does not check it. A generator that reads a file or
+a directory, such as one given on the command line to say how many
+tasks there are, relies on it staying unchanged while the run lasts
+(while the program runs, in a resident program): do not modify the
+files that shape the tasks during a run. A process whose option lists
+have to be fixed when the run is prepared uses ``define_opts``
+instead.
+
+A process whose tasks match those of another process, one by one, or
+whose task reads every task of another process, does not compute that
+number of tasks again: ``get_process_num_tasks`` gives it. The engine
+defines the options of the processes without a generator before those
+of the processes with one, so a generator can ask for the number of
+tasks of any process, and a process without a generator only for that
+of a process with one. In the following example the consumer has as
+many tasks as the producer, which counts the lines of a file given
+with ``-f``:
+
+.. code-block:: bash
+
+    consumer_generate_opts_size()
+    {
+        get_process_num_tasks "producer"
+    }
+
+When the number is read into a variable, a failure, such as a cycle of
+processes whose numbers of tasks depend on each other, has to stop the
+method that reads it:
+
+.. code-block:: bash
+
+    local n
+    n=$(get_process_num_tasks "producer") || return 1
+
 A Directory of Its Own for Each Task
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 

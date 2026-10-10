@@ -1317,8 +1317,12 @@ infer its dependencies and to resolve the connections of other processes to it,
 and again inside the task itself (see "How option values reach a task"). A
 generator is therefore called several times for each task, in different shells,
 and has to give the same option list every time for the same command line and
-task index. A generator declares a FIFO with `define_fifo_opt`, as
-`_define_opts` does (see "Declaring and owning a FIFO").
+task index. The engine does not check it: a file or a directory that the
+generator reads, such as one named by a task shaping option, has to stay
+unchanged while the run lasts, and a process whose option lists have to be fixed
+when the run is prepared builds them in `_define_opts`, which runs, in a run,
+only while the run is prepared. A generator declares a FIFO with
+`define_fifo_opt`, as `_define_opts` does (see "Declaring and owning a FIFO").
 
 **The number of tasks of another process.** A process whose tasks match, one by
 one, those of another process, or whose task reads every task of another
@@ -2545,6 +2549,14 @@ leaves, by design, to the program or to whoever runs it.
   its output options name is removed when the process is prepared again, unless
   it has a `_reset_outfiles` method, though the task does not run again (see
   "Run resources and their life cycle").
+- **Option generators.** The engine does not check that an option generator
+  gives the same option list every time. A file or a directory that it reads and
+  that changes during a run (for a resident program, while it runs and
+  relaunches its nodes) changes the options of the tasks launched afterwards,
+  against the dependencies and the FIFOs that the engine registered when the run
+  was prepared. Keeping such files unchanged is left to whoever runs the
+  program: the engine checks that the program is consistent with itself, not
+  that what is outside it stays unchanged (see "Arrays and option generators").
 - **The number of tasks of another process.** A process without an option
   generator cannot ask, while it defines its options, for the number of tasks of
   another process without one (see "Arrays and option generators").
