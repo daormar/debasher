@@ -34,18 +34,21 @@ which one you start with.
    additional method when that is what is missing.
 3. **Write the code** with `update_process`. Keep it small and readable, and
    make it fail loudly (a non-zero exit) on bad input rather than produce a
-   wrong output. Read each option as what the code prompt says it receives:
-   the data itself, or the path of a FIFO, a value descriptor or a
-   directory. In a node, use the methods of the runtime library that the
-   code prompt lists rather than writing your own: `self.sleep()` for the
-   pace, `inject` from `observe` for what it sees outside, and
-   `set_notice` for what whoever watches the program should know (a
-   missing configuration file), set again in `restore_node_state` when it
-   follows from the node state. A directory watcher or a launcher needs
-   little code or none: its class sends on `-outrequests` and `-outdone`, so
-   the code never does. A node that reads the results of a batch run takes
-   the run directory from `run_dir` in the message on `-outdone`, rather than
-   building it again from a runs root of its own.
+   wrong output. Comment it as the code prompt asks under "How to comment the
+   code": what each function, and each hook a node redefines, does and why, the
+   reason of each step that the code does not show, and what the node state
+   holds, never what the code already says. Read each option as what the code
+   prompt says it receives: the data itself, or the path of a FIFO, a value
+   descriptor or a directory. In a node, use the methods of the runtime library
+   that the code prompt lists rather than writing your own: `self.sleep()` for
+   the pace, `inject` from `observe` for what it sees outside, and `set_notice`
+   for what whoever watches the program should know (a missing configuration
+   file), set again in `restore_node_state` when it follows from the node state.
+   A directory watcher or a launcher needs little code or none: its class sends
+   on `-outrequests` and `-outdone`, so the code never does. A node that reads
+   the results of a batch run takes the run directory from `run_dir` in the
+   message on `-outdone`, rather than building it again from a runs root of its
+   own.
 4. **Write a test.** `add_test` writes the skeleton of a business test into
    `test/` (bats for a process of a general program, pytest for a node). Read
    it with `read_program_file`, fill in its TODOs with a real check of what

@@ -1,7 +1,7 @@
 import { deliveryChannel, receivesPath } from "./dataTypes";
 import type { ProgramOption } from "./option";
 import { fanoutBaseLabel, isFanoutOption } from "./option";
-import type { ProgramProcess } from "./process";
+import type { ProcessLanguage, ProgramProcess } from "./process";
 import type { Program } from "./program";
 import {
   LANGUAGE_NAMES,
@@ -42,6 +42,7 @@ export function buildCodePrompt(
         ? "Write the code that the description of the process asks for."
         : request.trim(),
     ],
+    commentSection(process.language),
     returnSection(process, language),
   ];
 
@@ -284,6 +285,32 @@ function codeSection(process: ProgramProcess, code: string): string[] {
     fence,
     "",
     instruction,
+  ];
+}
+
+// How the code of a process is commented, in the style of the code of
+// DeBasher itself (the Bash modules of the engine and of data/programs, the
+// runtime library of the nodes): what a reader cannot get from the code,
+// never what the code already says.
+export const COMMENT_SECTION_TITLE = "## How to comment the code";
+export const COMMENT_STEPS =
+  "- A comment for each step whose reason does not follow from the code: the format of an input, why something is skipped or dropped, a choice made so that the code can run again on what an earlier run left.";
+export const NO_REDUNDANT_COMMENTS = "- No comment that only repeats what the code says.";
+
+function commentSection(language: ProcessLanguage): string[] {
+  const functions = language === "bash"
+    ? "- Before each helper function, a block of `#` comments, as the modules of DeBasher have: what the function does, and why when it is not obvious, then its arguments (`# $1 - ...`) and what it prints or returns."
+    : language === "python"
+      ? "- A docstring for each helper function and class: what it does, and why when it is not obvious."
+      : "- Before each helper function, a comment: what it does, and why when it is not obvious.";
+  return [
+    COMMENT_SECTION_TITLE,
+    "",
+    "Comment the code for someone who did not write it:",
+    "",
+    functions,
+    COMMENT_STEPS,
+    NO_REDUNDANT_COMMENTS,
   ];
 }
 

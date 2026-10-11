@@ -18,7 +18,14 @@ import {
   nodeOptionRole,
   superCall,
 } from "./node";
-import { ASK_BEFORE_GUESSING, describedAs, edgeEnd, fenceFor } from "./codePrompt";
+import {
+  ASK_BEFORE_GUESSING,
+  COMMENT_SECTION_TITLE,
+  NO_REDUNDANT_COMMENTS,
+  describedAs,
+  edgeEnd,
+  fenceFor,
+} from "./codePrompt";
 
 // What the code prompt of a node takes from the runtime library, which the
 // backend reads from the library itself: the reference of what the code of
@@ -70,6 +77,7 @@ export function buildNodeCodePrompt(
         ? "Write the code that the description of the node asks for."
         : request.trim(),
     ],
+    commentSection(),
     returnSection(),
   ];
 
@@ -340,6 +348,22 @@ function codeSection(kind: NodeKind, draft: NodeCode, library: NodeLibrary): str
     }
   }
   return lines;
+}
+
+// How the code of a node is commented: as the runtime library documents its
+// own classes, with a docstring for each method, and a word on the node
+// state, which the hooks have to agree on.
+function commentSection(): string[] {
+  return [
+    COMMENT_SECTION_TITLE,
+    "",
+    "Comment the code for someone who did not write it, as the runtime library documents its own classes:",
+    "",
+    "- A docstring for each helper function and method, and for each hook or method that the node redefines (for a hook, the first line of its body): what it does, and why when it is not obvious.",
+    "- A comment for each step whose reason does not follow from the code: the format of a message, a choice made for the recovery of the node or the idempotence of an effect outside the program, why something is dropped.",
+    "- A comment in the constructor on what the node state holds, which the constructor, `process_data`, `capture_node_state` and `restore_node_state` have to agree on.",
+    NO_REDUNDANT_COMMENTS,
+  ];
 }
 
 function returnSection(): string[] {

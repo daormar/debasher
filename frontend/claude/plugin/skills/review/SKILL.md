@@ -67,6 +67,13 @@ its code. Offer to run the tests when what they do matters to a finding.
   class, and does a node that reads the results of a batch run take its
   directory from `run_dir` rather than build it again from a runs root of
   its own, which breaks silently once the two differ?
+- **Comments.** Is the code commented as its code prompt asks under "How to
+  comment the code": a docstring (or, in Bash, a block of `#` comments) for
+  each helper function and each hook or method that a node redefines, a
+  comment for each step whose reason does not follow from the code (the
+  format of an input, a choice made for recovery or idempotence, why
+  something is dropped), and, in a node, what the node state holds? Is there
+  a comment that only repeats the code, or one that the code contradicts?
 - **Its tests.** Is there a test? Does it check the outputs, the edges of the
   input and a failure, or only that the process ended? Are `TODO`s or the line
   that makes a skeleton fail still there?

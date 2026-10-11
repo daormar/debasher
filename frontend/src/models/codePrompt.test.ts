@@ -66,6 +66,7 @@ describe("buildCodePrompt", () => {
       "The options",
       "The code to complete",
       "What the code has to do",
+      "How to comment the code",
       "What to return",
     ]);
   });
@@ -196,6 +197,19 @@ describe("buildCodePrompt", () => {
     const prompt = buildCodePrompt(program, count, "", "");
     expect(prompt).toContain("## What to return\n\nIf something that the code depends on is missing or ambiguous");
     expect(prompt).toContain("ask about it before writing any code, all your questions at once, instead of guessing. Otherwise, return the code as follows.\n\nReturn the whole code");
+  });
+
+  it("asks for comments that say what the code does not, in the style of the language", () => {
+    const bash = buildCodePrompt(program, count, "", "");
+    expect(bash).toContain("## How to comment the code\n\nComment the code for someone who did not write it:");
+    expect(bash).toContain("Before each helper function, a block of `#` comments, as the modules of DeBasher have");
+    expect(bash).toContain("its arguments (`# $1 - ...`) and what it prints or returns.");
+    expect(bash).toContain("A comment for each step whose reason does not follow from the code: the format of an input");
+    expect(bash).toContain("No comment that only repeats what the code says.");
+    const python = buildCodePrompt(program, withLanguage(count, "python"), "", "");
+    expect(python).toContain("A docstring for each helper function and class");
+    expect(python).not.toContain("`# $1 - ...`");
+    expect(buildCodePrompt(program, withLanguage(count, "r"), "", "")).toContain("Before each helper function, a comment: what it does");
   });
 
   it("asks for the whole code in a single block, with the function line in Bash", () => {

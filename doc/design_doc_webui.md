@@ -3520,7 +3520,17 @@ under a heading of its own:
    to change the code as the code request says and to keep the rest.
 6. **The code request.** What the user wrote in the prompt panel, or, when it
    is blank, to write the code that the description of the process asks for.
-7. **What the AI tool returns.** The whole code (for a Bash process, including
+7. **How to comment the code**, for whoever reads the code later, in the style
+   of the code of DeBasher itself: before each helper function, in Bash, a block
+   of `#` comments with what it does, its arguments and what it prints or
+   returns, as the modules of the engine and of `data/programs` have; in Python,
+   a docstring for each helper function and class; in another language, a
+   comment. A comment for each step whose reason does not follow from the code
+   (the format of an input, why something is skipped or dropped, a choice made
+   so that the code can run again on what an earlier run left), and none that
+   only repeats the code. What the comments say is what the program model does
+   not hold, and they reach the code editor with the code.
+8. **What the AI tool returns.** The whole code (for a Bash process, including
    the line that names its function) in a single fenced code block tagged with
    the language, with nothing else inside the block. The user copies the code
    from the answer and pastes it over the draft, so the answer has to hold all
@@ -3649,7 +3659,18 @@ resident program is, it says:
    for a hook that the node inherits, the inherited code, which an empty body
    runs and a body replaces, or that it could not be read.
 6. **The code request**, as for a process.
-7. **What the AI tool returns.** Each part that changes, whole, in a fenced code
+7. **How to comment the code**, as the runtime library documents its own
+   classes: a docstring for each helper function and method, and for each hook
+   or method that the node redefines (for a hook, as the first line of its body,
+   since a hook part has no `def` line); a comment for each step whose reason
+   does not follow from the code (the format of a message, a choice made for the
+   recovery of the node or the idempotence of an effect outside the program, why
+   something is dropped); a comment in the constructor on what the node state
+   holds, which the constructor, `process_data`, `capture_node_state` and
+   `restore_node_state` have to agree on; and none that only repeats the code. A
+   docstring in a part comes back unchanged when the module is imported, since
+   import takes each part as text.
+8. **What the AI tool returns.** Each part that changes, whole, in a fenced code
    block tagged `python`, under a heading with the name of the part, the one
    that the node code editor gives it; a part that the answer leaves out stays
    as it is. One code prompt serves both a new node, whose constructor,

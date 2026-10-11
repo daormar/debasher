@@ -81,6 +81,7 @@ describe("buildNodeCodePrompt", () => {
       "The ports and options",
       "The code to complete",
       "What the code has to do",
+      "How to comment the code",
       "What to return",
     ]);
   });
@@ -114,6 +115,15 @@ describe("buildNodeCodePrompt", () => {
     const prompt = buildNodeCodePrompt(program, launch, emptyNodeCode(), "", library);
     expect(prompt).toContain("- `-inreq` (configuration option, string)");
     expect(prompt).not.toContain("as a request for a batch run");
+  });
+
+  it("asks for comments as the runtime library documents its classes", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("## How to comment the code\n\nComment the code for someone who did not write it, as the runtime library documents its own classes:");
+    expect(prompt).toContain("A docstring for each helper function and method, and for each hook or method that the node redefines (for a hook, the first line of its body)");
+    expect(prompt).toContain("a choice made for the recovery of the node or the idempotence of an effect outside the program, why something is dropped.");
+    expect(prompt).toContain("A comment in the constructor on what the node state holds, which the constructor, `process_data`, `capture_node_state` and `restore_node_state` have to agree on.");
+    expect(prompt).toContain("No comment that only repeats what the code says.");
   });
 
   it("asks for the methods of the runtime library rather than code of its own", () => {
