@@ -159,9 +159,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **A connected input** is declared with channel `none` and no value
   (`shared_dir`, naming the directory, when it reads a shared directory):
   the channel of the output says how the data travels, so in a FIFO
-  connection only the output has channel `fifo`. In a resident program an
-  input on another channel takes no connection, and the connection is what
-  makes an input a business input.
+  connection only the output has channel `fifo`. An input on another channel
+  takes no connection, and an edit that moves a connected input to one is
+  refused. In a resident program the connection is what makes an input a
+  business input.
 - **A file connection** makes the reader wait until the writer finished
   (`afterok`, or task by task between two processes of several tasks). Use it
   for batch steps, results that have to stay, steps that may be skipped or run

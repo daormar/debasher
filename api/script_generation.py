@@ -304,6 +304,39 @@ def _define_opts_func_foot():
 Connections = list[tuple[str, str, str]]
 
 
+def _check_connected_input_channels(program: Program) -> None:
+    """
+    Refuses an input that a connection reaches on an option channel that
+    would hide the connection: _option_definition_line takes the value of
+    such an input from its channel, and the connection would be lost. The
+    channel of the output says how the data travels, so a connected input
+    is on "none", or on "shared_dir" when it reads a shared directory (the
+    rule of isConnectedInputChannel in the frontend, whose normalization
+    keeps the metadata it saves in line with it).
+    """
+    options = {
+        (process.id, option.id): (process, option)
+        for process in program.processes
+        for option in process.options
+    }
+    for edge in program.edges:
+        source = options.get((edge.sourceProcessId, edge.sourceOptionId))
+        target = options.get((edge.targetProcessId, edge.targetOptionId))
+        if source is None or target is None:
+            continue
+        (source_process, source_option), (target_process, target_option) = source, target
+        if target_option.channel == "none" or (
+            target_option.channel == "shared_dir" and source_option.channel == "shared_dir"
+        ):
+            continue
+        raise ValueError(
+            f'Option "{target_option.label}" on "{target_process.name}" uses channel '
+            f'"{target_option.channel}", so it can\'t read "{source_option.label}" of '
+            f'"{source_process.name}": a connected input receives what the output delivers, '
+            'through the channel of the output, and so uses channel "none".'
+        )
+
+
 def _connections_by_option(program: Program) -> dict[tuple[str, str], Connections]:
     """
     Maps a target option, as (process id, option id), to the edges
@@ -996,6 +1029,7 @@ def _build_script(
     lines = [SCRIPT_HEADER, "", ""]
 
     process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
+    _check_connected_input_channels(program)
     connections_by_option = _connections_by_option(program)
 
     # Add preamble

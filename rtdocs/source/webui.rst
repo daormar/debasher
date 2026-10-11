@@ -191,7 +191,11 @@ an input, as the engine requires. Its editor sets:
 * its **channel**, how its data gets to the process: a direct value; a
   value descriptor, the path of a file where an output writes a value
   for the processes connected to it; a FIFO; a shared directory; or,
-  for an output, the output directory of the process;
+  for an output, the output directory of the process. A connected
+  input receives its data through the channel of the output it reads,
+  so the editor shows "From connection" instead of a choice, and an
+  input on a channel of its own, such as a FIFO, cannot be connected:
+  set it to a direct value first;
 * its **value**, for a direct value, which is a Bash word such as
   ``10`` or ``${task_idx}``, written into the generated script as it is.
 

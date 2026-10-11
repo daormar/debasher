@@ -1,5 +1,5 @@
 import { isValidEdge } from "./connections";
-import { dataTypeProblem } from "./dataTypes";
+import { connectedChannelProblem, connectedInputChannelProblem, dataTypeProblem } from "./dataTypes";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
 import { DIRECTORY_CHANNELS } from "./option";
@@ -115,7 +115,11 @@ function editProblem(program: Program, edit: EditOp): string | null {
         // data type follows them (see normalizeDataTypes)
         (edit.changes.dataType === undefined
           ? null
-          : dataTypeProblem(program, process, { ...option!, ...edit.changes }))
+          : dataTypeProblem(program, process, { ...option!, ...edit.changes })) ??
+        // A channel that would hide the connection of a connected input
+        (edit.changes.channel === undefined
+          ? null
+          : connectedChannelProblem(program, process, { ...option!, ...edit.changes }))
       );
     }
 
@@ -137,6 +141,15 @@ function editProblem(program: Program, edit: EditOp): string | null {
       const missing = missingOption(source, edge.sourceOptionId) ?? missingOption(target, edge.targetOptionId);
       if (missing) {
         return missing;
+      }
+      const sourceOption = source.options.find(option => option.id === edge.sourceOptionId)!;
+      const targetOption = target.options.find(option => option.id === edge.targetOptionId)!;
+      const channelProblem =
+        sourceOption.direction === "output" && targetOption.direction === "input"
+          ? connectedInputChannelProblem(target, targetOption, source, sourceOption)
+          : null;
+      if (channelProblem) {
+        return channelProblem;
       }
       if (!isValidEdge(program, edge)) {
         const label = (process: ProgramProcess, optionId: string) =>

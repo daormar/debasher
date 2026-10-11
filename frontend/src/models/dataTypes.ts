@@ -10,12 +10,43 @@ import type { Program } from "./program";
 // line of the FIFO, or of the value in the descriptor. A directory channel
 // carries no data of a type of its own: its data type is always "dir". A
 // connected input carries what the output it reads carries, and so has its
-// data type.
+// data type. It also receives it through the channel of that output, so its
+// own channel is "none", or "shared_dir" when it reads a shared directory.
 
 // The data type that an option channel fixes, or null when the data type
 // is free: the directory channels name a directory, whatever is in it.
 export function channelDataType(channel: OptionChannel): OptionDataType | null {
   return channel === "shared_dir" || channel === "process_outdir" ? "dir" : null;
+}
+
+// Whether an input on option channel `channel` can read an output on
+// `sourceChannel`. The channel of the output says how the data travels, so
+// the input itself is on "none"; the exception is an input that reads a
+// shared directory, which may name that directory too, on "shared_dir"
+// (connect, in programEdits.ts, makes it so). An input on another channel
+// would take its value from that channel, and the connection would be lost.
+export function isConnectedInputChannel(channel: OptionChannel, sourceChannel: OptionChannel): boolean {
+  return channel === "none" || (channel === "shared_dir" && sourceChannel === "shared_dir");
+}
+
+// Why `option` of `process`, an input on the channel it has, cannot read
+// `sourceOption` of `sourceProcess`, or null.
+export function connectedInputChannelProblem(
+  process: ProgramProcess,
+  option: ProgramOption,
+  sourceProcess: ProgramProcess,
+  sourceOption: ProgramOption
+): string | null {
+  if (isConnectedInputChannel(option.channel, sourceOption.channel)) {
+    return null;
+  }
+  const alternative = sourceOption.channel === "shared_dir" ? ' (or "shared_dir", naming the same directory)' : "";
+  return (
+    `Option "${option.label}" of process "${process.name}" uses the channel "${option.channel}", ` +
+    `so it cannot read "${sourceOption.label}" of process "${sourceProcess.name}": an input that a ` +
+    `connection reaches receives what the output delivers, through the channel of the output, and so ` +
+    `is declared with the channel "none"${alternative}.`
+  );
 }
 
 // The incoming edge of an input, if it is connected. Only inputs on a
@@ -98,6 +129,40 @@ export function normalizeDataTypes(program: Program): Program {
     return { ...process, options };
   });
   return changed ? { ...program, processes } : program;
+}
+
+// The program with every connected input whose own channel would hide its
+// connection (see isConnectedInputChannel) moved to the channel "none",
+// without the fields that only the channel it leaves takes. The edges are
+// the one source of truth about what is connected, so this repairs a
+// program whose metadata breaks the rule, such as one edited by hand.
+export function normalizeConnectedInputChannels(program: Program): Program {
+  let changed = false;
+  const processes = program.processes.map(process => {
+    let processChanged = false;
+    const options = process.options.map(option => {
+      const source = connectedSource(program, process.id, option.id);
+      if (!source || isConnectedInputChannel(option.channel, source.option.channel)) {
+        return option;
+      }
+      processChanged = true;
+      const { fifoTag: _fifoTag, subpath: _subpath, ...rest } = option;
+      return { ...rest, channel: "none" as const, mirror: false };
+    });
+    if (!processChanged) {
+      return process;
+    }
+    changed = true;
+    return { ...process, options };
+  });
+  return changed ? { ...program, processes } : program;
+}
+
+// Why a connected input cannot be on the channel it has, or null: that
+// channel would hide its connection (see isConnectedInputChannel).
+export function connectedChannelProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
+  const source = connectedSource(program, process.id, option.id);
+  return source ? connectedInputChannelProblem(process, option, source.process, source.option) : null;
 }
 
 // Why the data type of an option cannot be the one it has, or null: the

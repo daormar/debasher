@@ -429,3 +429,43 @@ def test_an_output_taken_from_the_process_specifications_is_refused():
     option.fromProcessSpec = True
     with pytest.raises(ValueError, match="is an output"):
         _option_definition_line(_make_process([option]), option, {}, {})
+
+
+# --- The channel of a connected input --------------------------------------
+
+from api.models import ProgramEdge  # noqa: E402
+
+
+def _connected_program(target_channel, source_channel="fifo"):
+    """counter writes -outf, on `source_channel`; reader reads it through
+    -in, an input on `target_channel`."""
+    counter = _make_process([
+        ProgramOption(id="out", label="-outf", direction="output", dataType="int", channel=source_channel,
+                      description="", value="nums" if source_channel != "none" else "${process_outdir}/n",
+                      commandLine=False)
+    ]).model_copy(update={"id": "c", "name": "counter"})
+    reader = _make_process([
+        ProgramOption(id="in", label="-in", direction="input", dataType="int", channel=target_channel,
+                      description="", value="nums" if target_channel != "none" else "",
+                      commandLine=False)
+    ]).model_copy(update={"id": "r", "name": "reader"})
+    edge = ProgramEdge(id="e", sourceProcessId="c", sourceOptionId="out", targetProcessId="r", targetOptionId="in")
+    return _seq_program([], [counter, reader], sharedDirs=["nums"], edges=[edge])
+
+
+def test_a_connected_input_reads_its_connection():
+    script = generate_script(_connected_program("none"), skip_redundant_check=True)
+    assert 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist' in script
+
+
+@pytest.mark.parametrize("target_channel, source_channel", [("fifo", "fifo"), ("shared_dir", "fifo")])
+def test_a_connected_input_on_a_channel_that_would_hide_its_connection_is_refused(target_channel, source_channel):
+    # The input would take its value from its own channel, and the
+    # connection would be lost: a FIFO of its own that nothing writes
+    with pytest.raises(ValueError, match="a connected input receives what the output delivers"):
+        generate_script(_connected_program(target_channel, source_channel), skip_redundant_check=True)
+
+
+def test_a_connected_input_names_the_shared_directory_that_it_reads():
+    script = generate_script(_connected_program("shared_dir", "shared_dir"), skip_redundant_check=True)
+    assert 'debasher::define_opt_from_shared_dir "-in" "nums" optlist' in script

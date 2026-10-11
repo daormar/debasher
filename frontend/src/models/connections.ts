@@ -1,3 +1,4 @@
+import { isConnectedInputChannel } from "./dataTypes";
 import type { ProgramEdge } from "./edge";
 import { edgeEndText } from "./edge";
 import { isFanoutOption } from "./option";
@@ -147,6 +148,17 @@ export function isValidEdge(
       isBusinessOutput(sourceOptionDef) &&
       isBusinessInputCandidate(targetOptionDef)
     )
+  ) {
+    return false;
+  }
+
+  // The channel of the output says how the data travels, so an input on
+  // a channel of its own would take its value from it and lose the
+  // connection (see isConnectedInputChannel)
+  if (
+    sourceOptionDef &&
+    targetOptionDef &&
+    !isConnectedInputChannel(targetOptionDef.channel, sourceOptionDef.channel)
   ) {
     return false;
   }

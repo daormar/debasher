@@ -1,4 +1,4 @@
-import { normalizeDataTypes } from "./dataTypes";
+import { normalizeConnectedInputChannels, normalizeDataTypes } from "./dataTypes";
 import type { EdgeDisplay, ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
 import { MOD_DIR_SEP, splitModDir } from "./modDir";
@@ -18,9 +18,10 @@ import type { SeqProcess } from "./seqProcess";
 // the caller, never here, so that an edit gives the same result each time it
 // is applied.
 //
-// What an edit does not do: keep the references of the connected options, and
-// the data types that an option channel or a connection fixes, in step with
-// the connections, which normalizeProgram does after every edit, and
+// What an edit does not do: keep the references of the connected options,
+// their channels, and the data types that an option channel or a connection
+// fixes, in step with the connections, which normalizeProgram does after
+// every edit, and
 // ask the user before an edit frees a group of processes added with another
 // program, which is up to the caller (see dissolveGroups).
 
@@ -97,9 +98,11 @@ function normalizeConnectedOptionValues(source: Program): Program {
  * Re-derives every connected option's "[process;option]" value from the
  * current edges and names, so renaming a process or a connected option's
  * label can't leave a stale reference behind in what gets saved/generated,
- * and sets the data type that an option channel or a connection fixes
- * (see normalizeDataTypes), which also repairs a program whose metadata
- * breaks that rule, such as one edited by hand.
+ * moves a connected input off a channel that would hide its connection
+ * (see normalizeConnectedInputChannels), and sets the data type that an
+ * option channel or a connection fixes (see normalizeDataTypes), which also
+ * repairs a program whose metadata breaks those rules, such as one edited
+ * by hand.
  * Also self-heals a falsy executionOptions.scheduler (e.g. a file saved
  * while it was blank, see ExecutionOptionsEditor, whose dropdown defaults
  * its *displayed* value to "BUILTIN" without ever correcting a genuinely
@@ -110,7 +113,11 @@ function normalizeConnectedOptionValues(source: Program): Program {
  */
 export function normalizeProgram(source: Program): Program {
 
-  const normalized = normalizeDataTypes(normalizeConnectedOptionValues(source));
+  // The channels first: an input that leaves "shared_dir" then gets the
+  // reference to its connection as its value
+  const normalized = normalizeDataTypes(
+    normalizeConnectedOptionValues(normalizeConnectedInputChannels(source))
+  );
 
   return normalized.executionOptions.scheduler
     ? normalized

@@ -586,6 +586,23 @@ it (see "What the code prompt says"). A Bash process is the exception for an
 input that reads a value descriptor: `read_opt_value_from_func_args` gives the
 value, not the path.
 
+A connected input also receives its data through the option channel of the
+output that it reads, so its own option channel is `none`. The exception is an
+input that reads a shared directory: it may name that directory too, on
+`shared_dir`. An input on another channel would take its value from that
+channel, and its connection would be lost: on `fifo`, for example, it would read
+a FIFO of its own that no process writes, and the run would never end. The web
+UI keeps the rule wherever a connected input can arise. The canvas refuses a
+connection into an input on another channel, in a general program as in a
+resident one, and so do the checks of the edits that an agent makes, with a
+refusal that says how the input is declared; they also refuse an
+`updateOption` that moves a connected input to such a channel. The editor of an
+option shows "From connection" for the channel of a connected input instead of
+a choice. `normalizeProgram` moves a connected input on another channel to
+`none`: this repairs a program whose metadata breaks the rule, and makes an
+input follow its output when the output leaves `shared_dir`. Script generation
+refuses such an input in metadata that did not go through that normalization.
+
 ## Connections
 
 An edge goes from an output option of a process to an input option of another
@@ -615,6 +632,8 @@ the engine:
   specifications, all of which script generation writes before it looks at
   any connection. The editor of an option does not turn a connected input
   into any of them either.
+- The input is on the option channel `none`, or on `shared_dir` when the
+  output is too (see "Data type and option channel").
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same directory,
