@@ -168,8 +168,9 @@ wait_for_fresh_halted_marker()
 ########
 # Reads a node's own .id file and sends its whole process group a
 # graceful stop signal (see debasher::_stop_pid_gracefully). A missing or
-# empty .id file (never launched, or already gone) is not an error: there
-# is nothing to stop.
+# empty .id file (never launched), or one whose task has ended (see
+# debasher::_builtin_sched_live_pid), is not an error: there is nothing to
+# stop.
 stop_node_gracefully()
 {
     local absdirname=$1
@@ -179,11 +180,12 @@ stop_node_gracefully()
     if [ ! -f "${id_file}" ]; then
         return 0
     fi
-    local pid
-    pid=$("${CAT}" "${id_file}" 2>/dev/null)
-    if [ -z "${pid}" ]; then
+    local id_info pid
+    id_info=$("${CAT}" "${id_file}" 2>/dev/null)
+    if [ -z "${id_info}" ]; then
         return 0
     fi
+    pid=$(debasher::_builtin_sched_live_pid "${id_info}") || return 0
     debasher::_stop_pid_gracefully "${pid}"
 }
 

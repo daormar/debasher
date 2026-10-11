@@ -1063,15 +1063,18 @@ def test_only_the_tasks_that_did_not_end_cleanly_and_whose_pid_is_gone_are_down(
     (exec_dir / "Work_2.id").write_text("not a pid\n")
     (exec_dir / "Work_3.id").write_text(f"{_dead_pid()}\n")
     (exec_dir / "Work_3.finished").write_text("")
+    # With its start time, as the engine writes it
+    (exec_dir / "Work_4.id").write_text(f"{_dead_pid()}@Sun_Oct_11_10:00:00_2026\n")
+    (exec_dir / "Work_5.id").write_text(f"{os.getpid()}@Sun_Oct_11_10:00:00_2026\n")
     (exec_dir / "Work_10.opts").write_text("")
 
     tasks = node_relaunch._tasks(str(tmp_path), "Work")
 
     assert [(task.stem, task.index) for task in tasks] == [
-        ("Work_0", 0), ("Work_1", 1), ("Work_2", 2), ("Work_3", 3)
+        ("Work_0", 0), ("Work_1", 1), ("Work_2", 2), ("Work_3", 3), ("Work_4", 4), ("Work_5", 5)
     ]
     # Work_3 ended cleanly, as a node does in an orderly stop.
-    assert [node_relaunch._is_down(task) for task in tasks] == [False, True, False, False]
+    assert [node_relaunch._is_down(task) for task in tasks] == [False, True, False, False, True, False]
 
 
 _TRY_LOCK = (

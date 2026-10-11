@@ -72,9 +72,12 @@ def _tasks(output_dir: str, process_name: str) -> list[Task]:
 
 def _pid_exists(task: Task) -> bool | None:
     """Whether the PID of the task exists; None when its .id file gives no
-    PID."""
+    PID. The file holds "<pid>@<start time>" (see
+    debasher::_builtin_sched_launch_id_info in the engine), of which only
+    the PID is read, as the Supervisor does: a PID that another process got
+    since only keeps the task from being taken for down."""
     try:
-        pid = int(task.pid_file.read_text().strip())
+        pid = int(task.pid_file.read_text().strip().split("@", 1)[0])
     except (OSError, ValueError):
         return None
 

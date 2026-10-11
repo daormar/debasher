@@ -1790,13 +1790,15 @@ used, so that the tools that read the run later take the same one, wherever
 they run. A resident program always runs on the built-in scheduler.
 
 The rest of the engine does not depend on the scheduler, and asks it for a few
-things only: to write the process script of a process, to launch it, to give
-the ids of what it launched, to tell whether an id still runs, and to stop an
-id. The ids of a process are kept in its exec directory, in a `.id` file, and a
-process is `IN-PROGRESS` exactly when one of its ids still runs (see "Process
-status"). For the built-in scheduler an id is the process id of the script of
-a task; for the Slurm scheduler it is a job id. `debasher_stop` ends a run
-through the same operation, whatever its scheduler.
+things only: to write the process script of a process, to launch it, to give the
+ids of what it launched, to tell whether an id still runs, and to stop an id.
+The ids of a process are kept in its exec directory, in a `.id` file, and a
+process is `IN-PROGRESS` exactly when an id of it still runs, other than the id
+of a task that has its completion marker (see "Process status"). For the
+built-in scheduler an id is the process id of the script of a task, together
+with the time at which that process started (see "The built-in scheduler"); for
+the Slurm scheduler it is a job id. `debasher_stop` ends a run through the same
+operation, whatever its scheduler.
 
 Both schedulers take the dependencies of each process from the final process
 specification, and give them the meaning described in "Dependency types and
@@ -1903,10 +1905,25 @@ for more CPUs or memory than the budget, which the validation checks too, in
 the same way.
 
 A task is launched as a background process of its own process group, whose
-process id goes to the `.id` file of the task, so that stopping it reaches
+id (see below) goes to the `.id` file of the task, so that stopping it reaches
 everything it started. The script of the task ignores `SIGTERM` itself, so
 that a graceful stop sent to its whole group ends what it runs but lets it
 finish its own bookkeeping; `debasher_stop` sends `SIGKILL` to the group.
+
+Once a task has ended, the system may give its process id to another process.
+The id of a task is therefore its process id together with the time at which
+that process started, as `ps` gives it with the locale and the time zone fixed,
+so that every tool gets the same text, and its blanks turned into `_`:
+`<pid>@<start time>`. The task runs while a process with that process id exists,
+can be signalled by the user who asks, and started at that time. The scheduler,
+`debasher_stop`, a new launch of the same task (which first stops the one before
+it if it still runs) and the orderly stop of a resident program signal only such
+a process, never one that merely has the process id of a task that has ended.
+`debasher_status`, `debasher_stop` and the scheduler do not ask about the id of
+a task that has its completion marker either. Without `ps`, the id is the
+process id alone, and the process id then decides by itself whether the task
+runs, as it does for any id without a start time; a task that has already ended
+when its start time is read gets an empty one, and never runs.
 
 The built-in scheduler gives the dependency types the meaning of the table. A
 dependency holds when the status of the producer says so: `after` once the
@@ -2239,7 +2256,7 @@ directory and from the scheduler, and is kept nowhere:
 | Status | When |
 |---|---|
 | `TO-DO` | the process has no process script: none of its tasks has been launched or cancelled |
-| `IN-PROGRESS` | one of the ids of the process still runs, as the scheduler says |
+| `IN-PROGRESS` | an id of the process, other than that of a task with its completion marker, still runs, as the scheduler says |
 | `FINISHED` | every task of the process has its completion marker |
 | `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched or cancelled, none running, and some neither launched nor cancelled |
 | `UNFINISHED` | any other case: some task of the process was launched or cancelled, nothing of it runs, and some task has no completion marker |
@@ -2254,11 +2271,13 @@ any task has finished: an array whose every task was launched and failed is
 as failed in the run where its tasks ran. A cancelled task counts with the
 launched ones, and gives its process a process script, so that a process whose
 every task was cancelled is `UNFINISHED` too, and not `TO-DO` (see "Tasks that
-will not be launched"). An id runs when the process with that id exists, for the
-built-in scheduler, or when Slurm still lists the job, for the Slurm scheduler;
-a process id that the system gives again to an unrelated process after the task
-has ended can make the process look `IN-PROGRESS`. `UNFINISHED_BUT_RUNNABLE` is
-the state of an array that the built-in scheduler was launching a few tasks at a
+will not be launched"). An id runs when the process that it names still runs,
+for the built-in scheduler (see "The built-in scheduler"), or when Slurm still
+lists the job, for the Slurm scheduler. The id of a task that has its completion
+marker is not asked about: the task has ended, and this keeps a system process
+that got the same process id from making the process look `IN-PROGRESS`, even
+where the start times cannot tell them apart. `UNFINISHED_BUT_RUNNABLE` is the
+state of an array that the built-in scheduler was launching a few tasks at a
 time, under a throttle or a budget of CPUs and memory, when its run stopped, and
 the next run launches the tasks that are left. During a run, it is also the
 state of an array whose remaining tasks still wait for their dependencies, such
@@ -2676,9 +2695,11 @@ leaves, by design, to the program or to whoever runs it.
 - **Ending a task.** A process function that calls `exit`, or that a signal
   kills, ends its whole task, with no `_post` method and no error message from
   the engine (see "Executing a task").
-- **Process ids.** A process id that the system gives again to an unrelated
-  process can make a process of the built-in scheduler look `IN-PROGRESS`
-  (see "Process status").
+- **Process ids.** Without `ps`, a process id that the system gives again to an
+  unrelated process can make a task of the built-in scheduler that ended without
+  its completion marker look running, and `debasher_stop`, a new launch of the
+  task or the orderly stop of a resident program may then signal that process
+  (see "The built-in scheduler").
 - **Names.** A process, or a shared directory, may have the name of a file of
   the engine at the top of the output directory, and the engine does not
   refuse it (see "The output directory").

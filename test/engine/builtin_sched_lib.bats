@@ -6,7 +6,7 @@
 # Supervisor to relaunch a downed node) calls, so a relaunch behaves
 # exactly like the original launch. The tests use a tiny fake process
 # script that records what it saw in its environment; _launch itself
-# writes its PID to the .id file.
+# writes its id, "<pid>@<start time>", to the .id file.
 
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
@@ -19,6 +19,7 @@ setup() {
     RM="$(command -v rm)"
     CAT="$(command -v cat)"
     MV="$(command -v mv)"
+    PS="$(command -v ps)"
     debasher_pythondir="/fake/pythondir"
     debasher_pkgpythondir="/fake/pkgpythondir"
     debasher_libexecdir="/fake/libexecdir"
@@ -47,6 +48,22 @@ EOF
     chmod +x "${SCRIPT}"
 }
 
+# The PID in the .id file $1
+pid_in_id_file() {
+    local id_info
+    id_info="$(cat "$1")"
+    echo "${id_info%%@*}"
+}
+
+# Starts a process that sleeps, as the leader of its own process group, as
+# a launched task would be, and leaves its PID in SLEEPER_PID
+start_sleeper() {
+    set -m
+    sleep 100 &
+    SLEEPER_PID=$!
+    set +m
+}
+
 # The launched script keeps running after _launch returns, so wait for
 # its own report instead of reading it right away.
 wait_for_report() {
@@ -63,7 +80,23 @@ wait_for_report() {
     wait_for_report
     # The PID that _launch records must be the script's own $$, the leader
     # of its process group, which debasher::_stop_pid kills as a group.
-    [ "$(cat "${EXECDIR}/proc.id")" = "$(grep '^pid=' "${EXECDIR}/seen.txt" | cut -d= -f2)" ]
+    [ "$(pid_in_id_file "${EXECDIR}/proc.id")" = "$(grep '^pid=' "${EXECDIR}/seen.txt" | cut -d= -f2)" ]
+}
+
+@test "_launch records the start time of the launched process with its PID" {
+    cat > "${SCRIPT}" <<'EOF'
+#!/bin/bash
+sleep 100
+EOF
+    chmod +x "${SCRIPT}"
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    local id_info pid
+    id_info="$(cat "${EXECDIR}/proc.id")"
+    pid="${id_info%%@*}"
+    [ "${id_info}" = "${pid}@$(debasher::_builtin_sched_pid_start_time "${pid}")" ]
+    [[ "${id_info}" != *" "* ]]
+    [ "$(debasher::_builtin_sched_live_pid "${id_info}")" = "${pid}" ]
+    kill -9 -- "-${pid}"
 }
 
 @test "_launch returns with the new PID already in the .id file, replacing a stale one" {
@@ -72,7 +105,7 @@ wait_for_report() {
     # Checked right away, before the script has done anything (it sleeps
     # first): the new PID is there as soon as _launch returns.
     local pid
-    pid="$(cat "${EXECDIR}/proc.id")"
+    pid="$(pid_in_id_file "${EXECDIR}/proc.id")"
     [ -n "${pid}" ]
     [ "${pid}" != "999999" ]
     [ ! -e "${EXECDIR}/proc.id.tmp" ]
@@ -90,7 +123,7 @@ EOF
     debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
     [ $((SECONDS - start)) -lt 2 ]
     local pid
-    pid="$(cat "${EXECDIR}/proc.id")"
+    pid="$(pid_in_id_file "${EXECDIR}/proc.id")"
     kill -0 "${pid}"
     kill -9 -- "-${pid}"
     wait "${pid}" 2>/dev/null || true
@@ -106,7 +139,7 @@ sleep 100
 EOF
     chmod +x "${SCRIPT}"
     debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
-    OLD_PID="$(cat "${EXECDIR}/proc.id")"
+    OLD_PID="$(pid_in_id_file "${EXECDIR}/proc.id")"
     kill -0 "${OLD_PID}"
 
     cat > "${SCRIPT}" <<'EOF'
@@ -124,6 +157,53 @@ EOF
 
     run kill -0 "${OLD_PID}"
     [ "$status" -ne 0 ]
+}
+
+@test "_launch leaves alone a process that got the PID of the previous incarnation" {
+    # The previous incarnation has ended, and the system gave its PID to
+    # another process, which started at another time
+    start_sleeper
+    echo "${SLEEPER_PID}@Mon_Jan__1_00:00:00_2001" > "${EXECDIR}/proc.id"
+
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    wait_for_report
+
+    kill -0 "${SLEEPER_PID}"
+    kill -9 -- "-${SLEEPER_PID}"
+}
+
+@test "_builtin_sched_live_pid takes a task for running only while its process, started at its time, runs" {
+    start_sleeper
+    local start
+    start="$(debasher::_builtin_sched_pid_start_time "${SLEEPER_PID}")"
+    [ -n "${start}" ]
+
+    [ "$(debasher::_builtin_sched_live_pid "${SLEEPER_PID}@${start}")" = "${SLEEPER_PID}" ]
+    # Another process that got the same PID
+    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@Mon_Jan__1_00:00:00_2001" || false
+    # A task that ended before its start time could be read
+    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@" || false
+    # An id without a start time, as an older run wrote it
+    [ "$(debasher::_builtin_sched_live_pid "${SLEEPER_PID}")" = "${SLEEPER_PID}" ]
+
+    kill -9 -- "-${SLEEPER_PID}"
+    wait "${SLEEPER_PID}" 2>/dev/null || true
+    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@${start}" || false
+}
+
+@test "_builtin_sched_stop_process stops the running tasks and leaves alone the processes that got the PIDs of ended ones" {
+    start_sleeper
+    local running="${SLEEPER_PID}@$(debasher::_builtin_sched_pid_start_time "${SLEEPER_PID}")"
+    local running_pid=${SLEEPER_PID}
+    start_sleeper
+    local reused="${SLEEPER_PID}@Mon_Jan__1_00:00:00_2001"
+
+    debasher::_builtin_sched_stop_process "${reused} ${running}"
+
+    wait "${running_pid}" 2>/dev/null || true
+    ! kill -0 "${running_pid}" 2>/dev/null || false
+    kill -0 "${SLEEPER_PID}"
+    kill -9 -- "-${SLEEPER_PID}"
 }
 
 @test "_launch names the .id file after the task index for an array task and exports the index" {
@@ -186,7 +266,7 @@ EOF
 
     debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
     local pid
-    pid=$(cat "${EXECDIR}/proc.id")
+    pid=$(pid_in_id_file "${EXECDIR}/proc.id")
     [ -n "${pid}" ]
 
     kill -TERM -- "-${pid}"
@@ -602,6 +682,26 @@ launch_arr_task() {
 
     run debasher::_get_process_status "${OUTDIR}" arr
     [ "${output}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+}
+
+@test "the id of a finished task is not asked about, even when it names a running process" {
+    setup_array_status
+    # Every id runs, as a process id that the system gave again to another
+    # process seems to when its start time cannot be compared
+    debasher::_id_exists() { return 0; }
+    local idx
+    for idx in 0 1 2; do
+        launch_arr_task "${idx}"
+        mark_task_finished arr "${idx}"
+    done
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+
+    # A task without its completion marker is still asked about
+    "${RM}" "$(debasher::_get_task_finished_filename "${OUTDIR}" arr 2)"
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]
 }
 
 # --- tasks that will not be launched ----------------------------------------

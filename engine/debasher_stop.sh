@@ -138,9 +138,10 @@ process_stop_for_pfile()
         # Check process status
         local status=$(debasher::_get_process_status "${absdirname}" ${processname})
 
-        # Obtain ids
+        # Obtain the ids of the tasks that may still run: the id of a task
+        # that has ended may name another process by now
         local ids_info
-        ids_info=$(debasher::_read_ids_from_files "${absdirname}" ${processname})
+        ids_info=$(debasher::_read_ids_of_unfinished_tasks "${absdirname}" ${processname})
 
         # Print status
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then

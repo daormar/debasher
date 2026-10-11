@@ -184,9 +184,11 @@ node_of_process()
 
 ########
 # Echoes the state of the task of node $2, from its own .id and .finished,
-# the files that debasher_status reads for a whole process: alive while the
-# process in its .id exists, otherwise finished with a .finished, down with
-# an .id and no .finished, and not_launched with no .id yet.
+# the files that debasher_status reads for a whole process: finished with a
+# .finished, whose .id is then not asked about, as debasher_status does not
+# (see debasher::_read_ids_of_unfinished_tasks); otherwise alive while the
+# process that its .id names still runs, down with an .id, and not_launched
+# with no .id yet.
 task_state_of_node()
 {
     local absdirname=$1
@@ -195,18 +197,16 @@ task_state_of_node()
     local id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
     local finished_file=$(debasher::_resident_tool_node_finished_filename "${absdirname}" "${node}")
 
-    if [ -f "${id_file}" ]; then
+    if [ -f "${finished_file}" ]; then
+        echo "finished"
+    elif [ -f "${id_file}" ]; then
         local id
         id=$("${CAT}" "${id_file}")
         if debasher::_id_exists "$(debasher::_get_global_id "${id}")"; then
             echo "alive"
-            return 0
+        else
+            echo "down"
         fi
-    fi
-    if [ -f "${finished_file}" ]; then
-        echo "finished"
-    elif [ -f "${id_file}" ]; then
-        echo "down"
     else
         echo "not_launched"
     fi

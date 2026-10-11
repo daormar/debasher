@@ -1974,16 +1974,18 @@ debasher_builtin_sched::_launch()
         local pid_file=$(debasher::_get_array_taskid_filename "${dirname}" ${processname} ${task_idx})
     fi
 
-    # If a previous incarnation of this same process/task left its PID
-    # behind, kill its whole process group before starting a new one:
-    # a relaunch triggered by a missed heartbeat does not prove the old
-    # one is actually gone (see debasher::_stop_pid), and launching a
-    # second copy while the first still holds its FIFOs would leave two
-    # live incarnations of the same node running at once. A no-op if it
-    # is already gone.
+    # If a previous incarnation of this same process/task left its id
+    # behind and still runs, kill its whole process group before starting
+    # a new one: a relaunch triggered by a missed heartbeat does not prove
+    # the old one is actually gone (see debasher::_stop_pid), and launching
+    # a second copy while the first still holds its FIFOs would leave two
+    # live incarnations of the same node running at once. Nothing is
+    # killed when it has ended, whatever process now has its process id
+    # (see debasher::_builtin_sched_live_pid).
     if [ -f "${pid_file}" ]; then
-        local old_pid=$("${CAT}" "${pid_file}" 2>/dev/null)
-        if [ -n "${old_pid}" ]; then
+        local old_id_info old_pid
+        old_id_info=$("${CAT}" "${pid_file}" 2>/dev/null)
+        if [ -n "${old_id_info}" ] && old_pid=$(debasher::_builtin_sched_live_pid "${old_id_info}"); then
             debasher::_stop_pid "${old_pid}" || true
         fi
     fi
@@ -2012,14 +2014,15 @@ debasher_builtin_sched::_launch()
     local pid=$!
     set +m
 
-    # Record the PID here, not from inside the launched script: $! is
+    # Record the id here, not from inside the launched script: $! is
     # the script's own PID (the background job execs it directly), so
     # the file is complete as soon as this returns, however long the
-    # script takes to start. Written to a temporary file and renamed
-    # over the old one, so that a concurrent reader (debasher_stop, a
-    # relaunch) sees either the old PID or the new one, never an empty
-    # file.
-    echo ${pid} > "${pid_file}.tmp" || return 1
+    # script takes to start. The id is the PID with the start time of
+    # its process (see debasher::_builtin_sched_launch_id_info). Written
+    # to a temporary file and renamed over the old one, so that a
+    # concurrent reader (debasher_stop, a relaunch) sees either the old id
+    # or the new one, never an empty file.
+    debasher::_builtin_sched_launch_id_info "${pid}" > "${pid_file}.tmp" || return 1
     "${MV}" -f "${pid_file}.tmp" "${pid_file}" || return 1
 
     # Unset variables

@@ -60,6 +60,7 @@ debasher_check_installation: Makefile
 	echo "SQUEUE=\"$(SQUEUE)\"" >> $@
 	echo "SACCT=\"$(SACCT)\"" >> $@
 	echo "SCONTROL=\"$(SCONTROL)\"" >> $@
+	echo "PS=\"$(PS)\"" >> $@
 	echo "WGET=\"$(WGET)\"" >> $@
 	echo "PANDOC=\"$(PANDOC)\"" >> $@
 	echo "PYTHON=\"$(PYTHON)\"" >> $@

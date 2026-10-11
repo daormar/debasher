@@ -19,24 +19,96 @@
 ##########################################
 
 ########
-debasher::_builtin_sched_id_exists()
+# The start time of the process with id $1, with no blanks and in a form
+# that depends neither on the locale nor on the time zone of whoever asks,
+# so that the one recorded when a task is launched compares with the one
+# read later by any tool. Fails when there is no such process, or no ps to
+# ask.
+debasher::_builtin_sched_pid_start_time()
 {
     local pid=$1
 
-    kill -0 "$pid"  > /dev/null 2>&1 || return 1
+    local start
+    start=$(LC_ALL=C TZ=UTC0 "${PS}" -o lstart= -p "${pid}" 2> /dev/null) || return 1
 
-    return 0
+    # Squeeze the blanks, the day of the month being padded with one
+    local -a words
+    read -r -a words <<< "${start}"
+    [ ${#words[@]} -gt 0 ] || return 1
+    local IFS="_"
+    echo "${words[*]}"
 }
 
 ########
+# The id of a task that the built-in scheduler launched as process $1, as
+# its .id file keeps it: "<pid>@<start time>". A process id alone does not
+# name the task for good: once the task has ended, the system may give the
+# same id to another process, which would then be taken for the task, as
+# running and as what to stop. The start time tells them apart. Without ps
+# to ask, the id is the process id alone; a process that has already ended
+# when its start time is read gets an empty one, and is never taken for a
+# running task.
+debasher::_builtin_sched_launch_id_info()
+{
+    local pid=$1
+
+    local start
+    if start=$(debasher::_builtin_sched_pid_start_time "${pid}"); then
+        echo "${pid}@${start}"
+    elif kill -0 "${pid}" > /dev/null 2>&1; then
+        echo "${pid}"
+    else
+        echo "${pid}@"
+    fi
+}
+
+########
+# Echoes the process id of the task that the id $1 names (see
+# debasher::_builtin_sched_launch_id_info) if it still runs, and fails
+# otherwise: a process with that id exists, can be signalled by this user
+# and, when the id has a start time, started at that time. A start time
+# that cannot be read now, with no ps to ask, leaves the process id alone
+# to decide, as does an id without one.
+debasher::_builtin_sched_live_pid()
+{
+    local id_info=$1
+
+    local pid=${id_info%%@*}
+    kill -0 "${pid}" > /dev/null 2>&1 || return 1
+
+    if [ "${id_info}" != "${pid}" ]; then
+        local recorded=${id_info#*@}
+        [ -n "${recorded}" ] || return 1
+        local current
+        if current=$(debasher::_builtin_sched_pid_start_time "${pid}"); then
+            [ "${current}" = "${recorded}" ] || return 1
+        fi
+    fi
+
+    echo "${pid}"
+}
+
+########
+debasher::_builtin_sched_id_exists()
+{
+    local id_info=$1
+
+    debasher::_builtin_sched_live_pid "${id_info}" > /dev/null
+}
+
+########
+# Stops the tasks of a process that still run, among those that the ids in
+# $1 name: the ids of the tasks that have ended are left alone, since their
+# process ids may now belong to other processes.
 debasher::_builtin_sched_stop_process()
 {
     # Initialize variables
     local ids_info=$1
 
-    # Process ids information for process (each element in ids_info is a pid)
+    local id pid
     for id in ${ids_info}; do
-        debasher::_stop_pid $id || { echo "Error while stopping process with id $id" >&2 ; return 1; }
+        pid=$(debasher::_builtin_sched_live_pid "${id}") || continue
+        debasher::_stop_pid "${pid}" || { echo "Error while stopping process with id ${pid}" >&2 ; return 1; }
     done
 }
 

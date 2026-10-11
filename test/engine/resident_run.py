@@ -183,9 +183,10 @@ class SchedOutTailer(threading.Thread):
 
 
 def read_pid(id_file):
+    """The PID in a .id file, which holds "<pid>@<start time>"."""
     try:
         with open(id_file) as f:
-            return f.read().strip()
+            return f.read().strip().split("@", 1)[0]
     except FileNotFoundError:
         return None
 

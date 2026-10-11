@@ -118,6 +118,7 @@ $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA): Makefile
 	echo "SQUEUE=\"$(SQUEUE)\"" >> $@
 	echo "SACCT=\"$(SACCT)\"" >> $@
 	echo "SCONTROL=\"$(SCONTROL)\"" >> $@
+	echo "PS=\"$(PS)\"" >> $@
 	echo "WGET=\"$(WGET)\"" >> $@
 	echo "PANDOC=\"$(PANDOC)\"" >> $@
 	echo "PYTHON=\"$(PYTHON)\"" >> $@

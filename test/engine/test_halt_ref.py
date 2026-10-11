@@ -20,6 +20,7 @@ from resident_run import (
     DEBASHER_STOP_RESIDENT,
     launch,
     outdir,
+    read_pid,
     real_run,
     wait_for,
     write_line,
@@ -56,7 +57,7 @@ def test_a_lone_node_with_no_supervisor_stays_up_after_halting_and_stops_cleanly
 
     id_path = os.path.join(outdir, "__exec__", "solo", "solo.id")
     assert wait_for(id_path)
-    pid = int(open(id_path).read().strip())
+    pid = int(read_pid(id_path))
     os.kill(pid, 0)  # raises ProcessLookupError if it is not alive
 
     # The actual guarantee: still running a couple of seconds after halting,

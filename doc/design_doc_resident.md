@@ -2160,15 +2160,16 @@ with it the trace is exact.
   once, by the PID-based fast path below, which does not depend on elapsed
   time.
 - **PID-based fast path**: every BUILTIN-scheduler process gets a `.id` file
-  holding its PID (written by `debasher_builtin_sched::_launch`, for every
-  process, not only resident ones), at `__exec__/<node>/<node>.id`. If
-  that PID no longer exists (checked directly, no need to wait for the heartbeat
-  timeout) and `<node>.finished` is absent, the node is declared down
-  immediately: a gone PID is unambiguous, whereas a live PID proves nothing
-  about whether the node is actually *functioning* (a stuck/deadlocked process
-  still holds its PID). So PID-dead is a fast, certain shortcut to "down";
-  heartbeat timeout remains the only judge of "alive but not really working";
-  PID-alive is never, by itself, treated as "healthy".
+  holding the PID of its script with the time at which that PID's process
+  started (written by `debasher_builtin_sched::_launch`, for every process, not
+  only resident ones), at `__exec__/<node>/<node>.id`; the `Supervisor` reads
+  only the PID. If that PID no longer exists (checked directly, no need to wait
+  for the heartbeat timeout) and `<node>.finished` is absent, the node is
+  declared down immediately: a gone PID is unambiguous, whereas a live PID
+  proves nothing about whether the node is actually *functioning* (a
+  stuck/deadlocked process still holds its PID). So PID-dead is a fast, certain
+  shortcut to "down"; heartbeat timeout remains the only judge of "alive but not
+  really working"; PID-alive is never, by itself, treated as "healthy".
 - **No new `.failed` marker file.** A deliberate application-level error exit
   and a real crash already leave the same signature (no `.finished`, eventually
   no heartbeat, dead PID) and are treated identically. No behavioral difference
@@ -2245,12 +2246,12 @@ with it the trace is exact.
   being one per process. `_launch` avoids all of it, since it writes the
   `.id` itself and its explicit export overrides whatever the caller
   inherited.
-- **What `_launch` does for this** (`engine/debasher_builtin_sched_lib.sh`):
-  it writes the new process's PID into the `.id` itself, as soon as the
-  process starts and without waiting for it, through a temporary file
-  renamed into place, so that a reader sees either the old PID or the new
-  one, never an empty file; it exports `DEBASHER_LIBEXECDIR` so a
-  running process can find the installed tools (`debasher_libexecdir` is
+- **What `_launch` does for this** (`engine/debasher_builtin_sched_lib.sh`): it
+  writes the new process's id, its PID with the start time of its process, into
+  the `.id` itself, as soon as the process starts and without waiting for it,
+  through a temporary file renamed into place, so that a reader sees either the
+  old id or the new one, never an empty file; it exports `DEBASHER_LIBEXECDIR`
+  so a running process can find the installed tools (`debasher_libexecdir` is
   deliberately excluded from what generated scripts carry); and it unsets
   `BUILTIN_ARRAY_TASK_ID` before a non-array launch.
 - The launcher runs without blocking the checker thread; a short-lived
@@ -2464,8 +2465,8 @@ signal (see "Clean-completion detection").
   4. Wait for every node's halted marker to go past its own baseline (never
      "exists": a node halted from a previous, already-resumed cycle would
      already show one that means nothing about this run).
-  5. Re-read every node's `.id` (not reusing what step 1 or discovery
-     already saw) and send each a stop signal.
+  5. Re-read every node's `.id` (not reusing what step 1 or discovery already
+     saw) and send each one that still runs a stop signal.
   6. Wait for every node's own `.finished`.
 - **A stop signal is `SIGTERM` to the whole process group (`kill -TERM --
   "-$pid"`, `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of
@@ -2650,10 +2651,11 @@ The commands:
 
 - **`summary`**: what the web UI shows first of a node, and what warns of a
   coming failure.
-  - `task_state`: `alive` when the process in the `.id` of the task exists,
-    otherwise `finished` when the task has a `.finished`, `down` when it has
-    an `.id` and no `.finished`, and `not_launched` when it has no `.id` yet.
-    These are the files that `debasher_status` reads for a whole process.
+  - `task_state`: `finished` when the task has a `.finished`, whose `.id` is
+    then not asked about, otherwise `alive` when the process that the `.id` of
+    the task names (its PID with its start time) still runs, `down` when it has
+    an `.id`, and `not_launched` when it has no `.id` yet. These are the files
+    that `debasher_status` reads for a whole process, and in the same way.
   - `checkpoints`: the epochs of the checkpoints that the node retains, oldest
     first, each with the time at which it was written, and `capture_pos`, that
     of the latest one.
@@ -3358,17 +3360,16 @@ open.
   that grace period elapses with still no real heartbeat: declared down
   again, counted against the same budget, able to escalate like any other
   outage.
-- **Relaunching while the old process is still alive.** The
-  heartbeat-timeout path also fires for a live but stuck process (PID
-  alive, no heartbeat): `on_node_down` would start a second copy while the
-  first still held its FIFOs, and since `_launch` removed the old `.id`,
-  the old process would no longer be reachable by `debasher_stop` either.
-  Now `debasher_builtin_sched::_launch` reads the old `.id` file, if there
-  is one, before removing it, and kills that process group with the same
-  `debasher::_stop_pid` a manual `debasher_stop` already uses (a no-op if
-  it is already gone): one code path for an initial launch and every
-  relaunch, with no need to tell a genuine crash apart from a stuck but
-  live process.
+- **Relaunching while the old process is still alive.** The heartbeat-timeout
+  path also fires for a live but stuck process (PID alive, no heartbeat):
+  `on_node_down` would start a second copy while the first still held its FIFOs,
+  and since `_launch` removed the old `.id`, the old process would no longer be
+  reachable by `debasher_stop` either. Now `debasher_builtin_sched::_launch`
+  reads the old `.id` file, if there is one, before removing it, and kills that
+  process group with the same `debasher::_stop_pid` a manual `debasher_stop`
+  already uses (only while it still runs, never a process that merely got its
+  PID after it ended): one code path for an initial launch and every relaunch,
+  with no need to tell a genuine crash apart from a stuck but live process.
 - **Initiators numbered their rounds independently.** Each initiator
   numbered its next round as the last epoch it closed or abandoned plus one,
   and nothing makes two counters meet when no channel goes from one

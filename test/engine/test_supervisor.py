@@ -287,6 +287,15 @@ def test_node_pid_alive_false_for_a_pid_that_no_longer_exists(execdir):
     assert proc._node_pid_alive("a") is False
 
 
+def test_node_pid_alive_reads_the_pid_of_an_id_with_its_start_time(execdir):
+    # The engine writes "<pid>@<start time>"
+    _node_dir(execdir, "a").joinpath("a.id").write_text(f"{os.getpid()}@Sun_Oct_11_10:00:00_2026")
+    _node_dir(execdir, "b").joinpath("b.id").write_text(f"{_dead_pid()}@Sun_Oct_11_10:00:00_2026")
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc._node_pid_alive("a") is True
+    assert proc._node_pid_alive("b") is False
+
+
 def test_node_pid_alive_true_for_malformed_id_file(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text("not-a-pid")
     proc = _Sup(opts=_FAKE_OPTS)

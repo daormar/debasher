@@ -672,11 +672,15 @@ class Supervisor(_PortWorker):
         _check_node), never evidence of health by itself. Deliberately
         conservative: no .id file yet (not launched yet) or an
         unreadable one does NOT count as dead here, only an existing,
-        readable PID that really doesn't exist any more does.
+        readable PID that really doesn't exist any more does. The .id
+        file holds "<pid>@<start time>" (see
+        debasher::_builtin_sched_launch_id_info); only the PID is read: a
+        PID that another process got since only keeps the node alive here,
+        which the heartbeat still judges.
         """
         try:
             with open(self._node_id_file(node_name)) as f:
-                pid = int(f.read().strip())
+                pid = int(f.read().strip().split("@", 1)[0])
         except (FileNotFoundError, ValueError):
             return True
 

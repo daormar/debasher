@@ -409,14 +409,45 @@ debasher::_stop_process()
 }
 
 ########
+# Echoes the ids of a process that may still run: those of its tasks that
+# have no completion marker, and the id of the process as a whole while it
+# has not finished. The id of a task that has its completion marker is left
+# out: the task has ended, and its id may name another process by now, as a
+# process id that the system gave again does when the scheduler cannot tell
+# them apart (see debasher::_builtin_sched_live_pid).
+debasher::_read_ids_of_unfinished_tasks()
+{
+    local dirname=$1
+    local processname=$2
+
+    # The id of the process as a whole
+    local filename=$(debasher::_get_processid_filename "${dirname}" "${processname}")
+    if [ -f "${filename}" ] && ! debasher::_process_is_finished "${dirname}" "${processname}"; then
+        "${CAT}" "${filename}"
+    fi
+
+    # The ids of the tasks of an array
+    local execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    local taskid_file idx
+    for taskid_file in "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT}; do
+        [ -f "${taskid_file}" ] || continue
+        idx=${taskid_file#"${execdir}/${processname}_"}
+        idx=${idx%".${DEBASHER_ARRAY_TASKID_FEXT}"}
+        debasher::_array_task_is_finished "${dirname}" "${processname}" "${idx}" && continue
+        "${CAT}" "${taskid_file}"
+    done
+}
+
+########
+# Whether some id of a process that may still run (see
+# debasher::_read_ids_of_unfinished_tasks) still runs
 debasher::_process_is_in_progress()
 {
     local dirname=$1
     local processname=$2
-    local ids=$(debasher::_read_ids_from_files "$dirname" "$processname")
 
-    # Iterate over ids
-    for id in ${ids}; do
+    local id
+    for id in $(debasher::_read_ids_of_unfinished_tasks "${dirname}" "${processname}"); do
         # Get global id (when executing multiple attempts, multiple ids
         # will be associated to a given process)
         local global_id=$(debasher::_get_global_id "${id}")
