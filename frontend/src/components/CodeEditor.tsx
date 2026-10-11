@@ -19,7 +19,7 @@ export default function CodeEditor({ process, onClose }: Props) {
 
   const [draft, setDraft] = useState(() =>
     isCodeStillTemplate(process.code)
-      ? generateCodeTemplate(process)
+      ? generateCodeTemplate(program, process)
       : process.code
   );
 

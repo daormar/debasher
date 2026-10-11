@@ -1,3 +1,4 @@
+import { deliveryChannel, receivesPath } from "./dataTypes";
 import type { ProgramOption } from "./option";
 import { fanoutBaseLabel, isFanoutOption } from "./option";
 import type { ProgramProcess } from "./process";
@@ -21,7 +22,7 @@ export function buildCodePrompt(
   request: string,
 ): string {
   const language = LANGUAGE_NAMES[process.language];
-  const code = draft.trim() === "" ? generateCodeTemplate(process) : draft;
+  const code = draft.trim() === "" ? generateCodeTemplate(program, process) : draft;
 
   const sections = [
     [
@@ -88,15 +89,28 @@ export function optionsSection(program: Program, process: ProgramProcess): strin
   ];
 }
 
-function optionKind(option: ProgramOption): string {
+// The direction of an option and the type of what the code receives for
+// it: the data itself, or a path that leads to the data, whose data type
+// says what is there (see receivesPath).
+function optionKind(program: Program, process: ProgramProcess, option: ProgramOption): string {
   if (option.dataType === "None") {
     return "flag";
   }
-  return `${option.direction}, ${option.dataType}`;
+  if (!receivesPath(program, process, option)) {
+    return `${option.direction}, ${option.dataType}`;
+  }
+  switch (deliveryChannel(program, process.id, option)) {
+    case "fifo":
+      return `${option.direction}, the path of a FIFO, each line a ${option.dataType}`;
+    case "value_desc":
+      return `${option.direction}, the path of a value descriptor that holds a ${option.dataType}`;
+    default:
+      return `${option.direction}, the path of a directory`;
+  }
 }
 
 function optionLines(program: Program, process: ProgramProcess, option: ProgramOption): string[] {
-  const facts = [optionKind(option)];
+  const facts = [optionKind(program, process, option)];
   if (option.mandatory) {
     facts.push("mandatory");
   }

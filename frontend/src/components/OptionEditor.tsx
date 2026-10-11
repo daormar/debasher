@@ -8,6 +8,7 @@ import type {
 } from "../models/option";
 import type { ProgramType } from "../models/program";
 import { optionLabelProblem } from "../models/process";
+import { channelDataType, ownDataType } from "../models/dataTypes";
 import {
   DIRECTORY_CHANNELS,
   getOptionDirection,
@@ -247,6 +248,15 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const [taskShaping, setTaskShaping] =
     useState(option.taskShaping ?? false);
 
+  // The data type that the option channel or the connection fixes (see
+  // fixedDataType), shown instead of a choice: a directory channel names a
+  // directory, and a connected input carries what the output it reads
+  // carries. A command line option has the channel "none", whatever the
+  // disabled channel selector still holds.
+  const lockedDataType: OptionDataType | null =
+    channelDataType(commandLine ? "none" : channel) ??
+    (connectedSourceOption ? ownDataType(connectedSourceOption.sourceOption) : null);
+
   // A task shaping option is a mandatory command line input with a value,
   // and not a fanout family, which script_generation.py refuses otherwise
   // and not the count of a fanout family
@@ -291,7 +301,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     updateOption(processId, option.id, {
       label,
       direction: getOptionDirection(label),
-      dataType,
+      dataType: lockedDataType ?? dataType,
       channel: savedChannel,
       mirror: !isResident && !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
       fifoTag: isResident && savedChannel === "fifo" && direction === "input" ? "external" : undefined,
@@ -416,51 +426,73 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
           Data type
         </label>
 
-        <select
+        {lockedDataType ? (
 
-          value={dataType}
+          <div
+            style={{
+              width: "100%",
+              padding: "6px 8px",
+              borderRadius: 4,
+              border: "1px solid #bbb",
+              color: "#888",
+              boxSizing: "border-box",
+            }}
+          >
+            {lockedDataType}{" "}
+            {connectedSourceOption && !channelDataType(commandLine ? "none" : channel)
+              ? "(from connection)"
+              : "(directory channel)"}
+          </div>
 
-          onChange={(event) =>
-            setDataType(
-              event.target.value as OptionDataType
-            )
-          }
+        ) : (
 
-          style={{
-            width: "100%",
-          }}
+          <select
 
-        >
+            value={dataType}
 
-          <option value="int">
-            int
-          </option>
+            onChange={(event) =>
+              setDataType(
+                event.target.value as OptionDataType
+              )
+            }
 
-          <option value="float">
-            float
-          </option>
+            style={{
+              width: "100%",
+            }}
 
-          <option value="string">
-            string
-          </option>
+          >
 
-          <option value="file">
-            file
-          </option>
-
-          <option value="dir">
-            dir
-          </option>
-
-          {/* A flag takes no connection (see isValidEdge), nor
-              does a command line option or one from the process spec. */}
-          {direction === "input" && !isConnected && (
-            <option value="None">
-              None (flag)
+            <option value="int">
+              int
             </option>
-          )}
 
-        </select>
+            <option value="float">
+              float
+            </option>
+
+            <option value="string">
+              string
+            </option>
+
+            <option value="file">
+              file
+            </option>
+
+            <option value="dir">
+              dir
+            </option>
+
+            {/* A flag takes no connection (see isValidEdge), nor
+                does a command line option or one from the process spec. */}
+            {direction === "input" && !isConnected && (
+              <option value="None">
+                None (flag)
+              </option>
+            )}
+
+          </select>
+
+        )}
 
         <label>
           Description

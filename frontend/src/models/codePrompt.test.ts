@@ -84,11 +84,11 @@ describe("buildCodePrompt", () => {
 
   it("describes each option with its connections", () => {
     const prompt = buildCodePrompt(program, count, "", "");
-    expect(prompt).toContain("- `-inf` (input, string)\n  lines to count\n  Reads the option `-outf` of the process `produce`: the lines\n  (`produce`: Writes numbered lines.)");
+    expect(prompt).toContain("- `-inf` (input, the path of a FIFO, each line a string)\n  lines to count\n  Reads the option `-outf` of the process `produce`: the lines\n  (`produce`: Writes numbered lines.)");
     expect(prompt).toContain("That output is a FIFO: both processes run at the same time");
     expect(prompt).toContain("- `-sep` (input, string)\n  Its value: `tab`.");
     expect(prompt).toContain("- `-v` (flag)\n  say more");
-    expect(prompt).toContain("- `-outv` (output, string)\n  the count\n  A value descriptor: write the value with `write_value_to_desc <value> <path>`");
+    expect(prompt).toContain("- `-outv` (output, the path of a value descriptor that holds a string)\n  the count\n  A value descriptor: write the value with `write_value_to_desc <value> <path>`");
     expect(prompt).toContain("Read by the option `-total` of the process `report`: lines counted");
   });
 
@@ -171,7 +171,7 @@ describe("buildCodePrompt", () => {
     for (const language of ["bash", "python", "perl", "r", "groovy"] as const) {
       const p = withLanguage(count, language);
       const prompt = buildCodePrompt(program, p, "  \n", "");
-      expect(prompt).toContain(`\`\`\`${language}\n${generateCodeTemplate(p)}\n\`\`\``);
+      expect(prompt).toContain(`\`\`\`${language}\n${generateCodeTemplate(program, p)}\n\`\`\``);
       expect(prompt).toContain(`write the code of the process where the comment \`${TEMPLATE_MARKER}\` is`);
     }
   });

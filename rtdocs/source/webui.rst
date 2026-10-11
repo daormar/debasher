@@ -172,17 +172,26 @@ An option is added by its label, which starts with a dash: a label
 that starts with ``-out`` or ``--out`` makes an output, and any other
 an input, as the engine requires. Its editor sets:
 
-* its **data type** (int, float, string, file or dir, or "None (flag)"
-  for an input that takes no value); an input of type file or dir,
-  given on the command line or as a value, has to name an existing
-  file or directory, and the engine makes its path absolute;
+* its **data type**, the type of the data that the option carries
+  (int, float, string, file or dir, or "None (flag)" for an input that
+  takes no value). With a direct value, the process receives the data
+  itself, and an input of type file or dir, given on the command line
+  or as a value, has to name an existing file or directory, and the
+  engine makes its path absolute. Through a FIFO or a value
+  descriptor, the process receives a path, and the data type says what
+  is there: a FIFO of type int carries an int on each line. A shared
+  directory, or the output directory of the process, is always of type
+  dir, and a connected input always carries what the output it reads
+  carries, so it has its data type; the editor then shows the data
+  type instead of offering a choice;
 * whether it is a **command line** option, given when the program is
   run (and whether it is mandatory, and whether it is a **task
   shaping** option, see below), or whether its value is taken from an
   attribute of the **process specifications**, such as ``cpus``;
-* its **channel**, how its value is delivered: a direct value; a
+* its **channel**, how its data gets to the process: a direct value; a
   value descriptor, the path of a file where an output writes a value
-  for the processes connected to it; a FIFO; or a shared directory;
+  for the processes connected to it; a FIFO; a shared directory; or,
+  for an output, the output directory of the process;
 * its **value**, for a direct value, which is a Bash word such as
   ``10`` or ``${task_idx}``, written into the generated script as it is.
 

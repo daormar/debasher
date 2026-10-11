@@ -1,4 +1,5 @@
 import { isValidEdge } from "./connections";
+import { dataTypeProblem } from "./dataTypes";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
 import { DIRECTORY_CHANNELS } from "./option";
@@ -108,7 +109,13 @@ function editProblem(program: Program, edit: EditOp): string | null {
         (edit.changes.label === undefined
           ? null
           : optionLabelProblem(process, edit.changes.label, program.programType, edit.optionId)) ??
-        optionFieldsProblem(process, { ...option!, ...edit.changes })
+        optionFieldsProblem(process, { ...option!, ...edit.changes }) ??
+        // A data type that the edit names, and that the option channel or
+        // the connection of the option fixes to another; otherwise the
+        // data type follows them (see normalizeDataTypes)
+        (edit.changes.dataType === undefined
+          ? null
+          : dataTypeProblem(program, process, { ...option!, ...edit.changes }))
       );
     }
 
@@ -178,6 +185,9 @@ function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): st
   }
   if (option.direction !== "output" && option.channel === "process_outdir") {
     return `${where} uses the channel "process_outdir", which only an output can use.`;
+  }
+  if (option.dataType === "None" && option.channel !== "none") {
+    return `${where} is a flag, which carries no data, and so no channel but "none".`;
   }
   if (option.subpath && !DIRECTORY_CHANNELS.has(option.channel)) {
     return `${where} has a subpath, which only the channels "shared_dir" and "process_outdir" take.`;

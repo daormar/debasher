@@ -1,6 +1,8 @@
 import type { ProcessLanguage, ProgramProcess } from "./process";
 import type { OptionDataType, ProgramOption } from "./option";
 import { fanoutBaseLabel, isFanoutOption } from "./option";
+import type { Program } from "./program";
+import { receivesPath } from "./dataTypes";
 
 // Comment text used to mark the point where the user is expected to
 // write the process's actual logic. Also used, via isCodeStillTemplate,
@@ -15,6 +17,16 @@ export const GENERATOR_SIZE_TEMPLATE = `# TODO: return the number of tasks
 
 export function isCodeStillTemplate(code: string): boolean {
   return code.trim() === "" || code.includes(TEMPLATE_MARKER);
+}
+
+// The type of the argument that the process receives for an option, which
+// a template parses it as: its data type, unless what it receives is a path
+// (a FIFO, a value descriptor or a directory), whose data type is that of
+// what the path leads to (see receivesPath).
+type ArgumentType = (option: ProgramOption) => OptionDataType;
+
+function argumentTypeOf(program: Program, process: ProgramProcess): ArgumentType {
+  return option => (receivesPath(program, process, option) ? "string" : option.dataType);
 }
 
 function toIdentifier(label: string): string {
@@ -158,7 +170,7 @@ function pythonDest(label: string): string {
   return label.replace(/^-+/, "").replace(/-/g, "_");
 }
 
-function generatePythonTemplate(process: ProgramProcess): string {
+function generatePythonTemplate(process: ProgramProcess, argumentType: ArgumentType): string {
   const fanoutOptions = fanoutOptionsOf(process);
   const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
@@ -177,11 +189,11 @@ function generatePythonTemplate(process: ProgramProcess): string {
       );
     } else if (option.mandatory) {
       lines.push(
-        `parser.add_argument('${option.label}', type=${pythonArgparseType(option.dataType)}, required=True, help=${help})`
+        `parser.add_argument('${option.label}', type=${pythonArgparseType(argumentType(option))}, required=True, help=${help})`
       );
     } else {
       lines.push(
-        `parser.add_argument('${option.label}', type=${pythonArgparseType(option.dataType)}, default=${pythonDefaultLiteral(option.dataType)}, help=${help})`
+        `parser.add_argument('${option.label}', type=${pythonArgparseType(argumentType(option))}, default=${pythonDefaultLiteral(argumentType(option))}, help=${help})`
       );
     }
   }
@@ -196,7 +208,7 @@ function generatePythonTemplate(process: ProgramProcess): string {
       const help = JSON.stringify(read.option.description ?? "");
       lines.push(`for i in range(int(args.${read.countId})):`);
       lines.push(
-        `    parser.add_argument(f'${read.baseLabel}{i}', type=${pythonArgparseType(read.option.dataType)}, required=True, help=${help})`
+        `    parser.add_argument(f'${read.baseLabel}{i}', type=${pythonArgparseType(argumentType(read.option))}, required=True, help=${help})`
       );
     }
   }
@@ -243,7 +255,7 @@ function perlDefaultLiteral(dataType: OptionDataType): string {
   }
 }
 
-function generatePerlTemplate(process: ProgramProcess): string {
+function generatePerlTemplate(process: ProgramProcess, argumentType: ArgumentType): string {
   const fanoutOptions = fanoutOptionsOf(process);
   const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
@@ -261,7 +273,7 @@ function generatePerlTemplate(process: ProgramProcess): string {
   if (optionsWithIds.length > 0) {
     lines.push("");
     for (const [option, id] of optionsWithIds) {
-      lines.push(`my $${id} = ${perlDefaultLiteral(option.dataType)};`);
+      lines.push(`my $${id} = ${perlDefaultLiteral(argumentType(option))};`);
     }
     for (const read of reads) {
       lines.push(`my @${read.id};`);
@@ -275,7 +287,7 @@ function generatePerlTemplate(process: ProgramProcess): string {
     }
     const specs = optionsWithIds.map(([option, id]) => {
       const flagName = option.label.replace(/^-+/, "");
-      const suffix = option.dataType === "None" ? "" : getoptLongSuffix(option.dataType);
+      const suffix = option.dataType === "None" ? "" : getoptLongSuffix(argumentType(option));
       return `"${flagName}${suffix}" => \\$${id}`;
     });
     lines.push(`GetOptions(${specs.join(", ")})`);
@@ -285,7 +297,7 @@ function generatePerlTemplate(process: ProgramProcess): string {
       lines.push('Getopt::Long::Configure("no_pass_through");');
       const fanoutSpecs = reads.map(read => {
         const flagName = read.baseLabel.replace(/^-+/, "");
-        const suffix = getoptLongSuffix(read.option.dataType);
+        const suffix = getoptLongSuffix(argumentType(read.option));
         return `(map { my $i = $_; ("${flagName}$i${suffix}" => \\$${read.id}[$i]) } 0 .. $${read.countId} - 1)`;
       });
       lines.push(`GetOptions(${fanoutSpecs.join(", ")})`);
@@ -410,12 +422,14 @@ function generateGroovyTemplate(process: ProgramProcess): string {
   return lines.join("\n");
 }
 
-export function generateCodeTemplate(process: ProgramProcess): string {
+// The first code of a process of `program`, which reads its options: the
+// program tells what reaches the process through its connections.
+export function generateCodeTemplate(program: Program, process: ProgramProcess): string {
   switch (process.language) {
     case "python":
-      return generatePythonTemplate(process);
+      return generatePythonTemplate(process, argumentTypeOf(program, process));
     case "perl":
-      return generatePerlTemplate(process);
+      return generatePerlTemplate(process, argumentTypeOf(program, process));
     case "r":
       return generateRTemplate(process);
     case "groovy":

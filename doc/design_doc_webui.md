@@ -104,14 +104,16 @@ refer to it.
   in the sense of the engine, named by its **label**, the option's name for the
   engine, such as `-infile`.
 - **direction**: whether an option is an `input` or an `output` of its process.
-- **data type**: the type of an option's value: `int`, `float`, `string`,
-  `file` for the path of a regular file, `dir` for the path of a directory, or
-  `None` for a flag, an option that takes no value.
-- **option channel**: how an option's value is delivered, independent of its
-  data type (`ProgramOption.channel`): `none` for a literal value or a
-  connection, `value_desc` for a value descriptor the engine synthesizes, `fifo`
-  for a named pipe, `shared_dir` for a shared directory, `process_outdir` for
-  the process output directory of the option's own process.
+- **data type**: the type of the data that an option carries, whatever option
+  channel carries it: `int`, `float`, `string`, `file` for the path of a
+  regular file, `dir` for the path of a directory, or `None` for a flag, an
+  option that takes no value (see "Data type and option channel").
+- **option channel**: how an option's data gets to its process, independent of
+  its data type (`ProgramOption.channel`; a connected input gets its data
+  through the option channel of the output it reads): `none` for a literal value
+  or a connection, `value_desc` for a value descriptor the engine synthesizes,
+  `fifo` for a named pipe, `shared_dir` for a shared directory, `process_outdir`
+  for the process output directory of the option's own process.
 - **literal value**: the value of an option with option channel `none` that is
   not connected, not a command line option and not taken from the process
   specifications: the Bash word that the user writes in `ProgramOption.value`,
@@ -539,20 +541,50 @@ receive at run time:
   comes from the program options at run time.
 
 A few combinations make no sense, and the model keeps them out. A flag is always
-an input. `mirror` only applies to a `fifo` output. `value_desc` and
-`process_outdir` only apply to an output: the consumer of a value descriptor, or
-of a process output directory, just connects to it. A `subpath` only applies to
-`shared_dir` and `process_outdir`. `fromProcessSpec` only applies to an input,
-since an output names what the process produces, and `fromProcessSpec` and
-`commandLine` exclude each other, and a command line option has option channel
-`none`, since its value comes only from the command line. A task shaping option
-is a mandatory command line input with a value, and not a fanout family. A
-fanout family only exists on a `standard` process, and names in
-`countSourceOptionId` a command line option of the same process that gives the
-count. The editor offers only the valid combinations, the checks of the edits
-that an agent makes refuse the ones that concern an output or a directory
-channel (see "Edits from an agent"), and script generation checks again those
-whose violation would produce a wrong module, refusing to generate it.
+an input, and, since it carries no data, only takes the option channel `none`.
+`mirror` only applies to a `fifo` output. `value_desc` and `process_outdir` only
+apply to an output: the consumer of a value descriptor, or of a process output
+directory, just connects to it. A `subpath` only applies to `shared_dir` and
+`process_outdir`. `fromProcessSpec` only applies to an input, since an output
+names what the process produces, and `fromProcessSpec` and `commandLine` exclude
+each other, and a command line option has option channel `none`, since its value
+comes only from the command line. A task shaping option is a mandatory command
+line input with a value, and not a fanout family. A fanout family only exists on
+a `standard` process, and names in `countSourceOptionId` a command line option
+of the same process that gives the count. The editor offers only the valid
+combinations, the checks of the edits that an agent makes refuse the ones that
+concern an output, a flag or a directory channel (see "Edits from an agent"),
+and script generation checks again those whose violation would produce a wrong
+module, refusing to generate it.
+
+## Data type and option channel
+
+The data type of an option is the type of the data that it carries, and its
+option channel is how the data gets to the process. With option channel `none`
+the process receives the data itself, unless the option is a connected input,
+which receives what the output it reads delivers. Through a FIFO or a value
+descriptor the process receives a path, and the data type is that of each line
+of the FIFO, or of the value that the descriptor holds: a FIFO of data type
+`int` carries an integer on each line, one of data type `file` the path of a
+file. Two things fix the data type instead of the user. A directory channel,
+`shared_dir` or `process_outdir`, names a directory, whatever is in it, so its
+data type is `dir`. A connected input carries the data of the output that it
+reads, so its data type is that of the output, and follows it when the output
+changes. For such an option the editor shows the fixed data type instead of a
+choice. `normalizeProgram` sets it after every edit and when a program is
+loaded, which also repairs a program whose metadata breaks the rule, for example
+one edited by hand, and the checks of the edits that an agent makes refuse an
+`updateOption` that names another data type for it; an option that an agent adds
+with another data type simply takes the fixed one. The engine checks the data
+type only where the process receives the data itself: an input of data type
+`file` or `dir` with a literal value, or a command line option, has to name an
+existing regular file or directory. The template of the code parses what the
+process receives for each option, so it reads the path of a FIFO, of a value
+descriptor or of a directory as a string, whatever its data type, and the code
+prompt says, for each option, whether the code receives the data or the path of
+it (see "What the code prompt says"). A Bash process is the exception for an
+input that reads a value descriptor: `read_opt_value_from_func_args` gives the
+value, not the path.
 
 ## Connections
 
@@ -1487,18 +1519,20 @@ the store only when the user accepts it.
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
 result through the same normalization (`normalizeProgram`), which derives the
-connection sentinels from the edges and restores the default scheduler if it is
-blank. The rules of "Connections" therefore hold after every change, not only
-when the program is saved. An operation that would change a process of a group
-first asks the user, and dissolves the whole group if the user agrees (see
-"Groups"); if not, the program is left as it was. One action of the user asks
-once, for all the groups it touches: deleting a selection on the canvas removes
-its processes and edges in one operation, asked before the canvas drops
-anything, so a declined deletion leaves them drawn; renaming a process along
-with the definition that a loaded module provides for the new name is one
-operation too. Every operation applies to the latest program, not to the one of
-the last render, so the operations of one event build on each other, and once
-the first has dissolved a group the next ones do not ask again.
+connection sentinels from the edges, sets the data type that an option channel
+or a connection fixes (see "Data type and option channel") and restores the
+default scheduler if it is blank. The rules of "Connections" therefore hold
+after every change, not only when the program is saved. An operation that would
+change a process of a group first asks the user, and dissolves the whole group
+if the user agrees (see "Groups"); if not, the program is left as it was. One
+action of the user asks once, for all the groups it touches: deleting a
+selection on the canvas removes its processes and edges in one operation, asked
+before the canvas drops anything, so a declined deletion leaves them drawn;
+renaming a process along with the definition that a loaded module provides for
+the new name is one operation too. Every operation applies to the latest
+program, not to the one of the last render, so the operations of one event build
+on each other, and once the first has dissolved a group the next ones do not ask
+again.
 
 The operations rest on plain functions of the program model, in
 `models/programEdits.ts`: each takes a program and returns the edited one
@@ -3410,29 +3444,31 @@ under a heading of its own:
    options handler mode but `standard`, that the code runs once for each task,
    with the option list of that task.
 4. **The options.** For each option of the process, in its order: its label, its
-   direction and data type, or that it is a flag, its description, whether it is
-   mandatory, a command line option or a task shaping option (which the code
-   cannot read, since no task receives it), and its literal value if it has one,
-   or where its value comes from: the specifications of the process, a shared
-   directory or the process output directory, with its subpath. An option
-   channel other than `none` says what it means for the code: a FIFO is closed
-   once written or read until its end, a value descriptor is written as the
-   language rules say, and a task subdirectory, or the process output directory
-   of a process in `standard` mode, exists and is empty when the code starts,
-   unless the process has a `_reset_outfiles` method, which the prompt then
-   says, so the code may write files of fixed names into it; the process output
-   directory of a process in `array` or `generator` mode, without a subpath, is
-   shared by its tasks and not emptied, which the prompt says too. A connected
-   input names the process and the output option it reads from, with their
-   descriptions, and says what the output is: a FIFO, read as it arrives, a
-   value descriptor, or else a file whose writer has finished before the process
-   runs; a connected output names, likewise, the options that read it; an
-   unconnected FIFO says that someone outside the program is at its other end.
-   An option of a fanout family names the option that gives its count. A value
-   descriptor is written, in Bash, with `write_value_to_desc`, and read with
-   `read_opt_value_from_func_args`, which gives the value and not the path; in
-   another language it is written into the file that the option names, and its
-   reader gets the path of that file.
+   direction and what the code receives for it (the data itself, of its data
+   type, or the path of a FIFO or of a value descriptor, with the data type of
+   what it holds, or the path of a directory), or that it is a flag, its
+   description, whether it is mandatory, a command line option or a task shaping
+   option (which the code cannot read, since no task receives it), and its
+   literal value if it has one, or where its value comes from: the
+   specifications of the process, a shared directory or the process output
+   directory, with its subpath. An option channel other than `none` says what it
+   means for the code: a FIFO is closed once written or read until its end, a
+   value descriptor is written as the language rules say, and a task
+   subdirectory, or the process output directory of a process in `standard`
+   mode, exists and is empty when the code starts, unless the process has a
+   `_reset_outfiles` method, which the prompt then says, so the code may write
+   files of fixed names into it; the process output directory of a process in
+   `array` or `generator` mode, without a subpath, is shared by its tasks and
+   not emptied, which the prompt says too. A connected input names the process
+   and the output option it reads from, with their descriptions, and says what
+   the output is: a FIFO, read as it arrives, a value descriptor, or else a file
+   whose writer has finished before the process runs; a connected output names,
+   likewise, the options that read it; an unconnected FIFO says that someone
+   outside the program is at its other end. An option of a fanout family names
+   the option that gives its count. A value descriptor is written, in Bash, with
+   `write_value_to_desc`, and read with `read_opt_value_from_func_args`, which
+   gives the value and not the path; in another language it is written into the
+   file that the option names, and its reader gets the path of that file.
 5. **The code to complete.** The draft of the code editor, which starts as the
    template while the code is still one, or the template when the user has
    emptied the draft, in a fenced code block tagged with the language and longer

@@ -141,7 +141,7 @@ describe("buildOptionsHandlerPrompt", () => {
   it("carries the code of the process, or says that there is none yet", () => {
     expect(buildOptionsHandlerPrompt(program, count, "array", "", ""))
       .toContain("For context only, how each task uses its options (Bash):\n\n```bash\ncount()\n{");
-    const unwritten = { ...count, code: generateCodeTemplate(count) } as ProgramProcess;
+    const unwritten = { ...count, code: generateCodeTemplate(program, count) } as ProgramProcess;
     expect(buildOptionsHandlerPrompt(program, unwritten, "array", "", ""))
       .toContain("The code of the process is not written yet: the descriptions above are all there is about what a task does.");
     const aliased = { ...count, additionalSpecs: { alias: "other" } } as unknown as ProgramProcess;
