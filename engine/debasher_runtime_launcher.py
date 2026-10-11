@@ -421,6 +421,14 @@ class ProgramLauncher(FBPProcess):
     def _run_dir(self, run):
         return os.path.join(self._runs_root(), run)
 
+    def _wiring_problem(self):
+        if not [port for port in self.INPUT_PORTS if port not in self.CONTROL_PORTS]:
+            return (
+                "no input port: the node never receives a request, so it never launches "
+                "a batch run (add an input option, such as -requests)"
+            )
+        return None
+
     # -- node hooks --
 
     def initialize_runtime(self):

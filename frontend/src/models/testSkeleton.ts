@@ -1,4 +1,4 @@
-import { isBusinessOutput, nodeOptionRole, observesOutside } from "./node";
+import { isBusinessOutput, nodeOptionRole, observesOutside, WATCH_DIR_OPTION_LABEL } from "./node";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
@@ -31,9 +31,6 @@ export function offersAddTest(program: Program, process: ProgramProcess): boolea
   );
 }
 
-// The option of a DirectoryWatcher that gives the directory it watches
-// instead of WATCH_DIR (WATCH_DIR_OPTION in the runtime library).
-const WATCH_DIR_LABEL = "-watchdir";
 
 /**
  * The name of the test skeleton of `process` that "Add test" proposes, in
@@ -259,9 +256,9 @@ function observeTest(node: NodeSkeleton): string[] {
 // with the directory it watches: what it brings in when a file arrives
 // there, and that after a restart it requests no file twice.
 function watcherTests(process: ProgramProcess, node: NodeSkeleton): string[][] {
-  const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_LABEL);
+  const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_OPTION_LABEL);
   const build = hasWatchDirOption
-    ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_LABEL))}: str(tmp_path)})`
+    ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_OPTION_LABEL))}: str(tmp_path)})`
     : "    under_test = node()";
   const files = hasWatchDirOption
     ? ["    # TODO: write in tmp_path the files that the test needs", '    (tmp_path / "TODO").write_text("TODO")']

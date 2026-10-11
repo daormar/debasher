@@ -448,6 +448,13 @@ class FBPProcess(_PortWorker):
         # incarnation may speak of a fault fixed since.
         self._remove_notice_file()
 
+        # A node that lacks a port its class relies on runs, but does nothing
+        # useful: it says so to whoever watches the program
+        problem = self._wiring_problem()
+        if problem is not None:
+            self.log.warning("%s", problem)
+            self.set_notice(problem, level="warning")
+
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
         if checkpoint is not None:
@@ -967,6 +974,15 @@ class FBPProcess(_PortWorker):
                 json.dump({**notice, "set_at": time.time()}, f)
             os.replace(tmp_path, path)
         self._notice = notice
+
+    def _wiring_problem(self):
+        """
+        What the ports of the node lack for its class to do its work, or
+        None. A class of the runtime library that relies on a port by the
+        name it gives it (DirectoryWatcher, ProgramLauncher) redefines it;
+        run() turns the answer into a warning notice at every start.
+        """
+        return None
 
     def _remove_notice_file(self):
         with self._notice_lock:

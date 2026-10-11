@@ -3,7 +3,7 @@ import type { OptionDataType, ProgramOption } from "./option";
 import { createOption, isValidOptionLabel } from "./option";
 import type { NodeCode, NodeInfo, NodeKind } from "./node";
 import type { ProgramType } from "./program";
-import { emptyNodeCode, isReservedNodeOptionLabel, nodeNameProblem } from "./node";
+import { emptyNodeCode, isReservedNodeOptionLabel, nodeNameProblem, standardNodeOptions } from "./node";
 
 export type ProcessLanguage =
   | "bash"
@@ -242,7 +242,8 @@ export interface NewProcessSource {
 /**
  * A new process, with the ids of its options from `newId`. A node is written
  * in Python, in the parts of NodeCode, and a Supervisor has no code of its
- * own.
+ * own. A new node gets the options that its class relies on (see
+ * standardNodeOptions).
  */
 export function createProcess(
   id: string,
@@ -267,6 +268,7 @@ export function createProcess(
           initiator: false,
           nodeCode: nodeKind === "Supervisor" ? undefined : emptyNodeCode(),
           language: "python",
+          options: standardNodeOptions(nodeKind, newId),
         }
       : {};
 

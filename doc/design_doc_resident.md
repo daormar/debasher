@@ -1246,7 +1246,8 @@ and modification time have stayed the same for `STABLE_OBSERVATIONS`
 observations in a row, a file whose name starts with a dot never counts, and a
 module whose files are complete in another way (a companion file, a rename at
 the end of a copy) redefines `is_complete()`; `request_for()` makes the
-request from the path.
+request from the path. A watcher without the output port `REQUESTS_PORT` sends
+nothing, and says so in a notice (see "Notices").
 
 ## Notices
 
@@ -1293,8 +1294,17 @@ The notice is read from outside: `debasher_inspect_resident` gives it in the
 summary of a node and, for every node of a program at once, with its command
 `notices` (see "`debasher_inspect_resident`: what a node keeps"), and the web UI
 marks the canvas node that has one (see "Observing and talking to a live
-program" in `doc/design_doc_webui.md`). The `Supervisor` has no notice, and the
-classes of the runtime library set none of their own: a `DirectoryWatcher` that
+program" in `doc/design_doc_webui.md`). The `Supervisor` has no notice. The
+classes of the runtime library set one of their own only when the node lacks a
+port that the class needs to do its work, since such a node runs but does
+nothing useful, and would otherwise not say so: at every start, once the notice
+file is removed,
+`run()` asks `_wiring_problem()`, which a class of the library redefines, and
+sets what it answers as a `warning` notice, with the same line in the log. A
+`DirectoryWatcher` without the output port `REQUESTS_PORT` says that the files
+it sees are sent nowhere, and a `ProgramLauncher` without an input port that
+carries data says that it never receives a request. A notice that the code of
+the node sets later replaces it. Apart from that, a `DirectoryWatcher` that
 waits for files says nothing, and a module that wants it to derives from it and
 sets one.
 
@@ -3088,10 +3098,11 @@ The node runs the engine's own search for this, `debasher_resolve_pfile`, from
 the directory of the module. An absolute path is accepted with a warning,
 since it ties the program to one machine. A node whose `PFILE` is not found
 stops when it is created. Every input port that carries data is a port of
-requests; the output port `DONE_PORT` (`outdone` by default), if the node has
-it, tells when a batch run ends (see "The end of a batch run as an input
-event"). A launcher node cannot be a task of an array process, since the tasks
-would share its bookkeeping.
+requests, and a node with none says so in a notice (see "Notices"); the output
+port `DONE_PORT` (`outdone` by default), if the node has it, tells when a batch
+run ends (see "The end of a batch run as an input event"). A launcher node
+cannot be a task of an array process, since the tasks would share its
+bookkeeping.
 
 The modules that the general program loads are found with the
 `DEBASHER_MOD_DIR` of the launcher node, which inherits it along the whole

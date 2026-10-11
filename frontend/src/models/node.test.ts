@@ -18,7 +18,29 @@ import {
   nodeOptionRole,
   observesOutside,
   programCommandLineOptions,
+  DONE_PORT_LABEL,
+  REQUESTS_PORT_LABEL,
+  WATCH_DIR_OPTION_LABEL,
 } from "./node";
+import { createProcess } from "./process";
+
+// The runtime library of resident programs, read from the repository: the
+// classes whose options a new node gets
+const RUNTIME_SOURCES = import.meta.glob<string>(
+  "../../../engine/debasher_runtime_{watcher,launcher}.py",
+  { query: "?raw", import: "default", eager: true },
+);
+
+// The value of the class attribute `name` in the runtime library
+function runtimeAttribute(name: string): string | undefined {
+  for (const source of Object.values(RUNTIME_SOURCES)) {
+    const match = new RegExp(`^\\s+${name} = "([^"]*)"`, "m").exec(source);
+    if (match) {
+      return match[1];
+    }
+  }
+  return undefined;
+}
 
 function option(label: string, fields: Partial<ProgramOption> = {}): ProgramOption {
   return {
@@ -222,4 +244,43 @@ describe("inherited hooks", () => {
       .toBe("This body replaces process_data of ProgramLauncher, shown below: call " +
         "super().process_data(port_name, packet) in it to keep what that one does.");
   });
+});
+
+describe("the options of a new node", () => {
+
+  const counter = () => {
+    let next = 0;
+    return () => `o${next++}`;
+  };
+  const optionsOf = (nodeKind: ProgramProcess["nodeKind"]) =>
+    createProcess("p", "n", { nodeKind }, counter()).options;
+
+  it("gives a DirectoryWatcher the directory it watches and the port of its requests", () => {
+    expect(optionsOf("DirectoryWatcher").map(o => [o.label, o.direction, o.channel, o.commandLine, o.mandatory])).toEqual([
+      ["-watchdir", "input", "none", true, true],
+      ["-outrequests", "output", "fifo", false, false],
+    ]);
+  });
+
+  it("gives a ProgramLauncher an input of requests that a connection can reach, and the port of the ends", () => {
+    const options = optionsOf("ProgramLauncher");
+    expect(options.map(o => [o.label, o.direction, o.channel])).toEqual([
+      ["-requests", "input", "none"],
+      ["-outdone", "output", "fifo"],
+    ]);
+    expect(isBusinessInputCandidate(options[0])).toBe(true);
+  });
+
+  it("gives the other kinds none", () => {
+    expect(optionsOf("FBPProcess")).toEqual([]);
+    expect(optionsOf("Supervisor")).toEqual([]);
+  });
+
+  it("names them as the classes of the runtime library look for them", () => {
+    expect(Object.keys(RUNTIME_SOURCES)).toHaveLength(2);
+    expect(`-${runtimeAttribute("WATCH_DIR_OPTION")}`).toBe(WATCH_DIR_OPTION_LABEL);
+    expect(`-${runtimeAttribute("REQUESTS_PORT")}`).toBe(REQUESTS_PORT_LABEL);
+    expect(`-${runtimeAttribute("DONE_PORT")}`).toBe(DONE_PORT_LABEL);
+  });
+
 });

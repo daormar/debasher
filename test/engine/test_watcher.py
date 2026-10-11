@@ -150,3 +150,15 @@ def test_a_module_decides_what_request_a_file_makes(watch_dir):
     node._run_process_data("arrivals", {"file": path})
 
     assert _sent(node) == [{"opts": {"-bam": path, "-outf": "counts.txt"}, "run": "sample/s17.bam"}]
+
+
+# --- its port -------------------------------------------------------------------
+
+
+def test_a_watcher_without_its_requests_port_says_so(watch_dir):
+    class Unwired(_Watch):
+        OUTPUT_PORTS = []
+
+    assert _node(watch_dir)._wiring_problem() is None
+    problem = Unwired(opts={"watchdir": str(watch_dir)})._wiring_problem()
+    assert problem.startswith("no output port outrequests")

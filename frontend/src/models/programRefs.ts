@@ -193,12 +193,18 @@ function resolveOne(program: Program, named: NamedEdit, newId: () => string): Ed
         newId(), named.name, { info: named.info, nodeKind: named.nodeKind, nodeInfo: named.nodeInfo }, newId
       );
       const namedOptions = named.options ?? [];
-      const created = namedOptions.map(({ label }) => createOption(newId(), label));
+      // A named option with the label of one that the process starts with
+      // (the options of a library process, or those that the class of a
+      // node relies on, see standardNodeOptions) gives that one its fields
+      // rather than adding a second
+      const created = namedOptions.map(
+        ({ label }) => process.options.find(option => option.label === label) ?? createOption(newId(), label)
+      );
       const draft: ProgramProcess = {
         ...process,
         ...withNestedFields(process, named.changes ?? {}, NESTED_PROCESS_FIELDS),
         position: named.position ?? process.position,
-        options: [...process.options, ...created],
+        options: [...process.options, ...created.filter(option => !process.options.includes(option))],
       };
       // The fields go in once every option exists, so that a count source
       // may name an option added with it.

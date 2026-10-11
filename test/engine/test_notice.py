@@ -234,3 +234,19 @@ def test_what_the_startup_sets_is_there_once_the_node_runs(execdir):
         assert _notice(execdir)["level"] == "warning"
     finally:
         _stop(node, thread)
+
+
+class _Miswired(_Portless):
+    def _wiring_problem(self):
+        return "no output port outrequests"
+
+
+def test_a_node_that_lacks_a_port_its_class_relies_on_says_so_once_it_runs(execdir):
+    node = _Miswired(opts={})
+
+    thread = _run_until_started(node)
+    try:
+        assert _notice(execdir)["text"] == "no output port outrequests"
+        assert _notice(execdir)["level"] == "warning"
+    finally:
+        _stop(node, thread)

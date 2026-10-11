@@ -2047,7 +2047,19 @@ the classes of the engine's runtime library with the same names (see
 `doc/design_doc_resident.md`). The engine derives the role of a process from
 the base of its class, and the web UI stores the kind instead: the user never
 writes the class declaration, which script generation writes from the kind, so
-the kind and the code cannot disagree.
+the kind and the code cannot disagree. A new `DirectoryWatcher` or
+`ProgramLauncher` that no module of the preamble defines starts with the options
+that its class needs, since without them the node runs and does nothing useful:
+`-watchdir`, a mandatory command line option, and the output port
+`-outrequests` for the first; an input option `-requests`, which becomes a port
+when a connection reaches it, and the output port `-outdone` for the second.
+The user removes those that the node does not need. The labels of the three
+that the classes name are constants of the frontend, which a test keeps in step
+with the attributes of the runtime library (`WATCH_DIR_OPTION`,
+`REQUESTS_PORT` and `DONE_PORT`); a launcher takes a request from any input, so
+`-requests` is only the label that a new one starts with. An option that an
+agent adds together with the node under one of those labels completes it
+instead of adding a second.
 
 **The code of a node.** A node is always written in Python, with no choice of
 language. Its code is made of parts, each edited on its own, which script

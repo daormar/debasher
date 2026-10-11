@@ -37,6 +37,56 @@ export const NODE_KINDS: { value: NodeKind; label: string; description: string }
   },
 ];
 
+// The labels of the options that the classes of the runtime library look
+// for by name: WATCH_DIR_OPTION and REQUESTS_PORT of DirectoryWatcher, and
+// DONE_PORT of ProgramLauncher (a test keeps them in step with
+// engine/debasher_runtime_watcher.py and debasher_runtime_launcher.py).
+export const WATCH_DIR_OPTION_LABEL = "-watchdir";
+export const REQUESTS_PORT_LABEL = "-outrequests";
+export const DONE_PORT_LABEL = "-outdone";
+
+// The input of a new ProgramLauncher. The class takes a request from any
+// input, so this label is only the one that a new node starts with.
+export const LAUNCHER_REQUESTS_LABEL = "-requests";
+
+/**
+ * The options that a new node of `kind` starts with: those that the class
+ * of a DirectoryWatcher or a ProgramLauncher relies on, without which the
+ * node runs but does nothing useful, and none for the other kinds. A node
+ * that a module of the preamble defines comes with its own instead.
+ */
+export function standardNodeOptions(kind: NodeKind, newId: () => string): ProgramOption[] {
+  switch (kind) {
+    case "DirectoryWatcher":
+      return [
+        createOption(newId(), WATCH_DIR_OPTION_LABEL, {
+          commandLine: true,
+          mandatory: true,
+          description: "directory to watch, given on the command line",
+        }),
+        createOption(newId(), REQUESTS_PORT_LABEL, {
+          channel: "fifo",
+          value: "requests",
+          description: "one request for each complete file",
+        }),
+      ];
+    case "ProgramLauncher":
+      return [
+        createOption(newId(), LAUNCHER_REQUESTS_LABEL, {
+          description: "requests, one batch run each",
+        }),
+        createOption(newId(), DONE_PORT_LABEL, {
+          channel: "fifo",
+          value: "done",
+          description: "a message for each batch run that ends",
+        }),
+      ];
+    case "FBPProcess":
+    case "Supervisor":
+      return [];
+  }
+}
+
 /**
  * The code of a node, in parts that script generation assembles into the
  * Python heredoc of its process, each kept without the indentation that all

@@ -735,3 +735,14 @@ def test_process_is_the_name_of_a_process(outdir):
 
     with pytest.raises(ValueError, match="PROCESS"):
         Nameless(opts={"requests": "/dev/null"})
+
+
+# --- its ports ------------------------------------------------------------------
+
+
+def test_a_launcher_without_an_input_port_says_so(outdir):
+    class Unwired(_Launcher):
+        INPUT_PORTS = []
+
+    assert _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})._wiring_problem() is None
+    assert Unwired(opts={})._wiring_problem().startswith("no input port")

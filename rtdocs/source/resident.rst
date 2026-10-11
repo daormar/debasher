@@ -459,7 +459,11 @@ has at most one notice, and a new one replaces the previous one. The
 notice is not part of the node state: every start of the node begins
 without one, so a notice that follows from the node state is set
 again in ``restore_node_state``. ``debasher_inspect_resident`` shows
-the notices, and the web interface marks the node that has one.
+the notices, and the web interface marks the node that has one. A
+``DirectoryWatcher`` without the output port ``-outrequests``, and a
+``ProgramLauncher`` without an input port, leave a warning notice of
+their own when they start, since they would otherwise run doing
+nothing useful.
 
 Batch Runs From a Node
 ----------------------

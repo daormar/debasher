@@ -393,7 +393,14 @@ Nodes
 ``ProgramLauncher``, which launches a general program for each request
 it receives; ``DirectoryWatcher``, which sends a request for each file
 that arrives in a directory; or ``Supervisor``, at most one per
-program. A mark in the head of each node shows its kind.
+program. A mark in the head of each node shows its kind. A new
+``DirectoryWatcher`` comes with the options that its class needs:
+``-watchdir``, the directory to watch, given on the command line, and
+the output port ``-outrequests``. A new ``ProgramLauncher`` comes with
+an input ``-requests``, for the connection that brings its requests,
+and the output port ``-outdone``. Remove those that the node does not
+need; the class looks for ``-watchdir``, ``-outrequests`` and
+``-outdone`` by name, so do not rename them.
 
 "Edit node code" in the Inspector edits the Python code of a node in
 parts: the *node preamble* (imports, helper functions), the *class

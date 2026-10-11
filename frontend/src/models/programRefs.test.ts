@@ -125,6 +125,23 @@ describe("resolveNamedEdits", () => {
     expect(edit.process.options.map(o => o.label)).toEqual(["-in"]);
   });
 
+  it("completes the options that a new node starts with instead of adding them twice", () => {
+    const [edit] = resolved([{
+      op: "addProcess",
+      name: "watch",
+      nodeKind: "DirectoryWatcher",
+      options: [{ label: "-outrequests", description: "one request for each sample" }, { label: "-n" }],
+    }]);
+
+    if (edit.op !== "addProcess") {
+      throw new Error(edit.op);
+    }
+    expect(edit.process.options.map(o => o.label)).toEqual(["-watchdir", "-outrequests", "-n"]);
+    const requests = edit.process.options[1];
+    expect(requests.description).toBe("one request for each sample");
+    expect(requests.channel).toBe("fifo");
+  });
+
   it("changes only the given fields of a field that holds an object", () => {
     const from = program();
     from.processes[0].computationalSpecs = { cpus: 1, mem: 256 };

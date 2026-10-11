@@ -187,7 +187,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   from the library): `FBPProcess` (a business node), `ProgramLauncher` (runs a
   general program for each request), `DirectoryWatcher` (sends the files that
   appear in a directory), `Supervisor` (at most one, with no code, relaunching
-  nodes that are down).
+  nodes that are down). A new `DirectoryWatcher` comes with `-watchdir` (the
+  directory to watch, from the command line) and the output port
+  `-outrequests`, and a new `ProgramLauncher` with the input `-requests`
+  (any input takes requests) and the output port `-outdone`. The classes look
+  for `-watchdir`, `-outrequests` and `-outdone` by name (`WATCH_DIR_OPTION`,
+  `REQUESTS_PORT`, `DONE_PORT`), so do not rename them; give their fields as
+  options with the same labels. A watcher without `-outrequests` or a launcher
+  without an input runs but does nothing, and says so in a warning notice.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,

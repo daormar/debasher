@@ -115,6 +115,14 @@ class DirectoryWatcher(FBPProcess):
             watch_dir = os.path.join(module_dir, watch_dir)
         return watch_dir
 
+    def _wiring_problem(self):
+        if self.REQUESTS_PORT and self.REQUESTS_PORT not in self.OUTPUT_PORTS:
+            return (
+                f"no output port {self.REQUESTS_PORT}: the files that the node sees are sent "
+                f"nowhere (add the output option -{self.REQUESTS_PORT})"
+            )
+        return None
+
     # -- node hooks --
 
     def initialize_runtime(self):

@@ -379,7 +379,7 @@ const editingTools = [
 
   editTool(
     "add_process",
-    "Adds a process. A process (or node) that a module of the preamble defines comes with its description, options and code (see search_library); in a resident program, any other node needs nodeKind.",
+    "Adds a process. A process (or node) that a module of the preamble defines comes with its description, options and code (see search_library); in a resident program, any other node needs nodeKind, and a DirectoryWatcher or ProgramLauncher comes with the options its class needs (-watchdir and -outrequests, -requests and -outdone), which options with the same labels complete.",
     schemas.addProcessFields,
     ({ name, nodeKind, changes, options, position }) => [{ op: "addProcess", name, nodeKind, changes, options, position }]
   ),
