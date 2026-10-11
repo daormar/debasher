@@ -157,7 +157,14 @@ export default function SeqProcessesEditor({ onClose }: Props) {
 
         <div style={{ display: "flex", gap: 12, minHeight: 420 }}>
 
+          {/* The list ends where the code editor does: its buttons sit above
+              it, so that only Cancel and Save are below both. */}
           <div style={{ width: 200, display: "flex", flexDirection: "column", gap: 4 }}>
+
+            <div style={{ display: "flex", gap: 4 }}>
+              <button onClick={handleAdd}>Add</button>
+              <button onClick={handleRemove} disabled={!selected}>Remove</button>
+            </div>
 
             <ul
               aria-label="Sequential processes"
@@ -181,11 +188,6 @@ export default function SeqProcessesEditor({ onClose }: Props) {
                 </li>
               ))}
             </ul>
-
-            <div style={{ display: "flex", gap: 4 }}>
-              <button onClick={handleAdd}>Add</button>
-              <button onClick={handleRemove} disabled={!selected}>Remove</button>
-            </div>
 
           </div>
 
@@ -322,10 +324,13 @@ export default function SeqProcessesEditor({ onClose }: Props) {
                   An alias runs the code it names: its own code is not used.
                 </p>
               ) : (
-                <div style={{ border: "1px solid #ccc" }}>
+                // The editor takes the height that the fields leave, so that it
+                // ends where the list does.
+                <div style={{ border: "1px solid #ccc", flex: 1, minHeight: 240 }}>
                   <CodeMirror
                     value={selected.code}
-                    height="240px"
+                    height="100%"
+                    style={{ height: "100%" }}
                     extensions={[languageExtension(selected.language)]}
                     onChange={value => update({ code: value })}
                   />
