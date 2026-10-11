@@ -116,6 +116,16 @@ const MAX_FANOUT_INLINE = 10;
 // grows down from the top right.
 const RUN_INDICATOR_PANEL_STYLE = { marginRight: 15 + 200 + 8 };
 
+// The legend in the top right corner stops above the minimap in the bottom
+// right one: the canvas less the margin of its own panel (15px), the margin
+// of the minimap panel (15px) and its default height (150px), and a small
+// gap. A legend taller than that scrolls inside (see CanvasLegend).
+const LEGEND_PANEL_STYLE = {
+  maxHeight: `calc(100% - ${15 + 15 + 150 + 8}px)`,
+  display: "flex",
+  flexDirection: "column" as const,
+};
+
 // True if `option` itself is fifo-channel, or is a plain ("none"-
 // channel) connection whose upstream source is: a "-inf"-style input
 // on a "standard"-mode process is never itself channel === "fifo":
@@ -992,7 +1002,7 @@ export default function ProgramCanvas() {
             <ProgramFilesPanel openRequest={filesPanelRequest} />
           </Panel>
 
-          <Panel position="top-right">
+          <Panel position="top-right" style={LEGEND_PANEL_STYLE}>
             <CanvasLegend programType={program.programType} />
           </Panel>
 

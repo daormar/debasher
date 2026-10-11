@@ -1627,10 +1627,12 @@ process specifications, and `flag` for a flag that the module always gives.
 
 The canvas has a legend, which the user can fold. It says what each process
 status means (see "Process status" in `doc/design_doc_engine.md`), and what the
-canvas draws to tell processes and edges apart: the borders of a canvas node,
-a hollow handle and its tag, an edge from a file or a value and one from a
-FIFO, a fanout edge, the route of an edge that goes back up and of a
-self-loop, a label edge, and the label of a fanout family.
+canvas draws to tell processes and edges apart: the borders of a canvas node, a
+hollow handle and its tag, an edge from a file or a value and one from a FIFO, a
+fanout edge, the route of an edge that goes back up and of a self-loop, a label
+edge, and the label of a fanout family. The legend sits in the top right corner
+and stops above the minimap in the bottom right one: a legend taller than the
+room between them scrolls inside, while the button that folds it stays in view.
 
 Of what the canvas shows, only the positions and which edges are label edges
 belong to the program model and are saved. The selection, the part of the
@@ -3181,12 +3183,16 @@ the process status. What a resident program adds follows it this way:
   does not refresh the list of canvas nodes.
 
 The canvas of a resident program has a legend of its own, which the user folds
-as that of a general program (see "From the store to the canvas"). It says
-what each process status means in a resident program (see "Observing and
-talking to a live program"), and what each mark means: the node kind, an
-initiator, a node that observes the outside world, a notice and its level, an
-external input, a business output read outside the program, a hollow handle and
-its tag, a trigger port, and the edges of the Supervisor wiring.
+as that of a general program (see "From the store to the canvas"). It says what
+each process status means in a resident program (see "Observing and talking to a
+live program"), and what each mark means: the node kind, an initiator, a node
+that observes the outside world, a notice and its level, the double border of a
+node in `array` or `generator` mode, each task a node of its own, an external
+input, a business output read outside the program, a hollow handle and its tag,
+a trigger port, and the edges: a FIFO from a business output to a business
+input, the route of an edge that goes back up and of a self-loop, a label edge,
+the edges of the Supervisor wiring and a fanout edge; and the label of a fanout
+family.
 
 ## Guarantees and non-goals of a resident program
 

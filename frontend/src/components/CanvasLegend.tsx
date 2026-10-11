@@ -116,6 +116,49 @@ function LabelEdgeRow() {
   );
 }
 
+// The rows that both legends share: the double border of a process of
+// several tasks, and the edges that a fanout family, a cycle or a
+// self-loop draw. `noun` is what the canvas nodes are.
+function DoubleBorderRow({ noun }: { noun: string }) {
+  return (
+    <LegendRow mark={<BorderSample border="1px solid #999" double />}>
+      Double: array or generator mode, {noun === "node"
+        ? "each task a node of its own."
+        : "a task for each element or index."}
+    </LegendRow>
+  );
+}
+
+function FanoutRows() {
+  return (
+    <>
+      <LegendRow
+        mark={
+          <svg width={24} height={12} viewBox="0 0 24 12">
+            <polygon points="0,5 24,1 24,11 0,7" fill="#999" />
+          </svg>
+        }
+      >
+        A fanout: one becomes many, narrow at the fanout family.
+      </LegendRow>
+      <LegendRow
+        mark={<span style={{ fontSize: 10 }}>-outf<span style={{ color: "#c0392b" }}>-ith</span></span>}
+      >
+        A fanout family: as many options as another option says.
+      </LegendRow>
+    </>
+  );
+}
+
+function DetourRow({ noun }: { noun: string }) {
+  return (
+    <LegendRow mark={<EdgeSample points="4,11 4,9 22,9 22,1 10,1 10,3" />}>
+      Around the {noun}s, on the right: an edge that goes back up, or a
+      self-loop around its own {noun}.
+    </LegendRow>
+  );
+}
+
 /** What the canvas of a general program draws. */
 function GeneralLegend() {
   return (
@@ -124,9 +167,7 @@ function GeneralLegend() {
       <StatusRows meanings={GENERAL_STATUS_MEANINGS} />
 
       <Heading>Borders</Heading>
-      <LegendRow mark={<BorderSample border="1px solid #999" double />}>
-        Double: array or generator mode, a task for each element or index.
-      </LegendRow>
+      <DoubleBorderRow noun="process" />
       <LegendRow mark={<BorderSample border="1px dashed #999" />}>
         Dashed: manual mode.
       </LegendRow>
@@ -149,25 +190,9 @@ function GeneralLegend() {
       <LegendRow mark={<EdgeSample points="0,6 24,6" dash="6 4" />}>
         From a FIFO.
       </LegendRow>
-      <LegendRow
-        mark={
-          <svg width={24} height={12} viewBox="0 0 24 12">
-            <polygon points="0,5 24,1 24,11 0,7" fill="#999" />
-          </svg>
-        }
-      >
-        A fanout: one becomes many, narrow at the fanout family.
-      </LegendRow>
-      <LegendRow mark={<EdgeSample points="4,11 4,9 22,9 22,1 10,1 10,3" />}>
-        Around the processes, on the right: an edge that goes back up, or a
-        self-loop around its own process.
-      </LegendRow>
+      <DetourRow noun="process" />
       <LabelEdgeRow />
-      <LegendRow
-        mark={<span style={{ fontSize: 10 }}>-outf<span style={{ color: "#c0392b" }}>-ith</span></span>}
-      >
-        A fanout family: as many options as another option says.
-      </LegendRow>
+      <FanoutRows />
     </>
   );
 }
@@ -179,7 +204,7 @@ function ResidentLegend() {
       <Heading>Process status</Heading>
       <StatusRows meanings={RESIDENT_STATUS_MEANINGS} />
 
-      <Heading>Marks</Heading>
+      <Heading>Node marks</Heading>
       <LegendRow mark={<NodeKindChip kind="FBPProcess" />}>
         The node kind, on a band with the name and the marks.
       </LegendRow>
@@ -199,6 +224,11 @@ function ResidentLegend() {
       <LegendRow mark={<NoticeMark level="warning" title="A warning notice" />}>
         A notice of level warning.
       </LegendRow>
+
+      <Heading>Borders</Heading>
+      <DoubleBorderRow noun="node" />
+
+      <Heading>Handles</Heading>
       <LegendRow mark={<OutsideMark kind="externalInput" />}>
         Above an input: written from outside the program.
       </LegendRow>
@@ -212,11 +242,18 @@ function ResidentLegend() {
       <LegendRow mark={<TriggerMark />}>
         A trigger port of the Supervisor wiring.
       </LegendRow>
+
+      <Heading>Edges</Heading>
+      <LegendRow mark={<EdgeSample points="0,6 24,6" dash="6 4" />}>
+        A FIFO from a business output to a business input.
+      </LegendRow>
+      <DetourRow noun="node" />
+      <LabelEdgeRow />
       <LegendRow mark={<EdgeSample points="0,6 24,6" dash="2 4" color={WIRING_EDGE_COLOR} />}>
         The Supervisor wiring, read only, shown from the menu of the
         Supervisor.
       </LegendRow>
-      <LabelEdgeRow />
+      <FanoutRows />
     </>
   );
 }
@@ -242,6 +279,11 @@ export default function CanvasLegend({ programType }: { programType: ProgramType
         borderRadius: 4,
         fontSize: 11,
         boxShadow: "0 1px 3px rgba(0, 0, 0, 0.15)",
+        // Within the height that its panel leaves it, above the minimap:
+        // the rows scroll, the button that folds it stays in view.
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 0,
       }}
     >
 
@@ -255,6 +297,7 @@ export default function CanvasLegend({ programType }: { programType: ProgramType
           padding: "6px 8px",
           fontWeight: "bold",
           cursor: "pointer",
+          flexShrink: 0,
         }}
       >
         {isOpen ? "▾ Legend" : "▸ Legend"}
@@ -262,7 +305,7 @@ export default function CanvasLegend({ programType }: { programType: ProgramType
 
       {isOpen && (
 
-        <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", minHeight: 0 }}>
           {programType === "resident" ? <ResidentLegend /> : <GeneralLegend />}
         </div>
 
