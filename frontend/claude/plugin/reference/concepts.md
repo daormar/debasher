@@ -8,7 +8,10 @@ read and change that saved program with the same rules as the editor. Every
 tool takes the home directory as `home_dir`.
 
 Documentation: https://debasher.readthedocs.io/en/latest/ (the web UI:
-https://debasher.readthedocs.io/en/latest/webui.html).
+https://debasher.readthedocs.io/en/latest/webui.html; how the pieces combine
+for the usual shapes of a program, such as a chain of steps for each entry of
+an input or a pool of workers:
+https://debasher.readthedocs.io/en/latest/design_patterns.html).
 
 ## Programs
 
@@ -21,6 +24,8 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   directory holds the program metadata (`.debasher/program.json`, which only
   the tools change), the generated script `<name>.sh`, and the user files,
   such as `test/`. A run writes into the output directory (`outputDir`).
+  `create_program` starts an empty program in a new home directory, and
+  `import_module` makes one from an existing DeBasher module (a `.sh` file).
 - **The generated script is never edited by hand.** Every save writes it
   again from the program metadata, so a change made to it is lost: change
   the code of a process with `update_process` instead.
@@ -74,26 +79,51 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   `${task_idx}`. `manual`: the whole option definition written by hand
   (general programs only). When both ends of a connection have several tasks,
   task i reads task i.
+- **Number of tasks taken from another process.** When a process has as many
+  tasks as another one (each task reads the task with the same index), its
+  options handler asks for that number with `get_process_num_tasks
+  "<process>"` instead of computing it again with the rule of the other
+  process, which two copies could apply differently. A `generator` may ask any
+  process; an `array` only a process in `generator` mode.
+- **The options handler runs more than once.** The engine calls the code of
+  a generator again whenever it needs the options of a task, inside the task
+  too, so a file or directory that it reads (such as one given on the command
+  line to count the tasks) has to stay unchanged while the run lasts.
 - **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`);
-  `additionalSpecs` (`force` to always rerun, `processdeps` to replace the
-  inferred dependencies, aliases).
-- **Additional methods**, bodies of optional functions: `skipCode` (return 0
-  to skip a task; never on a process at either end of a FIFO), `condaEnvsCode`,
-  `dockerImgsCode`, `postCode`, `resetOutfilesCode`, `outdirBasenameCode`.
+  `additionalSpecs` (general programs only): `force` to rerun in every run,
+  `processdeps` to replace the dependencies inferred from the connections
+  (`afterok:<process>`, several joined by `,` when all have to hold or by
+  `?` when one is enough; the types are `after`, `afterok`, `afternotok`,
+  `afterany` and `aftercorr`, the last one task by task between two
+  processes of several tasks), and aliases (`alias`, `externalAlias`,
+  `aliasOptMap`), which take the code of the process from another one.
+- **Additional methods** (general programs only), bodies of optional
+  functions: `skipCode` (return 0 to skip a task; never on a process at
+  either end of a FIFO), `condaEnvsCode`, `dockerImgsCode`, `postCode`,
+  `resetOutfilesCode`, `outdirBasenameCode`.
 
 ## Options
 
 - **Label** starting with `-`, unique in its process. A label starting with
   `-out` is an output; any other is an input.
-- **dataType**: `int`, `float`, `string` (the default), `file`, `dir`, or
-  `None` for a flag (always an input). An input of type `file` or `dir`, given
-  on the command line or as a value, has to name an existing regular file or
-  directory, and the engine makes its path absolute.
-- **channel**: `none` (a value or a connection), `fifo` (`value` is the name of
-  the FIFO), `value_desc` (an output into which the task writes a value, which
-  a reader gets as the value rather than a path), `shared_dir` (`value` names a
-  shared directory), `process_outdir` (an output: the output directory of the
-  process, `value` empty).
+- **dataType**, the type of the data that the option carries: `int`,
+  `float`, `string` (the default), `file`, `dir`, or `None` for a flag
+  (always an input, on channel `none`). An input of type `file` or `dir`,
+  given on the command line or as a value, has to name an existing regular
+  file or directory, and the engine makes its path absolute.
+- **channel**, how the data gets to the process: `none` (a value or a
+  connection; the process receives the data itself), `fifo` (`value` is the
+  name of the FIFO), `value_desc` (an output into which the task writes a
+  value), `shared_dir` (`value` names a shared directory), `process_outdir`
+  (an output: the output directory of the process, `value` empty). Through a
+  FIFO or a value descriptor the process receives a path, and the data type
+  is that of each line of the FIFO, or of the value held (a FIFO of `int`
+  carries an integer per line); in Bash, `read_opt_value_from_func_args` on
+  an input that reads a value descriptor gives the value, not the path.
+- **Fixed data types.** A directory channel (`shared_dir`,
+  `process_outdir`) has data type `dir`, and a connected input has the data
+  type of the output it reads, and follows it. An edit that names another
+  data type for such an option is refused; leave the field out.
 - **subpath**: with `shared_dir` or `process_outdir`, a directory of the
   task's own below that directory, a Bash word such as `${task_idx}`, which
   the engine creates; below the output directory it is also emptied before
@@ -102,8 +132,9 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   them through a fanout family, one option per task.
 - **Where an input's value comes from**: a connection; a literal `value` (a
   Bash word, such as `10` or `${task_idx}`); `commandLine` (from the program
-  options); or `fromProcessSpec` (`value` names a specification: `cpus`,
-  `mem`, `time`, ...). The last two take no connection.
+  options); or `fromProcessSpec` (on a `standard` process, never on an output:
+  `value` names a specification, `cpus`, `mem`, `time`, ...). The last two
+  take no connection.
 - `taskShaping`: a mandatory command-line input with a value that only the
   options handler reads (the code that builds the array or counts the tasks),
   to decide the tasks; no task receives it, so the code of the process cannot
@@ -129,6 +160,11 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   streams until the writer closes. Use it to stream, to run steps
   concurrently, or for a cycle, which needs at least one FIFO edge. A FIFO has
   one reader, both ends on the same machine, and no Slurm.
+- **FIFOs between processes of several tasks.** The FIFOs that the tasks of
+  a process declare through one option are read inside the program for every
+  task or for none: a reader with fewer tasks than the writer would leave the
+  extra writers blocked, so the preparation of the run stops instead. Give
+  the reader the number of tasks of the writer with `get_process_num_tasks`.
 - **How the canvas draws it** (`display` of `connect`, or
   `set_connection_display`): a line, or a label edge, a stub at each end that
   names the other. Use a label edge for a connection whose line would cross
@@ -173,6 +209,13 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   a node (`get_code_prompt`) carries the reference of every hook, method and
   class attribute of its class, read from the installed runtime library:
   look there for one that this list does not name.
+- **Specifications of a node.** Besides `cpus`, `mem` and `time`, a node
+  takes limits in its `computationalSpecs` (`input_log_max_mb`,
+  `out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms`,
+  `startup_timeout_s`), a `ProgramLauncher` also `max_concurrent_runs` and
+  `batch_sched`, and the `Supervisor` only `heartbeat_timeout_s` and
+  `startup_timeout_s`; unset, a limit keeps the default of the class. A node
+  has no additional specifications and no additional methods.
 - **Rounds and snapshots.** A snapshot is a round started by an initiator
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its
@@ -181,7 +224,9 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 - **Running.** Always the built-in scheduler; `run_program` waits for the
   launch and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
-  its state.
+  its state. `restart_node` kills a live node, as in a crash, and has it
+  relaunched from its last checkpoint; `relaunch_node` relaunches a node
+  that is down in a program without a Supervisor.
 - **Notices of a live program.** `get_status` lists the notices of the
   nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks
   a node that has one, an "i" in a blue circle for `info` and an "!" in an
@@ -210,7 +255,21 @@ https://debasher.readthedocs.io/en/latest/webui.html).
 - `run_program` saves and launches the program in its output directory; a
   general program runs in the background (follow it with `get_status`:
   `in-progress`, `finished`, `unfinished`; a resident one is `new`, `live` or
-  `stopped`).
+  `stopped`). A run is in progress from the moment `debasher_exec` starts
+  preparing it, maybe before any process runs. `stop_program` stops it.
+- **While a run or a validation is in progress** in the output directory,
+  saving, running, validating, running the tests and resetting the output
+  directory are refused: wait for it to end, or stop it.
+- **Running a general program again on the same output directory** resumes
+  it: it launches what did not finish (for an array, the tasks that did not
+  finish) and leaves alone what finished, except a process with `force`, one
+  whose options changed, one at the other end of a FIFO from a process that
+  runs again, and one that ran (under `after`, `afterany`, or `afterok`
+  joined by `?`) after a process that did not finish; every process that
+  depends on one of them runs again too. A task whose dependencies can no longer
+  hold (`afterok` on a process that failed) is cancelled and counts as
+  failed. To start from scratch, empty the output directory with
+  `reset_output_dir`.
 - `get_process_output` reads what a process left (`stdout`, `scheduler`,
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a
   process of several tasks.
