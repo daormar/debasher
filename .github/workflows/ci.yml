@@ -124,7 +124,11 @@ jobs:
       run:
         shell: wsl-bash -u ci {0}
     steps:
+      # It takes about a minute, and it has hung for good on some runs
+      # with nothing of DeBasher involved yet: failing it early lets the
+      # job be run again instead of waiting for the timeout of the job
       - name: Install Ubuntu in WSL2, with the requirements
+        timeout-minutes: 10
         uses: Vampire/setup-wsl@v7
         with:
           distribution: Ubuntu-24.04
