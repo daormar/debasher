@@ -153,6 +153,26 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   the node state is complete and serializable as JSON; effects outside the
   program are idempotent. Read options from `self.opts` (labels without the
   dash), log with `self.log`, wait with `self.sleep()`.
+- **Methods that a node calls**, on top of `send_data` and `sleep`:
+  - `self.inject(payload)`, from `observe`: `observe` looks at the world
+    outside (a directory, a queue) on a thread of its own, every
+    `OBSERVE_INTERVAL_SECS`, and brings what it sees in as a message that
+    `process_data` receives on the port that `OBSERVE_PORT` names;
+    `self.observe_now()` makes it look at once.
+  - `self.set_notice(text, level="info")` (`level` is `info` or `warning`)
+    and `self.clear_notice()`: a message of the node for whoever watches the
+    program, such as that its configuration file is missing. A node has at
+    most one notice, and a new one replaces it; any hook or thread may set
+    it. It is not part of the node state and every start of the node begins
+    without one, so a notice that follows from the state is set again in
+    `restore_node_state`.
+- **Class attributes** tune a node (`OBSERVE_PORT`,
+  `OBSERVE_INTERVAL_SECS`, `NOTICE_MAX_CHARS`, ...) and configure the
+  `DirectoryWatcher` (`WATCH_DIR`, `PATTERN`, ...) and the
+  `ProgramLauncher` (`PFILE`, `MAX_CONCURRENT_RUNS`, ...). The code prompt of
+  a node (`get_code_prompt`) carries the reference of every hook, method and
+  class attribute of its class, read from the installed runtime library:
+  look there for one that this list does not name.
 - **Rounds and snapshots.** A snapshot is a round started by an initiator
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its
@@ -162,6 +182,11 @@ https://debasher.readthedocs.io/en/latest/webui.html).
   launch and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
   its state.
+- **Notices of a live program.** `get_status` lists the notices of the
+  nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks
+  a node that has one, an "i" in a blue circle for `info` and an "!" in an
+  amber triangle for `warning`, with the text in its tooltip; the mark is
+  dimmed while the node does not run.
 - **Talking to a live program.** An external input (`fifoTag: "external"`)
   and a business output with no connection are written and read from
   outside with `list_fifos`, `write_fifo` and `read_fifo`, in resident
