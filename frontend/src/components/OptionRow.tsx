@@ -36,6 +36,8 @@ export default function OptionRow({
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
+    whiteSpace: "nowrap",
     marginBottom: 8,
     transform: CSS.Translate.toString(transform),
     transition,

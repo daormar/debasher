@@ -401,7 +401,7 @@ export default function Inspector() {
       <div
         style={{
           maxHeight: 160,
-          overflowY: "auto",
+          overflow: "auto",
           border: "1px solid #ddd",
           borderRadius: 4,
           padding: 8,
@@ -409,56 +409,63 @@ export default function Inspector() {
         }}
       >
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleOptionDragEnd}
-        >
+        {/* As wide as the widest row (each row stays on one line), so
+            every row has the same width and the whole list scrolls
+            sideways as one when it does not fit. */}
+        <div style={{ width: "max-content", minWidth: "100%" }}>
 
-          {(["top", "bottom"] as const).map(row => {
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleOptionDragEnd}
+          >
 
-            const groupOptions = selectedProcess.options.filter(
-              o => optionRow(o, flippedOptionIds) === row
-            );
+            {(["top", "bottom"] as const).map(row => {
 
-            if (groupOptions.length === 0) {
-              return null;
-            }
+              const groupOptions = selectedProcess.options.filter(
+                o => optionRow(o, flippedOptionIds) === row
+              );
 
-            return (
-              <SortableContext
-                key={row}
-                items={groupOptions.map(o => o.id)}
-                strategy={verticalListSortingStrategy}
-              >
+              if (groupOptions.length === 0) {
+                return null;
+              }
 
-                {groupOptions.map(option => (
-                  <OptionRow
-                    key={option.id}
-                    option={option}
-                    isFanoutMode={selectedProcess.optionsHandler.mode === "standard"}
-                    onEdit={() => setEditingOptionId(option.id)}
-                    onRemove={() =>
-                      removeOption(
-                        selectedProcess.id,
-                        option.id
-                      )
-                    }
-                    onConnect={
-                      option.direction === "input" &&
-                      connectionCandidates(program, selectedProcess.id, option.id).length > 0
-                        ? () => setConnectingOptionId(option.id)
-                        : undefined
-                    }
-                  />
-                ))}
+              return (
+                <SortableContext
+                  key={row}
+                  items={groupOptions.map(o => o.id)}
+                  strategy={verticalListSortingStrategy}
+                >
 
-              </SortableContext>
-            );
+                  {groupOptions.map(option => (
+                    <OptionRow
+                      key={option.id}
+                      option={option}
+                      isFanoutMode={selectedProcess.optionsHandler.mode === "standard"}
+                      onEdit={() => setEditingOptionId(option.id)}
+                      onRemove={() =>
+                        removeOption(
+                          selectedProcess.id,
+                          option.id
+                        )
+                      }
+                      onConnect={
+                        option.direction === "input" &&
+                        connectionCandidates(program, selectedProcess.id, option.id).length > 0
+                          ? () => setConnectingOptionId(option.id)
+                          : undefined
+                      }
+                    />
+                  ))}
 
-          })}
+                </SortableContext>
+              );
 
-        </DndContext>
+            })}
+
+          </DndContext>
+
+        </div>
 
       </div>
 
