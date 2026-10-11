@@ -9,16 +9,18 @@
 
 # DeBasher
 
-DeBasher is a flow-based programming extension for Bash.
+DeBasher is a flow-based programming extension for Bash, and a polyglot one:
+Bash holds a program together, but each of its processes can be written in
+Bash, Python, R, Perl or Groovy, and a single program can mix them. With the
+web interface, a program can be built without writing any Bash at all.
 
-A DeBasher program is made of processes, written as Bash functions (or in
-Python, R, Perl or Groovy), whose input and output options connect them;
-those connections define the dependency graph that DeBasher schedules and
-runs, in parallel where the data allows it. A general program processes a
-batch of inputs and ends; a resident program is made of long-lived, stateful
-processes that exchange messages through FIFOs and recover from crashes.
-Programs can be written by hand or built, run and observed from a browser
-with the DeBasher web interface.
+A DeBasher program is made of processes whose input and output options
+connect them; those connections define the dependency graph that DeBasher
+schedules and runs, in parallel where the data allows it. A general program
+processes a batch of inputs and ends; a resident program is made of
+long-lived, stateful processes that exchange messages through FIFOs and
+recover from crashes. Programs can be written by hand or built, run and
+observed from a browser with the DeBasher web interface.
 
 Among its features:
 
@@ -27,7 +29,8 @@ Among its features:
   resume;
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
-- a web interface to build and run programs without explicitly writing their topology.
+- a web interface to build and run programs without explicitly writing their
+  topology.
 
 ## Installation
 

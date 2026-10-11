@@ -35,10 +35,13 @@ with `component-based software engineering
 resulting in programs that naturally exploit process parallelism and at
 the same time optimize modularity and code reuse.
 
-In spite of the fact that DeBasher uses Bash as native language, it
-should be highlighted that flow-based programming is by nature language
-agnostic. Because of that, DeBasher allows the user to implement the
-program components in multiple programming languages and not only Bash.
+DeBasher is also a polyglot tool. Flow-based programming is by nature
+language agnostic: a process is a black box that only shows its inputs
+and outputs to the rest of the program. Bash holds a DeBasher program
+together, declaring its processes and the options that connect them,
+but each process can be written in Bash, Python, R, Perl or Groovy, and
+a single program can mix them (see the :ref:`implem` Section). With the
+web interface, a program can be built without writing any Bash at all.
 
 DeBasher runs two types of program. A general program processes a
 batch of inputs: each of its processes runs once, as soon as its

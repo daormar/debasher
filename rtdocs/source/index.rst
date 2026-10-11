@@ -1,10 +1,16 @@
 DeBasher
 ========
 
-**DeBasher** is a flow-based programming extension for Bash. `Flow-based
-programming <https://en.wikipedia.org/wiki/Flow-based_programming>`_
-combines data flow programming with component-based software engineering
-to enable the implementation of highly modular programs that exploit the
+**DeBasher** is a flow-based programming extension for Bash, and a
+polyglot one: Bash holds a program together, but each of its processes
+can be written in Bash, Python, R, Perl or Groovy, and a single program
+can mix them. With the web interface, a program can be built without
+writing any Bash at all.
+
+`Flow-based programming
+<https://en.wikipedia.org/wiki/Flow-based_programming>`_ combines data
+flow programming with component-based software engineering to enable
+the implementation of highly modular programs that exploit the
 parallelism implicitly determined by data dependencies between
 components.
 
