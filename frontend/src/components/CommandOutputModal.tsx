@@ -22,11 +22,13 @@ export default function CommandOutputModal({ title, message, output, onClose }: 
       }}
     >
 
+      {/* A fixed width, whatever the output, which scrolls inside it: a
+          long path, in the title or in the output, never widens it */}
       <div
         style={{
-          width: "60%",
-          maxWidth: 720,
+          width: "min(900px, 90vw)",
           maxHeight: "80vh",
+          boxSizing: "border-box",
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -36,12 +38,12 @@ export default function CommandOutputModal({ title, message, output, onClose }: 
         }}
       >
 
-        <h3 style={{ margin: 0 }}>
+        <h3 style={{ margin: 0, overflowWrap: "anywhere" }}>
           {title}
         </h3>
 
         {message && (
-          <p style={{ margin: 0, fontSize: 14 }}>
+          <p style={{ margin: 0, fontSize: 14, overflowWrap: "anywhere" }}>
             {message}
           </p>
         )}
@@ -49,6 +51,7 @@ export default function CommandOutputModal({ title, message, output, onClose }: 
         <pre
           style={{
             width: "100%",
+            minHeight: 0,
             maxHeight: "60vh",
             margin: 0,
             padding: 8,
