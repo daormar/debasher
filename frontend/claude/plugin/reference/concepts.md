@@ -156,6 +156,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - From an output to an input (`connect`, `disconnect`); an input takes one
   connection, except `shared_dir` options naming the same directory, whatever
   their subpaths.
+- **A connected input** is declared with channel `none` and no value
+  (`shared_dir`, naming the directory, when it reads a shared directory):
+  the channel of the output says how the data travels, so in a FIFO
+  connection only the output has channel `fifo`. In a resident program an
+  input on another channel takes no connection, and the connection is what
+  makes an input a business input.
 - **A file connection** makes the reader wait until the writer finished
   (`afterok`, or task by task between two processes of several tasks). Use it
   for batch steps, results that have to stay, steps that may be skipped or run
@@ -281,6 +287,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a
   process of several tasks.
 - Editing tools apply their edits whole or not at all; `dry_run` answers with
-  what would change and saves nothing. A save is refused when the program
-  changed on disk since it was read (the user may be editing it in the web
-  UI): read it again and work from what is there.
+  what would change and saves nothing. `addProcess` (and `add_process`)
+  takes the fields of the process (`description`, `language`, `code`,
+  `optionsHandler`, ...) inside `changes`, as `updateProcess` does; only
+  `name`, `nodeKind`, `options` and `position` go beside it. A save is
+  refused when the program changed on disk since it was read (the user may
+  be editing it in the web UI): read it again and work from what is there.

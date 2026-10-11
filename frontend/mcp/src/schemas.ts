@@ -154,7 +154,8 @@ export const addProcessFields = {
   name: z.string().min(1),
   nodeKind: nodeKind.optional()
     .describe("In a resident program: the node kind of a node that no module of the preamble defines."),
-  changes: processChanges.optional(),
+  changes: processChanges.optional()
+    .describe("The fields of the process (description, language, code, ...), as update_process takes them."),
   options: z.array(newOption).optional(),
   position: position.optional().describe("Where on the canvas; by default, to the right of every process."),
 };
