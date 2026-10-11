@@ -201,11 +201,13 @@ read_pars "$@" || exit 1
 check_pars || exit 1
 
 # Without -p, the program is in progress while a debasher_exec holds the
-# lock of the output directory, whatever the processes say: it may still be
-# preparing the run, before the files that the statuses come from are
-# written, or waiting between one process ending and the next starting
+# lock of the output directory to prepare or run it, whatever the
+# processes say: it may still be preparing the run, before the files that
+# the statuses come from are written, or waiting between one process
+# ending and the next starting. One that only validates the program
+# prepares nothing to run, and does not count
 exec_holds_lock=0
-if [ ${p_given} -eq 0 ] && debasher::_outdir_is_locked "$(debasher::_get_absolute_path "${pdir}")"; then
+if [ ${p_given} -eq 0 ] && debasher::_outdir_is_locked_for_a_run "$(debasher::_get_absolute_path "${pdir}")"; then
     exec_holds_lock=1
 fi
 

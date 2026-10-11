@@ -853,8 +853,15 @@ ensure_exclusive_execution()
 
     # The process id goes into the lock file, so that debasher_stop can
     # stop this debasher_exec, the built-in scheduler of the run, before
-    # it stops the processes (see debasher::_stop_run_scheduler)
-    echo "$$" > "$lockfile" || return 1
+    # it stops the processes (see debasher::_stop_run_scheduler), followed
+    # by a mark when this debasher_exec only validates the program, so
+    # that debasher_status does not take the validation for a run (see
+    # debasher::_outdir_is_locked_for_a_run)
+    if [ "${validate}" -eq 1 ]; then
+        printf '%s\n%s\n' "$$" "${DEBASHER_LOCK_VALIDATION_MARK}" > "$lockfile" || return 1
+    else
+        echo "$$" > "$lockfile" || return 1
+    fi
 }
 
 ########

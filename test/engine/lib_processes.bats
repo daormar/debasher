@@ -818,13 +818,17 @@ EOF
 }
 
 # Holds the lock of the output directory $1 the way debasher_exec does, with
-# its process id in the lock file, until it gets SIGTERM, which it ignores
-# when $2 is "ignore"
+# its process id in the lock file, followed by the mark $3 when given, until
+# it gets SIGTERM, which it ignores when $2 is "ignore"
 hold_lock() {
     (
         exec 9>>"$1/lock"
         flock -x 9
-        echo "${BASHPID}" > "$1/lock"
+        if [ -n "${3:-}" ]; then
+            printf '%s\n%s\n' "${BASHPID}" "$3" > "$1/lock"
+        else
+            echo "${BASHPID}" > "$1/lock"
+        fi
         if [ "${2:-}" = "ignore" ]; then
             trap '' TERM
         else
@@ -855,6 +859,39 @@ hold_lock() {
     kill -TERM "${pid}"
     flock -w 5 "${outd}/lock" true
     ! debasher::_outdir_is_locked "${outd}" || false
+}
+
+@test "debasher::_outdir_is_locked_for_a_run leaves out a debasher_exec that only validates" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    ! debasher::_outdir_is_locked_for_a_run "${outd}" || false
+
+    hold_lock "${outd}" "" "${DEBASHER_LOCK_VALIDATION_MARK}"
+    local pid=$(head -n 1 "${outd}/lock")
+    debasher::_outdir_is_locked "${outd}"
+    ! debasher::_outdir_is_locked_for_a_run "${outd}" || false
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+
+    hold_lock "${outd}"
+    pid=$(cat "${outd}/lock")
+    debasher::_outdir_is_locked_for_a_run "${outd}"
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+}
+
+@test "debasher::_stop_run_scheduler stops a debasher_exec that only validates, by the process id of the first line" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}" "" "${DEBASHER_LOCK_VALIDATION_MARK}"
+    local pid=$(head -n 1 "${outd}/lock")
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    flock -n "${outd}/lock" true
+    ! kill -0 "${pid}" 2>/dev/null || false
 }
 
 @test "debasher::_stop_run_scheduler does nothing when no debasher_exec holds the lock" {

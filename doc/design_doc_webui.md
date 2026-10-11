@@ -264,9 +264,9 @@ refer to it.
   run; it colors the canvas.
 - **run in progress**: the state of an output directory for which
   `debasher_status` ends with 2, whoever launched the run: at least one process
-  is `IN-PROGRESS`, or a `debasher_exec` holds the lock of the output
-  directory, preparing the run or, with the built-in scheduler for a general
-  program, running it.
+  is `IN-PROGRESS`, or a `debasher_exec` holds the lock of the output directory,
+  preparing the run or, with the built-in scheduler for a general program,
+  running it; one that only validates the program does not count.
 - **orderly stop**: the stop of a resident program with
   `debasher_stop_resident`, which halts every node in one round before stopping
   it, so that the next launch resumes the program with nothing lost.

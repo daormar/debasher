@@ -344,6 +344,9 @@ DEBASHER_PRG_PREF="program"
 DEBASHER_PRG_COMMAND_LINE_BASENAME="command_line.sh"
 DEBASHER_EXEC_CONTEXT_BASENAME=".exec_context.sh"
 DEBASHER_LOCK_BASENAME="lock"
+# The second line of the lock file of a debasher_exec that only validates a
+# program, which prepares nothing to run (see debasher::_outdir_is_locked_for_a_run)
+DEBASHER_LOCK_VALIDATION_MARK="validate"
 DEBASHER_STEP_MARKER_PREFIX="DEBASHER_STEP_DONE_"
 
 # DIR_NAMES

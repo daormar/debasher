@@ -274,8 +274,9 @@ relative to the output directory of the run.
 - **lock**: the `lock` file of the output directory, which `debasher_exec` holds
   while it prepares and launches a run, so that two of them never do so on the
   same output directory at once. With the built-in scheduler, unless in oneshot
-  mode, `debasher_exec` is the scheduler of the run and holds the lock until
-  the program ends.
+  mode, `debasher_exec` is the scheduler of the run and holds the lock until the
+  program ends. A `debasher_exec` that only validates the program (`--validate`)
+  holds it too, and says so on the second line of the lock file.
 - **process output directory**: the directory of a process under the output
   directory, named after the process unless its `_outdir_basename` method gives
   another name. Before each task runs, the `_reset_outfiles` method of the
@@ -2182,7 +2183,7 @@ fixed:
 
 | Path | Written by | Holds |
 |---|---|---|
-| `lock` | `debasher_exec`, when it starts | the lock of the directory, and the process id of the `debasher_exec` that holds it |
+| `lock` | `debasher_exec`, when it starts | the lock of the directory, the process id of the `debasher_exec` that holds it and, on a second line, `validate` when it only validates the program |
 | `command_line.sh` | `debasher_exec` | the directory it ran from and its command line, with the program file resolved and the scheduler recorded |
 | `.exec_context.sh` | `debasher_exec` | the execution context |
 | `program.procspec` | `debasher_exec` | the final process specification |
@@ -2287,15 +2288,16 @@ tasks of an array are submitted together, and the state does not arise.
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
 and 3 otherwise; given `-p`, it counts only that process. Without `-p`, it also
-ends with 2 while a `debasher_exec` holds the lock of the output directory,
-whatever the processes say. That `debasher_exec` may still be preparing the
-run, before the command line file that `debasher_status` reads exists, or
-while every process still shows its status from the run before, or `TO-DO`;
-and, as the built-in scheduler of the run outside oneshot mode, it waits
-between one process ending and the next starting. `debasher_status` checks the
-lock by taking it for an instant, and `debasher_exec` waits up to two seconds
-for the lock before it refuses the output directory, so that a check never
-makes a launch fail.
+ends with 2 while a `debasher_exec` holds the lock of the output directory to
+prepare or run the program, whatever the processes say. A validation does not
+count: it prepares nothing to run, and its `debasher_exec` says so on the second
+line of the lock file. The `debasher_exec` of a run may still be preparing it,
+before the command line file that `debasher_status` reads exists, or while every
+process still shows its status from the run before, or `TO-DO`; and, as the
+built-in scheduler of the run outside oneshot mode, it waits between one process
+ending and the next starting. `debasher_status` checks the lock by taking it for
+an instant, and `debasher_exec` waits up to two seconds for the lock before it
+refuses the output directory, so that a check never makes a launch fail.
 
 ## Reruns
 

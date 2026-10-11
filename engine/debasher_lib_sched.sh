@@ -152,6 +152,25 @@ debasher::_outdir_is_locked()
 }
 
 ########
+# Whether a debasher_exec holds the lock of an output directory to prepare
+# or run a program there (see debasher::_outdir_is_locked), and not only to
+# validate it, which it marks in the second line of the lock file.
+#
+# $1 - Absolute path of the output directory.
+debasher::_outdir_is_locked_for_a_run()
+{
+    local dirname=$1
+    local lockfile="${dirname}/${DEBASHER_LOCK_BASENAME}"
+
+    debasher::_outdir_is_locked "${dirname}" || return 1
+
+    # A lock file without a mark ends after its first line
+    local pid mark=""
+    { read -r pid; read -r mark; } < "${lockfile}" || true
+    [ "${mark}" != "${DEBASHER_LOCK_VALIDATION_MARK}" ]
+}
+
+########
 # Stops the debasher_exec that is preparing or running a program in an
 # output directory, if any, and waits until it has ended. That
 # debasher_exec holds the lock of the directory for as long as it runs, and
@@ -172,7 +191,9 @@ debasher::_stop_run_scheduler()
     debasher::_outdir_is_locked "${dirname}" || return 0
 
     local pid
-    pid=$("${CAT}" "${lockfile}")
+    # The first line, which a mark may follow (see
+    # ensure_exclusive_execution in debasher_exec)
+    read -r pid < "${lockfile}"
     if ! debasher::_str_is_positive_integer "${pid}"; then
         echo "Error: the output directory ${dirname} is locked, but its lock file does not give the process that holds it" >&2
         return 1

@@ -549,6 +549,21 @@ def test_status_reports_the_run_in_progress_while_a_debasher_exec_holds_the_lock
     assert one_process.returncode == 0
 
 
+def test_status_does_not_take_a_validation_for_a_run(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    # A debasher_exec --validate holds the lock, and marks it
+    with open(outdir / "lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        (outdir / "lock").write_text(f"{os.getpid()}\nvalidate\n")
+        status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "debasher_exec is preparing or running the program" not in status.stderr
+
+
 def test_status_reports_the_run_in_progress_before_debasher_exec_writes_the_command_line(tmp_path):
     outdir = tmp_path / "out"
     outdir.mkdir()
