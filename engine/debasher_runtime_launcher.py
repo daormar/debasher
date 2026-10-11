@@ -76,22 +76,86 @@ def _read_json(path):
         return json.load(f)
 
 
-def _pid_alive(pid):
+def _pid_start_time(pid):
+    """
+    The start time of the process `pid` as the engine records it for a task
+    of the built-in scheduler (see debasher::_builtin_sched_pid_start_time in
+    engine/debasher_lib_sched_builtin.sh): what "ps -o lstart=" gives with
+    the locale and the time zone fixed, so that whoever reads it gets the
+    same text, its blanks turned into "_". None when there is no such
+    process, or no ps to ask.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "lstart=", "-p", str(pid)],
+            env={**os.environ, "LC_ALL": "C", "TZ": "UTC0"},
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    words = result.stdout.split()
+    if result.returncode != 0 or not words:
+        return None
+    return "_".join(words)
+
+
+def _launch_id(pid):
+    """
+    What launcher.pid keeps of the shell of a batch run with process id
+    `pid`: "<pid>@<start time>". A process id alone does not name the shell
+    for good: once it has ended, the system may give the same id to another
+    process, which would then be taken for a shell that still runs, and the
+    batch run would never end. Without ps to ask, the process id alone; a
+    shell that has already ended gets an empty start time, and never runs.
+    """
+    start = _pid_start_time(pid)
+    if start is not None:
+        return f"{pid}@{start}"
+    return f"{pid}" if _pid_exists(pid) else f"{pid}@"
+
+
+def _pid_exists(pid):
+    """Whether a process with id `pid` exists that this user can signal: a
+    process of another user is never the shell of a batch run."""
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         return False
-    except PermissionError:
-        return True
     return True
 
 
-def _read_pid(path):
+def _shell_alive(launch_id):
+    """
+    Whether the shell that `launch_id` (see _launch_id) names still runs: a
+    process with its id exists, this user can signal it, and, when the id has
+    a start time, it started at that time. A start time that cannot be read
+    now, with no ps to ask, leaves the process id alone to decide, as does an
+    id without one, as an earlier launch wrote it.
+    """
+    pid_text, has_start, recorded = launch_id.partition("@")
+    pid = int(pid_text)
+    if not _pid_exists(pid):
+        return False
+    if not has_start:
+        return True
+    if not recorded:
+        return False
+    current = _pid_start_time(pid)
+    return current is None or current == recorded
+
+
+def _read_launch_id(path):
+    """The id in launcher.pid (see _launch_id), or None when there is none,
+    or none that gives a process id."""
     try:
         with open(path) as f:
-            return int(f.read().strip())
+            launch_id = f.read().strip()
+        int(launch_id.partition("@")[0])
     except (FileNotFoundError, ValueError):
         return None
+    return launch_id
 
 
 def _read_exit_code(run_dir):
@@ -151,14 +215,14 @@ def _batch_run_state(run_dir, single_process, program_status):
     has ended but not yet been waited for, whose PID still shows as alive,
     is never taken for a running one once its file is there.
     """
-    pid = _read_pid(os.path.join(run_dir, _PID_FILE))
-    alive = pid is not None and _pid_alive(pid)
+    launch_id = _read_launch_id(os.path.join(run_dir, _PID_FILE))
+    alive = launch_id is not None and _shell_alive(launch_id)
     exit_code = _read_exit_code(run_dir)
     if exit_code is not None:
         return ("finished", 0) if exit_code == 0 else ("failed", exit_code)
     if not single_process and os.path.exists(os.path.join(run_dir, _SUBMITTED_FILE)):
         return _state_from_program_status(program_status(run_dir), ended=True)
-    if pid is None:
+    if launch_id is None:
         return ("registered", None)
     if alive:
         return ("running", None)
@@ -641,7 +705,7 @@ class ProgramLauncher(FBPProcess):
         self._children[run_dir] = child
         tmp_path = os.path.join(run_dir, f"{_PID_FILE}.tmp")
         with open(tmp_path, "w") as f:
-            f.write(f"{child.pid}\n")
+            f.write(f"{_launch_id(child.pid)}\n")
         os.replace(tmp_path, os.path.join(run_dir, _PID_FILE))
         self.log.info("launched the batch run in %s (pid %s)", run_dir, child.pid)
 

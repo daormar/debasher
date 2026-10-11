@@ -374,6 +374,15 @@ def test_the_scheduler_of_the_batch_runs_reaches_debasher_exec(outdir, monkeypat
     assert "-a x" in (outdir / "a" / "fake_args").read_text()
 
 
+def test_the_shell_of_a_batch_run_is_kept_with_its_start_time(outdir):
+    node = _node()
+    _request(node, 1, {"opts": {}, "run": "a"})
+    _check_until_ended(node, outdir, "a")
+    pid, at, start = (outdir / "a" / "launcher.pid").read_text().strip().partition("@")
+    assert pid.isdigit() and at == "@"
+    assert " " not in start
+
+
 def test_without_a_scheduler_the_batch_runs_use_the_builtin_one(outdir):
     node = _node()
     _request(node, 1, {"opts": {}, "run": "a"})
@@ -495,6 +504,39 @@ def test_a_run_whose_shell_is_alive_is_running(tmp_path):
     finally:
         shell.kill()
         shell.wait()
+
+
+def test_a_run_whose_shell_is_alive_since_its_start_time_is_running(tmp_path):
+    shell = subprocess.Popen(["sleep", "10"])
+    try:
+        (tmp_path / "launcher.pid").write_text(f"{launcher_mod._launch_id(shell.pid)}\n")
+        assert "@" in (tmp_path / "launcher.pid").read_text()
+        assert _state(tmp_path) == (("running", None), [])
+    finally:
+        shell.kill()
+        shell.wait()
+
+
+def test_a_process_that_got_the_pid_of_the_shell_is_not_taken_for_it(tmp_path):
+    # The shell ended with no file, as after a reboot, and its process id now
+    # belongs to a process that started at another time
+    other = subprocess.Popen(["sleep", "10"])
+    try:
+        (tmp_path / "launcher.pid").write_text(f"{other.pid}@Mon_Jan__1_00:00:00_2001\n")
+        assert _state(tmp_path, single_process=True) == (("stopped", None), [])
+        # A shell that ended before its start time could be read
+        (tmp_path / "launcher.pid").write_text(f"{other.pid}@\n")
+        assert _state(tmp_path, single_process=True) == (("stopped", None), [])
+    finally:
+        other.kill()
+        other.wait()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can signal every process")
+def test_a_process_of_another_user_is_never_the_shell(tmp_path):
+    # Process 1 belongs to root, as the first process ids after a reboot do
+    (tmp_path / "launcher.pid").write_text("1\n")
+    assert _state(tmp_path, single_process=True) == (("stopped", None), [])
 
 
 def test_a_shell_that_ended_is_told_by_its_file_even_before_it_is_waited_for(tmp_path):

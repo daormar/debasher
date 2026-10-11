@@ -3194,13 +3194,22 @@ incarnation held in memory, and a tool outside the node (see
 parent learns its exit code: the file `submitted` when it ends with 0, and
 `exit_code`, holding its exit code, when it fails (options that the program
 refuses, for example), each written into a temporary file renamed into place
-before the shell ends. `observe()` writes the PID of that shell into the run
-directory, `launcher.pid`, and the output of both goes to `launcher.log`.
+before the shell ends. `observe()` writes the id of that shell into the run
+directory, `launcher.pid`, and the output of both goes to `launcher.log`. The id
+is the PID of the shell together with the time at which its process started, as
+the engine keeps the id of a task of the built-in scheduler (see "The built-in
+scheduler" in `doc/design_doc_engine.md`): `<pid>@<start time>`. Without `ps`,
+the id is the PID alone; a shell that has already ended when its start time is
+read gets an empty one, and never runs. Once the shell has ended, as by a
+restart of the machine, the system may give its PID to another process, and a
+PID alone would then make the batch run look running for as long as that process
+lives: not launched again, not reported, and holding a slot.
+
 With the built-in scheduler, `debasher_exec` waits for the program to end, but
-with SLURM it only submits the jobs, and ends at once, so once it has ended
-well the node asks `debasher_status` on the run directory, at most once every
-`STATUS_CHECK_INTERVAL_SECS`, until nothing of the program is in progress.
-The states of a batch run, in the order in which the rule looks at its run
+with SLURM it only submits the jobs, and ends at once, so once it has ended well
+the node asks `debasher_status` on the run directory, at most once every
+`STATUS_CHECK_INTERVAL_SECS`, until nothing of the program is in progress. The
+states of a batch run, in the order in which the rule looks at its run
 directory:
 
 - With `exit_code`: ended, finished if it holds 0, failed otherwise.
@@ -3212,7 +3221,12 @@ directory:
   code into `exit_code`.
 - With no `launcher.pid`: registered and not launched, launched when a slot is
   free.
-- With its shell alive: running.
+- With its shell alive: running. The shell is alive while a process with its PID
+  exists, the user of the node can signal it (a process of another user, such as
+  one that took the PID after a restart, is never the shell), and, when the id
+  has a start time, it started at that time. An id without a start time, or one
+  checked when `ps` cannot give the current start time, is decided by the PID
+  alone.
 - With its shell gone and neither file: it was stopped before it ended,
   together with its shell, as by a restart of the machine. If
   `debasher_status` says that something of the program is still in progress,
@@ -3241,9 +3255,9 @@ to be the same in a replay, since the node sends nothing when it launches.
 ## The end of a batch run as an input event
 
 The directory of a batch run always says how it is going: its registration, the
-PID and exit code that `observe()` writes, and `debasher_status` on it
-for each of its processes. Anyone can read it, the frontend included, at no
-cost to the node.
+id of its shell and the exit code that `observe()` writes, and `debasher_status`
+on it for each of its processes. Anyone can read it, the frontend included, at
+no cost to the node.
 
 A node downstream can also be told, through an output port of the launcher
 node, `outdone`. `observe()` cannot send on it: a node sends only from
@@ -3282,7 +3296,7 @@ ends when it ends, and the options of a request are the arguments of that
 function. The states of a batch run differ in two points. The shell that runs
 it writes `exit_code` whatever the exit code, 0 included, and never
 `submitted`, since nothing of the process is left to ask `debasher_status`
-about once it has ended. And with neither an exit code nor a live PID, the
+about once it has ended. And with neither an exit code nor a live shell, the
 process was stopped before it ended, and it is launched again from the start,
 since `debasher_exec_process` has nothing to resume from: a process run this
 way has to be able to run twice, overwriting its results.
