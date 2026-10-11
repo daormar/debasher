@@ -17,8 +17,9 @@ builds a program as a network of components that exchange data through
 connections defined outside them: the order in which the components run follows
 from the flow of data between them, not from an order written by hand, and
 components that do not depend on each other run in parallel. In DeBasher a
-component is a process, a set of Bash functions with named input and output
-options; a connection is an input option that takes the value of an output
+component is a process, a set of functions with named input and output options,
+which can be written in Bash, Python, R, Perl or Groovy and mixed in a single
+program; a connection is an input option that takes the value of an output
 option of another process; and a program is the set of processes that a module
 adds. The engine infers the dependencies between processes from their
 connections, since a process that reads a file written by another waits for it.
@@ -26,11 +27,11 @@ Data can also stream between two processes through a FIFO while both run, which
 lets a program hold cycles that the dependency graph never sees.
 
 The engine is language agnostic. Bash is the language in which processes are
-declared and connected, but the code of a process can be written in Python, R,
-Perl or Groovy, embedded in the module or kept in a file of its own, or be any
-program that a Bash function runs. A process receives a list of options and
-produces files, values or data written into a FIFO, and nothing in that
-contract depends on the language of its code.
+declared and connected, but the code of a process can be in another language,
+embedded in the module or kept in a file of its own, or be any program that a
+Bash function runs. A process receives a list of options and produces files,
+values or data written into a FIFO, and nothing in that contract depends on the
+language of its code.
 
 Nor does it depend on the number of tasks of the process. A process is like a
 Unix command: its function receives a list of options, and its implementation is
