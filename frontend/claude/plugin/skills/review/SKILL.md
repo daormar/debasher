@@ -62,7 +62,11 @@ its code. Offer to run the tests when what they do matters to a finding.
   and are effects outside the program idempotent? Does it wait with
   `self.sleep()` rather than `time.sleep()`, look at the outside world only
   in `observe` (bringing it in with `inject`), and set again in
-  `restore_node_state` a notice that follows from the node state?
+  `restore_node_state` a notice that follows from the node state? Does a
+  directory watcher or a launcher leave `-outrequests` and `-outdone` to its
+  class, and does a node that reads the results of a batch run take its
+  directory from `run_dir` rather than build it again from a runs root of
+  its own, which breaks silently once the two differ?
 - **Its tests.** Is there a test? Does it check the outputs, the edges of the
   input and a failure, or only that the process ended? Are `TODO`s or the line
   that makes a skeleton fail still there?
