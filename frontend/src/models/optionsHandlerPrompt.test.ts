@@ -64,8 +64,9 @@ describe("buildOptionsHandlerPrompt", () => {
     const prompt = buildOptionsHandlerPrompt(program, generator, "generator", "", "");
     expect(prompt).toContain("# Write the code that prints the number of tasks of the DeBasher process `count`");
     expect(prompt).toContain("written into the function `count_generate_opts_size`. It has to print the number of tasks of the process on its standard output, and nothing else.");
-    expect(prompt).toContain("`debasher_exec` runs the code once each time it prepares a run, in a subshell");
-    expect(prompt).not.toContain("several times");
+    expect(prompt).toContain("`debasher_exec` runs the code each time it prepares a run, in a subshell");
+    expect(prompt).toContain("within a run it may run it more than once");
+    expect(prompt).toContain("has to stay unchanged while the run lasts");
     expect(prompt).toContain("Print the number of tasks that the description of the process and the values of its options call for.");
   });
 

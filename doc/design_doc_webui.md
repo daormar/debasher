@@ -3608,28 +3608,42 @@ resident program is, it says:
 1. **How the code is put together.** The class of the node, named after its
    process, the node kind it derives from, and the order in which script
    generation assembles the parts (see "Script generation and import of a
-   resident program"); that each part is written without the indentation of
-   the class, and a hook without its `def` line, under its fixed signature;
-   that the constructor calls `super().__init__()` and gives the node state
-   its first value; that the class never declares the ports; and, for an
-   `FBPProcess`, which hooks it has to give, or, for a `ProgramLauncher` or a
-   `DirectoryWatcher`, that an empty body runs the hook of its class and a
-   body replaces it.
+   resident program"); that each part is written without the indentation of the
+   class, and a hook without its `def` line, under its fixed signature; that the
+   constructor calls `super().__init__()` and gives the node state its first
+   value; that the class never declares the ports; and, for an `FBPProcess`,
+   which hooks it has to give, or, for a `ProgramLauncher` or a
+   `DirectoryWatcher`, that an empty body runs the hook of its class and a body
+   replaces it. And that the code uses the methods of the runtime library rather
+   than code of its own: `self.sleep()` for the pace, `observe` with
+   `self.inject()` for what the node sees outside the program, and
+   `self.set_notice()` for a notice, set again in `restore_node_state` when it
+   follows from the node state.
 2. **The runtime library.** The node reference of its node kind.
 3. **The program**, its name and description, and **the node**: its name, its
    class, its node kind, its description, and whether it runs as several
    tasks.
 4. **The ports and options.** Each option of the node by its sort (see "The
-   program model of a resident program"), with its description. A business
-   input names the port under which what arrives reaches `process_data` and
-   the option of the node that sends it; a business output, the call that
-   sends on it and the options that read it, or that someone outside the
-   program reads it, and, for a fanout family, its ports and the option that
-   gives their count; an external input, that someone outside the program
-   writes it; and a configuration option, the entry of `self.opts` that gives
-   its value and, for a flag, that its name goes into the class attribute
-   `FLAGS`. An input that no connection reaches yet is described as a
-   configuration option, which it is until one does.
+   program model of a resident program"), with its description. A business input
+   names the port under which what arrives reaches `process_data` and the option
+   of the node that sends it; a business output, the call that sends on it and
+   the options that read it, or that someone outside the program reads it, and,
+   for a fanout family, its ports and the option that gives their count; an
+   external input, that someone outside the program writes it; and a
+   configuration option, the entry of `self.opts` that gives its value and, for
+   a flag, that its name goes into the class attribute `FLAGS`. An input that no
+   connection reaches yet is described as a configuration option, which it is
+   until one does. Of a `DirectoryWatcher` or a `ProgramLauncher`, an option
+   that its class looks for by name (see "The program model of a resident
+   program", and "A node that launches a general program" in
+   `doc/design_doc_resident.md`) says what the class does with it: it reads it
+   (`-watchdir`, `-pfile`, `-process`, `-runsdir`), or it sends on it, and the
+   code does not, with what it sends (on `-outrequests`, the request that
+   `request_for()` makes by default; on `-outdone`, the end of a batch run with
+   its `run_dir`); and a business input of a launcher, that the class takes each
+   message on it as a request, with the form of one. A business input that one
+   of those two outputs reaches says what each message holds, so that the node
+   that reads the ends of the batch runs finds their results in `run_dir`.
 5. **The code to complete.** Every part, under its name: its code, or that it
    is empty (and, for a hook that an `FBPProcess` has to give, required), and,
    for a hook that the node inherits, the inherited code, which an empty body
@@ -3691,27 +3705,31 @@ uses its options. After a title and a sentence on what a task is, it says:
    written into the `_generate_opts_size` method, has to print the number of
    tasks and nothing else, and does not share its variables with the function
    that defines the options of a task (whose values can use `${task_idx}`),
-   since `debasher_exec` runs it in a subshell, once each time it prepares a run
-   (see "Arrays and option generators" in `doc/design_doc_engine.md`). For both,
-   the lines that script generation writes before the code (`cmdline`,
-   `process_spec`, `process_name` and `process_outdir`), how to read a command
-   line option with `get_cmdline_opt`, and that the code runs while
-   `debasher_exec` prepares the run, before any process of the program. So it
-   never opens a FIFO, of a general or a resident program: nothing writes it
-   yet, and opening it for reading blocks until something does, which would
-   leave `debasher_exec` waiting, and whatever it read would be taken from the
-   reader of the FIFO. Nor does it read what a process of the program produces,
-   which a first run does not find and a later run finds as an earlier run left
-   it. It may read what exists before the run, such as a file or a directory
-   given on the command line; the number of tasks typically comes from a command
-   line option. And that a process with as many tasks as another one takes that
-   number with `get_process_num_tasks` instead of computing it again, which
-   would repeat the rule by which the other process counts its tasks (for
-   `array`, only from a process in `generator` mode, see "Arrays and option
-   generators" in `doc/design_doc_engine.md`). The prompt then names, with their
-   modes, the processes that this process reads task by task and can ask, the
-   usual candidates; a connection between `shared_dir` options pairs no tasks
-   and is left out.
+   since `debasher_exec` runs it in a subshell; that it runs each time a run is
+   prepared, maybe more than once (when another process asks for its number of
+   tasks), so the code has to print the same number every time; and that, since
+   that function runs again inside each task, a file or a directory that it
+   reads has to stay unchanged while the run lasts (see "Arrays and option
+   generators" in `doc/design_doc_engine.md`). For both, the lines that script
+   generation writes before the code (`cmdline`, `process_spec`, `process_name`
+   and `process_outdir`), how to read a command line option with
+   `get_cmdline_opt`, and that the code runs while `debasher_exec` prepares the
+   run, before any process of the program. So it never opens a FIFO, of a
+   general or a resident program: nothing writes it yet, and opening it for
+   reading blocks until something does, which would leave `debasher_exec`
+   waiting, and whatever it read would be taken from the reader of the FIFO. Nor
+   does it read what a process of the program produces, which a first run does
+   not find and a later run finds as an earlier run left it. It may read what
+   exists before the run, such as a file or a directory given on the command
+   line; the number of tasks typically comes from a command line option. And
+   that a process with as many tasks as another one takes that number with
+   `get_process_num_tasks` instead of computing it again, which would repeat the
+   rule by which the other process counts its tasks (for `array`, only from a
+   process in `generator` mode, see "Arrays and option generators" in
+   `doc/design_doc_engine.md`). The prompt then names, with their modes, the
+   processes that this process reads task by task and can ask, the usual
+   candidates; a connection between `shared_dir` options pairs no tasks and is
+   left out.
 2. **The program** and **the process**, with its options handler mode.
 3. **The options**, as in the code prompt of a process: their values show
    what a task needs, such as an input option whose value is

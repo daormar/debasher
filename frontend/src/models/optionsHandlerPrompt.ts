@@ -82,7 +82,7 @@ function rulesSection(program: Program, process: ProgramProcess, mode: PromptedH
       ]
     : [
         `- The code is Bash, written into the function \`${process.name}_generate_opts_size\`. It has to print the number of tasks of the process on its standard output, and nothing else. Another function defines the options of the task of index \`task_idx\`, from 0, whose values can use \`\${task_idx}\`; it does not see the variables of this code.`,
-        "- `debasher_exec` runs the code once each time it prepares a run, in a subshell, so a later run counts the tasks again, from what it reads then.",
+        "- `debasher_exec` runs the code each time it prepares a run, in a subshell, so a later run counts the tasks again, from what it reads then; within a run it may run it more than once (when another process asks for the number of tasks with `get_process_num_tasks`), and it calls the function that defines the options of a task again inside that task. The code has to print the same number every time: a file or a directory that it reads, such as one given on the command line, has to stay unchanged while the run lasts.",
       ];
   return [
     "## How the engine runs the code",

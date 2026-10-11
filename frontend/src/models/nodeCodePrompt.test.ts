@@ -113,6 +113,73 @@ describe("buildNodeCodePrompt", () => {
   it("takes an input that no connection reaches as a configuration option", () => {
     const prompt = buildNodeCodePrompt(program, launch, emptyNodeCode(), "", library);
     expect(prompt).toContain("- `-inreq` (configuration option, string)");
+    expect(prompt).not.toContain("as a request for a batch run");
+  });
+
+  it("asks for the methods of the runtime library rather than code of its own", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("`self.sleep()`, not `time.sleep()`");
+    expect(prompt).toContain("`observe` with `self.inject()`");
+    expect(prompt).toContain("set again in `restore_node_state` when it follows from the node state");
+  });
+
+  describe("a watcher, a launcher and the node that reads the ends of the batch runs", () => {
+    const watch = node("Watch", "DirectoryWatcher", [
+      createOption("watchdir", "-watchdir", { commandLine: true, mandatory: true }),
+      createOption("outrequests", "-outrequests", { direction: "output", channel: "fifo", value: "requests" }),
+    ]);
+    const batch = node("Batch", "ProgramLauncher", [
+      createOption("requests", "-requests"),
+      createOption("pfile", "-pfile", { commandLine: true }),
+      createOption("process", "-process", { value: "align" }),
+      createOption("runsdir", "-runsdir", { commandLine: true }),
+      createOption("outdone", "-outdone", { direction: "output", channel: "fifo", value: "done" }),
+    ]);
+    const report = node("Report", "FBPProcess", [
+      createOption("done", "-done"),
+      createOption("files", "-files"),
+    ]);
+    const pipeline = {
+      name: "pipeline",
+      programType: "resident",
+      description: "",
+      processes: [watch, batch, report],
+      edges: [
+        { id: "e1", sourceProcessId: "Watch", sourceOptionId: "outrequests", targetProcessId: "Batch", targetOptionId: "requests" },
+        { id: "e2", sourceProcessId: "Batch", sourceOptionId: "outdone", targetProcessId: "Report", targetOptionId: "done" },
+        { id: "e3", sourceProcessId: "Watch", sourceOptionId: "outrequests", targetProcessId: "Report", targetOptionId: "files" },
+      ],
+    } as unknown as Program;
+
+    it("says which options the class of a watcher uses, and what it sends", () => {
+      const prompt = buildNodeCodePrompt(pipeline, watch, emptyNodeCode(), "", library);
+      expect(prompt).toContain("The class `DirectoryWatcher` reads it (`WATCH_DIR_OPTION`)");
+      expect(prompt).toContain("The class `DirectoryWatcher` sends on it (`REQUESTS_PORT`), once for each complete file, what `request_for()` makes of its path, by default `{\"opts\": {\"-infile\": \"<path of the file>\"}");
+      expect(prompt).not.toContain("Send on it with");
+    });
+
+    it("says which options the class of a launcher uses, and what it takes and sends", () => {
+      const prompt = buildNodeCodePrompt(pipeline, batch, emptyNodeCode(), "", library);
+      expect(prompt).toContain("The class `ProgramLauncher` takes every message on it as a request for a batch run: `{\"opts\": {\"-<option>\": \"<value>\", ...}, \"run\": \"<run directory>\"}`");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it (`PFILE_OPTION`): the general program to launch, in place of `PFILE`.");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it (`PROCESS_OPTION`)");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it (`RUNS_ROOT_OPTION`)");
+      expect(prompt).toContain("The class `ProgramLauncher` sends on it (`DONE_PORT`), for each batch run that ends, `{\"run\": ..., \"run_dir\": ..., \"status\": ..., \"exit_code\": ...}`");
+      expect(prompt).not.toContain("Send on it with");
+    });
+
+    it("tells the node downstream what each message of the class holds", () => {
+      const prompt = buildNodeCodePrompt(pipeline, report, emptyNodeCode(), "", library);
+      expect(prompt).toContain("Each message is `{\"run\": ..., \"run_dir\": ..., \"status\": ..., \"exit_code\": ...}`, with `run_dir` the absolute path of the run directory, where the results of the batch run are");
+      expect(prompt).toContain("Each message is `{\"opts\": {\"-infile\": \"<path of the file>\"}, \"run\": \"<name of the file without its extension>\"}`, for one complete file.");
+    });
+
+    it("leaves the request to a request_for that the class body of the watcher redefines", () => {
+      const redefined = { ...watch, nodeCode: code({ classBody: "def request_for(self, path):\n    return {\"opts\": {\"-bam\": path}}" }) };
+      const withRedefined = { ...pipeline, processes: [redefined, batch, report] } as Program;
+      const prompt = buildNodeCodePrompt(withRedefined, report, emptyNodeCode(), "", library);
+      expect(prompt).toContain("Each message is what `request_for()` of `Watch`, redefined in its class body, makes of the path of a complete file.");
+    });
   });
 
   it("names the ports of a fanout family", () => {

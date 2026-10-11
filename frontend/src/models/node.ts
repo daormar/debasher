@@ -39,11 +39,15 @@ export const NODE_KINDS: { value: NodeKind; label: string; description: string }
 
 // The labels of the options that the classes of the runtime library look
 // for by name: WATCH_DIR_OPTION and REQUESTS_PORT of DirectoryWatcher, and
-// DONE_PORT of ProgramLauncher (a test keeps them in step with
+// DONE_PORT, PFILE_OPTION, PROCESS_OPTION and RUNS_ROOT_OPTION of
+// ProgramLauncher (a test keeps them in step with
 // engine/debasher_runtime_watcher.py and debasher_runtime_launcher.py).
 export const WATCH_DIR_OPTION_LABEL = "-watchdir";
 export const REQUESTS_PORT_LABEL = "-outrequests";
 export const DONE_PORT_LABEL = "-outdone";
+export const PFILE_OPTION_LABEL = "-pfile";
+export const PROCESS_OPTION_LABEL = "-process";
+export const RUNS_ROOT_OPTION_LABEL = "-runsdir";
 
 // The input of a new ProgramLauncher. The class takes a request from any
 // input, so this label is only the one that a new node starts with.

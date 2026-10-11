@@ -4,8 +4,14 @@ import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import type { NodeCode, NodeHookPart, NodeKind } from "./node";
 import {
+  DONE_PORT_LABEL,
   NODE_CODE_PARTS,
   NODE_HOOKS,
+  PFILE_OPTION_LABEL,
+  PROCESS_OPTION_LABEL,
+  REQUESTS_PORT_LABEL,
+  RUNS_ROOT_OPTION_LABEL,
+  WATCH_DIR_OPTION_LABEL,
   inheritsHooks,
   isRequiredHook,
   nodeClassName,
@@ -80,6 +86,7 @@ function rulesSection(process: ProgramProcess, kind: NodeKind): string[] {
     "- You write only the parts, each without the indentation of the class: the node preamble, the code before the class (imports, helper functions, constants); the class body (class attributes, the constructor, which calls `super().__init__()` and gives the node state its first value, and helper methods); and the body of each hook, without its `def` line.",
     `- The signatures of the hooks are fixed: ${signatures}. A hook with an empty body is left out of the class.`,
     "- The class never declares the ports of the node: the engine gives them from the options of its process (see the ports and options below).",
+    "- Use the methods of the runtime library rather than writing your own: `self.sleep()`, not `time.sleep()`, to set the pace; `observe` with `self.inject()` to bring in what the node sees outside the program, never `process_data`; and `self.set_notice()` for what whoever watches the program should know (a missing configuration file), set again in `restore_node_state` when it follows from the node state.",
   ];
   if (kind === "FBPProcess") {
     lines.push("- This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime` (`pass` when it has nothing to open), and to `observe` only if it looks at something outside the program, with `OBSERVE_PORT` set in the class body.");
@@ -156,7 +163,9 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
   switch (role) {
     case "businessOutput":
       heading = `business output, port \`${name}\``;
-      if (fanoutFamily) {
+      if (classSends(process, option)) {
+        notes.push(...classOptionNotes(process, option, false));
+      } else if (fanoutFamily) {
         const base = portName(fanoutBaseLabel(option.label));
         const countSource = process.options.find(o => o.id === option.countSourceOptionId);
         notes.push(`A fanout family: the ports \`${base}0\`, \`${base}1\`, ..., as many as ${countSource ? `the value of \`${countSource.label}\`` : "an option that is not chosen yet"} says; send on one with \`self.send_data(f"${base}{i}", payload)\`.`);
@@ -176,10 +185,15 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
     case "businessInput":
       heading = `business input, port \`${name}\``;
       notes.push(`What arrives on it reaches \`process_data\` with \`port_name\` \`"${name}"\`.`);
+      notes.push(...classOptionNotes(process, option, true));
       for (const edge of incoming) {
         const end = edgeEnd(program, edge.sourceProcessId, edge.sourceOptionId, "node");
         if (end) {
           notes.push(`Sent by ${end.text}`, ...end.processNote);
+          const sender = program.processes.find(p => p.id === edge.sourceProcessId);
+          if (sender) {
+            notes.push(...sentMessageNotes(sender, end.option));
+          }
         }
       }
       break;
@@ -190,6 +204,7 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
     default:
       heading = option.dataType === "None" ? "flag" : `configuration option, ${option.dataType}`;
       notes.push(...configurationNotes(option, name));
+      notes.push(...classOptionNotes(process, option, false));
       break;
   }
 
@@ -205,6 +220,77 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
     notes.push("Only the options handler reads it, to decide the tasks of the node: no task receives it, so the code of the node cannot read it.");
   }
   return [`- \`${option.label}\` (${facts.join(", ")})`, ...notes.map(note => `  ${note}`)];
+}
+
+// The request that a ProgramLauncher takes, and the message that it sends on
+// DONE_PORT for each batch run that ends (see ProgramLauncher in
+// engine/debasher_runtime_launcher.py).
+const LAUNCHER_REQUEST =
+  '`{"opts": {"-<option>": "<value>", ...}, "run": "<run directory>"}`: the options of the general program, names with their dash and values as strings, and, optionally, the name of the run directory of the batch run';
+const LAUNCHER_DONE_MESSAGE =
+  '`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`, with `run_dir` the absolute path of the run directory, where the results of the batch run are, and `status` `"finished"` for an exit code of 0 and `"failed"` for any other';
+
+// The request that the default request_for() of a DirectoryWatcher makes of
+// the path of a complete file, with FILE_OPTION as the option of the path.
+const WATCHER_REQUEST =
+  '`{"opts": {"-infile": "<path of the file>"}, "run": "<name of the file without its extension>"}`';
+
+// Whether the class of the node, not its code, sends on a business output:
+// the requests of a DirectoryWatcher and the ends of the batch runs of a
+// ProgramLauncher.
+function classSends(process: ProgramProcess, option: ProgramOption): boolean {
+  return (process.nodeKind === "DirectoryWatcher" && option.label === REQUESTS_PORT_LABEL)
+    || (process.nodeKind === "ProgramLauncher" && option.label === DONE_PORT_LABEL);
+}
+
+// What the class of a DirectoryWatcher or a ProgramLauncher does with an
+// option of the node: the options it looks for by name, and, for a
+// launcher, a business input (`businessInput`), each of which takes
+// requests. None for an FBPProcess.
+function classOptionNotes(process: ProgramProcess, option: ProgramOption, businessInput: boolean): string[] {
+  if (process.nodeKind === "DirectoryWatcher") {
+    switch (option.label) {
+      case WATCH_DIR_OPTION_LABEL:
+        return ["The class `DirectoryWatcher` reads it (`WATCH_DIR_OPTION`): the directory it watches, in place of `WATCH_DIR`."];
+      case REQUESTS_PORT_LABEL:
+        return [`The class \`DirectoryWatcher\` sends on it (\`REQUESTS_PORT\`), once for each complete file, what \`request_for()\` makes of its path, by default ${WATCHER_REQUEST}. Redefine \`request_for\` in the class body to send something else; the code does not send on it.`];
+      default:
+        return [];
+    }
+  }
+  if (process.nodeKind === "ProgramLauncher") {
+    switch (option.label) {
+      case PFILE_OPTION_LABEL:
+        return ["The class `ProgramLauncher` reads it (`PFILE_OPTION`): the general program to launch, in place of `PFILE`."];
+      case PROCESS_OPTION_LABEL:
+        return ["The class `ProgramLauncher` reads it (`PROCESS_OPTION`): the process of the general program to launch alone, in place of `PROCESS`."];
+      case RUNS_ROOT_OPTION_LABEL:
+        return ["The class `ProgramLauncher` reads it (`RUNS_ROOT_OPTION`): the absolute path under which the run directories go, in place of `RUNS_ROOT`."];
+      case DONE_PORT_LABEL:
+        return [`The class \`ProgramLauncher\` sends on it (\`DONE_PORT\`), for each batch run that ends, ${LAUNCHER_DONE_MESSAGE}; the code does not send on it.`];
+      default:
+        return businessInput
+          ? [`The class \`ProgramLauncher\` takes every message on it as a request for a batch run: ${LAUNCHER_REQUEST}.`]
+          : [];
+    }
+  }
+  return [];
+}
+
+// What each message on a business input holds when the class of the node
+// at the other end sends it: the requests of a DirectoryWatcher and the
+// ends of the batch runs of a ProgramLauncher.
+function sentMessageNotes(sender: ProgramProcess, output: ProgramOption): string[] {
+  if (!classSends(sender, output)) {
+    return [];
+  }
+  if (sender.nodeKind === "ProgramLauncher") {
+    return [`Each message is ${LAUNCHER_DONE_MESSAGE}.`];
+  }
+  const redefined = /\bdef request_for\b/.test(sender.nodeCode?.classBody ?? "");
+  return [redefined
+    ? `Each message is what \`request_for()\` of \`${sender.name}\`, redefined in its class body, makes of the path of a complete file.`
+    : `Each message is ${WATCHER_REQUEST}, for one complete file.`];
 }
 
 function configurationNotes(option: ProgramOption, name: string): string[] {

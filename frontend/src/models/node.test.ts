@@ -21,6 +21,9 @@ import {
   DONE_PORT_LABEL,
   REQUESTS_PORT_LABEL,
   WATCH_DIR_OPTION_LABEL,
+  PFILE_OPTION_LABEL,
+  PROCESS_OPTION_LABEL,
+  RUNS_ROOT_OPTION_LABEL,
 } from "./node";
 import { createProcess } from "./process";
 
@@ -281,6 +284,9 @@ describe("the options of a new node", () => {
     expect(`-${runtimeAttribute("WATCH_DIR_OPTION")}`).toBe(WATCH_DIR_OPTION_LABEL);
     expect(`-${runtimeAttribute("REQUESTS_PORT")}`).toBe(REQUESTS_PORT_LABEL);
     expect(`-${runtimeAttribute("DONE_PORT")}`).toBe(DONE_PORT_LABEL);
+    expect(`-${runtimeAttribute("PFILE_OPTION")}`).toBe(PFILE_OPTION_LABEL);
+    expect(`-${runtimeAttribute("PROCESS_OPTION")}`).toBe(PROCESS_OPTION_LABEL);
+    expect(`-${runtimeAttribute("RUNS_ROOT_OPTION")}`).toBe(RUNS_ROOT_OPTION_LABEL);
   });
 
 });
