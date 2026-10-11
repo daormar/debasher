@@ -1,4 +1,4 @@
-import type { FanoutFamily, ProgramOption } from "../models/option";
+import type { FanoutFamily, OptionChannel, ProgramOption } from "../models/option";
 
 interface Props {
   processName: string;
@@ -17,36 +17,42 @@ interface Props {
   // ProgramCanvas's expandFanoutOptions/MAX_FANOUT_INLINE) — shown as
   // their own "Pick index" row instead.
   families: FanoutFamily[];
-  // Option ids ProgramCanvas's fetchProcessIO already determined are
-  // fifo-backed — either option.channel === "fifo" itself, or a plain
-  // connection whose upstream source is (see ProgramCanvas's
-  // isFifoBackedOption for why a reading-side option like "-inf" can't
-  // tell that from its own fields alone).
-  fifoBackedOptionIds: Set<string>;
+  // The option channel through which the data of each option gets to the
+  // process (see deliveryChannel), by option id, as ProgramCanvas's
+  // fetchProcessIO found it: a connected input's own channel is "none",
+  // whatever the channel of the output it reads.
+  deliveryChannels: Map<string, OptionChannel>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
   onPickFanoutIndex: (family: FanoutFamily) => void;
   onClose: () => void;
 }
 
+// The option channel through which the data of a row arrives: that of its
+// option, or, for a row of a fanout family, whose id is "<family id>:<index>"
+// (see ProgramCanvas's expandFanoutOptions and
+// handleFanoutIndexPickerConfirm), that of its family.
+function rowChannel(option: ProgramOption, deliveryChannels: Map<string, OptionChannel>): OptionChannel {
+  return deliveryChannels.get(option.id)
+    ?? deliveryChannels.get(option.id.replace(/:\d+$/, ""))
+    ?? option.channel;
+}
+
 // A fifo's value is only ever shown as a path (no content view, for
-// now) — reading a fifo isn't safe the way reading a regular file is.
-// Anything else backed by a real path on disk (a "file" or "dir" option,
-// or a "shared_dir" or "process_outdir" option, which always names a
-// directory)
-// gets a "View" button, wired up in ProgramCanvas to
-// /api/execution/inspect-path.
-//
-// option.channel === "fifo" is checked directly (rather than only via
-// fifoBackedOptionIds) because a fanout family's own expanded rows
-// (ProgramCanvas's expandFanoutOptions/handleFanoutIndexPickerConfirm)
-// carry a synthesized "familyId:index" id that never matches the
-// pre-expansion id fifoBackedOptionIds was built from, even though
-// they correctly inherit the family's real channel.
-function optionHasPathButton(option: ProgramOption, fifoBackedOptionIds: Set<string>): boolean {
-  return option.channel !== "fifo" && !fifoBackedOptionIds.has(option.id) &&
-    (option.dataType === "file" || option.dataType === "dir" ||
-      option.channel === "shared_dir" || option.channel === "process_outdir");
+// now): reading a fifo isn't safe the way reading a regular file is.
+// Anything else backed by a real path on disk gets a "View" button, wired
+// up in ProgramCanvas to /api/execution/inspect-path: a "file" or "dir"
+// option, a "shared_dir" or "process_outdir" option, which always names a
+// directory, and an option written or read through a value descriptor,
+// a regular file that holds the value, whatever the data type of that
+// value.
+function optionHasPathButton(option: ProgramOption, deliveryChannels: Map<string, OptionChannel>): boolean {
+  const channel = rowChannel(option, deliveryChannels);
+  if (channel === "fifo") {
+    return false;
+  }
+  return option.dataType === "file" || option.dataType === "dir" ||
+    channel === "value_desc" || channel === "shared_dir" || channel === "process_outdir";
 }
 
 // Mirrors ProgramOptionsEditor's ("Run" > "Set program options") own
@@ -55,13 +61,13 @@ function optionHasPathButton(option: ProgramOption, fifoBackedOptionIds: Set<str
 function OptionRow({
   option,
   resolvedValue,
-  fifoBackedOptionIds,
+  deliveryChannels,
   isViewPending,
   onViewPath,
 }: {
   option: ProgramOption;
   resolvedValue: string;
-  fifoBackedOptionIds: Set<string>;
+  deliveryChannels: Map<string, OptionChannel>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
 }) {
@@ -88,7 +94,7 @@ function OptionRow({
           {resolvedValue || "(no value)"}
         </span>
 
-        {optionHasPathButton(option, fifoBackedOptionIds) && resolvedValue && (
+        {optionHasPathButton(option, deliveryChannels) && resolvedValue && (
           <button
             onClick={() => onViewPath(option, resolvedValue)}
             disabled={isViewPending}
@@ -160,7 +166,7 @@ function OptionSection({
   options,
   families,
   resolvedValues,
-  fifoBackedOptionIds,
+  deliveryChannels,
   isViewPending,
   onViewPath,
   onPickFanoutIndex,
@@ -169,7 +175,7 @@ function OptionSection({
   options: ProgramOption[];
   families: FanoutFamily[];
   resolvedValues: Record<string, string>;
-  fifoBackedOptionIds: Set<string>;
+  deliveryChannels: Map<string, OptionChannel>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
   onPickFanoutIndex: (family: FanoutFamily) => void;
@@ -192,7 +198,7 @@ function OptionSection({
           key={option.id}
           option={option}
           resolvedValue={resolvedValues[option.label] ?? option.value}
-          fifoBackedOptionIds={fifoBackedOptionIds}
+          deliveryChannels={deliveryChannels}
           isViewPending={isViewPending}
           onViewPath={onViewPath}
         />
@@ -217,7 +223,7 @@ export default function ProcessIOModal({
   options,
   resolvedValues,
   families,
-  fifoBackedOptionIds,
+  deliveryChannels,
   isViewPending,
   onViewPath,
   onPickFanoutIndex,
@@ -287,7 +293,7 @@ export default function ProcessIOModal({
                 options={inputs}
                 families={inputFamilies}
                 resolvedValues={resolvedValues}
-                fifoBackedOptionIds={fifoBackedOptionIds}
+                deliveryChannels={deliveryChannels}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
                 onPickFanoutIndex={onPickFanoutIndex}
@@ -298,7 +304,7 @@ export default function ProcessIOModal({
                 options={outputs}
                 families={outputFamilies}
                 resolvedValues={resolvedValues}
-                fifoBackedOptionIds={fifoBackedOptionIds}
+                deliveryChannels={deliveryChannels}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
                 onPickFanoutIndex={onPickFanoutIndex}

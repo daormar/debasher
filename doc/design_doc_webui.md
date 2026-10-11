@@ -1420,9 +1420,12 @@ output directory:
   one per line.
 - "Show inputs and outputs" parses that same file into the resolved value of
   each option, which for a FIFO, a shared directory, a process output directory
-  or a value descriptor is the path the engine chose, not the model's `value`.
-  Each value can be opened as a path: the content of a file, or the listing of a
-  directory, anywhere the server's user can read.
+  or a value descriptor is the path the engine chose, not the model's `value`. A
+  value that names a file or a directory can be opened, anywhere the server's
+  user can read: a file shows its content and a directory its listing. A value
+  descriptor is a file, whatever the data type of the value it holds. A FIFO
+  cannot be opened, whether the option defines it or is an input connected to
+  it, since reading it would take its data from its reader.
 
 A process that ran as several tasks has one set of files per task. The backend
 lists the task indices from the names of the files in the process's directory
