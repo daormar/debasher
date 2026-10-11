@@ -77,3 +77,8 @@ SEQ_PROCESS_DOC_HEADING_PREFIX = "Sequential Process: "
 # _define_opts in array mode. Script generation writes it and import
 # recognizes it, so both modes give option values the same name.
 TASK_IDX_VAR = "task_idx"
+
+# Mirrors DEBASHER_LOCK_BASENAME: the lock file of an output directory,
+# which a debasher_exec holds while it validates, prepares or runs a
+# program there.
+OUTDIR_LOCK_BASENAME = "lock"

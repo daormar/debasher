@@ -1123,10 +1123,17 @@ version and the rest on another, with nothing to show it. The frontend checks
 this before sending the save, and the backend checks it again with
 `debasher_status` (`run_guard.py`), whenever it finds that tool, so that a
 request from another tab or another client of the backend is refused too. The
-backend also refuses a save while there is a run in progress in the output
-directory named by the program metadata already saved in the home directory: a
-save that changes the output directory still writes the script that a run in the
-old one reads.
+backend also refuses it while a `debasher_exec` holds the lock of the output
+directory, which the backend tests by taking the lock for an instant, as
+`debasher_status` does. This covers a `debasher_exec` that only validates the
+program, for "Validate program" or for the validation that "Run program" makes
+with the built-in scheduler before it launches: it reads the script and writes
+into the output directory, but `debasher_status` does not count it as a run in
+progress (see "Following a run"), so the frontend lets the save go and the
+backend refuses it. A save is also refused while there is a run in progress in
+the output directory named by the program metadata already saved in the home
+directory: a save that changes the output directory still writes the script that
+a run in the old one reads.
 
 Running also saves. "Run program", "Validate program" and "Check program
 options" all save the program into the home directory, as a save does and with
@@ -1268,17 +1275,17 @@ The engine owns the output directory: `__exec__/` with each process's files
 (`.stdout`, `.sched_out`, `.opts`, ...), `__fifos__/` with the FIFOs, and its
 own state files. The web UI adds only the run log. It reads the rest (see
 "Execution and observation") and changes it in only one way: "Reset output
-directory" deletes everything inside it, keeping the directory itself. The
-reset does nothing, rather than fail, when the output directory is blank
-(which would otherwise resolve to the server's current directory), does not
-exist, is the root of the file system or the user's home, or is the program's
-home directory. It removes a symbolic link as itself and never follows it. The
-reset is refused while there is a run in progress, by the frontend and by the
-backend, whose processes may still use the files. The frontend also refuses to
-change the output directory while there is one: the status, the stop and the
-inspection actions all name the output directory, so changing it would leave
-the run out of reach of the web UI; the backend refuses to save the change
-(see "The home directory").
+directory" deletes everything inside it, keeping the directory itself. The reset
+does nothing, rather than fail, when the output directory is blank (which would
+otherwise resolve to the server's current directory), does not exist, is the
+root of the file system or the user's home, or is the program's home directory.
+It removes a symbolic link as itself and never follows it. The reset is refused
+while there is a run in progress, whose processes may still use the files, by
+the frontend and by the backend, with the check of a save (see "The home
+directory"). The frontend also refuses to change the output directory while
+there is one: the status, the stop and the inspection actions all name the
+output directory, so changing it would leave the run out of reach of the web UI;
+the backend refuses to save the change (see "The home directory").
 
 # Execution and observation
 
@@ -1289,11 +1296,12 @@ state").
 
 ## Launching a run
 
-"Run program" needs a home directory and an output directory. The frontend
-asks for the state of the output directory, and the backend (`/run`) checks it
-again: with a run in progress it answers with a conflict and does nothing.
-Otherwise it saves the program (see "The home directory") and builds the
-command:
+"Run program" needs a home directory and an output directory. The frontend asks
+for the state of the output directory, and the backend (`/run`) checks it again:
+with a run in progress, or a `debasher_exec` holding the lock of the output
+directory (see "The home directory"), it answers with a conflict and does
+nothing. Otherwise it saves the program (see "The home directory") and builds
+the command:
 
 - `debasher_exec --pfile <generated script> --outdir <output directory>
   --sched <scheduler>`;
@@ -1347,12 +1355,13 @@ per-process lines of `debasher_status` (`PROCESS: <name> ; STATUS: <status>`)
 and the canvas colors each canvas node by its process's status: `FINISHED`,
 `IN-PROGRESS`, `UNFINISHED`, `UNFINISHED_BUT_RUNNABLE` or `TO-DO`, and no color
 when there is nothing to report. With them comes whether `debasher_status`
-reports a run in progress, which it does from before any process is in
-progress, while `debasher_exec` prepares the run and every process may still
-show its status from the run before, or `TO-DO`. A run in progress is defined
-from that reading, not from the run phase, so the guards that depend on it
-(saving, resetting and changing the output directory) also hold for a run
-launched from another tab or from the command line.
+reports a run in progress, which it does from before any process is in progress,
+while `debasher_exec` prepares the run and every process may still show its
+status from the run before, or `TO-DO`, and not while a `debasher_exec` only
+validates the program. A run in progress is defined from that reading, not from
+the run phase, so the guards that depend on it (saving, resetting and changing
+the output directory) also hold for a run launched from another tab or from the
+command line.
 
 **The run phase** is derived from the same readings, and from the requests of
 the tab not answered yet:
@@ -1889,9 +1898,10 @@ non-goals of a resident program".
   inside it, and does nothing when it is blank, missing, the root, the user's
   home or the home directory (see "The output directory").
 - **No change under a running program.** While there is a run in progress, the
-  web UI refuses to save, to run, validate or check the options of the
-  program, to reset the output directory and to change it. The backend refuses
-  them too, whoever sends the request (see "The home directory").
+  web UI refuses to save, to run, validate or check the options of the program,
+  to reset the output directory and to change it. The backend refuses them too,
+  whoever sends the request, and also while a `debasher_exec` only validates the
+  program on the output directory (see "The home directory").
 
 **Execution and observation**
 
@@ -2680,7 +2690,8 @@ process ending and the next starting, and the processes of a resident program
 all start at once.
 
 **The guards.** The guards that depend on a run in progress apply unchanged,
-since they read whether `debasher_status` reports a run in progress, and not the
+since they read the engine's files (whether `debasher_status` reports a run in
+progress, and, in the backend, the lock of the output directory), and not the
 run phase: while the program is `live`, the frontend refuses to save, to reset
 the program state and to change the output directory, and the backend refuses
 them too and `/run` refuses to launch. What changes is which actions are offered

@@ -5,9 +5,13 @@ saving, which writes the generated script that the processes of a run read
 each time one starts, running, validating or checking the options of a
 program, which save it first, and resetting the output directory, whose
 files the processes of a run may still use. A save that changes the output
-directory is refused too while a run is in progress in the old one.
+directory is refused too while a run is in progress in the old one, and so
+are they all while a debasher_exec only validates the program, holding the
+lock of the output directory, which debasher_status does not count as a run.
 """
 
+import fcntl
+import os
 import stat
 from pathlib import Path
 
@@ -117,7 +121,7 @@ def test_a_save_is_refused_while_a_run_is_in_progress_in_the_output_directory(tm
 
     changed = program.model_copy(update={"description": "changed"})
 
-    assert "run is in progress" in _refused(lambda: _save(changed))
+    assert "a run or a validation is in progress" in _refused(lambda: _save(changed))
     assert script.read_text() == before
     assert persistence.load_program(program.homeDir).description == ""
 
@@ -156,3 +160,43 @@ def test_a_reset_of_the_output_directory_is_refused_while_a_run_is_in_progress(t
     _refused(lambda: execution.reset_output_dir(program))
 
     assert left.read_text() == "still in use"
+
+
+def _hold_validation_lock(output_dir: str):
+    """Holds the lock of `output_dir` as debasher_exec --validate does, with
+    its process id and the mark of a validation in the lock file; returns
+    the open lock file, which holds the lock until it is closed."""
+    os.makedirs(output_dir, exist_ok=True)
+    lock_file = open(os.path.join(output_dir, "lock"), "a")
+    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with open(os.path.join(output_dir, "lock"), "w") as contents:
+        contents.write(f"{os.getpid()}\nvalidate\n")
+    return lock_file
+
+
+def test_a_save_and_a_reset_are_refused_while_a_debasher_exec_validates_the_program(tmp_path, running_in):
+    program = _program(tmp_path)
+    program = program.model_copy(update={"revision": _save(program).revision})
+    script = Path(program.homeDir) / "guarded.sh"
+    before = script.read_text()
+
+    # debasher_status reports no run, as for a validation
+    with _hold_validation_lock(program.outputDir):
+        changed = program.model_copy(update={"description": "changed"})
+        assert "a run or a validation is in progress" in _refused(lambda: _save(changed))
+        _refused(lambda: execution.reset_output_dir(program))
+        _refused(lambda: execution.run_program(program))
+
+    assert script.read_text() == before
+    _save(program.model_copy(update={"description": "changed"}))
+    assert persistence.load_program(program.homeDir).description == "changed"
+
+
+def test_the_lock_is_looked_at_without_creating_it(tmp_path):
+    from api import run_guard
+
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    assert not run_guard.debasher_exec_holds_lock(str(output_dir))
+    assert not (output_dir / "lock").exists()
