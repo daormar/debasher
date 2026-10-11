@@ -39,7 +39,12 @@
 
 <p><a href="https://link.springer.com/article/10.1186/s12859-025-06108-1">DeBasher</a>
 is a software package implementing a flow-based programming extension
-for Bash. In the flow-based programming paradigm, networks of black box
+for Bash, and a polyglot one: Bash holds a program together, but each
+of its processes can be written in Bash, Python, R, Perl or Groovy, and
+a single program can mix them. With the web interface, a program can be
+built without writing any Bash at all.</p>
+
+<p>In the flow-based programming paradigm, networks of black box
 processes with well defined data exchange connections are
 executed. DeBasher is characterized by a strong orientation towards the
 definition of software components or modules.</p>
@@ -71,7 +76,7 @@ an MSc degree in Bioinformatics.</p>
 
 <ul>
 <li>Definition of complex programs composed of several processes.</li>
-<li>Framework to define programs and processes using Bash shell scripting or other programming languages (Python, R, Perl and Groovy).</li>
+<li>Processes written in Bash, Python, R, Perl or Groovy, mixed freely in a single program.</li>
 <li>Concurrent execution of processes depending on detailed process dependencies.</li>
 <li>Reexecution of only those processes that are pending or whose execution failed.</li>
 <li>A built-in scheduler for a single machine, and integration with workload schedulers such as Slurm.</li>
