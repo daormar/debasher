@@ -34,7 +34,14 @@ which one you start with.
    additional method when that is what is missing.
 3. **Write the code** with `update_process`. Keep it small and readable, and
    make it fail loudly (a non-zero exit) on bad input rather than produce a
-   wrong output.
+   wrong output. Read each option as what the code prompt says it receives:
+   the data itself, or the path of a FIFO, a value descriptor or a
+   directory. In a node, use the methods of the runtime library that the
+   code prompt lists rather than writing your own: `self.sleep()` for the
+   pace, `inject` from `observe` for what it sees outside, and
+   `set_notice` for what whoever watches the program should know (a
+   missing configuration file), set again in `restore_node_state` when it
+   follows from the node state.
 4. **Write a test.** `add_test` writes the skeleton of a business test into
    `test/` (bats for a process of a general program, pytest for a node). Read
    it with `read_program_file`, fill in its TODOs with a real check of what
@@ -96,6 +103,14 @@ without running it. Running it (`run_program`) writes into its output
 directory and may take long: offer it, and run it only when the user agrees.
 Follow a run with `get_status`, and read what a process left with
 `get_process_output` when something fails.
+
+A run on an output directory that holds an earlier run resumes it, and does
+not run again a process that finished, even when its code changed since:
+after fixing the code of such a process, say so, and offer to set
+`rerunOutdatedProcs` among the execution options or to empty the output
+directory (`reset_output_dir`, which deletes everything in it, so only when
+the user agrees). While a run or a validation is in progress, saving and
+running are refused: wait for it to end.
 
 If a tool refuses a save because the program changed on disk, the user (or
 another tab) saved it meanwhile: read the process again and work from what is

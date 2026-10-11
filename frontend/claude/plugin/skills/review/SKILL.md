@@ -40,18 +40,29 @@ its code. Offer to run the tests when what they do matters to a finding.
   option? Does it use the values as the code prompt says (Bash:
   `read_opt_value_from_func_args`, `local` variables, `return 0`; another
   language: the arguments its template parses, and no line that is `EOF`
-  alone)? Is an optional option handled when it is left out?
+  alone)? Is an optional option handled when it is left out? Does it treat
+  each option as what it receives, the data itself or the path of a FIFO, a
+  value descriptor or a directory, and the data as of the type declared?
 - **Failure.** On bad or missing input, does it fail with a non-zero status,
   or write a wrong output and succeed? Does it check what a command it calls
   returns?
 - **Connections.** Does a process that writes a FIFO close it when it is
   done, and one that reads a FIFO read it to its end? Does it write its
-  outputs where its options say, and nothing outside its output directory?
+  outputs where its options say, and nothing outside its output directory
+  and the shared directories its options name?
 - **Several tasks.** In array or generator mode, does each task use its own
-  values (`${task_idx}`), and not step on the outputs of the others?
+  values (`${task_idx}`), and write only into its own subdirectory, never
+  into the outputs of the others? Does an options handler that needs the
+  number of tasks of another process ask for it with
+  `get_process_num_tasks` rather than count it again with a copy of its
+  rule, and does a generator read only inputs that stay unchanged during
+  the run?
 - **Nodes** of a resident program: is `process_data` deterministic, does it
   send only from there, is the node state complete and serializable as JSON,
-  and are effects outside the program idempotent?
+  and are effects outside the program idempotent? Does it wait with
+  `self.sleep()` rather than `time.sleep()`, look at the outside world only
+  in `observe` (bringing it in with `inject`), and set again in
+  `restore_node_state` a notice that follows from the node state?
 - **Its tests.** Is there a test? Does it check the outputs, the edges of the
   input and a failure, or only that the process ended? Are `TODO`s or the line
   that makes a skeleton fail still there?

@@ -44,7 +44,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   machine) or `SLURM`; `builtinSchedCpus` and `builtinSchedMem` bound the
   built-in scheduler; `dfltThrottle` bounds the tasks of an array running at
   once; `condaSupport` and `dockerSupport` enable the environments that
-  processes declare.
+  processes declare; `rerunOutdatedProcs` runs again the processes that
+  finished before the last change of the generated script (see "Running and
+  following").
 - **Program options.** The values of the command-line options for the next
   run, by label; setting them replaces them all.
 - **Shared directories.** Named directories created once before any process
@@ -129,7 +131,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   the engine creates; below the output directory it is also emptied before
   each task, so the same code works with one task and with many. A task writes
   only into its own subdirectory. To gather the results of every task, read
-  them through a fanout family, one option per task.
+  them through a fanout family, one option per task, or read the whole shared
+  directory and give the dependency in `processdeps`, since the engine infers
+  none from a whole shared directory.
 - **Where an input's value comes from**: a connection; a literal `value` (a
   Bash word, such as `10` or `${task_idx}`); `commandLine` (from the program
   options); or `fromProcessSpec` (on a `standard` process, never on an output:
@@ -266,10 +270,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   whose options changed, one at the other end of a FIFO from a process that
   runs again, and one that ran (under `after`, `afterany`, or `afterok`
   joined by `?`) after a process that did not finish; every process that
-  depends on one of them runs again too. A task whose dependencies can no longer
-  hold (`afterok` on a process that failed) is cancelled and counts as
-  failed. To start from scratch, empty the output directory with
-  `reset_output_dir`.
+  depends on one of them runs again too. A change to the code of a process
+  that finished does not make it run again, unless `rerunOutdatedProcs` is
+  set, which then runs again every process that finished before the
+  generated script was last written (every save writes it) or a module that
+  it loads changed. A task whose dependencies can no longer hold (`afterok`
+  on a process that failed) is cancelled and counts as failed. To start from
+  scratch, empty the output directory with `reset_output_dir`.
 - `get_process_output` reads what a process left (`stdout`, `scheduler`,
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a
   process of several tasks.

@@ -28,8 +28,14 @@ it in this session.
 - Ask what the program has to do, if the user has not said: what comes in,
   what comes out, the steps in between, how much data, whether it runs once
   or keeps running (a resident program), where it runs (the built-in
-  scheduler or Slurm). Ask only what changes the design, a few questions at a
-  time.
+  scheduler or Slurm). When the input holds several entries (the samples of
+  a sample sheet), ask whether they go into one run, one task each, or one
+  run each, where failures stay apart and entries can come later. Ask only
+  what changes the design, a few questions at a time.
+- For the usual shapes (a chain of steps for each entry, a pool of workers,
+  a step that gathers every task of another, tasks that stream to each
+  other), start from the patterns of
+  https://debasher.readthedocs.io/en/latest/design_patterns.html.
 
 ## 2. Propose before you build
 
@@ -37,13 +43,25 @@ Propose the design in a short, readable form, and wait for the user to agree
 or change it before you edit anything:
 
 - each process: its name, what it does, its inputs and outputs (option labels,
-  outputs starting with `-out`), and its mode when it is not a single task
-  (array or generator, for one task per element);
+  outputs starting with `-out`, each with the data type of what it carries),
+  and its mode when it is not a single task (array or generator, for one task
+  per element), with where its number of tasks comes from: a command-line
+  option (a task shaping option when no task reads it), or another process,
+  asked with `get_process_num_tasks` rather than counted again;
+- how a step gathers the results of every task of another process: a
+  fanout family on a `standard` process, one option per task, or the whole
+  shared directory in which each task wrote a subdirectory of its own, with
+  the dependency on that process given in `processdeps`, since the engine
+  infers none from a whole shared directory;
 - each connection, and why it is a file or a FIFO: a file when the next
   process needs all of it, or the result has to stay; a FIFO to stream from
   one process to the next while both run, or for a cycle;
 - what the user has to give when running it (program options), and anything
-  the program needs from outside (modules, environments).
+  the program needs from outside (modules, environments);
+- for a resident program, the kind of each node (business node, directory
+  watcher, launcher of a general program, Supervisor), the external inputs
+  fed from outside, and the initiators of the snapshots, one in each
+  independent part.
 
 Prefer few processes with a clear job each over many tiny ones, and the
 connections of the data over ordering by hand.
@@ -56,7 +74,8 @@ connections of the data over ordering by hand.
   proposal. The single tools (`add_process`, `add_option`, `connect`, ...)
   are fine for small changes.
 - Lay the processes out with `move_process` and `layout`, unless the user
-  placed them by hand and wants them kept.
+  placed them by hand and wants them kept. Draw as a label edge
+  (`set_connection_display`) a connection whose line would cross others.
 - Each process gets a description that says what it does: the
   `/debasher:implement` skill writes its code from it.
 - Check the result with `validate_program`, and fix what it reports. It saves
@@ -65,7 +84,9 @@ connections of the data over ordering by hand.
 
 If a tool refuses a save because the program changed on disk, someone else
 (the user in the editor, most likely) saved it meanwhile: read it again with
-`get_program` and work from what is there; never redo their change away.
+`get_program` and work from what is there; never redo their change away. A
+save is also refused while a run or a validation of the program is in
+progress: wait for it to end, or ask the user before stopping it.
 
 ## 4. Hand over
 
