@@ -502,10 +502,14 @@ the name of its run directory:
     {"opts": {"-text": "world", "-secs": "5"}, "run": "r1"}
 
 The run directories go under the output directory of the launcher
-process, unless the class sets ``RUNS_ROOT``. When its process has an
-output port ``-outdone``, the node sends on it
-``{"run": ..., "status": ..., "exit_code": ...}`` for every batch run
-that ends, with ``status`` set to ``finished`` or ``failed``.
+process, unless the class sets ``RUNS_ROOT``, an absolute path, or the
+process has an option ``-runsdir``, whose value, also an absolute path,
+takes precedence (so that the command line can choose it). When its
+process has an output port ``-outdone``, the node sends on it
+``{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`` for
+every batch run that ends, with ``run_dir`` the absolute path of the
+run directory, where a node downstream finds the results, and
+``status`` set to ``finished`` or ``failed``.
 ``MAX_CONCURRENT_RUNS`` (one by default) says how many batch runs run
 at a time, and ``BATCH_SCHED`` which scheduler they use (the built-in
 one by default); a program sets them for one process with the

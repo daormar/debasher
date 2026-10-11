@@ -449,7 +449,7 @@ do the entries below that refer to it.
   outside the resident program's scheduling.
 - **runs root**: the directory under which a launcher node places its batch
   runs: the output directory of its process, or an absolute path that its class
-  gives.
+  or the option `-runsdir` of its process gives.
 - **run directory**: the output directory of one batch run, `<runs root>/<run>`,
   where `<run>` is a relative path that the request names, or else the position
   of the request in the input log.
@@ -3083,26 +3083,28 @@ can go on with its results.
 `ProgramLauncher` is a subclass of `FBPProcess` in the runtime library
 (`engine/debasher_runtime_launcher.py`), not a new kind of process: to the
 engine, a launcher node is a node like any other, with its heartbeat and its
-control ports. A module defines one with a class that names the general
-program, `PFILE`, or, with `PROCESS`, a single process of that module (see
-"A single process"), and may give the runs root, `RUNS_ROOT`, an absolute
-path; by default it is the output directory of the process, which the engine
+control ports. A module defines one with a class that names the general program,
+`PFILE`, or, with `PROCESS`, a single process of that module (see "A single
+process"), and may give the runs root, `RUNS_ROOT`, an absolute path. The option
+that `RUNS_ROOT_OPTION` names (`-runsdir` by default), if the process has it,
+gives it instead, for a runs root that the command line chooses; it has to be an
+absolute path too, and a node given a relative one stops when it is created. By
+default the runs root is the output directory of the process, which the engine
 keeps across launches of a node (see "Ordered shutdown") and exports to it as
-`DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as the module that declares the
-node would find a module it loads: a relative path is looked for in the
-directory of that module, where a program keeps its files, which the engine
-exports to the node as `DEBASHER_PROCESS_MODULE_DIR`, and then in the
-directories of `DEBASHER_MOD_DIR`, so that a program can launch one that
-another module keeps, at the price of depending on how the machine is set up.
-The node runs the engine's own search for this, `debasher_resolve_pfile`, from
-the directory of the module. An absolute path is accepted with a warning,
-since it ties the program to one machine. A node whose `PFILE` is not found
-stops when it is created. Every input port that carries data is a port of
-requests, and a node with none says so in a notice (see "Notices"); the output
-port `DONE_PORT` (`outdone` by default), if the node has it, tells when a batch
-run ends (see "The end of a batch run as an input event"). A launcher node
-cannot be a task of an array process, since the tasks would share its
-bookkeeping.
+`DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as the module that declares the node
+would find a module it loads: a relative path is looked for in the directory of
+that module, where a program keeps its files, which the engine exports to the
+node as `DEBASHER_PROCESS_MODULE_DIR`, and then in the directories of
+`DEBASHER_MOD_DIR`, so that a program can launch one that another module keeps,
+at the price of depending on how the machine is set up. The node runs the
+engine's own search for this, `debasher_resolve_pfile`, from the directory of
+the module. An absolute path is accepted with a warning, since it ties the
+program to one machine. A node whose `PFILE` is not found stops when it is
+created. Every input port that carries data is a port of requests, and a node
+with none says so in a notice (see "Notices"); the output port `DONE_PORT`
+(`outdone` by default), if the node has it, tells when a batch run ends (see
+"The end of a batch run as an input event"). A launcher node cannot be a task of
+an array process, since the tasks would share its bookkeeping.
 
 The modules that the general program loads are found with the
 `DEBASHER_MOD_DIR` of the launcher node, which inherits it along the whole
@@ -3279,10 +3281,14 @@ program. Once the exit code is written, `observe()` brings
 observe port, and only then, once it is logged, marks the run directory as
 notified, with a file `notified`. `process_data`, on `runs_done`, adds the
 batch run to the set of announced runs in its node state and sends
-`{"run": ..., "status": ..., "exit_code": ...}` on `outdone`, with `status`
-`finished` for an exit code of 0 and `failed` for any other, which then has
-everything a channel has: its numbering (G5), its replay, its part in the
-rounds.
+`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `outdone`,
+with `run_dir` the absolute path of the run directory, so that the node that
+reads the results of the batch run does not have to know the runs root, and
+`status` `finished` for an exit code of 0 and `failed` for any other. The
+message then has everything a channel has: its numbering (G5), its replay, its
+part in the rounds. A replay sends the same `run_dir`, which follows from the
+runs root and the name of the run alone, as long as the runs root does not
+change between launches of the node.
 
 - A node that goes down after writing the event and before marking the run
   directory writes it again when it comes back. `process_data` drops the

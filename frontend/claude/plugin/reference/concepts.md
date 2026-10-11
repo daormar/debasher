@@ -194,7 +194,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   for `-watchdir`, `-outrequests` and `-outdone` by name (`WATCH_DIR_OPTION`,
   `REQUESTS_PORT`, `DONE_PORT`), so do not rename them; give their fields as
   options with the same labels. A watcher without `-outrequests` or a launcher
-  without an input runs but does nothing, and says so in a warning notice.
+  without an input runs but does nothing, and says so in a warning notice. A
+  launcher puts its run directories in its output directory, unless its class
+  sets `RUNS_ROOT` or it has the option `-runsdir` (`RUNS_ROOT_OPTION`, which
+  wins); both are absolute paths. Each message on `-outdone` is
+  `{"run", "run_dir", "status", "exit_code"}`, so a node that reads the
+  results of a run takes its directory from `run_dir`.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,

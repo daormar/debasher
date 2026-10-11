@@ -274,8 +274,11 @@ class ProgramLauncher(FBPProcess):
     warning, since it ties the program to one machine. With PROCESS, the
     name of a process of that module, it launches that process alone, with
     debasher_exec_process, instead of the whole program. It may give
-    RUNS_ROOT, an absolute path under which the run directories go; by
-    default they go in the output directory of the process.
+    RUNS_ROOT, an absolute path under which the run directories go; an
+    option of the node named RUNS_ROOT_OPTION (-runsdir), if it has one,
+    gives it instead, for a runs root that the command line chooses, and
+    has to be an absolute path too. Without either, the run directories go
+    in the output directory of the process.
 
     Every input port is a port of requests. A request is a JSON object
     with `opts`, the options of the general program (names with their
@@ -289,7 +292,8 @@ class ProgramLauncher(FBPProcess):
     If the node has an output port DONE_PORT, observe() brings in the end
     of every batch run under the name RUNS_DONE_PORT (its observe port,
     which is not a fifo), and the node sends on DONE_PORT a message for
-    each, `{"run": ..., "status": ..., "exit_code": ...}`, with `status`
+    each, `{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`,
+    with `run_dir` the absolute path of the run directory, and `status`
     "finished" for an exit code of 0 and "failed" for any other.
 
     A launcher node cannot be a task of an array process.
@@ -303,6 +307,9 @@ class ProgramLauncher(FBPProcess):
     #: The absolute path under which the run directories go, or None for the
     #: output directory of the process.
     RUNS_ROOT = None
+    #: The option of the process, without its dash, that gives the runs root
+    #: instead of RUNS_ROOT, as an absolute path, when the process has it.
+    RUNS_ROOT_OPTION = "runsdir"
     RUNS_DONE_PORT = "runs_done"
     #: The output port on which the end of each batch run is sent, if the
     #: node has it.
@@ -337,6 +344,12 @@ class ProgramLauncher(FBPProcess):
             raise ValueError(f"{type(self).__name__}: PROCESS is not the name of a process")
         if self._task_idx() is not None:
             raise ValueError(f"{type(self).__name__}: a launcher node cannot be a task of an array process")
+        runs_root_opt = self.opts.get(self.RUNS_ROOT_OPTION)
+        if runs_root_opt and not os.path.isabs(runs_root_opt):
+            raise ValueError(
+                f"{type(self).__name__}: the runs root given by -{self.RUNS_ROOT_OPTION}, "
+                f"{runs_root_opt}, is not an absolute path"
+            )
         # The node state: the batch runs whose end has been announced on
         # DONE_PORT, so that an end reported twice is announced once.
         self._announced = set()
@@ -400,7 +413,12 @@ class ProgramLauncher(FBPProcess):
         return outdir
 
     def _runs_root(self):
-        return self.RUNS_ROOT or self._outdir()
+        """The absolute path under which the run directories go: the option
+        RUNS_ROOT_OPTION, else RUNS_ROOT, else the output directory of the
+        process."""
+        return os.path.abspath(
+            self.opts.get(self.RUNS_ROOT_OPTION) or self.RUNS_ROOT or self._outdir()
+        )
 
     def _bookkeeping_path(self, *names):
         return os.path.join(self._outdir(), _BOOKKEEPING_DIR, *names)
@@ -410,7 +428,7 @@ class ProgramLauncher(FBPProcess):
         the node and tell their states."""
         return {
             "launcher": {
-                "runs_root": os.path.abspath(self._runs_root()),
+                "runs_root": self._runs_root(),
                 "process": self.PROCESS,
             }
         }
@@ -542,7 +560,10 @@ class ProgramLauncher(FBPProcess):
         if self.DONE_PORT in self.OUTPUT_PORTS:
             exit_code = packet.get("exit_code")
             status = "finished" if exit_code == 0 else "failed"
-            self.send_data(self.DONE_PORT, {"run": run, "status": status, "exit_code": exit_code})
+            self.send_data(
+                self.DONE_PORT,
+                {"run": run, "run_dir": self._run_dir(run), "status": status, "exit_code": exit_code},
+            )
 
     # -- the observation of the batch runs --
 

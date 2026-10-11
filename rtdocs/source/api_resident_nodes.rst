@@ -115,6 +115,8 @@ Class attributes
 
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.RUNS_ROOT
 
+.. autoattribute:: debasher_runtime_lib.ProgramLauncher.RUNS_ROOT_OPTION
+
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.DONE_PORT
 
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.MAX_CONCURRENT_RUNS

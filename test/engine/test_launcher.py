@@ -600,6 +600,38 @@ def test_the_node_info_of_a_launcher_node_names_its_batch_runs(outdir):
     assert node._RUNTIME_CLASS == "ProgramLauncher"
 
 
+def test_the_runsdir_option_gives_the_runs_root(outdir, tmp_path):
+    class Rooted(_Launcher):
+        RUNS_ROOT = str(tmp_path / "class_runs")
+
+    runs = tmp_path / "runs"
+    node = _node(Rooted, {"requests": "/dev/null", "runsdir": str(runs)})
+    _request(node, 1, {"opts": {}, "run": "a"})
+
+    assert (runs / "a" / "launch.json").exists()
+    assert not (outdir / "a").exists()
+    assert not (tmp_path / "class_runs" / "a").exists()
+    assert node._node_info_extra()["launcher"]["runs_root"] == str(runs)
+
+
+def test_without_the_runsdir_option_the_runs_root_is_runs_root_or_the_output_directory(outdir, tmp_path):
+    class Rooted(_Launcher):
+        RUNS_ROOT = str(tmp_path / "class_runs")
+
+    node = _node(Rooted)
+    _request(node, 1, {"opts": {}, "run": "a"})
+    assert (tmp_path / "class_runs" / "a" / "launch.json").exists()
+
+    node = _node()
+    _request(node, 2, {"opts": {}, "run": "b"})
+    assert (outdir / "b" / "launch.json").exists()
+
+
+def test_a_relative_runsdir_option_stops_the_node(outdir):
+    with pytest.raises(ValueError, match="not an absolute path"):
+        _node(opts={"requests": "/dev/null", "runsdir": "runs"})
+
+
 # --- the end of a batch run --------------------------------------------------
 
 
@@ -640,7 +672,9 @@ def test_an_end_is_announced_once_even_if_reported_twice(outdir):
     _request(node, 5, {"run": "a", "exit_code": 0}, port="runs_done")
     _request(node, 6, {"run": "a", "exit_code": 0}, port="runs_done")
 
-    assert _sent(node, "outdone") == [{"run": "a", "status": "finished", "exit_code": 0}]
+    assert _sent(node, "outdone") == [
+        {"run": "a", "run_dir": str(outdir / "a"), "status": "finished", "exit_code": 0}
+    ]
     assert node.capture_node_state() == {"announced": ["a"]}
 
 
@@ -649,7 +683,20 @@ def test_the_end_of_a_failed_batch_run_is_announced_as_failed(outdir):
 
     _request(node, 5, {"run": "a", "exit_code": 3}, port="runs_done")
 
-    assert _sent(node, "outdone") == [{"run": "a", "status": "failed", "exit_code": 3}]
+    assert _sent(node, "outdone") == [
+        {"run": "a", "run_dir": str(outdir / "a"), "status": "failed", "exit_code": 3}
+    ]
+
+
+def test_the_end_of_a_batch_run_names_its_run_directory_under_the_runsdir_option(outdir, tmp_path):
+    runs = tmp_path / "runs"
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null", "runsdir": str(runs)})
+
+    _request(node, 5, {"run": "s17/v2", "exit_code": 0}, port="runs_done")
+
+    assert _sent(node, "outdone") == [
+        {"run": "s17/v2", "run_dir": str(runs / "s17" / "v2"), "status": "finished", "exit_code": 0}
+    ]
 
 
 def test_the_announced_runs_survive_a_restore(outdir):
