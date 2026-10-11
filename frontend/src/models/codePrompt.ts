@@ -297,7 +297,10 @@ export const COMMENT_STEPS =
   "- A comment for each step whose reason does not follow from the code: the format of an input, why something is skipped or dropped, a choice made so that the code can run again on what an earlier run left.";
 export const NO_REDUNDANT_COMMENTS = "- No comment that only repeats what the code says.";
 
-function commentSection(language: ProcessLanguage): string[] {
+// The section on comments of the code prompt of code in `language`, with
+// `extra` rules for what that code is (the body of a method, the code of an
+// options handler).
+export function commentSection(language: ProcessLanguage, extra: string[] = []): string[] {
   const functions = language === "bash"
     ? "- Before each helper function, a block of `#` comments, as the modules of DeBasher have: what the function does, and why when it is not obvious, then its arguments (`# $1 - ...`) and what it prints or returns."
     : language === "python"
@@ -309,6 +312,7 @@ function commentSection(language: ProcessLanguage): string[] {
     "Comment the code for someone who did not write it:",
     "",
     functions,
+    ...extra,
     COMMENT_STEPS,
     NO_REDUNDANT_COMMENTS,
   ];

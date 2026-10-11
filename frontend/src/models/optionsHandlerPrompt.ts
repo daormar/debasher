@@ -2,7 +2,7 @@ import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { GENERATOR_SIZE_TEMPLATE, LANGUAGE_NAMES, isCodeStillTemplate } from "./codeTemplates";
 import { NODE_CODE_PARTS, nodeClassName } from "./node";
-import { ASK_BEFORE_GUESSING, describedAs, fenceFor, optionsSection } from "./codePrompt";
+import { ASK_BEFORE_GUESSING, commentSection, describedAs, fenceFor, optionsSection } from "./codePrompt";
 
 // The options handler modes whose code has a code prompt: the code that
 // builds the array of an array process, and the code that prints the
@@ -62,6 +62,9 @@ export function buildOptionsHandlerPrompt(
           ? "Build the array that the description of the process and the values of its options call for."
           : "Print the number of tasks that the description of the process and the values of its options call for.",
     ],
+    commentSection("bash", [
+      `- A comment at the start of the code: what a task of the ${noun} is, and where the number of tasks comes from.`,
+    ]),
     [
       "## What to return",
       "",

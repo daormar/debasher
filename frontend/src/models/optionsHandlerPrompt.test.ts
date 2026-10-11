@@ -43,6 +43,7 @@ describe("buildOptionsHandlerPrompt", () => {
       "The code of the process",
       "The code to complete",
       "What the code has to do",
+      "How to comment the code",
       "What to return",
     ]);
   });
@@ -131,6 +132,16 @@ describe("buildOptionsHandlerPrompt", () => {
       edges: [{ id: "e1", sourceProcessId: "writer", sourceOptionId: "writer-data", targetProcessId: "reader", targetOptionId: "data" }],
     } as unknown as Program;
     expect(buildOptionsHandlerPrompt(connected, reader, "generator", "", "")).not.toContain("reads, task by task");
+  });
+
+  it("asks for comments in the style of the Bash modules of DeBasher", () => {
+    const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
+    expect(prompt).toContain("## How to comment the code\n\nComment the code for someone who did not write it:");
+    expect(prompt).toContain("Before each helper function, a block of `#` comments, as the modules of DeBasher have");
+    expect(prompt).toContain("A comment at the start of the code: what a task of the process is, and where the number of tasks comes from.");
+    expect(prompt).toContain("No comment that only repeats what the code says.");
+    const node = buildOptionsHandlerPrompt({ ...program, programType: "resident" } as Program, count, "generator", "", "");
+    expect(node).toContain("what a task of the node is");
   });
 
   it("shows the values of the options, which say what a task is", () => {

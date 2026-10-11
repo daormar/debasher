@@ -39,8 +39,18 @@ describe("buildMethodPrompt", () => {
       "The code of the process",
       "The code to complete",
       "What the code has to do",
+      "How to comment the code",
       "What to return",
     ]);
+  });
+
+  it("asks for comments in the style of the Bash modules of DeBasher", () => {
+    const prompt = buildMethodPrompt(program, align, "skipCode", "", "");
+    expect(prompt).toContain("## How to comment the code\n\nComment the code for someone who did not write it:");
+    expect(prompt).toContain("Before each helper function, a block of `#` comments, as the modules of DeBasher have");
+    expect(prompt).toContain("A comment at the start of the body: what the method does for this process, and why when it is not obvious.");
+    expect(prompt).toContain("No comment that only repeats what the code says.");
+    expect(buildMethodPrompt(program, { ...align, language: "python" }, "skipCode", "", "")).not.toContain("A docstring");
   });
 
   it("gives the rules of the method, from the list of the methods", () => {

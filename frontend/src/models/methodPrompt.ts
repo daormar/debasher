@@ -1,6 +1,6 @@
 import type { AdditionalMethods, ProgramProcess } from "./process";
 import type { Program } from "./program";
-import { ASK_BEFORE_GUESSING, describedAs, optionsSection } from "./codePrompt";
+import { ASK_BEFORE_GUESSING, commentSection, describedAs, optionsSection } from "./codePrompt";
 import { codeSection, processCodeSection } from "./optionsHandlerPrompt";
 import { processMethod } from "./processMethods";
 
@@ -53,6 +53,9 @@ export function buildMethodPrompt(
         ? request.trim()
         : `Write the \`${method.name}\` method that the description and the code of the process call for.`,
     ],
+    commentSection("bash", [
+      "- A comment at the start of the body: what the method does for this process, and why when it is not obvious.",
+    ]),
     [
       "## What to return",
       "",

@@ -3768,7 +3768,10 @@ uses its options. After a title and a sentence on what a task is, it says:
 6. **The code request**, or, when it is blank, to build the array, or print
    the number of tasks, that the description and the values of the options
    call for.
-7. **What the AI tool returns.** After the rule to ask rather than guess,
+7. **How to comment the code**, as in the code prompt of a Bash process (see
+   "What the code prompt says"), with a comment at the start of the code on what
+   a task of the process (or node) is, and where the number of tasks comes from.
+8. **What the AI tool returns.** After the rule to ask rather than guess,
    which matters most here, since what a task is (which files, from which
    directory, where the count comes from) is seldom written anywhere: the
    whole code in a single fenced code block tagged `bash`, without the lines
@@ -3812,7 +3815,10 @@ prompt says so, after a title and a sentence on what a method is:
 5. **The code to complete**, or that it is empty.
 6. **The code request**, or, when it is blank, to write the method that the
    description and the code of the process call for.
-7. **What the AI tool returns.** After the rule to ask rather than guess, the
+7. **How to comment the code**, as in the code prompt of a Bash process (see
+   "What the code prompt says"), with a comment at the start of the body on what
+   the method does for this process, and why when it is not obvious.
+8. **What the AI tool returns.** After the rule to ask rather than guess, the
    whole body in a single fenced code block tagged `bash`, without the line
    that names the function and the braces around the body.
 
