@@ -62,3 +62,65 @@ setup() {
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
 }
+
+# --- rerun due to an unfinished producer ------------------------------------
+
+# a failed; x finished. Every other process finished but e, with these
+# dependencies on them
+setup_unfinished_producer() {
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+    local -A deps=(
+        ["b"]="afterany:a" ["c"]="afterok:x?after:a" ["d"]="afterok:b" ["e"]="afterany:a"
+        ["f"]="none" ["g"]="afternotok:a" ["h"]="aftercorr:a" ["i"]="none:a" ["j"]="afterok:x"
+    )
+    declare -gA DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED=()
+    local proc
+    for proc in "${!deps[@]}"; do
+        DEBASHER_FINAL_PROCESS_SPEC[${proc}]="${proc} cpus=1 mem=32 time=00:01:00 ${sep} processdeps=${deps[${proc}]}"
+        DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED[${proc}]=$(debasher::_get_processdeps_from_detailed_spec "${deps[${proc}]}")
+    done
+    for proc in a b c d e f g h i j x; do
+        DEBASHER_PROGRAM_PROCESSES[${proc}]=1
+    done
+    debasher::_get_process_status() {
+        case $2 in
+            a|e) echo "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ;;
+            *) echo "${DEBASHER_FINISHED_PROCESS_STATUS}" ;;
+        esac
+    }
+}
+
+@test "debasher::_define_rerun_processes_due_to_unfinished_producers marks a finished process that after, afterany or afterok in a ? list let finish before its producer" {
+    setup_unfinished_producer
+
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${BATS_TEST_TMPDIR}"
+
+    [ "${DEBASHER_RERUN_PROCESSES["b"]}" = "${DEBASHER_UNFINISHED_PRODUCER_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES["c"]}" = "${DEBASHER_UNFINISHED_PRODUCER_RERUN_REASON}" ]
+    # d and j depend on finished processes; e has not finished, and runs
+    # anyway; f depends on nothing
+    local proc
+    for proc in a d e f j; do
+        [ -z "${DEBASHER_RERUN_PROCESSES[${proc}]+x}" ]
+    done
+}
+
+@test "debasher::_define_rerun_processes_due_to_unfinished_producers leaves out afternotok, aftercorr and none" {
+    setup_unfinished_producer
+
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${BATS_TEST_TMPDIR}"
+
+    local proc
+    for proc in g h i; do
+        [ -z "${DEBASHER_RERUN_PROCESSES[${proc}]+x}" ]
+    done
+}
+
+@test "the mark of a process that depends on an unfinished one spreads to the processes that depend on it" {
+    setup_unfinished_producer
+
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${BATS_TEST_TMPDIR}"
+    debasher::_propagate_rerun_mark_due_to_deps_iter
+
+    [ "${DEBASHER_RERUN_PROCESSES["d"]}" = "${DEBASHER_PROPAGATE_DEPS_RERUN_REASON}" ]
+}

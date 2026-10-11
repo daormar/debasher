@@ -248,6 +248,66 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
 }
 
 ########
+# Marks every finished process with a dependency of type after, afterany or
+# afterok on a process of the program that is not finished, which this run
+# is to launch: the process ran before that producer finished, and runs
+# again on what the producer leaves this time. A producer that did not finish satisfies after and
+# afterany, as when it failed and the process ran anyway, and afterok within
+# a list whose elements are joined by "?". afternotok is left out: it is
+# there for a producer that fails, and would no longer hold once the
+# producer finishes. So is aftercorr: a process that finished under it has
+# no task whose counterpart did not finish. A process that is not finished
+# itself is not marked either: it runs the tasks that it has left, and a
+# mark would run again those that have finished too.
+#
+# $1 - Absolute path of the output directory.
+debasher::_define_rerun_processes_due_to_unfinished_producers()
+{
+    local dirname=$1
+
+    # The status of each process, read once
+    local -A finished=()
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if [ "$(debasher::_get_process_status "${dirname}" "${processname}")" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            finished[${processname}]=1
+        else
+            finished[${processname}]=0
+        fi
+    done
+
+    for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
+        [ "${finished[${processname}]:-0}" -eq 1 ] || continue
+
+        local processdeps
+        processdeps=$(debasher::_extract_processdeps_from_process_spec "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}")
+        [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] || continue
+
+        local separator=$(debasher::_get_processdeps_separator "${processdeps}")
+        local processdeps_blanks=${processdeps}
+        if [ -n "${separator}" ]; then
+            processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" "${processdeps}")
+        fi
+
+        local dep deptype depsname
+        for dep in ${processdeps_blanks}; do
+            deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
+            depsname=$(debasher::_get_processname_part_in_dep "${dep}")
+            case ${deptype} in
+                ${DEBASHER_AFTER_PROCESSDEP_TYPE}|${DEBASHER_AFTERANY_PROCESSDEP_TYPE}|${DEBASHER_AFTEROK_PROCESSDEP_TYPE}) ;;
+                *) continue ;;
+            esac
+            # A name that is not a process of the program is left out
+            [ -n "${finished[${depsname}]+x}" ] || continue
+            if [ "${finished[${depsname}]}" -eq 0 ]; then
+                debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_UNFINISHED_PRODUCER_RERUN_REASON}"
+                break
+            fi
+        done
+    done
+}
+
+########
 debasher::_propagate_rerun_mark_due_to_fifos_iter()
 {
     # Read input parameters

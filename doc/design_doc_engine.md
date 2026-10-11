@@ -358,8 +358,9 @@ relative to the output directory of the run.
   `UNFINISHED`, any other case.
 - **rerun mark**: the decision to run a process again although it has run
   before, for a reason (forced, changed input, outdated code, the other end of
-  one of its FIFOs runs again), propagated to the processes that depend on it
-  and to the other ends of its FIFOs.
+  one of its FIFOs runs again, a resident resume, a producer that has not
+  finished), propagated to the processes that depend on it and to the other ends
+  of its FIFOs.
 
 ## Business tests
 
@@ -2326,6 +2327,19 @@ reasons:
 - **Resident resume.** In a resident program, every node that is not running
   is marked, so that the program resumes from its checkpoints, as
   `doc/design_doc_resident.md` describes.
+- **Unfinished producer.** A finished process has a dependency of type `after`,
+  `afterany` or `afterok` on a process that has not finished, which this run is
+  to launch: the process ran before that producer finished, and runs again on
+  what the producer leaves this time, waiting for it as its dependency says.
+  `after` and `afterany` hold on a producer that did not finish, as when the
+  producer failed and the process ran anyway, and an `afterok` within a list
+  separated by `?` lets the process run once another element holds (see
+  "Explicit dependencies"). `afternotok` is left out: it is there for a producer
+  that fails, and would no longer hold once the producer finishes. `aftercorr`
+  is left out too: a process that finished under it has no task whose
+  counterpart did not finish. A process that has not finished itself is not
+  marked for this reason: it runs the tasks it has left, and a mark would run
+  again those that have finished too.
 
 The marks then spread until nothing changes: from a process to every process
 that depends on it, and from one end of a FIFO to the other. A process marked
@@ -2630,9 +2644,10 @@ leaves, by design, to the program or to whoever runs it.
     anything, a program that it could not run without waiting for something to
     end (see "The built-in scheduler").
 14. A new run on an output directory runs every process that has not finished,
-    and every finished process that is forced, whose options changed, or whose
-    FIFO has an end that runs again, together with every process that depends
-    on them (see "Reruns").
+    and every finished process that is forced, whose options changed, whose FIFO
+    has an end that runs again, or that depends through `after`, `afterany` or
+    `afterok` on a process that has not finished, together with every process
+    that depends on them (see "Reruns").
 15. After `debasher_stop` on a whole program, no task of the run is running,
     nothing is left that could launch one, and nothing is left half launched
     (see "Tools that read a run").
@@ -2677,10 +2692,12 @@ leaves, by design, to the program or to whoever runs it.
   task receives its options is not kept (see "Defining the options of a
   task").
 - **What counts as a change.** A changed input is a changed option: a file
-  changed in place under the same path is not one, and only the first ten
-  tasks of an array are compared. Outdated code is found only on request, by
-  the modification time of the modules, and against every module of the
-  program (see "Reruns").
+  changed in place under the same path is not one, and only the first ten tasks
+  of an array are compared. Outdated code is found only on request, by the
+  modification time of the modules, and against every module of the program (see
+  "Reruns"). The finished tasks of a process that has not finished keep what
+  they read from a producer that has not finished either and is not marked to
+  rerun.
 - **Cycles through FIFOs.** Whether a loop through FIFOs ends, and whether its
   processes can block waiting for each other, is decided by the protocol
   between the processes, not by the engine (see "Cycles through FIFOs").

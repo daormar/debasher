@@ -791,6 +791,8 @@ register_all_rerun_processes()
 
     debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1
 
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${dirname}" || exit 1
+
     debasher::_propagate_rerun_processes "${dirname}" || exit 1
 
     echo "Registering complete" >&2

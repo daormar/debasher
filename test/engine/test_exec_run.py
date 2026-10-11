@@ -575,6 +575,95 @@ def test_status_reports_the_run_in_progress_before_debasher_exec_writes_the_comm
     assert run_tool(DEBASHER_STATUS, "-d", str(outdir)).returncode == 1
 
 
+# A producer that fails until a file exists, and a consumer that copies
+# what it produced, which afterany lets run after the producer failed
+AFTERANY_MODULE = """\
+produce_explain_opts()
+{
+    explain_opt "-ok" "<file>" "File whose existence lets the producer succeed"
+    explain_opt "-outf" "<file>" "What the producer wrote"
+}
+
+produce_define_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local optlist=""
+    define_cmdline_opt "$cmdline" "-ok" optlist || return 1
+    define_opt "-outf" "${process_outdir}/out.txt" optlist || return 1
+    save_opt_list optlist
+}
+
+produce()
+{
+    local ok=$(read_opt_value_from_func_args "-ok" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    if [ -f "${ok}" ]; then
+        echo new > "${outf}"
+    else
+        echo old > "${outf}"
+        return 1
+    fi
+}
+
+consume_explain_opts()
+{
+    explain_opt "-inf" "<file>" "What the producer wrote"
+    explain_opt "-outf" "<file>" "A copy of it"
+}
+
+consume_define_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local optlist=""
+    define_opt_from_proc_out "-inf" "produce" "-outf" optlist || return 1
+    define_opt "-outf" "${process_outdir}/copy.txt" optlist || return 1
+    save_opt_list optlist
+}
+
+consume()
+{
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    cp "${inf}" "${outf}"
+}
+
+debasher_afterany_program()
+{
+    add_debasher_process "produce" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "consume" "cpus=1 mem=32 time=00:01:00" "processdeps=afterany:produce"
+}
+"""
+
+
+def test_a_process_that_ran_after_its_producer_failed_runs_again_once_the_producer_does(tmp_path):
+    pfile = tmp_path / "debasher_afterany.sh"
+    pfile.write_text(AFTERANY_MODULE)
+    outdir = tmp_path / "out"
+    ok = tmp_path / "ok"
+    args = ("--pfile", str(pfile), "--outdir", str(outdir), "-ok", str(ok), "--wait")
+
+    # The producer fails, and the consumer, under afterany, copies what it
+    # left and finishes
+    run_exec(*args)
+    copy = outdir / "consume" / "copy.txt"
+    assert copy.read_text() == "old\n"
+    assert (outdir / "__exec__" / "consume" / "consume.finished").exists()
+    assert not (outdir / "__exec__" / "produce" / "produce.finished").exists()
+
+    # Once the producer succeeds, the consumer reads what it produces now
+    ok.write_text("")
+    result = run_exec(*args)
+    assert result.returncode == 0, result.stderr
+    assert copy.read_text() == "new\n"
+    assert "consume" in result.stderr.split("Printing list of processes to rerun...")[1].split("\n")[1]
+
+
 def test_get_sched_out_fails_for_a_missing_file(tmp_path):
     outdir = tmp_path / "out"
     result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))

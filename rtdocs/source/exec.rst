@@ -336,6 +336,47 @@ process using the ``-p`` option:
 
     $ debasher_status -d out -p hello_world
 
+.. _rerun:
+
+Running a Program Again
+-----------------------
+
+Executing ``debasher_exec`` again on the same output directory resumes
+the program instead of starting it from scratch: it launches the
+processes that did not finish (for an array, only the tasks that did
+not finish), and leaves alone the ones that finished. A process skipped
+by its ``skip`` method counts as finished. The output of
+``debasher_exec`` lists, after "Printing list of processes to rerun",
+the finished processes that it runs again, which are these:
+
+* a process with ``force=yes`` among its additional specifications
+  (see the :ref:`implem` Section), which runs in every execution;
+* a process whose options changed since the last execution, as
+  ``program.opts`` and ``program.opts_old`` give them (see
+  :ref:`outdstruct`). The options are compared, not the files they
+  name: a file changed in place under the same path is not a change;
+* with the ``--rerun-outdated-procs`` option of ``debasher_exec``, a
+  process whose code is older than the modules of the program;
+* a process at one end of a FIFO whose other end runs again, since both
+  ends have to run together;
+* a process that ran after another one that did not finish, which this
+  execution runs again: it runs again on what that one leaves this
+  time. This happens with the
+  dependency types that let a process run after another one that
+  failed, ``afterany`` and ``after``, and with ``afterok`` within a
+  list joined by ``?``. For instance, if ``report`` depends on ``grade``
+  with ``afterany``, and ``grade`` fails, ``report`` still runs, with
+  what ``grade`` left; once the problem is fixed, the next execution
+  runs ``grade`` and then ``report`` again. A process that depends on
+  another with ``afternotok``, which is there for when it fails, is
+  not run again.
+
+Every process that depends on one of those runs again too, and so on.
+
+To run the whole program again from scratch, empty its output
+directory first (in the web interface, "Reset output directory" in the
+Run menu).
+
 Program Stop
 ------------
 
