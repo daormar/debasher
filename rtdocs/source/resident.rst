@@ -502,9 +502,14 @@ the name of its run directory:
     {"opts": {"-text": "world", "-secs": "5"}, "run": "r1"}
 
 The run directories go under the output directory of the launcher
-process, unless the class sets ``RUNS_ROOT``, an absolute path, or the
-process has an option ``-runsdir``, whose value, also an absolute path,
-takes precedence (so that the command line can choose it). When its
+process, unless the class sets ``RUNS_ROOT``, an absolute path.
+``PFILE``, ``PROCESS`` and ``RUNS_ROOT`` can also come from options of
+the process, ``-pfile``, ``-process`` and ``-runsdir``, whose values
+take precedence, so that the command line chooses them and the class
+needs no code at all. ``-pfile`` is not a file option (define it with
+``define_cmdline_opt``, not ``define_cmdline_infile_opt``): a relative
+name is looked for as ``PFILE`` is. ``-runsdir`` has to be
+an absolute path. When its
 process has an output port ``-outdone``, the node sends on it
 ``{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`` for
 every batch run that ends, with ``run_dir`` the absolute path of the

@@ -197,7 +197,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   without an input runs but does nothing, and says so in a warning notice. A
   launcher puts its run directories in its output directory, unless its class
   sets `RUNS_ROOT` or it has the option `-runsdir` (`RUNS_ROOT_OPTION`, which
-  wins); both are absolute paths. Each message on `-outdone` is
+  wins); both are absolute paths. The program it launches can come from the
+  options `-pfile` and `-process` (data type `string`, not `file`) instead of
+  `PFILE` and `PROCESS` in the class body. Each message on `-outdone` is
   `{"run", "run_dir", "status", "exit_code"}`, so a node that reads the
   results of a run takes its directory from `run_dir`.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`

@@ -3084,27 +3084,35 @@ can go on with its results.
 (`engine/debasher_runtime_launcher.py`), not a new kind of process: to the
 engine, a launcher node is a node like any other, with its heartbeat and its
 control ports. A module defines one with a class that names the general program,
-`PFILE`, or, with `PROCESS`, a single process of that module (see "A single
-process"), and may give the runs root, `RUNS_ROOT`, an absolute path. The option
-that `RUNS_ROOT_OPTION` names (`-runsdir` by default), if the process has it,
-gives it instead, for a runs root that the command line chooses; it has to be an
-absolute path too, and a node given a relative one stops when it is created. By
-default the runs root is the output directory of the process, which the engine
-keeps across launches of a node (see "Ordered shutdown") and exports to it as
-`DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as the module that declares the node
-would find a module it loads: a relative path is looked for in the directory of
-that module, where a program keeps its files, which the engine exports to the
-node as `DEBASHER_PROCESS_MODULE_DIR`, and then in the directories of
-`DEBASHER_MOD_DIR`, so that a program can launch one that another module keeps,
-at the price of depending on how the machine is set up. The node runs the
-engine's own search for this, `debasher_resolve_pfile`, from the directory of
-the module. An absolute path is accepted with a warning, since it ties the
-program to one machine. A node whose `PFILE` is not found stops when it is
-created. Every input port that carries data is a port of requests, and a node
-with none says so in a notice (see "Notices"); the output port `DONE_PORT`
+`PFILE` (or an option does, see below), or, with `PROCESS`, a single process of
+that module (see "A single process"), and may give the runs root, `RUNS_ROOT`,
+an absolute path. By default the runs root is the output directory of the
+process, which the engine keeps across launches of a node (see "Ordered
+shutdown") and exports to it as `DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as
+the module that declares the node would find a module it loads: a relative path
+is looked for in the directory of that module, where a program keeps its files,
+which the engine exports to the node as `DEBASHER_PROCESS_MODULE_DIR`, and then
+in the directories of `DEBASHER_MOD_DIR`, so that a program can launch one that
+another module keeps, at the price of depending on how the machine is set up.
+The node runs the engine's own search for this, `debasher_resolve_pfile`, from
+the directory of the module. An absolute path is accepted with a warning, since
+it ties the program to one machine. A node whose `PFILE` is not found stops when
+it is created. Every input port that carries data is a port of requests, and a
+node with none says so in a notice (see "Notices"); the output port `DONE_PORT`
 (`outdone` by default), if the node has it, tells when a batch run ends (see
 "The end of a batch run as an input event"). A launcher node cannot be a task of
 an array process, since the tasks would share its bookkeeping.
+
+An option of the process, when the process has it, gives `PFILE`, `PROCESS` or
+`RUNS_ROOT` instead, for a value that the command line chooses: the options that
+`PFILE_OPTION`, `PROCESS_OPTION` and `RUNS_ROOT_OPTION` name (`-pfile`,
+`-process` and `-runsdir` by default), so that the class of a launcher node
+needs no body. `-pfile` is not a file option (`define_cmdline_opt`, not
+`define_cmdline_infile_opt`): the engine leaves a relative name as it is, and
+the node looks for it as it looks for `PFILE`, with the warning for an absolute
+path; a node with neither `PFILE` nor `-pfile` stops when it is created.
+`-runsdir` has to be an absolute path, and a node given a relative one stops
+when it is created too.
 
 The modules that the general program loads are found with the
 `DEBASHER_MOD_DIR` of the launcher node, which inherits it along the whole

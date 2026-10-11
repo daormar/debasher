@@ -167,8 +167,44 @@ def test_a_new_life_begins_once_the_output_directory_is_emptied(outdir):
 
 
 def test_a_launcher_node_needs_its_program():
-    with pytest.raises(ValueError, match="PFILE"):
+    with pytest.raises(ValueError, match="neither PFILE nor an option -pfile"):
         lib.ProgramLauncher(opts={"requests": "/dev/null"})
+
+
+def test_the_pfile_option_gives_the_program_without_a_class_attribute(outdir, tmp_path):
+    node = lib.ProgramLauncher(opts={"requests": "/dev/null", "pfile": "pipeline.sh"})
+    assert node._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+    assert node.PROCESS is None
+
+
+def test_the_pfile_option_takes_the_place_of_pfile(outdir, tmp_path):
+    (tmp_path / "program" / "variant.sh").write_text("# a variant of the general program\n")
+    node = _Launcher(opts={"requests": "/dev/null", "pfile": "variant.sh"})
+    assert node._pfile == str((tmp_path / "program" / "variant.sh").resolve())
+    assert _node()._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+
+
+def test_the_pfile_option_is_found_through_debasher_mod_dir(outdir, tmp_path, monkeypatch):
+    shared_dir = tmp_path / "shared"
+    shared_dir.mkdir()
+    (shared_dir / "shared.sh").write_text("# a general program of another module\n")
+    monkeypatch.setenv("DEBASHER_MOD_DIR", str(shared_dir))
+    node = lib.ProgramLauncher(opts={"requests": "/dev/null", "pfile": "shared.sh"})
+    assert node._pfile == str((shared_dir / "shared.sh").resolve())
+
+
+def test_a_pfile_option_that_is_not_found_stops_the_node(outdir):
+    with pytest.raises(ValueError, match="the general program nowhere.sh is not a file"):
+        _Launcher(opts={"requests": "/dev/null", "pfile": "nowhere.sh"})
+
+
+def test_the_process_option_takes_the_place_of_process(outdir):
+    node = _node(_Launcher, {"requests": "/dev/null", "process": "align"})
+    assert node.PROCESS == "align"
+    assert node._node_info_extra()["launcher"]["process"] == "align"
+    assert _node(_ProcessLauncher, {"requests": "/dev/null", "process": "sort"}).PROCESS == "sort"
+    assert _node(_ProcessLauncher).PROCESS == "align"
+    assert _node().PROCESS is None
 
 
 def test_a_relative_program_is_found_in_the_directory_of_the_module(outdir, tmp_path):

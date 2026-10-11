@@ -44,8 +44,9 @@ _CLASSES = {
         (),
         (),
         (
-            "PFILE", "PROCESS", "RUNS_ROOT", "RUNS_ROOT_OPTION", "DONE_PORT",
-            "MAX_CONCURRENT_RUNS", "BATCH_SCHED", "STATUS_CHECK_INTERVAL_SECS",
+            "PFILE", "PFILE_OPTION", "PROCESS", "PROCESS_OPTION", "RUNS_ROOT",
+            "RUNS_ROOT_OPTION", "DONE_PORT", "MAX_CONCURRENT_RUNS", "BATCH_SCHED",
+            "STATUS_CHECK_INTERVAL_SECS",
         ),
     ),
 }

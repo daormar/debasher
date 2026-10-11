@@ -42,7 +42,10 @@ def test_a_node_of_a_derived_class_gets_its_class_after_fbpprocess(kind):
 def test_the_attributes_of_a_class_come_with_their_value_and_documentation():
     reference = node_reference.node_reference("ProgramLauncher")
 
-    assert "- `PFILE = None`: The module of the general program to launch (required)." in reference
+    assert (
+        "- `PFILE = None`: The module of the general program to launch (required, unless the "
+        "process has the option PFILE_OPTION)."
+    ) in reference
 
 
 def test_a_supervisor_has_no_reference():

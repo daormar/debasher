@@ -274,11 +274,15 @@ class ProgramLauncher(FBPProcess):
     warning, since it ties the program to one machine. With PROCESS, the
     name of a process of that module, it launches that process alone, with
     debasher_exec_process, instead of the whole program. It may give
-    RUNS_ROOT, an absolute path under which the run directories go; an
-    option of the node named RUNS_ROOT_OPTION (-runsdir), if it has one,
-    gives it instead, for a runs root that the command line chooses, and
-    has to be an absolute path too. Without either, the run directories go
-    in the output directory of the process.
+    RUNS_ROOT, an absolute path under which the run directories go; without
+    it, the run directories go in the output directory of the process.
+
+    An option of the node gives any of the three instead, for a value that
+    the command line chooses, when the node has it: PFILE_OPTION (-pfile),
+    PROCESS_OPTION (-process) and RUNS_ROOT_OPTION (-runsdir). -pfile is not
+    a file option (define_cmdline_opt, not define_cmdline_infile_opt), so
+    that the engine leaves a relative name as it is and the node looks for
+    it as PFILE; -runsdir has to be an absolute path.
 
     Every input port is a port of requests. A request is a JSON object
     with `opts`, the options of the general program (names with their
@@ -299,11 +303,18 @@ class ProgramLauncher(FBPProcess):
     A launcher node cannot be a task of an array process.
     """
 
-    #: The module of the general program to launch (required).
+    #: The module of the general program to launch (required, unless the
+    #: process has the option PFILE_OPTION).
     PFILE = None
+    #: The option of the process, without its dash, that gives the module of
+    #: the general program instead of PFILE, when the process has it.
+    PFILE_OPTION = "pfile"
     #: The name of a process of PFILE to launch alone, instead of the whole
     #: program, or None.
     PROCESS = None
+    #: The option of the process, without its dash, that gives the process to
+    #: launch alone instead of PROCESS, when the process has it.
+    PROCESS_OPTION = "process"
     #: The absolute path under which the run directories go, or None for the
     #: output directory of the process.
     RUNS_ROOT = None
@@ -337,8 +348,15 @@ class ProgramLauncher(FBPProcess):
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
+        # The options PFILE_OPTION and PROCESS_OPTION, when the process has
+        # them, take the place of the class attributes for this node.
+        self.PFILE = self.opts.get(self.PFILE_OPTION) or self.PFILE
+        self.PROCESS = self.opts.get(self.PROCESS_OPTION) or self.PROCESS
         if not self.PFILE:
-            raise ValueError(f"{type(self).__name__}: PFILE, the general program to launch, is not set")
+            raise ValueError(
+                f"{type(self).__name__}: the general program to launch is not set: neither "
+                f"PFILE nor an option -{self.PFILE_OPTION}"
+            )
         self._pfile = self._find_pfile()
         if self.PROCESS is not None and (not isinstance(self.PROCESS, str) or not self.PROCESS):
             raise ValueError(f"{type(self).__name__}: PROCESS is not the name of a process")
