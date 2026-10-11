@@ -106,7 +106,7 @@ Process Array Example Using the Array Option Handler
 
         # -outdir option
         local description="directory of the task, below the output directory of the process"
-        explain_opt "-outdir" "<file>" "$description"
+        explain_opt "-outdir" "<dir>" "$description"
     }
 
     array_reader_identify_cmdline_opts()

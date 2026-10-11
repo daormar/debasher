@@ -60,7 +60,7 @@ worker_stepdone_explain_opts()
 
     # -outd option
     local description="directory of the task, below the output directory of the process"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########

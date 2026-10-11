@@ -36,7 +36,7 @@ Telegram Example Using an Imperative Style
 
         # -out-processdir option
         local description="output directory"
-        explain_opt "-out-processdir" "<file>" "$description"
+        explain_opt "-out-processdir" "<dir>" "$description"
     }
 
     telegram_identify_cmdline_opts()

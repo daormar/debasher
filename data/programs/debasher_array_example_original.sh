@@ -130,7 +130,7 @@ array_reader_explain_opts()
 
     # -outdir option
     local description="output directory of reader"
-    explain_opt "-outdir" "<file>" "$description"
+    explain_opt "-outdir" "<dir>" "$description"
 }
 
 ########

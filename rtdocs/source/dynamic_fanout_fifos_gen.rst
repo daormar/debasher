@@ -163,7 +163,7 @@ Dynamic Fanout Example Using FIFOs and Generators
 
         # -outd option
         local description="name of output directory"
-        explain_opt "-outd" "<file>" "$description"
+        explain_opt "-outd" "<dir>" "$description"
 
         # -outf option
         local description="output fifo"
@@ -320,7 +320,7 @@ Dynamic Fanout Example Using FIFOs and Generators
 
         # -outd option
         local description="directory of the task, below the output directory of the process"
-        explain_opt "-outd" "<file>" "$description"
+        explain_opt "-outd" "<dir>" "$description"
     }
 
     worker_explain_task_shaping_opts()
@@ -406,7 +406,7 @@ Dynamic Fanout Example Using FIFOs and Generators
 
         # -indi option
         local description="i'th input directory"
-        explain_opt "-ind-ith" "<file>" "$description"
+        explain_opt "-ind-ith" "<dir>" "$description"
 
         # -outf option
         local description="output file"

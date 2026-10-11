@@ -148,7 +148,7 @@ array_reader_explain_opts()
 
     # -outdir option
     local description="directory of the task, below the output directory of the process"
-    explain_opt "-outdir" "<file>" "$description"
+    explain_opt "-outdir" "<dir>" "$description"
 }
 
 ########

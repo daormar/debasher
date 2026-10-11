@@ -149,7 +149,7 @@ worker_explain_opts()
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########

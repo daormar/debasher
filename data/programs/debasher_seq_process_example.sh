@@ -56,7 +56,7 @@ calculate_explain_opts()
 
     # -outd option
     local description="Output directory"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########

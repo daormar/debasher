@@ -102,7 +102,7 @@ Process Array Example
 
         # -outdir option
         local description="output directory of reader"
-        explain_opt "-outdir" "<file>" "$description"
+        explain_opt "-outdir" "<dir>" "$description"
     }
 
     array_reader_identify_cmdline_opts()

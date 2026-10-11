@@ -67,7 +67,7 @@ square_explain_opts()
 
     # -outd option
     local description="directory of the task, below the shared directory"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########
@@ -143,7 +143,7 @@ total_explain_opts()
 
     # -ind-ith option
     local description="i'th directory of a task of square"
-    explain_opt "-ind-ith" "<file>" "$description"
+    explain_opt "-ind-ith" "<dir>" "$description"
 
     # -outf option
     local description="output file"

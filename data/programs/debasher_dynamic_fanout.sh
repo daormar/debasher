@@ -197,7 +197,7 @@ fragment_explain_opts()
 
     # -outd option
     local description="output directory"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########
@@ -277,7 +277,7 @@ dispatch_explain_opts()
 
     # -ind option
     local description="input directory"
-    explain_opt "-ind" "<file>" "$description"
+    explain_opt "-ind" "<dir>" "$description"
 
     # -outfi option
     local description="i'th output file"
@@ -366,7 +366,7 @@ worker_explain_opts()
 
     # -outd option
     local description="directory of the task, below the output directory of the process"
-    explain_opt "-outd" "<file>" "$description"
+    explain_opt "-outd" "<dir>" "$description"
 }
 
 ########
@@ -452,7 +452,7 @@ aggregate_explain_opts()
 
     # -indi option
     local description="i'th input directory"
-    explain_opt "-ind-ith" "<file>" "$description"
+    explain_opt "-ind-ith" "<dir>" "$description"
 
     # -outf option
     local description="output file"

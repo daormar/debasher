@@ -28,7 +28,7 @@ Telegram Example Using Four Pipeline Stages
 
         # -outf option
         local description="output file"
-        explain_opt "-outf" "<file>" "$description"
+        explain_opt "-outf" "<string>" "$description"
     }
 
     rseq_identify_cmdline_opts()
@@ -75,11 +75,11 @@ Telegram Example Using Four Pipeline Stages
     {
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<file>" "$description"
+        explain_opt "-inf" "<string>" "$description"
 
         # -outf option
         local description="output fifo"
-        explain_opt "-outf" "<file>" "$description"
+        explain_opt "-outf" "<string>" "$description"
     }
 
     decomposer_identify_cmdline_opts()
@@ -130,11 +130,11 @@ Telegram Example Using Four Pipeline Stages
 
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<file>" "$description"
+        explain_opt "-inf" "<string>" "$description"
 
         # -outf option
         local description="output fifo"
-        explain_opt "-outf" "<file>" "$description"
+        explain_opt "-outf" "<string>" "$description"
     }
 
     recomposer_identify_cmdline_opts()
@@ -208,7 +208,7 @@ Telegram Example Using Four Pipeline Stages
     {
         # -inf option
         local description="input fifo"
-        explain_opt "-inf" "<file>" "$description"
+        explain_opt "-inf" "<string>" "$description"
 
         # -outf option
         local description="output fifo"

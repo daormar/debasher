@@ -168,7 +168,7 @@ Dynamic Fanout Example
 
         # -outd option
         local description="output directory"
-        explain_opt "-outd" "<file>" "$description"
+        explain_opt "-outd" "<dir>" "$description"
     }
 
     fragment_identify_cmdline_opts()
@@ -243,7 +243,7 @@ Dynamic Fanout Example
 
         # -ind option
         local description="input directory"
-        explain_opt "-ind" "<file>" "$description"
+        explain_opt "-ind" "<dir>" "$description"
 
         # -outfi option
         local description="i'th output file"
@@ -327,7 +327,7 @@ Dynamic Fanout Example
 
         # -outd option
         local description="directory of the task, below the output directory of the process"
-        explain_opt "-outd" "<file>" "$description"
+        explain_opt "-outd" "<dir>" "$description"
     }
 
     worker_explain_task_shaping_opts()
@@ -406,7 +406,7 @@ Dynamic Fanout Example
 
         # -indi option
         local description="i'th input directory"
-        explain_opt "-ind-ith" "<file>" "$description"
+        explain_opt "-ind-ith" "<dir>" "$description"
 
         # -outf option
         local description="output file"

@@ -59,7 +59,7 @@ shared_dir_writer_explain_opts()
 
     # -out-datadir option
     local description="data directory"
-    explain_opt "-out-datadir" "<file>" "$description"
+    explain_opt "-out-datadir" "<dir>" "$description"
 }
 
 ########
@@ -111,7 +111,7 @@ shared_dir_reader_explain_opts()
 {
     # -datadir option
     local description="data directory"
-    explain_opt "-datadir" "<file>" "$description"
+    explain_opt "-datadir" "<dir>" "$description"
 }
 
 ########

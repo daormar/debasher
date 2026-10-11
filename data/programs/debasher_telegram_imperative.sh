@@ -56,7 +56,7 @@ telegram_explain_opts()
 
     # -out-processdir option
     local description="output directory"
-    explain_opt "-out-processdir" "<file>" "$description"
+    explain_opt "-out-processdir" "<dir>" "$description"
 }
 
 ########
