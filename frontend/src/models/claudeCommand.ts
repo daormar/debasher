@@ -11,10 +11,36 @@ export function shellWord(word: string): string {
   return `'${word.replace(/'/g, `'\\''`)}'`;
 }
 
+// How the session of Claude Code starts: with a new conversation, with the
+// last one on the program, or with one that Claude Code lists for the user
+// to pick. Claude Code keeps its conversations by the directory where it
+// runs, which debasher_claude makes the home directory of the program, so
+// the conversations of each program are its own.
+export type ClaudeConversation = "new" | "continue" | "resume";
+
+export const CLAUDE_CONVERSATIONS: { value: ClaudeConversation; label: string }[] = [
+  { value: "new", label: "Start a new conversation" },
+  { value: "continue", label: "Continue the last conversation" },
+  { value: "resume", label: "Resume an earlier conversation" },
+];
+
+// The options of Claude Code that start each kind of session, which
+// debasher_claude passes to it as they are after "--".
+const CONVERSATION_ARGS: Record<ClaudeConversation, string> = {
+  new: "",
+  continue: " -- --continue",
+  resume: " -- --resume",
+};
+
 // The command, run through `prefix` when given, as the `docker compose exec`
 // that runs it inside the container of the backend.
-export function claudeCommand(homeDir: string, url: string, prefix: string | null = null): string {
-  const command = `debasher_claude --home-dir ${shellWord(homeDir)} --url ${shellWord(url)}`;
+export function claudeCommand(
+  homeDir: string,
+  url: string,
+  prefix: string | null = null,
+  conversation: ClaudeConversation = "new",
+): string {
+  const command = `debasher_claude --home-dir ${shellWord(homeDir)} --url ${shellWord(url)}${CONVERSATION_ARGS[conversation]}`;
   return prefix ? `${prefix} ${command}` : command;
 }
 

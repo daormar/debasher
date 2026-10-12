@@ -131,6 +131,11 @@ describe("HelpMenu", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(
       "debasher_claude --home-dir '/home/me/my programs/wc' --url http://127.0.0.1:9000"
     ));
+
+    fireEvent.change(screen.getByRole("combobox", { name: /Conversation/ }), { target: { value: "continue" } });
+    expect(command).toHaveValue(
+      "debasher_claude --home-dir '/home/me/my programs/wc' --url http://127.0.0.1:9000 -- --continue"
+    );
   });
 
   it("asks to save a program first, before giving a command", async () => {

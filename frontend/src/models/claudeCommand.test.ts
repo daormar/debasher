@@ -33,4 +33,16 @@ describe("claudeCommand", () => {
     );
   });
 
+  it("passes Claude Code the option that continues or resumes a conversation", () => {
+    expect(claudeCommand("/data/wc", "http://127.0.0.1:8000", null, "new")).toBe(
+      "debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000"
+    );
+    expect(claudeCommand("/data/wc", "http://127.0.0.1:8000", null, "continue")).toBe(
+      "debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000 -- --continue"
+    );
+    expect(claudeCommand("/data/wc", "http://127.0.0.1:8000", "docker compose exec -it debasher", "resume")).toBe(
+      "docker compose exec -it debasher debasher_claude --home-dir /data/wc --url http://127.0.0.1:8000 -- --resume"
+    );
+  });
+
 });

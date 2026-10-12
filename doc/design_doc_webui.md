@@ -4166,7 +4166,13 @@ the backend serves (under the dev server, which forwards `/api` to the backend,
 that origin reaches the API as well). The user can change the URL in the dialog.
 The command holds no token: the MCP server reads it from the token file (see
 "The token file"). The home directory and the URL are quoted for a POSIX shell
-when they hold anything that the shell would read otherwise. The command gives
+when they hold anything that the shell would read otherwise. A selector of the
+dialog chooses how the session starts: with a new conversation, with the last
+conversation on the program (`-- --continue`), or with one that Claude Code
+lists for the user to pick (`-- --resume`). `debasher_claude` passes what
+follows `--` to Claude Code as it is, and Claude Code keeps its conversations by
+the directory where it runs, which `debasher_claude` makes the home directory of
+the program, so the conversations of each program are its own. The command gives
 no session mode (no `--mode`): the skills are listed for the user to know them,
 and Claude Code calls one on its own when the work asks for it. A program that
 was never saved gets no command, since the MCP tools work on the program as

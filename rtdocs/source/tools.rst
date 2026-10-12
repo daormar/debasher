@@ -552,3 +552,11 @@ something, always ask. Claude Code may not edit by hand what DeBasher
 keeps in ``.debasher``. For example::
 
     $ debasher_claude --home-dir ~/programs/my_program --mode design
+
+Claude Code keeps its conversations by the directory where it runs,
+which ``debasher_claude`` makes the home directory of the program, so
+the conversations of each program are its own. ``-- --continue`` takes
+up the last one again, and ``-- --resume`` lists them for you to pick
+one::
+
+    $ debasher_claude --home-dir ~/programs/my_program -- --continue

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_WEBUI_INFO, getWebuiInfo } from "../api/webuiApi";
 import type { WebuiInfo } from "../api/webuiApi";
-import { CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
+import { CLAUDE_CONVERSATIONS, CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
+import type { ClaudeConversation } from "../models/claudeCommand";
 import { copyOrSelect } from "../utils/clipboard";
 
 interface Props {
@@ -46,11 +47,13 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
     };
   }, []);
 
+  const [conversation, setConversation] = useState<ClaudeConversation>("new");
+
   const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const commandRef = useRef<HTMLTextAreaElement>(null);
 
-  const command = homeDir ? claudeCommand(homeDir, url.trim(), info?.claudeCodePrefix ?? null) : "";
+  const command = homeDir ? claudeCommand(homeDir, url.trim(), info?.claudeCodePrefix ?? null, conversation) : "";
 
   async function handleCopy() {
     setCopyNote(
@@ -126,6 +129,18 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
                 onChange={event => setUrl(event.target.value)}
                 style={{ flex: 1, fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 }}
               />
+            </label>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+              Conversation
+              <select
+                value={conversation}
+                onChange={event => setConversation(event.target.value as ClaudeConversation)}
+              >
+                {CLAUDE_CONVERSATIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
             </label>
 
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>

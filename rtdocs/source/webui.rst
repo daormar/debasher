@@ -154,8 +154,10 @@ edits the selected process, and a toolbar above:
   program open in the editor stays as it is. Its "Claude Code" gives the
   command that starts Claude Code on the program (see the
   :ref:`tools` Section, ``debasher_claude``), to run in a terminal of
-  your own, and its "How to cite DeBasher" gives the reference of the
-  article to cite, as text and as BibTeX.
+  your own, with a new conversation or with an earlier one of the
+  program (see `Working with Claude Code`_), and its "How to cite
+  DeBasher" gives the reference of the article to cite, as text and
+  as BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the
@@ -544,6 +546,12 @@ Starting a Session
    address. The command holds no token: ``debasher_mcp`` reads it by
    itself from the file that ``debasher_webui`` leaves for its port, so
    it works with a ``debasher_webui`` that runs on the same machine.
+
+   "Conversation" chooses how the session starts: with a new
+   conversation, with the last one held on this program (the command
+   ends in ``-- --continue``), or with one that Claude Code lists for
+   you to pick (``-- --resume``). Claude Code keeps the conversations
+   of each program apart, by its home directory.
 3. Copy the command and run it in a terminal. Claude Code starts in
    the home directory of the program, with the tools of DeBasher and
    the plugin of DeBasher.
