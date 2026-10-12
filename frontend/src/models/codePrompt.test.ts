@@ -71,6 +71,46 @@ describe("buildCodePrompt", () => {
     ]);
   });
 
+  it("lists the sequential processes that a Bash process can run as steps, before the code", () => {
+    const withSeq = {
+      ...program,
+      seqProcesses: [
+        { id: "s1", name: "double", description: "Doubles $1 into the file $2.", language: "python", code: "", computationalSpecs: {}, additionalSpecs: { sched: "SLURM" } },
+        { id: "s2", name: "add_one", description: "Adds one to -n.", language: "bash", code: "", computationalSpecs: {}, additionalSpecs: { alias: "increment", aliasOptMap: [{ fromLabel: "-n", toLabel: "-value" }] } },
+        { id: "s3", name: "tidy", description: "", language: "bash", code: "", computationalSpecs: {}, additionalSpecs: { externalAlias: "tidy.sh" } },
+        { id: "s4", name: "plain", description: "Prints $1.", language: "bash", code: "", computationalSpecs: {}, additionalSpecs: {} },
+      ],
+    } as unknown as Program;
+    const prompt = buildCodePrompt(withSeq, count, "", "");
+    const headings = [...prompt.matchAll(/^## (.*)$/gm)].map(m => m[1]);
+    expect(headings.indexOf("The sequential processes")).toBe(headings.indexOf("The options") + 1);
+    expect(prompt).toContain("`seq_execute <name> <args>`");
+    expect(prompt).toContain("- `double` (Python, steps on Slurm): Doubles $1 into the file $2.");
+    expect(prompt).toContain("- `add_one` (alias of `increment`, `-n` passed on as `-value`): Adds one to -n.");
+    expect(prompt).toContain("- `tidy` (external alias `tidy.sh`, arguments not described)\n");
+    expect(prompt).toContain("- `plain` (Bash): Prints $1.");
+    expect(prompt).toContain("not `seq_execute_slurm`");
+    expect(prompt).toContain("`< /dev/null`");
+    expect(prompt).toContain("never a FIFO");
+  });
+
+  it("gives the rule of the steps on Slurm only when a sequential process sends its steps there", () => {
+    const withSeq = {
+      ...program,
+      seqProcesses: [{ id: "s1", name: "plain", description: "Prints $1.", language: "bash", code: "", computationalSpecs: {}, additionalSpecs: {} }],
+    } as unknown as Program;
+    expect(buildCodePrompt(withSeq, count, "", "")).not.toContain("never a FIFO");
+  });
+
+  it("says nothing of sequential processes when the program has none, or to a process in another language", () => {
+    const withSeq = {
+      ...program,
+      seqProcesses: [{ id: "s1", name: "double", description: "", language: "python", code: "", computationalSpecs: {}, additionalSpecs: {} }],
+    } as unknown as Program;
+    expect(buildCodePrompt(program, count, "", "")).not.toContain("seq_execute");
+    expect(buildCodePrompt(withSeq, withLanguage(count, "python"), "", "")).not.toContain("seq_execute");
+  });
+
   it("describes the program and the process", () => {
     const prompt = buildCodePrompt(program, count, "", "");
     expect(prompt).toContain("- Name: `lines`\n- Description: Counts the lines that a producer writes.");

@@ -4,6 +4,7 @@ import type { ProgramOption } from "./option";
 import { fanoutBaseLabel, isFanoutOption } from "./option";
 import type { ProcessLanguage, ProgramProcess } from "./process";
 import type { Program } from "./program";
+import type { SeqProcess } from "./seqProcess";
 import {
   LANGUAGE_NAMES,
   TEMPLATE_MARKER,
@@ -35,6 +36,7 @@ export function buildCodePrompt(
     ["## The program", "", `- Name: \`${program.name}\``, ...describedAs(program.description)],
     processSection(process, language),
     optionsSection(program, process),
+    seqProcessesSection(program, process),
     codeSection(process, code),
     [
       "## What the code has to do",
@@ -47,7 +49,48 @@ export function buildCodePrompt(
     returnSection(process, language),
   ];
 
-  return sections.map(lines => lines.join("\n")).join("\n\n") + "\n";
+  return sections.filter(lines => lines.length > 0).map(lines => lines.join("\n")).join("\n\n") + "\n";
+}
+
+// The sequential processes that a Bash process can run as steps with
+// seq_execute, or nothing when the program has none or the process is in
+// another language, which cannot call seq_execute. Their descriptions are
+// all that tells the arguments they take, since they have no options.
+function seqProcessesSection(program: Program, process: ProgramProcess): string[] {
+  const seqProcesses = program.seqProcesses ?? [];
+  if (process.language !== "bash" || seqProcesses.length === 0) {
+    return [];
+  }
+  const onSlurm = seqProcesses.some(seqProcess => seqProcess.additionalSpecs.sched === "SLURM");
+  return [
+    "## The sequential processes",
+    "",
+    "The program has sequential processes: code that the process can run as a step with `seq_execute <name> <args>`, which runs it, waits for it to end and returns a status other than 0 when it fails. It receives the arguments exactly as they are given, as positional arguments or as options, which its description lists.",
+    "",
+    ...seqProcesses.map(seqProcessLine),
+    "",
+    "- Call `seq_execute` for these steps, not `seq_execute_slurm`: whether a step runs in the shell of the task or on Slurm is set by its sequential process.",
+    "- Inside a loop that reads its standard input, give the step `< /dev/null`, or the step takes the rest of the loop's input.",
+    ...(onSlurm
+      ? ["- A step on Slurm runs in a new shell, possibly on another machine: give it everything it needs as arguments, and pass it files, never a FIFO."]
+      : []),
+  ];
+}
+
+// A sequential process as a line of the list: its name, its language or
+// the code it takes from an alias, whether its steps go to Slurm, and its
+// description, which says what arguments it takes.
+function seqProcessLine(seqProcess: SeqProcess): string {
+  const { alias, aliasOptMap, externalAlias, sched } = seqProcess.additionalSpecs;
+  const renamed = (aliasOptMap ?? []).map(mapping => `\`${mapping.fromLabel}\` passed on as \`${mapping.toLabel}\``);
+  const traits = [
+    alias ? `alias of \`${alias}\`` : externalAlias ? `external alias \`${externalAlias}\`` : LANGUAGE_NAMES[seqProcess.language],
+    ...((alias || externalAlias) ? renamed : []),
+    sched === "SLURM" ? "steps on Slurm" : null,
+    seqProcess.description.trim() === "" ? "arguments not described" : null,
+  ].filter(Boolean);
+  const description = seqProcess.description.trim() === "" ? "" : `: ${oneLine(seqProcess.description)}`;
+  return `- \`${seqProcess.name}\` (${traits.join(", ")})${description}`;
 }
 
 // A description as the lines of a list item, or nothing when it is blank.

@@ -3570,16 +3570,31 @@ under a heading of its own:
    `read_opt_value_from_func_args`, which gives the value and not the path; in
    another language it is written into the file that the option names, and its
    reader gets the path of that file.
-5. **The code to complete.** The draft of the code editor, which starts as the
+5. **The sequential processes**, only for a Bash process of a program that has
+   any, since only Bash code can call `seq_execute`: that the process can run
+   each of them as a step with `seq_execute <name> <args>`, which passes the
+   arguments as they are given, waits for the step to end and returns a status
+   other than 0 when it fails; then each sequential process with its language,
+   or the target of its alias or external alias and the labels that its option
+   map renames, whether its steps go to Slurm (`sched` is `SLURM`), and its
+   description, the only place that tells the arguments it takes, since it has
+   no options, or that its arguments are not described. Rules close it: to call
+   `seq_execute` and not `seq_execute_slurm`, since the sequential process sets
+   where its steps run; to give a step `/dev/null` as its standard input inside
+   a loop that reads its standard input, whose rest the step would otherwise
+   take; and, when the steps of a sequential process go to Slurm, that such a
+   step runs in a new shell, possibly on another machine, so it gets everything
+   it needs as arguments, and files, never a FIFO.
+6. **The code to complete.** The draft of the code editor, which starts as the
    template while the code is still one, or the template when the user has
    emptied the draft, in a fenced code block tagged with the language and longer
    than any run of backquotes in the code. The template already reads every
    option that a task receives, so the code prompt asks to keep those lines and
    to write the code where the template marker is; without the marker, it asks
    to change the code as the code request says and to keep the rest.
-6. **The code request.** What the user wrote in the prompt panel, or, when it
+7. **The code request.** What the user wrote in the prompt panel, or, when it
    is blank, to write the code that the description of the process asks for.
-7. **How to comment the code**, for whoever reads the code later, in the style
+8. **How to comment the code**, for whoever reads the code later, in the style
    of the code of DeBasher itself: before each helper function, in Bash, a block
    of `#` comments with what it does, its arguments and what it prints or
    returns, as the modules of the engine and of `data/programs` have; in Python,
@@ -3589,7 +3604,7 @@ under a heading of its own:
    so that the code can run again on what an earlier run left), and none that
    only repeats the code. What the comments say is what the program model does
    not hold, and they reach the code editor with the code.
-8. **What the AI tool returns.** The whole code (for a Bash process, including
+9. **What the AI tool returns.** The whole code (for a Bash process, including
    the line that names its function) in a single fenced code block tagged with
    the language, with nothing else inside the block. The user copies the code
    from the answer and pastes it over the draft, so the answer has to hold all
