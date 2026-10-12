@@ -2803,7 +2803,8 @@ leaves, by design, to the program or to whoever runs it.
   that what is outside it stays unchanged (see "Arrays and option generators").
 - **The number of tasks of another process.** A process without an option
   generator cannot ask, while it defines its options, for the number of tasks of
-  another process without one (see "Arrays and option generators").
+  another process without one (see "Arrays and option generators", and "Future
+  work").
 - **Steps.** The engine keeps no record of a step: it has no status, no log
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step
@@ -2850,6 +2851,16 @@ What is known to be missing from the design, or left open by it:
   `processdeps=none` would still allow. Explicit dependencies that add to the
   inferred ones, instead of replacing them, would serve too, at the cost of
   declaring them by hand.
+- **The number of tasks of a process without an option generator.** The
+  engine could define a process without an option generator when another first
+  asks for its number of tasks, once, and stop the preparation of the run when a
+  number of tasks depends on itself, as it does between option generators (see
+  "Arrays and option generators"). The answer would still not depend on the
+  order in which the processes happen to be defined. A process could then read
+  every task of an array process through a fanout family with as many options
+  as the array process has tasks, and an array process could match its tasks,
+  one by one, to those of another, without a command line option that repeats
+  their number.
 - **Processes that left the program.** `debasher_exec` could refuse to start
   in every run, and not only in a run with a subdivided shared directory,
   while a process that an earlier run had, and that the program no longer has,

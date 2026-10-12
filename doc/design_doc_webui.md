@@ -4712,12 +4712,10 @@ then succeeds in the first one.
   without a count source option count the tasks of a process in `array` mode,
   as it counts those of a process in `generator` mode. The engine answers a
   process without an option generator only about a process with one, since it
-  defines the options of the processes without one in no particular order (see
-  "Arrays and option generators" in `doc/design_doc_engine.md`). An engine that
-  defined such a process when another first asks for its number of tasks, once,
-  and that stopped a cycle of such questions as it stops one between option
-  generators, would answer it, and script generation would then accept the
-  family.
+  defines the options of the processes without one in no particular order;
+  once it answers about any process (see "The number of tasks of a process
+  without an option generator" in "Future work" of `doc/design_doc_engine.md`),
+  script generation would accept the family.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.
