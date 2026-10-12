@@ -313,6 +313,9 @@ def _is_alive(pid):
     try:
         with open(f"/proc/{pid}/stat") as f:
             return f.read().split()[2] != "Z"
+    except ProcessLookupError:
+        # The process ended between the kill above and the read
+        return False
     except FileNotFoundError:
         return True
 
