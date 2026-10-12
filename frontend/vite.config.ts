@@ -16,8 +16,9 @@ export default defineConfig({
     // (Authorization) and their Host as they come: the proxy adds no token of
     // its own, which it would hand to anyone who reaches its port. Open
     // http://localhost:5173/#token=<the backend's DEBASHER_WEBUI_TOKEN> once.
+    // WebSockets too, for the terminal of a session of Claude Code in the page.
     proxy: {
-      "/api": "http://localhost:8000",
+      "/api": { target: "http://localhost:8000", ws: true },
     },
     // The tests read files of the repository outside frontend/ (the sources
     // of the documentation that the Help menu links to); the dev server keeps

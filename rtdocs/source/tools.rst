@@ -469,6 +469,17 @@ that environment before running the tool or pointing it directly at
 the environment's interpreter through the ``DEBASHER_WEBUI_PYTHON``
 environment variable.
 
+The Help menu of the web interface gives the command that starts
+Claude Code on a program, and runs it in a terminal at the bottom of
+the editor (see the :ref:`webui` Section, "Working with Claude Code").
+Set ``DEBASHER_WEBUI_CLAUDE_CODE`` to ``no`` where Claude Code cannot
+work on the programs of the server, because its directories are not
+those of the machine where Claude Code would run: the menu then gives
+neither. Set ``DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL`` to ``no`` to keep
+the command and run no Claude Code from the server itself. The server
+runs Claude Code with its own environment: ``DEBASHER_CLAUDE_CMD``
+names the command of Claude Code when it is not in its ``PATH``.
+
 debasher_mcp
 ^^^^^^^^^^^^
 

@@ -16,15 +16,21 @@ export interface WebuiInfo {
   // The URL of the backend from its own machine; null when the backend does
   // not know its port (uvicorn started by hand).
   backendUrl: string | null;
+  // Whether the backend runs Claude Code in the page, in the terminal panel
+  // of the editor: not where it is turned off, nor for a backend that does not
+  // know its own URL, nor without debasher_claude.
+  claudeCodeTerminal: boolean;
 }
 
 // What a backend that cannot answer is taken to offer: the command as it is,
-// naming the origin of the page.
+// naming the origin of the page, and no session in the page, which needs the
+// backend.
 export const DEFAULT_WEBUI_INFO: WebuiInfo = {
   claudeCode: true,
   claudeCodePrefix: null,
   claudeCodeInstall: null,
   backendUrl: null,
+  claudeCodeTerminal: false,
 };
 
 export async function getWebuiInfo(): Promise<WebuiInfo> {

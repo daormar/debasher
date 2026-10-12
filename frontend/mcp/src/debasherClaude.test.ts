@@ -78,6 +78,8 @@ describe("debasher_claude", () => {
     });
     expect(option(args, "--settings")).toBe(SETTINGS);
     expect(option(args, "--append-system-prompt")).toContain(`home directory is ${home}`);
+    // It may run in the editor, which a reload of its tab would end.
+    expect(option(args, "--append-system-prompt")).toContain("ends a session that runs in the editor");
     expect(args.some(arg => arg.startsWith("/debasher:"))).toBe(false);
   });
 

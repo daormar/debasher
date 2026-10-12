@@ -325,3 +325,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `name`, `nodeKind`, `options` and `position` go beside it. A save is
   refused when the program changed on disk since it was read (the user may
   be editing it in the web UI): read it again and work from what is there.
+- **The user and the editor.** The tools see the program as saved, never the
+  unsaved changes of a tab of the editor: when the user names something that
+  is not there, ask them to save it (Save in the toolbar). A tab without
+  unsaved changes loads what the tools save on its own; one with unsaved
+  changes shows a banner instead, where "Save mine over it" discards what the
+  tools saved. Claude Code may run in the terminal panel at the bottom of the
+  editor, which the backend of the web UI starts: reloading or closing that
+  tab, "Close" in the toolbar, or stopping `debasher_webui` ends the session
+  (the conversation is kept, and "Start again" in the panel, with "Continue
+  the last conversation", takes it up), so say so before suggesting any of
+  them.

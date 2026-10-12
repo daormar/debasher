@@ -4,6 +4,7 @@ import { DEFAULT_WEBUI_INFO, getWebuiInfo } from "../api/webuiApi";
 import type { WebuiInfo } from "../api/webuiApi";
 import { CLAUDE_CONVERSATIONS, CLAUDE_SKILLS, claudeCommand } from "../models/claudeCommand";
 import type { ClaudeConversation } from "../models/claudeCommand";
+import { isSessionActive, useClaudeTerminal } from "../store/ClaudeTerminalContext";
 import { copyOrSelect } from "../utils/clipboard";
 
 interface Props {
@@ -15,11 +16,12 @@ interface Props {
 
 // "Claude Code" of the Help menu: the command that starts Claude Code on the
 // program (debasher_claude), for the user to run in a terminal of their own,
-// and the skills that the session offers. The web UI runs nothing itself.
-// The backend says what the command is run through, as the `docker compose
-// exec` that runs it inside the container of the Docker image, and how
-// Claude Code is installed there; where Claude Code cannot work on its
-// programs, the dialog gives no command and says why.
+// and the skills that the session offers; and, where the backend runs Claude
+// Code in the page, "Open in the page", which starts the same command in the
+// terminal panel of the editor. The backend says what the command is run
+// through, as the `docker compose exec` that runs it inside the container of
+// the Docker image, and how Claude Code is installed there; where Claude Code
+// cannot work on its programs, the dialog gives no command and says why.
 export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: Props) {
 
   // Null until the backend answers; a backend that cannot answer is taken
@@ -50,6 +52,9 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
   const [conversation, setConversation] = useState<ClaudeConversation>("new");
 
   const [copyNote, setCopyNote] = useState<string | null>(null);
+
+  const terminal = useClaudeTerminal();
+  const sessionActive = isSessionActive(terminal.phase);
 
   const commandRef = useRef<HTMLTextAreaElement>(null);
 
@@ -161,6 +166,24 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
             </div>
 
             {copyNote && <span style={{ fontSize: 13, color: "#555" }}>{copyNote}</span>}
+
+            {info.claudeCodeTerminal && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span>Or run it in a terminal at the bottom of this editor:</span>
+                <button
+                  onClick={() => {
+                    if (sessionActive) {
+                      terminal.setVisible(true);
+                    } else {
+                      terminal.start(conversation);
+                    }
+                    onClose();
+                  }}
+                >
+                  {sessionActive ? "Show it in the page" : "Open in the page"}
+                </button>
+              </div>
+            )}
 
             {info.claudeCodeInstall && (
               <p style={{ margin: 0 }}>

@@ -54,7 +54,7 @@ of a process, of its options handler, of its additional methods or of a node.
 "Editing a program from an agent: the MCP server" describes a second client of
 the backend, for AI agents, "Claude Code on a program" how DeBasher starts
 Claude Code with that server, "Access to the backend: the token" how the backend
-obeys only those who hold its token, "Claude Code in the page" designs a
+obeys only those who hold its token, "Claude Code in the page" describes a
 terminal in the editor where the backend runs Claude Code, and "Future work"
 lists what is known to be missing.
 
@@ -1673,9 +1673,8 @@ the program metadata would hold them, whatever the order of the keys of an
 object). What a save keeps is the program it wrote, not the one the tab holds
 when the save is answered, since the user may have kept editing meanwhile.
 Leaving the editor with "Close", or closing or reloading the tab of the browser,
-asks first when the program holds unsaved changes. Once the terminal panel is
-built, leaving the editor will also end the session of the program, and ask
-first (see "The terminal panel").
+asks first when the program holds unsaved changes or has a session of Claude
+Code in the page, which leaving the editor ends (see "The terminal panel").
 
 ## From the store to the canvas
 
@@ -1945,10 +1944,10 @@ fails when such a call runs. A resident program has no sequential processes
 # Guarantees and non-goals
 
 This section gathers the guarantees that the web UI gives today for general
-programs, stated in the sections above, and what it deliberately does not
-try to do. Where a guarantee has a known gap, "Future work" lists it. Those of
-resident programs, designed and being built, are gathered in "Guarantees and
-non-goals of a resident program".
+programs, stated in the other sections of this document, and what it
+deliberately does not try to do. Where a guarantee has a known gap, "Future
+work" lists it. Those of resident programs, designed and being built, are
+gathered in "Guarantees and non-goals of a resident program".
 
 ## Guarantees
 
@@ -2061,6 +2060,22 @@ non-goals of a resident program".
 - **A refused token loses no unsaved change.** The editor stops and says how to
   get a new token, and keeps the program as it is (see "The editor without a
   valid token").
+
+**Claude Code in the page**
+
+- **The command of a session holds nothing that the page sends but the program
+  and how the conversation starts.** The backend builds it itself, and runs
+  nothing but `debasher_claude` (see "The session in the page").
+- **One session per program.** A backend runs at most one session in the page
+  on a program, whatever tab asks for it, and another tab gets it only by
+  taking it over (see "The session in the page").
+- **No session outlives its WebSocket or its backend.** A closed WebSocket
+  hangs the session up, and a backend that dies closes the pseudo-terminal,
+  the controlling terminal of its process, which hangs it up too (see "The
+  pseudo-terminal").
+- **Leaving the editor asks before it ends a session.** Closing or reloading
+  the tab, and "Close", ask first while a session runs (see "The terminal
+  panel").
 
 ## Non-goals
 
@@ -4205,9 +4220,8 @@ program and the URL of the backend, and Claude Code edits the program through
 the MCP tools while the editor of the web UI follows what it saves (see
 "Revisions of the program metadata"). It uses the user's own installation and
 account of Claude Code: the web UI calls no AI service, and holds no key of one.
-A terminal in the editor, where the backend runs `debasher_claude`, is built in
-the backend and not yet in the editor (see "Claude Code in the page"); the
-command to copy stays.
+The backend also runs it, for the terminal panel of the editor (see "Claude Code
+in the page").
 
 The web UI gives the command: "Claude Code" in the Help menu shows
 `debasher_claude` with the home directory of the program and the URL of the
@@ -4277,9 +4291,13 @@ directory, and starts Claude Code there with:
   (`--allowedTools` with a rule on Read, on the real path of the plugin, since
   Claude Code compares the paths it reads without symbolic links), for the
   skills to read its reference;
-- a line added to the system prompt that names the home directory, which the
-  MCP tools take as `home_dir`, and the backend, and says that the editor of the
-  web UI may have the program open;
+- a line added to the system prompt that names the home directory, which the MCP
+  tools take as `home_dir`, and the backend, and says that the editor of the web
+  UI may have the program open, that the tools see the program only as saved,
+  and that the session may run in the terminal panel of that editor, which
+  reloading or closing its tab, "Close" or stopping `debasher_webui` ends, so
+  that Claude Code says so before it suggests any of them (see "Claude Code in
+  the page");
 - a first message: the skill of the session mode given, if any
   (`/debasher:<mode>`), which takes the prompt given as its arguments, or else
   the prompt alone. Claude Code takes a single first message; it goes after
@@ -4655,17 +4673,18 @@ then succeeds in the first one.
 
 # Claude Code in the page
 
-This section designs a second way of running `debasher_claude`, besides the
+This section describes a second way of running `debasher_claude`, besides the
 command that the user copies (see "Claude Code on a program"): a terminal at the
 bottom of the editor, where the backend runs Claude Code on the open program and
-the browser shows its screen and takes its keys. The backend of it is built
-(`api/claude_sessions.py`, `api/routers/claude.py`), and the terminal panel is
-not yet. It changes nothing of the launcher, the MCP server, the permissions,
-the plugin or the command to copy, which stay as they are: a session in the page
-runs the same `debasher_claude`, with the same user, installation and account of
-Claude Code as the user's own terminal would. This section describes the session
-in the page, how the page opens one, the pseudo-terminal that carries it, the
-terminal panel that shows it, where the session runs, and how it is tested.
+the browser shows its screen and takes its keys (`api/claude_sessions.py` and
+`api/routers/claude.py` in the backend, `store/ClaudeTerminalContext.tsx` and
+`components/ClaudeTerminalPanel.tsx` in the frontend). The launcher, the MCP
+server, the permissions, the plugin and the command to copy are the same for
+both ways: a session in the page runs the same `debasher_claude`, with the same
+user, installation and account of Claude Code as the user's own terminal would.
+This section describes the session in the page, how the page opens one, the
+pseudo-terminal that carries it, the terminal panel that shows it, where the
+session runs, and how it is tested.
 
 ## The session in the page
 
@@ -4797,19 +4816,22 @@ outlives its backend.
 
 ## The terminal panel
 
-The terminal panel is not built yet: this is its design. It lies at the bottom
-of the editor, across its whole width, below the canvas and the inspector, so
-that Claude Code has the columns it needs and the canvas stays in sight while
-Claude Code changes the program. It shows the terminal with xterm.js. The user
-drags its upper edge to change its height, which the tab keeps in its memory
-only, and can fold it away while the session goes on. "Open in the page", next
-to the command in the "Claude Code" dialog, opens it with the way of starting
-that the selector of the dialog shows. The dialog shows it only where
+The terminal panel lies at the bottom of the editor, across its whole width,
+below the canvas and the inspector, so that Claude Code has the columns it needs
+and the canvas stays in sight while Claude Code changes the program. It shows
+the terminal with xterm.js, in a font named before the generic `monospace`:
+xterm.js measures its characters in that font, and draws nothing where the
+browser maps the generic family to no font. The user drags its upper edge to
+change its height, which the tab keeps in its memory only, and can fold it away
+while the session goes on. "Open in the page", next to the command in the
+"Claude Code" dialog, opens it with the way of starting that the selector of the
+dialog shows; while the tab has a session, the button reads "Show it in the
+page" and shows the panel instead. The dialog shows the button only where
 `GET /api/webui/info` says that the backend offers a session in the page, which
 it does not in the cases where the request for one gets 503 (see "Opening a
-session in the page"). Once a tab has a session, a button of the toolbar shows
-and hides the panel. The keys typed in the terminal go to it alone, never to the
-shortcuts of the canvas.
+session in the page"). Once the tab has asked for a session, a button of the
+toolbar ("Claude Code") shows and hides the panel. The keys typed in the
+terminal go to it alone, never to the shortcuts of the canvas.
 
 The panel says what the session is doing. A refused request for a session is
 shown in words (the program is not saved, the session in the page is not
@@ -4854,9 +4876,8 @@ the page (`claudeCodeTerminal`).
 A backend that uvicorn started by hand, as in development, knows no URL of its
 own and writes no token file (see "Development with the token"), so the MCP
 server of a session would not reach it: it offers no session in the page, and
-`GET /api/webui/info` says so, so that the dialog will show no "Open in the
-page". `python3 -m api.serve` starts a backend as `debasher_webui` does, with
-both.
+`GET /api/webui/info` says so, so that the dialog shows no "Open in the page".
+`python3 -m api.serve` starts a backend as `debasher_webui` does, with both.
 
 ## Testing the session in the page
 
@@ -4874,10 +4895,15 @@ of the process is reported, and that the token is not in the environment of the
 session. The exception of the middleware (its own path, a WebSocket alone, the
 Host still checked) is tested in `test/api/test_token_auth.py`, and what
 `GET /api/webui/info` says of the session in the page, for each reason to refuse
-it, in `test/api/test_webui_info.py`. Once the terminal panel is built, tests of
-the frontend will check what it shows and offers for each answer of the request
-and each end of the WebSocket, against a WebSocket that stands in for the one of
-the backend.
+it, in `test/api/test_webui_info.py`. The tests of the frontend check what the
+panel shows and offers for each answer of the request and each end of the
+WebSocket, against a WebSocket that stands in for the one of the backend
+(`store/ClaudeTerminalContext.test.tsx`), and, in the editor, with a terminal
+that stands in for xterm.js, which draws nothing under jsdom
+(`components/ClaudeTerminalPanel.test.tsx`); the messages of the panel and the
+question of "Close" are tested in `models/claudeTerminal.test.ts`, and the
+address of the WebSocket and the answers of the request in
+`api/claudeTerminalApi.test.ts`.
 
 # Future work
 

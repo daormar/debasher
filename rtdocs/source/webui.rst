@@ -51,7 +51,8 @@ the server::
 Open that address once: the browser keeps the token, and takes it out
 of the address bar. The server runs in the foreground until it is
 stopped, for example with ``Ctrl-C``; stopping it stops no program
-that it launched.
+that it launched, but ends a session of Claude Code in the editor (see
+`A Session in the Editor`_).
 
 The server runs every program as the user who started it, so it obeys
 only the requests that carry its token, which it draws anew at every
@@ -147,17 +148,19 @@ edits the selected process, and a toolbar above:
   one brings its options and code in.
 * **Add program**: brings every process of another program saved with
   the web interface into this one (see `Groups`_ below).
-* **Save**, **Run** (the menu described in `Running a General
-  Program`_ below), **Help** and **Close**, which goes back to the home
-  screen. The Help menu links to this documentation and to the
-  repository of DeBasher, each in a new tab of the browser, so that the
-  program open in the editor stays as it is. Its "Claude Code" gives the
-  command that starts Claude Code on the program (see the
-  :ref:`tools` Section, ``debasher_claude``), to run in a terminal of
-  your own, with a new conversation or with an earlier one of the
-  program (see `Working with Claude Code`_), and its "How to cite
-  DeBasher" gives the reference of the article to cite, as text and
-  as BibTeX.
+* **Save**, **Run** (the menu described in `Running a General Program`_
+  below), **Claude Code**, **Help** and **Close**, which goes back to
+  the home screen. **Claude Code** shows or hides the terminal of a
+  session of Claude Code in the editor, once one was opened (see
+  `A Session in the Editor`_). The Help menu links to this documentation
+  and to the repository of DeBasher, each in a new tab of the browser,
+  so that the program open in the editor stays as it is. Its "Claude
+  Code" gives the command that starts Claude Code on the program (see
+  the :ref:`tools` Section, ``debasher_claude``), to run in a terminal
+  of your own or in a terminal at the bottom of the editor, with a new
+  conversation or with an earlier one of the program (see
+  `Working with Claude Code`_), and its "How to cite DeBasher" gives the
+  reference of the article to cite, as text and as BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the
@@ -529,7 +532,9 @@ with you: it edits the program through ``debasher_mcp`` (see the
 :ref:`tools` Section), with the same rules as the editor, and the
 editor shows its changes as it saves them. It runs with your own
 installation and account of Claude Code; the web interface itself
-calls no AI service. (To have any AI tool write the code of one
+calls no AI service. You run Claude Code in a terminal of your own, or
+in the editor, where the server of the web interface starts it (see
+`A Session in the Editor`_). (To have any AI tool write the code of one
 process, the "AI prompt" button of the code editors is enough.)
 
 Starting a Session
@@ -578,6 +583,50 @@ work asks for them, and which you can also call by their command:
   what its description says, reads and writes its options, fails on bad
   input, and whether its tests check anything), changing nothing. Ask
   ``/debasher:implement`` to fix what you choose.
+
+A Session in the Editor
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Instead of copying the command, **Open in the page**, in the same
+dialog, runs it in a terminal at the bottom of the editor, with the
+conversation chosen there. The URL of the dialog is only for the
+command to copy: the server gives Claude Code its own address. Claude
+Code is the same, with the same skills and permissions; what changes
+is where it runs:
+
+* The server of the web interface starts it, on the machine where
+  ``debasher_webui`` runs and as the user who started it, with the
+  installation and the account of Claude Code of that user there.
+  Whoever holds the token of the server can therefore use that
+  account, as they can already run any command as that user.
+* The button is there only when the server was started with
+  ``debasher_webui`` and finds ``debasher_claude``; the
+  ``DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL`` environment variable turns
+  it off (see the :ref:`tools` Section, ``debasher_webui``).
+* The session lasts as long as the page and the server: reloading or
+  closing the tab, closing the program, or stopping the server ends it,
+  and the browser or **Close** asks first. Claude Code keeps the
+  conversation, and **Start again**, with "Continue the last
+  conversation", takes it up.
+* Drag the upper edge of the terminal to change its height. **Hide**,
+  and the **Claude Code** button of the toolbar, hide and show it
+  without ending the session; **End** ends it. The toolbar button
+  appears with the first session of the editor, and while a session
+  runs, the button of the dialog reads **Show it in the page** and shows
+  its terminal.
+* A program has one session in the editor at a time. If another tab, or
+  another browser, has it, the terminal says so and offers **Bring it
+  here**, which ends the other session and takes up its conversation
+  here; the other tab says that the session was opened in another page,
+  and can bring it back the same way. A session that you started in a
+  terminal of your own does not count: avoid working on the program from
+  both at once.
+* If the server does not find Claude Code, the terminal says so: the
+  server may have been started before Claude Code was installed, or
+  without it in its ``PATH``. Start the server again from a new
+  terminal, or give the command of Claude Code in
+  ``DEBASHER_CLAUDE_CMD``. In the Docker image, install it once with
+  the command that the dialog gives.
 
 An Example
 ^^^^^^^^^^

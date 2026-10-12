@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { KeyboardEvent } from "react";
 
 import { useProgram } from "../store/ProgramContext";
+import { isSessionActive, useClaudeTerminal } from "../store/ClaudeTerminalContext";
 import EnvVarsEditor from "./EnvVarsEditor";
 import PreambleEditor from "./PreambleEditor";
 import ProgramDescriptionEditor from "./ProgramDescriptionEditor";
@@ -13,6 +14,7 @@ import AddProgramDialog from "./AddProgramDialog";
 import RunMenu from "./RunMenu";
 import HelpMenu from "./HelpMenu";
 import { runGoesOnMessage } from "../models/generalRun";
+import { closeQuestion } from "../models/claudeTerminal";
 import { hasSupervisor } from "../models/node";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
@@ -36,6 +38,8 @@ export default function Toolbar({ onClose }: Props) {
     isRunInProgress,
     unsavedChanges,
   } = useProgram();
+
+  const terminal = useClaudeTerminal();
 
   const [isPreambleOpen, setPreambleOpen] =
     useState(false);
@@ -268,6 +272,16 @@ export default function Toolbar({ onClose }: Props) {
         }}
       >
 
+        {terminal.phase !== "none" && (
+          <button
+            aria-pressed={terminal.visible}
+            title={terminal.visible ? "Hide the Claude Code terminal" : "Show the Claude Code terminal"}
+            onClick={() => terminal.setVisible(!terminal.visible)}
+          >
+            Claude Code
+          </button>
+        )}
+
         <HelpMenu
           homeDir={program.homeDir}
           unsavedChanges={unsavedChanges}
@@ -275,10 +289,8 @@ export default function Toolbar({ onClose }: Props) {
 
         <button
           onClick={() => {
-            if (
-              unsavedChanges &&
-              !window.confirm("Close the program? The changes made since it was last saved are lost.")
-            ) {
+            const question = closeQuestion(unsavedChanges, isSessionActive(terminal.phase));
+            if (question !== null && !window.confirm(question)) {
               return;
             }
             onClose(runGoesOnMessage(program, isRunInProgress));
