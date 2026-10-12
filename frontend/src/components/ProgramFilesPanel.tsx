@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import CodeMirror from "@uiw/react-codemirror";
+import type { Extension } from "@codemirror/state";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import type { ProcessLanguage } from "../models/process";
 import {
   createFolder,
@@ -42,8 +43,11 @@ const LANGUAGE_BY_EXTENSION: Record<string, ProcessLanguage> = {
 
 // Stable reference, not an inline object literal in the JSX below: a
 // new object every render makes @uiw/react-codemirror treat basicSetup
-// as changed and reconfigure the editor (see previewExtensions).
+// as changed and reconfigure the editor (see languageExtensions).
 const CODE_PREVIEW_BASIC_SETUP = { lineNumbers: false, foldGutter: false };
+
+// The extensions of a preview in no known language, for the same reason.
+const NO_EXTENSIONS: Extension[] = [];
 
 function languageForPath(path: string): ProcessLanguage | null {
   const dot = path.lastIndexOf(".");
@@ -295,18 +299,9 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
   const previewLanguage =
     preview && preview.kind === "file" ? languageForPath(preview.path) : null;
 
-  // Stable across every keystroke (draft changing re-renders this
-  // component): without this, `[languageExtension(previewLanguage)]`
-  // would be a brand-new array, and languageExtension() a brand-new
-  // Extension instance, every render, and CodeMirror reconfigures
-  // its whole state (dropping syntax highlighting for a frame, then
-  // reapplying it) whenever `extensions` changes identity, even when
-  // the language itself hasn't. Only reruns when the language
-  // actually changes.
-  const previewExtensions = useMemo(
-    () => (previewLanguage ? [languageExtension(previewLanguage)] : []),
-    [previewLanguage]
-  );
+  // The extensions of the preview, the same array for the same language
+  // (see languageExtensions), so that a render does not reconfigure it.
+  const previewExtensions = previewLanguage ? languageExtensions(previewLanguage) : NO_EXTENSIONS;
 
   const canEditPreview =
     !!selectedEntry && !selectedEntry.readonly && preview?.kind === "file";
@@ -767,7 +762,9 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
                       style={{ flex: 1, minWidth: 0 }}
                       extensions={previewExtensions}
                       editable={canEditPreview}
-                      onChange={value => setDraft(value)}
+                      // The setter itself, which keeps its identity: a new function at each
+                      // render would reconfigure the editor (see languageExtensions).
+                      onChange={setDraft}
                       // No line-number/fold gutter here: it isn't used
                       // anywhere else CodeMirror shows up in this app
                       // (CodeEditor.tsx doesn't have one either), and
@@ -776,7 +773,7 @@ export default function ProgramFilesPanel({ openRequest = null }: Props) {
                       // <textarea> preview below, reading as a stray
                       // indent. Hoisted to a module-level constant, not
                       // an inline object literal, for the same reason
-                      // previewExtensions is memoized above: a new
+                      // previewExtensions is stable above: a new
                       // object every render makes CodeMirror reconfigure
                       // (and briefly drop highlighting) on every keystroke.
                       basicSetup={CODE_PREVIEW_BASIC_SETUP}

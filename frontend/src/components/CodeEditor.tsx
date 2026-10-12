@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import { generateCodeTemplate, isCodeStillTemplate } from "../models/codeTemplates";
 import { buildCodePrompt } from "../models/codePrompt";
 import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
@@ -106,11 +106,13 @@ export default function CodeEditor({ process, onClose }: Props) {
 
               height="400px"
 
-              extensions={[
-                languageExtension(process.language),
-              ]}
+              extensions={languageExtensions(process.language)}
 
-              onChange={value => setDraft(value)}
+              // The setter itself, which keeps its identity: a new function at each
+
+              // render would reconfigure the editor (see languageExtensions).
+
+              onChange={setDraft}
 
             />
 

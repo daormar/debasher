@@ -2,7 +2,7 @@ import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 
 interface Props {
@@ -72,11 +72,13 @@ export default function ManualConfigEditor({ process, onClose }: Props) {
 
             height="400px"
 
-            extensions={[
-              languageExtension("bash"),
-            ]}
+            extensions={languageExtensions("bash")}
 
-            onChange={value => setDraft(value)}
+            // The setter itself, which keeps its identity: a new function at each
+
+            // render would reconfigure the editor (see languageExtensions).
+
+            onChange={setDraft}
 
           />
 

@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import type { AdditionalMethods, ProgramProcess } from "../models/process";
 import { processMethod } from "../models/processMethods";
 import { buildMethodPrompt } from "../models/methodPrompt";
@@ -117,11 +117,13 @@ export default function MethodBodyEditor({
 
               height="400px"
 
-              extensions={[
-                languageExtension("bash"),
-              ]}
+              extensions={languageExtensions("bash")}
 
-              onChange={value => setDraft(value)}
+              // The setter itself, which keeps its identity: a new function at each
+
+              // render would reconfigure the editor (see languageExtensions).
+
+              onChange={setDraft}
 
             />
 

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { validateProcessName } from "../api/processApi";
-import { languageExtension, PROCESS_LANGUAGES } from "./codeLanguages";
+import { languageExtensions, PROCESS_LANGUAGES } from "./codeLanguages";
 import type { ProcessLanguage } from "../models/process";
 import type { SeqProcess } from "../models/seqProcess";
 import {
@@ -55,6 +55,17 @@ export default function SeqProcessesEditor({ onClose }: Props) {
       current.map(draft => (draft.id === selectedId ? withSeqProcessChanges(draft, changes) : draft))
     );
   }
+
+  // The same function while the same sequential process is selected: a new
+  // one at each render would reconfigure the editor (see
+  // languageExtensions).
+  const handleCodeChange = useCallback(
+    (value: string) =>
+      setDrafts(current =>
+        current.map(draft => (draft.id === selectedId ? withSeqProcessChanges(draft, { code: value }) : draft))
+      ),
+    [selectedId]
+  );
 
   function handleAdd() {
     let index = drafts.length + 1;
@@ -331,8 +342,8 @@ export default function SeqProcessesEditor({ onClose }: Props) {
                     value={selected.code}
                     height="100%"
                     style={{ height: "100%" }}
-                    extensions={[languageExtension(selected.language)]}
-                    onChange={value => update({ code: value })}
+                    extensions={languageExtensions(selected.language)}
+                    onChange={handleCodeChange}
                   />
                 </div>
               )}

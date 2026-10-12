@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 import { buildOptionsHandlerPrompt } from "../models/optionsHandlerPrompt";
 import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
@@ -124,11 +124,13 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
 
               height="400px"
 
-              extensions={[
-                languageExtension("bash"),
-              ]}
+              extensions={languageExtensions("bash")}
 
-              onChange={value => setDraft(value)}
+              // The setter itself, which keeps its identity: a new function at each
+
+              // render would reconfigure the editor (see languageExtensions).
+
+              onChange={setDraft}
 
             />
 

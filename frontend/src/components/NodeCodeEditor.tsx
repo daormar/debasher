@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
-import { languageExtension } from "./codeLanguages";
+import { languageExtensions } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 import type { NodeCode, NodeHookPart, NodeKind } from "../models/node";
 import {
@@ -55,6 +55,14 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
   const [part, setPart] =
     useState<Part>("classBody");
+
+  // One function for each part, which keeps its identity across renders:
+  // a new one at each render would reconfigure the editor (see
+  // languageExtensions).
+  const handleCodeChange = useCallback(
+    (value: string) => setDraft(current => ({ ...current, [part]: value })),
+    [part]
+  );
 
   // The code of the hooks that the node inherits from its class, and why it
   // could not be read, if it could not.
@@ -258,11 +266,9 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
 
                 style={{ height: "100%" }}
 
-                extensions={[
-                  languageExtension("python"),
-                ]}
+                extensions={languageExtensions("python")}
 
-                onChange={value => setDraft(current => ({ ...current, [part]: value }))}
+                onChange={handleCodeChange}
 
               />
 
