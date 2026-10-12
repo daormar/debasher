@@ -7,6 +7,17 @@ import type { ClaudeConversation } from "../models/claudeCommand";
 import { isSessionActive, useClaudeTerminal } from "../store/ClaudeTerminalContext";
 import { copyOrSelect } from "../utils/clipboard";
 
+// Where the backend offers both ways of running Claude Code, each one is a
+// section of its own, with a heading.
+const sectionStyle = { display: "flex", flexDirection: "column", gap: 8 } as const;
+
+const headingStyle = {
+  margin: 0,
+  paddingBottom: 4,
+  borderBottom: "1px solid #ddd",
+  fontSize: 14,
+} as const;
+
 interface Props {
   // The home directory of the program, empty while it was never saved.
   homeDir: string;
@@ -59,6 +70,33 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
   const commandRef = useRef<HTMLTextAreaElement>(null);
 
   const command = homeDir ? claudeCommand(homeDir, url.trim(), info?.claudeCodePrefix ?? null, conversation) : "";
+
+  // How the session starts, for both ways of running it: above them when the
+  // backend offers the two, else among the fields of the command. The note
+  // that installs Claude Code goes the same way.
+  const conversationField = (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+      Conversation
+      <select
+        value={conversation}
+        onChange={event => setConversation(event.target.value as ClaudeConversation)}
+      >
+        {CLAUDE_CONVERSATIONS.map(({ value, label }) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  // Where Claude Code does not come with the rest (the Docker image), how to
+  // install it, which both ways need.
+  const installNote = info?.claudeCodeInstall && (
+    <p style={{ margin: 0 }}>
+      The first time, install Claude Code there
+      with <code>{info.claudeCodeInstall}</code>; on its first
+      start, it asks you to log in, once.
+    </p>
+  );
 
   async function handleCopy() {
     setCopyNote(
@@ -121,77 +159,9 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
 
           <>
 
-            <p style={{ margin: 0 }}>
-              {info.claudeCodePrefix
-                ? "Run this in a terminal to work on this program with Claude Code, which runs where this web UI runs (in its container):"
-                : "Run this in a terminal to work on this program with Claude Code:"}
-            </p>
+            {info.claudeCodeTerminal && conversationField}
 
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              Backend URL
-              <input
-                value={url}
-                onChange={event => setUrl(event.target.value)}
-                style={{ flex: 1, fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 }}
-              />
-            </label>
-
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              Conversation
-              <select
-                value={conversation}
-                onChange={event => setConversation(event.target.value as ClaudeConversation)}
-              >
-                {CLAUDE_CONVERSATIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </label>
-
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-              <textarea
-                ref={commandRef}
-                aria-label="Command"
-                readOnly
-                rows={info.claudeCodePrefix ? 3 : 2}
-                value={command}
-                style={{
-                  flex: 1,
-                  fontFamily: "ui-monospace, Consolas, monospace",
-                  fontSize: 12,
-                  resize: "none",
-                }}
-              />
-              <button onClick={handleCopy}>Copy</button>
-            </div>
-
-            {copyNote && <span style={{ fontSize: 13, color: "#555" }}>{copyNote}</span>}
-
-            {info.claudeCodeTerminal && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span>Or run it in a terminal at the bottom of this editor:</span>
-                <button
-                  onClick={() => {
-                    if (sessionActive) {
-                      terminal.setVisible(true);
-                    } else {
-                      terminal.start(conversation);
-                    }
-                    onClose();
-                  }}
-                >
-                  {sessionActive ? "Show it in the page" : "Open in the page"}
-                </button>
-              </div>
-            )}
-
-            {info.claudeCodeInstall && (
-              <p style={{ margin: 0 }}>
-                The first time, install Claude Code there
-                with <code>{info.claudeCodeInstall}</code>; on its first
-                start, it asks you to log in, once.
-              </p>
-            )}
+            {info.claudeCodeTerminal && installNote}
 
             {unsavedChanges && (
               <p style={{ margin: 0, color: "#8a5300" }}>
@@ -199,6 +169,75 @@ export default function ClaudeCodeDialog({ homeDir, unsavedChanges, onClose }: P
                 see: it works on the program as saved. Save it first.
               </p>
             )}
+
+            {info.claudeCodeTerminal && (
+              <section aria-label="In this editor" style={sectionStyle}>
+                <h4 style={headingStyle}>In this editor</h4>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ flex: 1 }}>
+                    Runs Claude Code in a terminal at the bottom of this editor.
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (sessionActive) {
+                        terminal.setVisible(true);
+                      } else {
+                        terminal.start(conversation);
+                      }
+                      onClose();
+                    }}
+                  >
+                    {sessionActive ? "Show it in the page" : "Open in the page"}
+                  </button>
+                </div>
+              </section>
+            )}
+
+            <section aria-label="In a terminal of your own" style={sectionStyle}>
+
+              {info.claudeCodeTerminal && (
+                <h4 style={headingStyle}>In a terminal of your own</h4>
+              )}
+
+              <p style={{ margin: 0 }}>
+                {info.claudeCodePrefix
+                  ? "Run this in a terminal to work on this program with Claude Code, which runs where this web UI runs (in its container):"
+                  : "Run this in a terminal to work on this program with Claude Code:"}
+              </p>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                Backend URL
+                <input
+                  value={url}
+                  onChange={event => setUrl(event.target.value)}
+                  style={{ flex: 1, fontFamily: "ui-monospace, Consolas, monospace", fontSize: 12 }}
+                />
+              </label>
+
+              {!info.claudeCodeTerminal && conversationField}
+
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <textarea
+                  ref={commandRef}
+                  aria-label="Command"
+                  readOnly
+                  rows={info.claudeCodePrefix ? 3 : 2}
+                  value={command}
+                  style={{
+                    flex: 1,
+                    fontFamily: "ui-monospace, Consolas, monospace",
+                    fontSize: 12,
+                    resize: "none",
+                  }}
+                />
+                <button onClick={handleCopy}>Copy</button>
+              </div>
+
+              {copyNote && <span style={{ fontSize: 13, color: "#555" }}>{copyNote}</span>}
+
+              {!info.claudeCodeTerminal && installNote}
+
+            </section>
 
             <div>
               In the session you can ask anything, or call a skill:

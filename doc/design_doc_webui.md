@@ -4823,15 +4823,22 @@ the terminal with xterm.js, in a font named before the generic `monospace`:
 xterm.js measures its characters in that font, and draws nothing where the
 browser maps the generic family to no font. The user drags its upper edge to
 change its height, which the tab keeps in its memory only, and can fold it away
-while the session goes on. "Open in the page", next to the command in the
-"Claude Code" dialog, opens it with the way of starting that the selector of the
-dialog shows; while the tab has a session, the button reads "Show it in the
-page" and shows the panel instead. The dialog shows the button only where
-`GET /api/webui/info` says that the backend offers a session in the page, which
-it does not in the cases where the request for one gets 503 (see "Opening a
-session in the page"). Once the tab has asked for a session, a button of the
-toolbar ("Claude Code") shows and hides the panel. The keys typed in the
-terminal go to it alone, never to the shortcuts of the canvas.
+while the session goes on. Where `GET /api/webui/info` says that the backend
+offers a session in the page (it does not in the cases where the request for one
+gets 503, see "Opening a session in the page"), the "Claude Code" dialog sets
+out its two ways of running Claude Code under two headings, "In this editor" and
+"In a terminal of your own". The selector of the conversation sits above both,
+since it applies to both, and so does the command that installs Claude Code
+where the backend gives one; the URL of the backend and the command to copy sit
+under the second, since only that way uses them. Elsewhere the dialog has no
+headings and shows only the command, with the selector of the conversation and
+the command that installs Claude Code among its fields. "Open in the page",
+under "In this editor", opens the terminal panel with the way of starting that
+the selector of the conversation shows; while the tab has a session, the button
+reads "Show it in the page" and shows the panel instead. Once the tab has asked
+for a session, a button of the toolbar ("Claude Code") shows and hides the
+panel. The keys typed in the terminal go to it alone, never to the shortcuts of
+the canvas.
 
 The panel says what the session is doing. A refused request for a session is
 shown in words (the program is not saved, the session in the page is not

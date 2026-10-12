@@ -542,8 +542,9 @@ Starting a Session
 
 1. Save the program: Claude Code works on the program as saved in its
    home directory, and does not see changes that are not saved.
-2. Choose **Claude Code...** in the Help menu. It shows a command such
-   as::
+2. Choose **Claude Code...** in the Help menu. It shows a command
+   (under "In a terminal of your own" when the dialog also offers a
+   session in the editor, see `A Session in the Editor`_) such as::
 
        debasher_claude --home-dir /home/me/programs/wordcount \
                        --url http://127.0.0.1:8000
@@ -587,12 +588,14 @@ work asks for them, and which you can also call by their command:
 A Session in the Editor
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Instead of copying the command, **Open in the page**, in the same
-dialog, runs it in a terminal at the bottom of the editor, with the
-conversation chosen there. The URL of the dialog is only for the
-command to copy: the server gives Claude Code its own address. Claude
-Code is the same, with the same skills and permissions; what changes
-is where it runs:
+Where the server can run Claude Code itself, the dialog has two parts,
+"In this editor" and "In a terminal of your own", with "Conversation"
+above both. Instead of copying the command, **Open in the page**, under
+"In this editor", runs it in a terminal at the bottom of the editor,
+with the conversation chosen above. The URL field is only for the
+command to copy: the server gives Claude Code its own address.
+Claude Code is the same, with the same skills and permissions; what
+changes is where it runs:
 
 * The server of the web interface starts it, on the machine where
   ``debasher_webui`` runs and as the user who started it, with the

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_WEBUI_INFO } from "../api/webuiApi";
@@ -136,6 +136,48 @@ describe("HelpMenu", () => {
     expect(command).toHaveValue(
       "debasher_claude --home-dir '/home/me/my programs/wc' --url http://127.0.0.1:9000 -- --continue"
     );
+  });
+
+  it("parts the two ways of running Claude Code, with the conversation above both, where the backend offers both", async () => {
+    stubWebuiInfo(true, { claudeCodeTerminal: true });
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    const inEditor = await screen.findByRole("region", { name: "In this editor" });
+    const ownTerminal = screen.getByRole("region", { name: "In a terminal of your own" });
+    expect(within(inEditor).getByRole("heading", { name: "In this editor" })).toBeInTheDocument();
+    expect(within(inEditor).getByRole("button", { name: "Open in the page" })).toBeInTheDocument();
+    expect(within(ownTerminal).getByRole("heading", { name: "In a terminal of your own" })).toBeInTheDocument();
+    expect(within(ownTerminal).getByRole("textbox", { name: "Command" })).toBeInTheDocument();
+    expect(within(ownTerminal).getByRole("textbox", { name: /Backend URL/ })).toBeInTheDocument();
+    // The conversation is for both, so it belongs to neither.
+    const conversation = screen.getByRole("combobox", { name: /Conversation/ });
+    expect(inEditor).not.toContainElement(conversation);
+    expect(ownTerminal).not.toContainElement(conversation);
+  });
+
+  it("says how to install Claude Code above both ways, which both need", async () => {
+    stubWebuiInfo(true, {
+      claudeCodeTerminal: true,
+      claudeCodeInstall: "docker compose exec -it debasher install-claude-code",
+    });
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    const install = await screen.findByText("docker compose exec -it debasher install-claude-code");
+    expect(screen.getByRole("region", { name: "In this editor" })).not.toContainElement(install);
+    expect(screen.getByRole("region", { name: "In a terminal of your own" })).not.toContainElement(install);
+  });
+
+  it("gives the command alone, with no headings, where the backend offers no session in the page", async () => {
+    stubWebuiInfo(true);
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    await screen.findByRole("textbox", { name: "Command" });
+    expect(screen.queryByRole("heading", { name: "In this editor" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "In a terminal of your own" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open in the page" })).toBeNull();
   });
 
   it("asks to save a program first, before giving a command", async () => {
