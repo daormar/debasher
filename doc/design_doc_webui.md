@@ -1588,21 +1588,24 @@ the store only when the user accepts it.
 
 Every change to the program goes through an operation of the store
 (`addProcess`, `connect`, `updateOption`, ...), and every operation passes its
-result through the same normalization (`normalizeProgram`), which derives the
-connection sentinels from the edges, sets the data type that an option channel
-or a connection fixes (see "Data type and option channel") and restores the
-default scheduler if it is blank. The rules of "Connections" therefore hold
-after every change, not only when the program is saved. An operation that would
-change a process of a group first asks the user, and dissolves the whole group
-if the user agrees (see "Groups"); if not, the program is left as it was. One
-action of the user asks once, for all the groups it touches: deleting a
-selection on the canvas removes its processes and edges in one operation, asked
-before the canvas drops anything, so a declined deletion leaves them drawn;
-renaming a process along with the definition that a loaded module provides for
-the new name is one operation too. Every operation applies to the latest
-program, not to the one of the last render, so the operations of one event build
-on each other, and once the first has dissolved a group the next ones do not ask
-again.
+result through the same normalization (`normalizeProgram`), which drops the
+edges that no longer join an output to an input (one whose process or option is
+gone, or whose option changed direction with its label), derives the connection
+sentinels from the edges, sets the data type that an option channel or a
+connection fixes (see "Data type and option channel") and restores the default
+scheduler if it is blank. The rules of "Connections" therefore hold after every
+change, not only when the program is saved. Removing a process or an option
+removes the edges that leave it or reach it, and with them the connection
+sentinel of each input option that read it. An operation that would change a
+process of a group first asks the user, and dissolves the whole group if the
+user agrees (see "Groups"); if not, the program is left as it was. One action of
+the user asks once, for all the groups it touches: deleting a selection on the
+canvas removes its processes and edges in one operation, asked before the canvas
+drops anything, so a declined deletion leaves them drawn; renaming a process
+along with the definition that a loaded module provides for the new name is one
+operation too. Every operation applies to the latest program, not to the one of
+the last render, so the operations of one event build on each other, and once
+the first has dissolved a group the next ones do not ask again.
 
 The operations rest on plain functions of the program model, in
 `models/programEdits.ts`: each takes a program and returns the edited one

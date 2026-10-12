@@ -153,6 +153,18 @@ describe("editing a program", () => {
     expect(saved.processes[1].options[0].value).toBe("[a;-outf]");
   });
 
+  it("removes an output with its connection, leaving the input it fed with no value", async () => {
+    const backend = fakeBackend([program()]);
+    await call(backend, "connect", { home_dir: HOME, ...A_TO_B });
+
+    const answer = await text(backend, "remove_option", { home_dir: HOME, process: "a", option: "-outf" });
+
+    expect(answer).toContain("- Connection a -outf -> b -in");
+    const saved = savedProgram(backend);
+    expect(saved.edges).toEqual([]);
+    expect(saved.processes[1].options[0].value).toBe("");
+  });
+
   it("draws a connection as a label edge, when asked, and shows it so", async () => {
     const backend = fakeBackend([program()]);
 

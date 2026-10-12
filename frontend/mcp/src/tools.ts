@@ -434,7 +434,7 @@ const editingTools = [
 
   editTool(
     "remove_option",
-    "Removes an option of a process.",
+    "Removes an option of a process with its connections; an input that a removed output fed is left unconnected, with no value.",
     { process: schemas.processName, option: schemas.optionLabel },
     ({ process, option }) => [{ op: "removeOption", process, option }]
   ),

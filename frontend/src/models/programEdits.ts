@@ -95,7 +95,28 @@ function normalizeConnectedOptionValues(source: Program): Program {
 }
 
 /**
- * Re-derives every connected option's "[process;option]" value from the
+ * Drops every edge that no longer joins an output to an input: one whose
+ * process or option is gone, or whose option changed direction (its label
+ * did, such as an input relabeled "-out..."). Such an edge stands for no
+ * connection the engine could make, and script generation ignores it.
+ */
+function dropInvalidEdges(source: Program): Program {
+
+  const option = (processId: string, optionId: string) =>
+    source.processes.find(process => process.id === processId)?.options.find(o => o.id === optionId);
+
+  const edges = source.edges.filter(edge =>
+    option(edge.sourceProcessId, edge.sourceOptionId)?.direction === "output" &&
+    option(edge.targetProcessId, edge.targetOptionId)?.direction === "input"
+  );
+
+  return edges.length === source.edges.length ? source : { ...source, edges };
+
+}
+
+/**
+ * Drops the edges that join no output to an input (see dropInvalidEdges),
+ * re-derives every connected option's "[process;option]" value from the
  * current edges and names, so renaming a process or a connected option's
  * label can't leave a stale reference behind in what gets saved/generated,
  * moves a connected input off a channel that would hide its connection
@@ -116,7 +137,7 @@ export function normalizeProgram(source: Program): Program {
   // The channels first: an input that leaves "shared_dir" then gets the
   // reference to its connection as its value
   const normalized = normalizeDataTypes(
-    normalizeConnectedOptionValues(normalizeConnectedInputChannels(source))
+    normalizeConnectedOptionValues(normalizeConnectedInputChannels(dropInvalidEdges(source)))
   );
 
   return normalized.executionOptions.scheduler
@@ -289,11 +310,14 @@ export function updateOption(
   }));
 }
 
+// Removes the option with the edges left dangling by it, as removeProcess
+// does for a process: those that leave it and those that reach it. The
+// options that read it lose their reference to it (see normalizeProgram).
 // A fanout family counted by the removed option loses its count source
 // option, and then counts the tasks of the process at the other end of its
 // connections, rather than keep the id of an option that no longer exists.
 export function removeOption(program: Program, processId: string, optionId: string): Program {
-  return mapProcess(program, processId, process => ({
+  const removed = mapProcess(program, processId, process => ({
     ...process,
     options: process.options
       .filter(option => option.id !== optionId)
@@ -301,6 +325,16 @@ export function removeOption(program: Program, processId: string, optionId: stri
         option.countSourceOptionId === optionId ? { ...option, countSourceOptionId: undefined } : option
       ),
   }));
+  return {
+    ...removed,
+    edges: removed.edges.filter(edge => !edgeTouchesOption(edge, processId, optionId)),
+  };
+}
+
+// Whether the edge leaves or reaches the option of the process.
+function edgeTouchesOption(edge: ProgramEdge, processId: string, optionId: string): boolean {
+  return (edge.sourceProcessId === processId && edge.sourceOptionId === optionId) ||
+    (edge.targetProcessId === processId && edge.targetOptionId === optionId);
 }
 
 /**
@@ -602,7 +636,8 @@ export function applyEdits(program: Program, edits: EditOp[]): Program {
  * The groups that the edits touch in `program`, which have to be dissolved
  * (see dissolveGroups) before they are applied. An edit touches the group of
  * a process whose definition it changes, of a process it removes, and of the
- * target of an edge it adds or removes, since a connected option's
+ * target of an edge it adds or removes, the edges that go with a removed
+ * process or option included, since a connected option's
  * define_opt_from_proc_out call lives in the target's own generated function
  * (see api/script_generation.py's _option_definition_line). Replacing the
  * sequential processes touches the groups of those it changes or leaves out.
@@ -618,11 +653,26 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
     const touched = (() => {
       switch (edit.op) {
         case "removeProcess":
+          // Its edges go with it, and with each the reference of its target
+          return groupsOfProcesses(program, [
+            edit.processId,
+            ...program.edges
+              .filter(edge => edge.sourceProcessId === edit.processId)
+              .map(edge => edge.targetProcessId),
+          ]);
         case "updateProcess":
         case "addOption":
         case "updateOption":
-        case "removeOption":
           return groupsOfProcesses(program, [edit.processId]);
+        case "removeOption":
+          // The edges that leave or reach the option go with it, and with
+          // each the reference of its target (see groupsOfEdgeTargets)
+          return groupsOfProcesses(program, [
+            edit.processId,
+            ...program.edges
+              .filter(edge => edgeTouchesOption(edge, edit.processId, edit.optionId))
+              .map(edge => edge.targetProcessId),
+          ]);
         case "connect":
           return groupsOfProcesses(program, [edit.edge.targetProcessId]);
         case "disconnect":

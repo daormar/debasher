@@ -128,6 +128,33 @@ describe("the edits of a program", () => {
     expect(options.map(o => [o.id, o.countSourceOptionId])).toEqual([["by", undefined], ["bf", undefined], ["bg", "by"]]);
   });
 
+  it("take away the edges of a removed output, and the reference of the input that read it", () => {
+    const removed = applyEdits(connect(program(), ab), [{ op: "removeOption", processId: "id-a", optionId: "ao" }]);
+    expect(removed.edges).toEqual([]);
+    expect(removed.processes[1].options[0].value).toBe("");
+  });
+
+  it("take away the edges of a removed input, and leave the others", () => {
+    const fanIn = { ...ab, id: "e2", targetOptionId: "bj" };
+    const source: Program = {
+      ...program(),
+      processes: [process("a", [option("ao", "-outf")]), process("b", [option("bi", "-in"), option("bj", "-in2")])],
+    };
+    const removed = removeOption(connect(connect(source, ab), fanIn), "id-b", "bi");
+    expect(removed.edges).toEqual([fanIn]);
+  });
+
+  it("drop, once normalized, an edge that joins no output to an input", () => {
+    const dangling = { ...program(), edges: [ab, { ...ab, id: "e2", sourceOptionId: "gone" }] };
+    expect(normalizeProgram(dangling).edges).toEqual([ab]);
+
+    // An input relabeled as an output reads nothing any more
+    const relabeled = applyEdits(connect(program(), ab), [
+      { op: "updateOption", processId: "id-b", optionId: "bi", changes: { label: "-outx", direction: "output" } },
+    ]);
+    expect(relabeled.edges).toEqual([]);
+  });
+
 });
 
 describe("Add program", () => {
@@ -220,6 +247,10 @@ describe("edits as data", () => {
     expect(touched([{ op: "disconnect", edgeId: "e1" }])).toEqual(["g1"]);
     expect(touched([{ op: "setEdgeDisplay", edgeIds: ["e1"], display: "label" }])).toEqual([]);
     expect(touched([{ op: "removeOption", processId: "id-b", optionId: "bi" }])).toEqual(["g1"]);
+    // Removing the output that the grouped process reads, or its process,
+    // takes away the reference in the generated code of the group
+    expect(touched([{ op: "removeOption", processId: "id-a", optionId: "ao" }])).toEqual(["g1"]);
+    expect(touched([{ op: "removeProcess", processId: "id-a" }])).toEqual(["g1"]);
     expect(touched([{ op: "setProgramFields", changes: { name: "renamed" } }])).toEqual([]);
   });
 

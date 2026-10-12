@@ -107,7 +107,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 ## Options
 
 - **Label** starting with `-`, unique in its process. A label starting with
-  `-out` is an output; any other is an input.
+  `-out` is an output; any other is an input. A change of label that changes
+  the direction drops the connections of the option.
 - **dataType**, the type of the data that the option carries: `int`,
   `float`, `string` (the default), `file`, `dir`, or `None` for a flag
   (always an input, on channel `none`). An input of type `file` or `dir`,

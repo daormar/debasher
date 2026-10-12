@@ -53,7 +53,7 @@ export const optionFields = z.object({
 export const newOption = optionFields.extend({ label: optionLabel }).strict();
 
 export const optionChanges = optionFields.extend({
-  label: optionLabel.optional().describe("A new label; its direction follows from it (output when it starts with -out)."),
+  label: optionLabel.optional().describe("A new label; its direction follows from it (output when it starts with -out), and an option whose direction changes loses its connections."),
 }).strict();
 
 const computationalSpecs = z.object({
