@@ -956,7 +956,7 @@ def read_resident_fifo(request: FifoIORequest) -> ResidentFifoReadResponse:
 
 # There's no "debasher_get_opts" bin tool (unlike stdout/sched-out), the
 # ".opts" file (see engine/debasher_lib_processes.sh's
-# _get_process_opts_filename and debasher_lib_opts.sh's
+# _get_process_opts_filename and debasher_lib_args.sh's
 # _print_opts_as_qstrings) is read directly, the same way
 # _task_indices_for_process already reads __exec__ directly.
 def _get_process_opts_path(outdir: str, process_name: str, task_index: int | None) -> Path:

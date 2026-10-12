@@ -76,7 +76,7 @@ def parse_options(options_str: str) -> Instance:
     """Parse a string of '-flag value -flag value ...' into a dict.
 
     Values are written out via bash's `printf '%q'` (see
-    debasher::_sep_serialized_to_qstr in engine/debasher_lib_opts.sh),
+    debasher::_sep_serialized_to_qstr in engine/debasher_lib_args.sh),
     so a value containing spaces or shell-special characters arrives
     here backslash-escaped (or quoted) as a single token, e.g.
     'Hello\\ World\\!'. shlex.split() undoes that escaping the same

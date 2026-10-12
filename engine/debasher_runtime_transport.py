@@ -60,7 +60,7 @@ _STOP = object()
 def _parse_opts(argv, flags=()):
     """
     Parses argv into a name -> value dict, following DeBasher's own
-    "-optname value" CLI convention (see debasher_lib_opts.sh) -- one or
+    "-optname value" CLI convention (see debasher_lib_args.sh): one or
     two leading dashes, both stripped, so "-inf"/"--inf" both become the
     key "inf". A name in `flags` is a flag, given with no value
     (define_flag), and takes the value True. `argv` is expected in the raw sys.argv shape a Python
