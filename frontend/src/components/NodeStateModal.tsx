@@ -98,7 +98,7 @@ function CheckpointView({ checkpoint }: { checkpoint: NodeCheckpoint }) {
       <PortCounts title="In transit (channel_state)" counts={checkpoint.channel_state} />
       <PortCounts title="Outbound backlog (out_backlog)" counts={checkpoint.out_backlog} />
       <strong>Node state:</strong>
-      <pre style={{ ...preStyle, maxHeight: "35vh" }}>
+      <pre style={preStyle}>
         {JSON.stringify(checkpoint.node_state, null, 2)}
       </pre>
     </div>
@@ -139,22 +139,20 @@ function LogView({ log }: { log: InputLogView }) {
         The latest {log.records.length.toLocaleString()} records. Those above the latest checkpoint
         (capture_pos {log.capture_pos ?? "none"}), highlighted, are what a relaunch now would replay.
       </div>
-      <div style={{ overflow: "auto", maxHeight: "50vh" }}>
-        <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
-          <thead>
-            <tr>
-              {["Position", "Port", "Type", "Seq", "Payload"].map(h => (
-                <th key={h} style={cellStyle}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {log.records.map((record, i) => (
-              <LogRow key={i} record={record} capturePos={log.capture_pos} />
+      <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
+        <thead>
+          <tr>
+            {["Position", "Port", "Type", "Seq", "Payload"].map(h => (
+              <th key={h} style={{ ...cellStyle, position: "sticky", top: 0, background: "#fff" }}>{h}</th>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {log.records.map((record, i) => (
+            <LogRow key={i} record={record} capturePos={log.capture_pos} />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -272,7 +270,7 @@ export default function NodeStateModal({ process, taskIndex, onClose }: Props) {
         style={{
           width: "70%",
           maxWidth: 900,
-          maxHeight: "85vh",
+          height: "80vh",
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -306,32 +304,37 @@ export default function NodeStateModal({ process, taskIndex, onClose }: Props) {
           ))}
         </div>
 
-        {view === "checkpoints" && summary && summary.checkpoints.length > 0 && (
-          <label style={{ fontSize: 14 }}>
-            Checkpoint{" "}
-            <select value={epoch ?? ""} onChange={e => setEpoch(Number(e.target.value))}>
-              {summary.checkpoints.map(c => (
-                <option key={c.epoch} value={c.epoch}>
-                  epoch {c.epoch}, {formatTime(c.written_at)}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        {/* The dialog keeps its size whatever a view holds and while it is
+            read: the row of the selectors is there in every view, and what
+            does not fit in the area below scrolls. */}
+        <div style={{ minHeight: 26, display: "flex", alignItems: "center" }}>
+          {view === "checkpoints" && summary && summary.checkpoints.length > 0 && (
+            <label style={{ fontSize: 14 }}>
+              Checkpoint{" "}
+              <select value={epoch ?? ""} onChange={e => setEpoch(Number(e.target.value))}>
+                {summary.checkpoints.map(c => (
+                  <option key={c.epoch} value={c.epoch}>
+                    epoch {c.epoch}, {formatTime(c.written_at)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-        {view === "log" && (
-          <label style={{ fontSize: 14 }}>
-            Port{" "}
-            <select value={port} onChange={e => setPort(e.target.value)}>
-              <option value="">every port</option>
-              {ports.map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </label>
-        )}
+          {view === "log" && (
+            <label style={{ fontSize: 14 }}>
+              Port{" "}
+              <select value={port} onChange={e => setPort(e.target.value)}>
+                <option value="">every port</option>
+                {ports.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
-        <div style={{ overflow: "auto", minHeight: 0 }}>
+        <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
           {error ? (
             <pre style={{ ...preStyle, color: "#c0392b", whiteSpace: "pre-wrap" }}>{error}</pre>
           ) : isLoading ? (
