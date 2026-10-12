@@ -1953,3 +1953,18 @@ EOF2
     [[ "${output}" == *$'```r\nprint(2)\n```'* ]]
     [[ "${output}" != *"Warning"* ]]
 }
+
+# --- default reset of the output directory -----------------------------
+
+@test "the default reset of a process with a single task removes the entries whose name starts with a dot too" {
+    FIND="$(command -v find)"; RM="$(command -v rm)"
+    local dirname="${BATS_TEST_TMPDIR}/outd"
+    local outd="${dirname}/single"
+    mkdir -p "${outd}/sub"
+    touch "${outd}/out.txt" "${outd}/.__VAL_DESCRIPTOR__-outv_0"
+
+    debasher::_default_reset_outfiles_for_process "${dirname}" single
+
+    [ -d "${outd}" ]
+    [ -z "$(ls -A "${outd}")" ]
+}
