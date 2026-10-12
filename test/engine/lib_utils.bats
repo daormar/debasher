@@ -127,3 +127,32 @@ setup() {
     run debasher::_func_exists no_such_method
     [ "$status" -eq 1 ]
 }
+
+# --- debasher::_str_is_option --------------------------------------------
+
+@test "debasher::_str_is_option takes a dash followed by a letter or an underscore for an option, and a negative number for a value" {
+    local opt
+    for opt in -a --out -_x --b1; do
+        debasher::_str_is_option "${opt}" || { echo "not an option: ${opt}"; return 1; }
+    done
+    for opt in -5 -0.5 --1 - "" value; do
+        ! debasher::_str_is_option "${opt}" || { echo "an option: ${opt}"; return 1; }
+    done
+}
+
+# --- debasher::_get_processname_from_caller ------------------------------
+
+@test "debasher::_get_processname_from_caller prefers a registered process over a helper named like a method" {
+    declare -gA DEBASHER_PROGRAM_PROCESSES=(["myproc"]=1)
+    io_define_opts()
+    {
+        debasher::_get_processname_from_caller "_define_opts"
+    }
+    myproc_define_opts()
+    {
+        io_define_opts
+    }
+
+    run myproc_define_opts
+    [ "${output}" = "myproc" ]
+}

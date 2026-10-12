@@ -1333,3 +1333,11 @@ PYEOF
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"cannot be added to a 'resident' program"* ]]
 }
+
+# --- debasher::_is_valid_processname -------------------------------------
+
+@test "debasher::_is_valid_processname names the method a process name collides with" {
+    run debasher::_is_valid_processname "proc_define_opts"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"collides with method '_define_opts'"* ]]
+}

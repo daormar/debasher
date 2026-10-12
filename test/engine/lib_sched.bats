@@ -5,6 +5,11 @@
 
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
+    # The tests of the lock, the throttle and the dependencies without job
+    # ids call the functions of the engine from the shell of the test; the
+    # others load the engine in a bash of their own
+    debasher_pkglibdir="${ENGINE_BUILDDIR}"
+    source "${ENGINE_BUILDDIR}/debasher_lib.sh"
 }
 
 # Writes the context from a bash that has loaded the engine and a small
@@ -279,4 +284,165 @@ EOS
     run run_with_engine 'DEBASHER_SCHEDULER="${DEBASHER_SLURM_SCHEDULER}"; SRUN=false; f() { echo "ran $1"; }; seq_execute f here'
     [ "$status" -eq 0 ]
     [ "$output" = "ran here" ]
+}
+
+# --- the lock of the output directory ------------------------------------
+
+# Holds the lock of the output directory $1 the way debasher_exec does, with
+# its process id in the lock file, followed by the mark $3 when given, until
+# it gets SIGTERM, which it ignores when $2 is "ignore"
+hold_lock() {
+    (
+        exec 9>>"$1/lock"
+        flock -x 9
+        if [ -n "${3:-}" ]; then
+            printf '%s\n%s\n' "${BASHPID}" "$3" > "$1/lock"
+        else
+            echo "${BASHPID}" > "$1/lock"
+        fi
+        if [ "${2:-}" = "ignore" ]; then
+            trap '' TERM
+        else
+            trap 'exit 0' TERM
+        fi
+        while :; do sleep 0.1; done
+    ) &
+    local i
+    for (( i = 0; i < 50; i++ )); do
+        ! flock -n "$1/lock" true && [ -s "$1/lock" ] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+@test "debasher::_outdir_is_locked is true only while a debasher_exec holds the lock" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    ! debasher::_outdir_is_locked "${outd}" || false
+    # The check creates no lock file
+    [ ! -e "${outd}/lock" ]
+
+    hold_lock "${outd}"
+    local pid=$(cat "${outd}/lock")
+    debasher::_outdir_is_locked "${outd}"
+
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+    ! debasher::_outdir_is_locked "${outd}" || false
+}
+
+@test "debasher::_outdir_is_locked_for_a_run leaves out a debasher_exec that only validates" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    ! debasher::_outdir_is_locked_for_a_run "${outd}" || false
+
+    hold_lock "${outd}" "" "${DEBASHER_LOCK_VALIDATION_MARK}"
+    local pid=$(head -n 1 "${outd}/lock")
+    debasher::_outdir_is_locked "${outd}"
+    ! debasher::_outdir_is_locked_for_a_run "${outd}" || false
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+
+    hold_lock "${outd}"
+    pid=$(cat "${outd}/lock")
+    debasher::_outdir_is_locked_for_a_run "${outd}"
+    kill -TERM "${pid}"
+    flock -w 5 "${outd}/lock" true
+}
+
+@test "debasher::_stop_run_scheduler stops a debasher_exec that only validates, by the process id of the first line" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}" "" "${DEBASHER_LOCK_VALIDATION_MARK}"
+    local pid=$(head -n 1 "${outd}/lock")
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    flock -n "${outd}/lock" true
+    ! kill -0 "${pid}" 2>/dev/null || false
+}
+
+@test "debasher::_stop_run_scheduler does nothing when no debasher_exec holds the lock" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    debasher::_stop_run_scheduler "${outd}"
+    : > "${outd}/lock"
+    debasher::_stop_run_scheduler "${outd}"
+}
+
+@test "debasher::_stop_run_scheduler stops the holder of the lock with SIGTERM and waits until the lock is free" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}"
+    local pid=$(cat "${outd}/lock")
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" != *"Warning"* ]]
+    flock -n "${outd}/lock" true
+    ! kill -0 "${pid}" 2>/dev/null || false
+}
+
+@test "debasher::_stop_run_scheduler kills a holder of the lock that does not stop on SIGTERM" {
+    FLOCK="$(command -v flock)"; CAT="$(command -v cat)"
+    DEBASHER_EXEC_STOP_GRACE_SECS=1
+    local outd="${BATS_TEST_TMPDIR}/outd"
+    mkdir -p "${outd}"
+    hold_lock "${outd}" ignore
+
+    run debasher::_stop_run_scheduler "${outd}"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"did not stop within 1s"* ]]
+    flock -n "${outd}/lock" true
+}
+
+# --- the throttle of an array --------------------------------------------
+
+@test "debasher::_throttle_lets_all_tasks_run accepts no throttle and a throttle not smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=4 ${sep} processdeps=none"
+    debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=8 ${sep} processdeps=none"
+}
+
+@test "debasher::_throttle_lets_all_tasks_run refuses a throttle, its own or the default one, smaller than the number of tasks" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=(["arr"]=4)
+    DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=${DEBASHER_ARRAY_TASK_NOTHROTTLE}
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=none" || false
+
+    DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=3
+    ! debasher::_throttle_lets_all_tasks_run "arr" "arr cpus=1 mem=32 time=00:01:00 ${sep} processdeps=none" || false
+}
+
+# --- dependencies without job ids ----------------------------------------
+
+@test "debasher::_deps_without_ids_can_hold takes a dependency on a launched process, or on a finished one but afternotok" {
+    declare -A ids=(["a"]="101")
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "none" "/o" ids
+    debasher::_deps_without_ids_can_hold "afternotok:a" "/o" ids
+    debasher::_deps_without_ids_can_hold "afterok:done,after:done,afterany:done,aftercorr:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done" "/o" ids || false
+    ! debasher::_deps_without_ids_can_hold "afterok:a,afterok:pending" "/o" ids || false
+}
+
+@test "debasher::_deps_without_ids_can_hold needs one dependency that can hold with ?" {
+    declare -A ids=()
+    debasher::_get_process_status() { [ "$2" = "done" ] && echo "FINISHED" || echo "TO-DO"; }
+
+    debasher::_deps_without_ids_can_hold "afternotok:done?afterok:done" "/o" ids
+    ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids || false
 }
