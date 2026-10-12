@@ -104,3 +104,67 @@ def test_the_backend_does_not_start_without_a_token(monkeypatch):
     monkeypatch.setenv(token_auth.TOKEN_ENV_VAR, "")
     with pytest.raises(RuntimeError):
         token_auth.token_from_env()
+
+
+TICKETED = frozenset({"/api/claude/terminal"})
+
+
+async def _ok_websocket_app(scope, receive, send):
+    await send({"type": "websocket.accept"})
+
+
+def _open_websocket(path="/api/claude/terminal", headers=None):
+    """Whether the middleware lets a WebSocket through to its route."""
+    if headers is None:
+        headers = {"host": "127.0.0.1:8000"}
+    scope = {
+        "type": "websocket",
+        "path": path,
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    sent = []
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):
+        sent.append(message)
+
+    middleware = TokenAuthMiddleware(
+        _ok_websocket_app, token=TOKEN, hosts=token_auth.LOOPBACK_NAMES,
+        pages=PAGES, ticketed=TICKETED,
+    )
+    asyncio.run(middleware(scope, receive, send))
+    return sent[0]["type"] == "websocket.accept"
+
+
+def test_the_websocket_of_a_session_goes_to_its_route_without_the_token():
+    assert _open_websocket()
+    assert not _open_websocket(path="/api/other")
+    assert _open_websocket(path="/api/other", headers=_with_token())
+
+
+def test_the_websocket_of_a_session_still_needs_a_host_of_the_backend():
+    assert not _open_websocket(headers={"host": "malo.com:8000"})
+
+
+def test_only_the_websocket_of_a_ticketed_path_is_spared_the_token():
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/claude/terminal",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+    }
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    middleware = TokenAuthMiddleware(
+        _ok_app, token=TOKEN, hosts=token_auth.LOOPBACK_NAMES, pages=PAGES, ticketed=TICKETED
+    )
+    asyncio.run(middleware(scope, receive, send))
+    assert sent[0]["status"] == 401

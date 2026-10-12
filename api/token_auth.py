@@ -102,13 +102,25 @@ def bearer_token(authorization: str) -> str | None:
 
 
 class TokenAuthMiddleware:
-    """Refuses every request without the token, but those for the page."""
+    """
+    Refuses every request without the token, but those for the page and the
+    WebSockets of `ticketed`, whose route checks a ticket instead, since a
+    browser cannot give a WebSocket the header of the token.
+    """
 
-    def __init__(self, app, token: str, hosts: frozenset[str] | None, pages: frozenset[str]):
+    def __init__(
+        self,
+        app,
+        token: str,
+        hosts: frozenset[str] | None,
+        pages: frozenset[str],
+        ticketed: frozenset[str] = frozenset(),
+    ):
         self.app = app
         self.token = token
         self.hosts = hosts
         self.pages = pages
+        self.ticketed = ticketed
 
     def _has_token(self, headers: dict[bytes, bytes]) -> bool:
         token = bearer_token(headers.get(b"authorization", b"").decode("latin-1"))
@@ -134,7 +146,8 @@ class TokenAuthMiddleware:
             and scope["method"] in ("GET", "HEAD")
             and scope["path"] in self.pages
         )
-        if is_page or self._has_token(headers):
+        is_ticketed = scope["type"] == "websocket" and scope["path"] in self.ticketed
+        if is_page or is_ticketed or self._has_token(headers):
             await self.app(scope, receive, send)
             return
 

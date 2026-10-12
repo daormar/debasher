@@ -54,8 +54,9 @@ of a process, of its options handler, of its additional methods or of a node.
 "Editing a program from an agent: the MCP server" describes a second client of
 the backend, for AI agents, "Claude Code on a program" how DeBasher starts
 Claude Code with that server, "Access to the backend: the token" how the backend
-obeys only those who hold its token, and "Future work" lists what is known to
-be missing.
+obeys only those who hold its token, "Claude Code in the page" designs a
+terminal in the editor where the backend runs Claude Code, and "Future work"
+lists what is known to be missing.
 
 # Glossary
 
@@ -398,6 +399,29 @@ See "Access to the backend: the token".
 - **token file**: the private file, named after the port of the backend, into
   which the backend writes its token for the MCP server to read.
 
+## Claude Code in the page
+
+See "Claude Code in the page".
+
+- **session in the page**: a session of Claude Code that the backend runs with
+  `debasher_claude` in a pseudo-terminal, for the terminal panel of one tab,
+  and that ends with the WebSocket that carries it; a backend runs at most one
+  per program.
+- **terminal panel**: the panel at the bottom of the editor that shows the
+  terminal of a session in the page and takes its keys.
+- **pseudo-terminal**: a pair of devices of the operating system that a program
+  takes for its terminal, while another program, here the backend, reads what
+  it writes and gives it what is typed.
+- **registry of sessions**: what the backend keeps in memory of the sessions in
+  the page, one place per home directory, which a ticket holds until it is used
+  or expires, and then its session until it ends.
+- **takeover**: a request for a session in the page on a program that has one,
+  which ends the session of the other tab, waits for its process to end, and
+  starts with the last conversation.
+- **ticket**: a secret that serves once, within 30 seconds, which the backend
+  gives to a request with the token for a session in the page, and which the
+  WebSocket of the session carries instead of the token.
+
 # Architecture
 
 The web UI has three layers. The **frontend** is a single-page React
@@ -421,6 +445,7 @@ The backend groups its endpoints in routers, by what they act on:
 - `program-files`: browse and manage the user files of the home directory.
 - `fs`: browse the file system from the dialogs that ask for a path.
 - `webui`: what the web UI offers that depends on where the backend runs.
+- `claude`: open a session of Claude Code in the page and carry its terminal.
 
 One server process serves both the API and the built frontend, which is a single
 self-contained `index.html`. `debasher_webui` starts it, listening only on
@@ -441,10 +466,17 @@ is asked later of the engine itself, with `debasher_status` on the output
 directory.
 
 Two things follow. Restarting the backend loses nothing, since there is nothing
-in it to lose. And the backend does not coordinate two tabs that act on the same
-directories: the engine's files are the only truth they share, and the guards
-against a conflict read them (`/run` refuses to start when `debasher_status`
-reports a run in progress on that output directory).
+in it to lose, but for the sessions in the page (see below). And the backend
+does not coordinate two tabs that act on the same directories: the engine's
+files are the only truth they share, and the guards against a conflict read them
+(`/run` refuses to start when `debasher_status` reports a run in progress on
+that output directory).
+
+The sessions in the page are the one exception: the backend keeps the process of
+each session, and the tickets that open them, and gives a program one session at
+most, whatever tab asks for it. Restarting the backend ends them and loses the
+answer that Claude Code was writing in each, while the conversations of Claude
+Code, which it keeps on disk, stay (see "The session in the page").
 
 ## Where the state lives
 
@@ -1641,7 +1673,9 @@ the program metadata would hold them, whatever the order of the keys of an
 object). What a save keeps is the program it wrote, not the one the tab holds
 when the save is answered, since the user may have kept editing meanwhile.
 Leaving the editor with "Close", or closing or reloading the tab of the browser,
-asks first when the program holds unsaved changes.
+asks first when the program holds unsaved changes. Once the terminal panel is
+built, leaving the editor will also end the session of the program, and ask
+first (see "The terminal panel").
 
 ## From the store to the canvas
 
@@ -1991,7 +2025,8 @@ non-goals of a resident program".
 - **Talking to a FIFO competes with nobody.** "Talk to FIFOs" only opens
   unconnected FIFOs, and never blocks a request for more than a few seconds.
 - **Nothing is lost when the backend restarts**, since it keeps no state (see
-  "The backend keeps no state").
+  "The backend keeps no state"); the sessions in the page are the one
+  exception.
 
 **The code prompt**
 
@@ -2006,7 +2041,9 @@ non-goals of a resident program".
 
 - **No call to the API without the token.** The backend answers no request to
   the API that does not carry its token (see "What the backend checks"), and it
-  cannot be started without one (see "The token").
+  cannot be started without one (see "The token"). The WebSocket of a session in
+  the page carries a ticket instead, which only a request with the token gets,
+  and which serves once (see "Opening a session in the page").
 - **The browser hands the token to nobody.** It keeps the token for the origin
   of the backend alone and sends it only where the page puts it, and the token
   is never in an address that reaches a server or a log (see "How a request
@@ -4168,6 +4205,9 @@ program and the URL of the backend, and Claude Code edits the program through
 the MCP tools while the editor of the web UI follows what it saves (see
 "Revisions of the program metadata"). It uses the user's own installation and
 account of Claude Code: the web UI calls no AI service, and holds no key of one.
+A terminal in the editor, where the backend runs `debasher_claude`, is built in
+the backend and not yet in the editor (see "Claude Code in the page"); the
+command to copy stays.
 
 The web UI gives the command: "Claude Code" in the Help menu shows
 `debasher_claude` with the home directory of the program and the URL of the
@@ -4393,6 +4433,9 @@ when it is unset or empty: there is no way to run the backend without a token.
 Every request to the API carries the token in its `Authorization` header
 (`Bearer <token>`), whoever sends it: the editor and the MCP server alike. The
 backend compares it with its own in constant time (`secrets.compare_digest`).
+The WebSocket of a session in the page is the one exception: a browser cannot
+give it the header, so it carries a ticket that a request with the token got
+(see "Opening a session in the page").
 
 The page of the web UI takes the token from the fragment of its address when it
 loads, keeps it in the local storage of the browser (`localStorage`), and takes
@@ -4447,7 +4490,9 @@ only:
    even of a path that a mistake would leave open.
 2. **The token**, in the `Authorization` header. A request without it, or with
    another, is answered with 401 and the usual error body of the API
-   (`{"detail": "..."}`).
+   (`{"detail": "..."}`). The WebSocket of a session in the page is spared
+   this check, and its route checks its ticket instead (see "Opening a session
+   in the page").
 
 A page of another origin cannot act through the user's browser
 (cross-site request forgery): it has no token to send, the browser adds none
@@ -4602,6 +4647,237 @@ then succeeds in the first one.
   tunnel to a backend that listens on its loopback address.
 - **The token URL is printed.** It stays in the terminal that started
   `debasher_webui`, and in its log where one is kept.
+- **Whoever holds the token can spend the account of Claude Code.** The token
+  opens a session in the page, which runs Claude Code with the account of the
+  user who started the backend. That is no more than the token already gives,
+  since it runs any command as that user, but it spends what the account allows
+  (see "Claude Code in the page").
+
+# Claude Code in the page
+
+This section designs a second way of running `debasher_claude`, besides the
+command that the user copies (see "Claude Code on a program"): a terminal at the
+bottom of the editor, where the backend runs Claude Code on the open program and
+the browser shows its screen and takes its keys. The backend of it is built
+(`api/claude_sessions.py`, `api/routers/claude.py`), and the terminal panel is
+not yet. It changes nothing of the launcher, the MCP server, the permissions,
+the plugin or the command to copy, which stay as they are: a session in the page
+runs the same `debasher_claude`, with the same user, installation and account of
+Claude Code as the user's own terminal would. This section describes the session
+in the page, how the page opens one, the pseudo-terminal that carries it, the
+terminal panel that shows it, where the session runs, and how it is tested.
+
+## The session in the page
+
+A session in the page runs `debasher_claude` and nothing else. The page asks for
+a session on a program and says how its conversation starts: a new one, the last
+one, or one that Claude Code lists for the user to pick, as the selector of the
+"Claude Code" dialog offers. The backend builds the command itself:
+
+```
+debasher_claude --home-dir <home dir> --url <backend URL> [-- --continue | -- --resume]
+```
+
+with the URL of the backend that `GET /api/webui/info` gives (see "Claude Code
+on a program"). Nothing that the page sends becomes a command, an option or a
+variable of the session: the page chooses the program, and one of the three ways
+of starting the conversation. A shell, where the user would type any command, is
+not offered.
+
+A session lives as long as the WebSocket that carries its terminal (see "Opening
+a session in the page"). Each of these ends it: a tab that is reloaded or
+closed, a program closed in the editor, "End" in the terminal panel, and a
+backend that stops. Claude Code keeps its conversations on disk, by the
+directory where it runs, which `debasher_claude` makes the home directory of the
+program, so the end of a session loses only the answer that Claude Code was
+writing. What it had saved stays, and no edit is left half done, since every MCP
+tool saves the program metadata whole, under its revision (see "Revisions of the
+program metadata"). A session started again with the last conversation takes it
+up where it was.
+
+A backend runs at most one session in the page per program, whatever tab asked
+for it, and keeps the sessions in the registry of sessions, by home directory. A
+tab that asks for a session on a program that has one, in another tab or another
+browser, is told so, and can take it over (a takeover): the backend ends the
+other session, waits for its process to end, so that the conversation on disk is
+complete, and opens the new one with the last conversation, while the other tab,
+whose WebSocket the backend closes with code 4001, says that the session was
+opened in another page. A tab whose ticket was not yet used when another took
+its place over finds the ticket refused (code 1008). The registry of sessions
+and the tickets (see "Opening a session in the page") are the only state that
+the backend keeps between two requests (see "The backend keeps no state"):
+restarting the backend ends every session in the page, and their conversations
+stay on disk.
+
+A session of `debasher_claude` that the user started in a terminal of their own,
+with the command to copy, is not in the registry: the backend does not
+know of it, and a session in the page can work on the same program at the same
+time. Neither breaks the program, since the backend refuses a write made on a
+stale revision, but each sees the program change under it. Both keep their
+conversations in the home directory, so either can take up a conversation of the
+other.
+
+## Opening a session in the page
+
+A browser cannot give a WebSocket an `Authorization` header, so the WebSocket of
+a session cannot carry the token as every other request does (see "How a
+request carries the token"). Nor does it carry the token in its address, which
+reaches the access log of the backend, or in the header of its subprotocols,
+which a proxy may log. It carries a ticket, which an ordinary request with the
+token gets first:
+
+1. **The request for a session.** `POST /api/claude/session` gives the home
+   directory, how the conversation starts, the size of the terminal (columns
+   and rows, from 1 to 1000 each), and whether it is a takeover, which always
+   starts with the last conversation. The token is checked as for any request,
+   and the backend answers:
+   - 503 when it offers no session in the page: `DEBASHER_WEBUI_CLAUDE_CODE`
+     or `DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL` is set to `no`, it knows no URL
+     of its own (see "Where the session runs"), or `paths.py` finds no
+     `debasher_claude`;
+   - 400 for an empty home directory, and 422 for a size out of range;
+   - 404 when no program is saved in the home directory;
+   - 409 when the program has a session and the request does not take it over;
+   - otherwise a ticket, 32 random bytes from the secure generator of Python
+     (`secrets.token_urlsafe`), which the backend keeps in memory for 30
+     seconds with what the request asked for. The ticket already holds the
+     place of the program in the registry, so that two tabs that ask at once
+     never both get one, and the place is freed if the ticket expires unused.
+2. **The WebSocket.** The page opens `/api/claude/terminal?ticket=<ticket>`.
+   The middleware lets this path alone through without the token, and still
+   checks its `Host` header (see "What the backend checks"). The route takes
+   the ticket out of the memory of the backend, so that it serves once: an
+   unknown or expired ticket closes the WebSocket before it is accepted (code
+   1008), and a valid one opens it and starts the session with what the ticket
+   holds, and nothing else.
+
+The answers of the request let the terminal panel say what went wrong, which it
+could not do with the WebSocket alone: a browser that is refused a WebSocket
+tells the page only that it closed. The ticket in the address of the WebSocket
+does reach the access log, but it is used or expired by the time anyone reads
+it. A page of another origin can open a WebSocket to the backend, since the
+browser applies no same-origin policy to a WebSocket, but it has no ticket and
+cannot get one: the request for a session needs the token, which that page
+cannot read (see "How a request carries the token"). No check of the `Origin`
+header is needed here either.
+
+## The pseudo-terminal
+
+The backend runs the command of a session in a pseudo-terminal of its own
+(Python's `pty`, the same on Linux and macOS), with the size that the request
+gave, as the leader of a new session of the operating system (`setsid`), whose
+controlling terminal is the pseudo-terminal. The process inherits the
+environment of the backend with two changes: `TERM` names the terminal that the
+terminal panel emulates (`xterm-256color`), and `DEBASHER_WEBUI_TOKEN` is taken
+out, so that the token is not in the environment of Claude Code or of the
+commands that it runs. The MCP server reads the token from the token file (see
+"The token file"), which any process of the user can read, as the user can.
+
+The WebSocket carries two kinds of message:
+
+- **Binary messages**, the bytes of the terminal: what the user types, from the
+  page to the pseudo-terminal, and what Claude Code writes, from the
+  pseudo-terminal to the page. The backend reads the pseudo-terminal only as
+  fast as the WebSocket sends, so a slow page slows Claude Code down instead of
+  filling the memory of the backend.
+- **Text messages**, in JSON, that control the session:
+  `{"resize": [<columns>, <rows>]}` from the page, when the terminal panel
+  changes size, which the backend gives to the pseudo-terminal, and the kernel
+  to Claude Code as `SIGWINCH`; and `{"exit": <status>}` from the backend, when
+  the process ends, before the backend closes the WebSocket (code 1000).
+
+When the WebSocket closes first, the backend sends `SIGHUP` to the group of the
+process, as a closed terminal does to a shell, then `SIGKILL` if the process
+still lives a few seconds later. The group gets `SIGHUP` also when the process
+ends by itself, for whatever it left behind. Either way, the backend then frees
+the place of the program in the registry of sessions. A backend that dies with
+no chance to do so closes the pseudo-terminal as it dies, and the kernel sends
+`SIGHUP` to the session of the operating system of Claude Code: no Claude Code
+outlives its backend.
+
+## The terminal panel
+
+The terminal panel is not built yet: this is its design. It lies at the bottom
+of the editor, across its whole width, below the canvas and the inspector, so
+that Claude Code has the columns it needs and the canvas stays in sight while
+Claude Code changes the program. It shows the terminal with xterm.js. The user
+drags its upper edge to change its height, which the tab keeps in its memory
+only, and can fold it away while the session goes on. "Open in the page", next
+to the command in the "Claude Code" dialog, opens it with the way of starting
+that the selector of the dialog shows. The dialog shows it only where
+`GET /api/webui/info` says that the backend offers a session in the page, which
+it does not in the cases where the request for one gets 503 (see "Opening a
+session in the page"). Once a tab has a session, a button of the toolbar shows
+and hides the panel. The keys typed in the terminal go to it alone, never to the
+shortcuts of the canvas.
+
+The panel says what the session is doing. A refused request for a session is
+shown in words (the program is not saved, the session in the page is not
+offered here and why), and for a program with a session open elsewhere the panel
+offers to bring it here (see "The session in the page"). When the session ends,
+the panel keeps what the terminal last showed, says why it ended (Claude Code
+ended, with its exit status; the session was opened in another page; the
+backend stopped) and offers to start again, with the last conversation as the
+choice already made. What the launcher itself prints reaches the terminal as it
+is: its errors, such as a Claude Code that it does not find, and the login that
+Claude Code asks for on its first start.
+
+The editor asks before it ends a session. Closing or reloading the tab while a
+session runs asks first, as with unsaved changes (see "Screens and the store"),
+and so does "Close", which says that it also ends the session of Claude Code.
+
+## Where the session runs
+
+A session in the page runs where the backend runs, as the user who started the
+backend, and with its environment, not that of the user's own shell. Where the
+two differ, the command to copy, which the user's shell runs, still works. A
+backend that a service of the system started, or that a shell started before
+Claude Code was installed and its directory added to the `PATH`, may have no
+`claude` in its `PATH`: the launcher says so in the terminal, and
+`DEBASHER_CLAUDE_CMD`, set in the environment of the backend, names the command
+of Claude Code.
+
+In the Docker image the backend runs inside the container, where
+`install-claude-code` installs Claude Code, so the session runs
+`debasher_claude` there directly, without the `docker compose exec` that the
+copied command is run through (see "Claude Code in the Docker image"). Until
+Claude Code is installed, the launcher says in the terminal that it does not
+find it, and the dialog gives the command that installs it.
+
+`DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL`, set to `no` in the environment of the
+backend, turns the session in the page off and leaves the command to copy, for
+a backend whose terminal panel should not run Claude Code, while
+`DEBASHER_WEBUI_CLAUDE_CODE` set to `no` turns off both (see "Claude Code on a
+program"). `GET /api/webui/info` says whether the backend offers a session in
+the page (`claudeCodeTerminal`).
+
+A backend that uvicorn started by hand, as in development, knows no URL of its
+own and writes no token file (see "Development with the token"), so the MCP
+server of a session would not reach it: it offers no session in the page, and
+`GET /api/webui/info` says so, so that the dialog will show no "Open in the
+page". `python3 -m api.serve` starts a backend as `debasher_webui` does, with
+both.
+
+## Testing the session in the page
+
+The tests of the backend (`test/api/test_claude_sessions.py`) run the routes
+with a launcher that stands in for `debasher_claude`, which writes down its
+arguments, its environment and whether it has a controlling terminal, and
+answers what it reads. It is written in Python, not in Bash, since Bash takes a
+terminal on its standard input for its controlling one by itself, which would
+hide a session without one. They check that the session has the pseudo-terminal
+for its controlling terminal, that the command is built from the request alone,
+that a ticket serves once and expires, that a second session on a program is
+refused or takes the first one over, that a closed WebSocket ends the process
+and frees the program, that a resize reaches the pseudo-terminal, that the end
+of the process is reported, and that the token is not in the environment of the
+session. The exception of the middleware (its own path, a WebSocket alone, the
+Host still checked) is tested in `test/api/test_token_auth.py`, and what
+`GET /api/webui/info` says of the session in the page, for each reason to refuse
+it, in `test/api/test_webui_info.py`. Once the terminal panel is built, tests of
+the frontend will check what it shows and offers for each answer of the request
+and each end of the WebSocket, against a WebSocket that stands in for the one of
+the backend.
 
 # Future work
 
@@ -4620,13 +4896,24 @@ then succeeds in the first one.
 - **An assistant in the web UI.** A chat in the editor that helps to design and
   build the program, backed by an agent that calls the MCP tools and whose edits
   reach the canvas as proposals for the user to accept. Not designed beyond what
-  the MCP server and `debasher_claude` (see "Claude Code on a program") give it;
-  a terminal in the page that runs `debasher_claude` would come first, behind
-  the token (see "Access to the backend: the token"). It shares the open
+  the MCP server, `debasher_claude` and the terminal panel (see "Claude Code on
+  a program" and "Claude Code in the page") give it. It shares the open
   questions of the assistant on the documentation (see "An assistant on the
   documentation of DeBasher" below): where the key of the AI service lives on a
   server whose only guard is the token, and that the program, and maybe its
   files, leave the machine for that service, which the user has to know.
+- **A session in the page that outlives its tab.** Keeping the process of a
+  session in the page when its WebSocket closes, and attaching a tab to it
+  again, so that a reload loses not even the answer that Claude Code was
+  writing. It needs a registry of sessions that keeps them with no tab, a time
+  after which such a session ends, and a way to draw the screen of Claude Code
+  again from the bytes it wrote, which a terminal that starts on them midway
+  does not always draw right (see "The session in the page").
+- **Sessions of the user's own terminal.** `debasher_claude` could leave a file
+  in the home directory, with its PID and the time it started, for the terminal
+  panel to warn of a session on the program that the backend does not run (see
+  "The session in the page"). It could only warn, since the file outlives a
+  session killed with no chance to remove it.
 - **Round trip at run time.** Running each module of `data/programs/` and the
   module generated from it, and comparing what they do, beyond the comparison
   of models that `test/api/test_round_trip.py` makes.
