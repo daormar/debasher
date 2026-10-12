@@ -469,3 +469,86 @@ def test_a_connected_input_on_a_channel_that_would_hide_its_connection_is_refuse
 def test_a_connected_input_names_the_shared_directory_that_it_reads():
     script = generate_script(_connected_program("shared_dir", "shared_dir"), skip_redundant_check=True)
     assert 'debasher::define_opt_from_shared_dir "-in" "nums" optlist' in script
+
+
+# --- Fanout families counted by the tasks of another process ---------------
+
+
+def _family_program(family_direction, partner_modes, count_source=False):
+    """fam, a standard process, has a fanout family connected to one task
+    option of each partner, in the mode given for it: an input family
+    reads the first partner, an output family is read by every one."""
+    is_input = family_direction == "input"
+    options = [
+        ProgramOption(id="fam", label="-ind-ith" if is_input else "-outf-ith", direction=family_direction,
+                      dataType="string", description="", value="" if is_input else "part_${i}",
+                      commandLine=False, countSourceOptionId="w" if count_source else None),
+    ]
+    if count_source:
+        options.append(ProgramOption(id="w", label="-w", direction="input", dataType="int", description="",
+                                     value="", commandLine=True, mandatory=True))
+    fam = _make_process(options).model_copy(update={"id": "f", "name": "fam"})
+    processes, edges = [fam], []
+    for index, mode in enumerate(partner_modes):
+        name = f"partner{index}"
+        partner = _make_process([
+            ProgramOption(id="t", label="-outf" if is_input else "-inf", direction="output" if is_input else "input",
+                          dataType="string", description="", value="out_${task_idx}" if is_input else "",
+                          commandLine=False)
+        ]).model_copy(update={
+            "id": name,
+            "name": name,
+            "optionsHandler": OptionsHandler(mode=mode, generatorSizeCode="echo 2", arrayCode="array=(a b)"),
+        })
+        processes.append(partner)
+        if is_input:
+            edges.append(ProgramEdge(id=f"e{index}", sourceProcessId=name, sourceOptionId="t",
+                                     targetProcessId="f", targetOptionId="fam"))
+        else:
+            edges.append(ProgramEdge(id=f"e{index}", sourceProcessId="f", sourceOptionId="fam",
+                                     targetProcessId=name, targetOptionId="t"))
+        if is_input:
+            break
+    return _seq_program([], processes, edges=edges)
+
+
+@pytest.mark.parametrize("family_direction, var", [("input", "n_ind"), ("output", "n_outf")])
+def test_a_family_without_count_source_counts_the_tasks_of_the_generator_at_its_other_end(family_direction, var):
+    script = generate_script(_family_program(family_direction, ["generator"]), skip_redundant_check=True)
+
+    assert f"    local {var}\n    {var}=$(debasher::get_process_num_tasks \"partner0\") || return 1\n" in script
+    assert f"    for ((i=0; i<{var}; i++)); do\n" in script
+
+
+@pytest.mark.parametrize("family_direction", ["input", "output"])
+def test_a_family_without_count_source_connected_to_an_array_is_refused(family_direction):
+    with pytest.raises(ValueError, match=r'"partner0", which is in "array" mode'):
+        generate_script(_family_program(family_direction, ["array"]), skip_redundant_check=True)
+
+
+@pytest.mark.parametrize("family_direction", ["input", "output"])
+def test_a_family_with_a_count_source_option_keeps_reading_it(family_direction):
+    script = generate_script(
+        _family_program(family_direction, ["generator"], count_source=True), skip_redundant_check=True
+    )
+
+    assert 'local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")' in script
+    assert "get_process_num_tasks" not in script
+
+
+def test_an_output_family_without_count_source_nor_connection_is_refused():
+    with pytest.raises(ValueError, match="has no count source option and no connection"):
+        generate_script(_family_program("output", []), skip_redundant_check=True)
+
+
+def test_an_output_family_without_count_source_read_by_two_processes_is_refused():
+    with pytest.raises(ValueError, match=r"is read by several processes \(partner0, partner1\)"):
+        generate_script(_family_program("output", ["generator", "generator"]), skip_redundant_check=True)
+
+
+def test_a_family_whose_count_source_option_is_gone_is_refused_with_the_way_out():
+    program = _family_program("input", ["generator"])
+    program.processes[0].options[0].countSourceOptionId = "removed"
+
+    with pytest.raises(ValueError, match="an option that the process does not have"):
+        generate_script(program, skip_redundant_check=True)

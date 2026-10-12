@@ -233,7 +233,9 @@ to have an option generator:
 
 The process function finds its options ``-ind<i>`` among its
 arguments, and the engine makes ``merge`` wait for every task of
-``sort``, as in the previous pattern. The ``debasher_shared_subdir_example``
+``sort``, as in the previous pattern. In the web UI, a fanout family
+connected to a generator and without a count source option is written
+this way. The ``debasher_shared_subdir_example``
 example gathers the tasks of an option generator through a fanout
 family too, each of whose tasks writes into a subdirectory of its own
 of a shared directory; it reads their number from the same command line

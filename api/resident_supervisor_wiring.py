@@ -77,13 +77,17 @@ def _is_fanout_label(label: str) -> bool:
     return label.endswith("-ith") and label[: -len("-ith")].lstrip("-") != ""
 
 
-def _count_source(program: Program, node: ProgramProcess) -> ProgramOption:
+def _count_source(program: Program, node: ProgramProcess) -> ProgramOption | None:
     """
     The command line option that counts the tasks of an array or generator
     node: the one that counts the fanout family that the node is connected
-    to, directly or through the tasks of another array. Raises ValueError
-    when the node reaches no such family, since the Supervisor could not
-    count its heartbeat channels.
+    to, directly or through the tasks of another array. None for a
+    generator node that reaches no such family: the families of the
+    Supervisor that face it then have no count source option, and count
+    the number of tasks of the node, which the engine lets the Supervisor
+    ask for (see _fanout_count_process in script_generation.py). Raises
+    ValueError for an array node that reaches no such family, since the
+    Supervisor could not count its heartbeat channels.
     """
     processes_by_id = {process.id: process for process in program.processes}
     seen = {node.id}
@@ -111,12 +115,15 @@ def _count_source(program: Program, node: ProgramProcess) -> ProgramOption:
             count = next((o for o in other.options if o.id == other_option.countSourceOptionId), None)
             if count is not None and count.commandLine:
                 return count
+    if node.optionsHandler.mode == "generator":
+        return None
     raise ValueError(
         f'Process "{node.name}" is an {node.optionsHandler.mode} node of a resident program '
         "with a Supervisor, but it reaches no fanout family counted by a command line "
         "option, directly or through the tasks of another array: the Supervisor could "
-        "not tell how many heartbeat channels to read. Connect it to a fanout family "
-        "whose count source is a command line option."
+        "not tell how many heartbeat channels to read, and it can ask for the number of "
+        "tasks only of a node in generator mode. Connect it to a fanout family whose count "
+        "source is a command line option, or put it in generator mode."
     )
 
 
@@ -140,10 +147,14 @@ class SupervisorWiring:
         # it.
         self.count_options: dict[str, ProgramOption] = {}
 
-    def count_option(self, node: ProgramProcess) -> ProgramOption:
-        """The option of the Supervisor that counts the tasks of `node`, an
-        array or generator node."""
+    def count_option_id(self, node: ProgramProcess) -> str | None:
+        """The id of the option of the Supervisor that counts the tasks of
+        `node`, an array or generator node, or None when the families of
+        the Supervisor count the number of tasks of the node itself (see
+        _count_source)."""
         count = _count_source(self.program, node)
+        if count is None:
+            return None
         if count.label not in self.count_options:
             self.count_options[count.label] = _option(
                 count.label,
@@ -153,7 +164,7 @@ class SupervisorWiring:
                 commandLine=True,
                 mandatory=count.mandatory,
             )
-        return self.count_options[count.label]
+        return self.count_options[count.label].id
 
     def add_heartbeat(self, node: ProgramProcess) -> None:
         """The heartbeat channel of a node: an output of the node, read by an
@@ -175,7 +186,7 @@ class SupervisorWiring:
                 heartbeat_label(node.name) + "-ith",
                 "input",
                 f"heartbeat channel of the i'th task of {node.name}",
-                countSourceOptionId=self.count_option(node).id,
+                countSourceOptionId=self.count_option_id(node),
             )
         else:
             reader = _option(heartbeat_label(node.name), "input", f"heartbeat channel of {node.name}")
@@ -210,7 +221,7 @@ class SupervisorWiring:
                 channel="fifo",
                 fifoTag="control",
                 value=f"{self.supervisor.name}_{node.name}_trig_${{i}}",
-                countSourceOptionId=self.count_option(node).id,
+                countSourceOptionId=self.count_option_id(node),
             )
         else:
             trigger = _option(

@@ -169,7 +169,13 @@ refer to it.
 - **fanout family**: as defined in the design of the engine. In the web UI, an
   option of a `standard` process whose label ends in `-ith`, such as
   `-outf-ith`, which stands for as many numbered options (`-outf0`, `-outf1`,
-  ...) as another option of the same process says at run time.
+  ...) as its count source says at run time.
+- **count source**: what gives the number of options of a fanout family: the
+  command line option of the same process that `countSourceOptionId` names, or,
+  when it names none, the number of tasks of the process at the other end of
+  the connections of the family, which has to be in `generator` mode (see
+  "Option definitions"). A count source option is a count source of the first
+  kind.
 - **preamble**: Bash code that the generated module carries verbatim before its
   own functions, typically the `load_debasher_module` lines of the modules it
   builds on.
@@ -325,8 +331,8 @@ See "A prompt for the code of a process".
   says how the engine runs the code of a process of that language.
 - **template**: the first code that the code editor gives a process, in the
   language of the process, which reads every option of the process, a fanout
-  family included once it has a count source (see "Building the code
-  prompt").
+  family included, whose options it counts among its arguments when its count
+  source is a number of tasks (see "Building the code prompt").
 - **template marker**: the comment `ADD YOUR CODE HERE` of a template, where
   the code of the process goes; code that holds it, or no code at all, is
   still a template.
@@ -550,12 +556,13 @@ names what the process produces, and `fromProcessSpec` and `commandLine` exclude
 each other, and a command line option has option channel `none`, since its value
 comes only from the command line. A task shaping option is a mandatory command
 line input with a value, and not a fanout family. A fanout family only exists on
-a `standard` process, and names in `countSourceOptionId` a command line option
-of the same process that gives the count. The editor offers only the valid
-combinations, the checks of the edits that an agent makes refuse the ones that
-concern an output, a flag or a directory channel (see "Edits from an agent"),
-and script generation checks again those whose violation would produce a wrong
-module, refusing to generate it.
+a `standard` process, and its count source is a command line option of the same
+process, named in `countSourceOptionId`, or, without one, the number of tasks of
+the process at the other end of its connections. The editor offers only the
+valid combinations, the checks of the edits that an agent makes refuse the ones
+that concern an output, a flag or a directory channel (see "Edits from an
+agent"), and script generation checks again those whose violation would produce
+a wrong module, refusing to generate it.
 
 ## Data type and option channel
 
@@ -859,9 +866,33 @@ a fan-in), taken from the first rule that applies:
 A command line option always gets its definition from rule 6, or from rule 1
 for a flag, since one with an option channel other than `none` is refused (see
 "What script generation refuses"). A fanout family becomes a loop instead of
-one line: it reads the count from its command line option and defines one
-option per index, `define_opt` or `define_fifo_opt` on the writing side,
-`define_opt_from_proc_task_out` on the reading side.
+one line: it reads its count and defines one option per index, `define_opt` or
+`define_fifo_opt` on the writing side, `define_opt_from_proc_task_out` on the
+reading side.
+
+The count is that of the count source of the family. A count source option is
+read from the command line. Without one, the loop asks the engine, with
+`get_process_num_tasks`, for the number of tasks of the process at the other
+end of the connections of the family: the process that an input family reads,
+or the one process that reads an output family. The engine answers a process
+without an option generator only about a process with one, so that process has
+to be in `generator` mode. A number that the engine cannot give has to stop the
+function, so the count is assigned apart from the `local` that declares it,
+with `|| return 1`:
+
+```bash
+local n_ind
+n_ind=$(debasher::get_process_num_tasks "worker") || return 1
+for ((i=0; i<n_ind; i++)); do
+    debasher::define_opt_from_proc_task_out "-ind${i}" "worker" "${i}" "-outd" optlist || return 1
+done
+```
+
+A task does not receive that number as an option, so the template of its code
+counts the options of the family among its arguments. Whether the option
+generator gives the same number of tasks every time, which depends on the files
+and directories that it reads, is left to whoever runs the program, as the
+design of the engine says of every option generator.
 
 A task shaping option gets no definition, since no task receives it: the
 options handler reads it from the command line, in the code that builds
@@ -932,15 +963,18 @@ with an option channel other than `none`; an input with option channel
 `shared_dir` nor `process_outdir`; a task shaping option that is not a mandatory
 command line input with a value, or that is a fanout family; a fanout family
 that is a flag, a command line option or taken from the process specifications,
-whose count option is missing, is not a command line option or is a task shaping
-option, whose output is connected, mirrored or uses an option channel other than
-`none` or `fifo`, or whose input is not connected to a process in `array` or
-`generator` mode; a connection to a fanout family from a process in another
-mode; and a sequential process in a resident program, or with the name of a
-process or of another sequential process (see "Generating and importing a
-sequential process"). The save generates the script before it writes anything,
-so a program that script generation refuses leaves the home directory as it was.
-The save answers with the reason of the refusal, which the frontend shows.
+whose `countSourceOptionId` names no option of the process, or one that is not a
+command line option or is a task shaping option, that has no count source option
+and is not connected to exactly one process, in `generator` mode, at the other
+end of its connections, whose output is the target of a connection, mirrored or
+uses an option channel other than `none` or `fifo`, or whose input is not
+connected to a process in `array` or `generator` mode; a connection to a fanout
+family from a process in another mode; and a sequential process in a resident
+program, or with the name of a process or of another sequential process (see
+"Generating and importing a sequential process"). The save generates the script
+before it writes anything, so a program that script generation refuses leaves
+the home directory as it was. The save answers with the reason of the refusal,
+which the frontend shows.
 
 ## Environment variables of a program
 
@@ -1011,7 +1045,9 @@ and close the function. From the shape of the functions it decides the mode:
   opening lines, becomes `generatorSizeCode` as it is, and `_generate_opts` is
   parsed with the grammar.
 - `_define_opts` is a flat sequence of those calls, with fanout family loops
-  allowed among them: `standard` mode.
+  allowed among them, whose count is read from a command line option or asked
+  for with `get_process_num_tasks`, with or without the namespace `debasher::`:
+  `standard` mode.
 - `_define_opts` has exactly the shape that script generation writes for
   `array` mode: `array` mode, with the code that builds the array as
   `arrayCode`.
@@ -1038,7 +1074,10 @@ With the processes read, import assembles the program:
 - **Connections.** Each recovered connection becomes an edge, and a connection
   to a process outside the program is dropped. A connection by task index whose
   source does not run in `array` or `generator` mode cannot be written again as
-  it was, so its target falls back to `manual` mode.
+  it was, so its target falls back to `manual` mode. Neither can a fanout family
+  whose loop asks for the number of tasks of a process that is not the one at
+  the other end of its connections, or that is not in `generator` mode, so its
+  process falls back to `manual` mode too.
 - **Shared directories.** An option whose value names a shared directory,
   literally or through a variable that the engine resolves, becomes a
   `shared_dir` option when that directory is one the program can reach, and
@@ -2149,13 +2188,16 @@ node as a fanout family, as a `standard` process reads the tasks of an array
 (see "Option definitions"), and sends to the tasks of an initiator of that kind
 the same way. The family is counted by the command line option that counts the
 fanout family the node is connected to, directly or through the tasks of another
-array. A resident program with a `Supervisor` and a node of that kind that
-reaches no such family has no count for it, and script generation refuses it.
-The node has to build exactly as many tasks as the option says. A task too few
-makes the engine refuse the program, since the `Supervisor` would connect to a
-task that does not exist, and so does a task too many, which would otherwise run
-unsupervised: in a program with a `Supervisor`, the engine refuses a node with
-no heartbeat channel.
+array. A `generator` node that reaches no such family gives the count itself:
+the families of the `Supervisor` that face it have no count source option, and
+count its tasks, which the engine lets the `Supervisor`, a process without an
+option generator, ask for. A resident program with a `Supervisor` and an
+`array` node that reaches no such family has no count for it, and script
+generation refuses it. A node counted by an option has to build exactly as many
+tasks as the option says. A task too few makes the engine refuse the program,
+since the `Supervisor` would connect to a task that does not exist, and so does
+a task too many, which would otherwise run unsupervised: in a program with a
+`Supervisor`, the engine refuses a node with no heartbeat channel.
 
 **Initiators.** `ProgramProcess.initiator` marks a node as an initiator, where
 a round starts. A program made of independent subgraphs needs one initiator in
@@ -2322,8 +2364,8 @@ the Supervisor wiring with fixed labels, which no option of the user may take:
   the trigger port of the `Supervisor` or, without one, written from outside
   the program;
 - on the `Supervisor`, `-manual`, its manual trigger port, and the flag
-  `-no-hold-fifos`, together with the command line options that count its
-  fanout families.
+  `-no-hold-fifos`, together with the count source options of those of its
+  fanout families that have one.
 
 **The Supervisor wiring, imported.** Import recognizes the Supervisor wiring of
 a module by the rules with which the engine gives each process its ports (see
@@ -2394,10 +2436,10 @@ refuses"), script generation refuses a resident program with more than one
 the user that takes a label of the Supervisor wiring, uses the option channel
 `value_desc`, `shared_dir` or `process_outdir`, is mirrored or has the fifo tag
 `control`; a `Supervisor` with options of its own, or in `array` or `generator`
-mode; and, in a program with a `Supervisor`, an `array` or `generator` node that
-reaches no fanout family counted by a command line option. The editor offers
-none of them, and script generation refuses them in program metadata written by
-hand or by another tool.
+mode; and, in a program with a `Supervisor`, an `array` node that reaches no
+fanout family counted by a command line option. The editor offers none of them,
+and script generation refuses them in program metadata written by hand or by
+another tool.
 
 **A node of a module, reused.** In a general program the dialog that names a
 new process suggests the processes that the modules of the preamble define,
@@ -3516,10 +3558,14 @@ under a heading of its own:
    whose writer has finished before the process runs; a connected output names,
    likewise, the options that read it; an unconnected FIFO says that someone
    outside the program is at its other end. An option of a fanout family names
-   the option that gives its count. A value descriptor is written, in Bash, with
-   `write_value_to_desc`, and read with `read_opt_value_from_func_args`, which
-   gives the value and not the path; in another language it is written into the
-   file that the option names, and its reader gets the path of that file.
+   its count source, the option or the number of tasks of the process at the
+   other end of its connections, and in the second case says that the task does
+   not receive that number as an option and counts the options of the family
+   among its arguments. A value descriptor is written,
+   in Bash, with `write_value_to_desc`, and read with
+   `read_opt_value_from_func_args`, which gives the value and not the path; in
+   another language it is written into the file that the option names, and its
+   reader gets the path of that file.
 5. **The code to complete.** The draft of the code editor, which starts as the
    template while the code is still one, or the template when the user has
    emptied the draft, in a fenced code block tagged with the language and longer
@@ -3647,7 +3693,8 @@ resident program is, it says:
    names the port under which what arrives reaches `process_data` and the option
    of the node that sends it; a business output, the call that sends on it and
    the options that read it, or that someone outside the program reads it, and,
-   for a fanout family, its ports and the option that gives their count; an
+   for a fanout family, its ports and their count source, and, without a count
+   source option, that the node counts them in `self.OUTPUT_PORTS`; an
    external input, that someone outside the program writes it; and a
    configuration option, the entry of `self.opts` that gives its value and, for
    a flag, that its name goes into the class attribute `FLAGS`. An input that no
@@ -3929,9 +3976,10 @@ an earlier one added, and it stops at the first name that matches nothing, or at
 a label that two options of a process share, saying which named edit it is.
 Beyond the edits, a named edit adds, changes or removes one sequential process
 by its name, which resolves into one edit that replaces the whole list of
-sequential processes; names the option that gives the count of a fanout family
-by its label; and, when it changes the label of an option, also gives the option
-the direction that follows from the new label, as the editor of an option does.
+sequential processes; names the count source option of a fanout family by its
+label, or takes it away with an empty label; and, when it changes the label of
+an option, also gives the option the direction that follows from the new label,
+as the editor of an option does.
 Of a field that holds an object, such as the computational specifications of a
 process, the code of a node or the execution options of the program, a named
 edit gives only the fields that it changes, and the others keep their values;
@@ -4635,6 +4683,16 @@ then succeeds in the first one.
   node state, since a routing that a replay may change would make the sequence
   numbers of a channel label other messages (see "Fan-out and fan-in sized from
   the command line" in `doc/design_doc_resident.md`).
+- **A fanout family counted by the tasks of an array.** Letting a fanout family
+  without a count source option count the tasks of a process in `array` mode,
+  as it counts those of a process in `generator` mode. The engine answers a
+  process without an option generator only about a process with one, since it
+  defines the options of the processes without one in no particular order (see
+  "Arrays and option generators" in `doc/design_doc_engine.md`). An engine that
+  defined such a process when another first asks for its number of tasks, once,
+  and that stopped a cycle of such questions as it stops one between option
+  generators, would answer it, and script generation would then accept the
+  family.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.

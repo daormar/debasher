@@ -147,9 +147,17 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   data from the reader; general programs only); `fifoTag: "external"` (a FIFO
   input of a resident program fed from outside).
 - **Fanout family.** On a `standard` process, a label ending in `-ith`
-  (`-outf-ith`) stands for `-outf0`, `-outf1`, ..., as many as the command-line
-  option named by `countSource` says; it connects only to an array or
-  generator process, one option per task.
+  (`-outf-ith`) stands for `-outf0`, `-outf1`, ..., as many as its count
+  source says; it connects only to an array or generator process, one option
+  per task. The count source is the command-line option named by
+  `countSource`, or, without one (`countSource: ""` takes it away), the
+  number of tasks of the process at the other end of its connections (the
+  one that an input family reads, the only one that reads an output family),
+  which has to be a generator: prefer it to gather or feed the tasks of a
+  generator, since no option then has to match that number by hand. A family
+  connected to an array needs `countSource`. Without one, the task does not
+  receive the count, and its code counts the options of the family among its
+  arguments.
 
 ## Connections
 

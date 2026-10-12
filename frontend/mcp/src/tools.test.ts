@@ -207,6 +207,27 @@ describe("editing a program", () => {
     expect(await text(backend, "get_program", { home_dir: HOME })).toContain("-w (input, int, command line, task shaping, mandatory)");
   });
 
+  it("takes away the count source of a fanout family, which then counts the tasks of its connection", async () => {
+    const backend = fakeBackend([program()]);
+
+    await call(backend, "apply_edits", {
+      home_dir: HOME,
+      edits: [
+        { op: "updateProcess", process: "a", changes: { optionsHandler: { mode: "generator", generatorSizeCode: "echo 2" } } },
+        { op: "addOption", process: "b", label: "-w", fields: { dataType: "int", commandLine: true } },
+        { op: "addOption", process: "b", label: "-ind-ith", fields: { countSource: "-w" } },
+        { op: "connect", from: { process: "a", option: "-outf" }, to: { process: "b", option: "-ind-ith" } },
+      ],
+    });
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("-ind-ith (input, string, count from -w");
+
+    await call(backend, "update_option", { home_dir: HOME, process: "b", option: "-ind-ith", changes: { countSource: "" } });
+
+    const family = savedProgram(backend).processes[1].options.find(option => option.label === "-ind-ith")!;
+    expect(family.countSourceOptionId).toBeUndefined();
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("-ind-ith (input, string, count from the tasks of a");
+  });
+
   it("saves nothing when one edit breaks a rule, and says which", async () => {
     const backend = fakeBackend([program()]);
 

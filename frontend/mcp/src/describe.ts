@@ -1,4 +1,6 @@
+import { fanoutCountProcesses } from "../../src/models/connections";
 import { isLabelEdge } from "../../src/models/edge";
+import { isFanoutOption } from "../../src/models/option";
 import type { ProgramOption } from "../../src/models/option";
 import type { ProgramProcess } from "../../src/models/process";
 import type { Program } from "../../src/models/program";
@@ -26,7 +28,23 @@ function labelOf(process: ProgramProcess, optionId: string | undefined): string 
   return process.options.find(option => option.id === optionId)?.label;
 }
 
-export function optionLine(process: ProgramProcess, option: ProgramOption): string {
+// Where a fanout family of a standard process takes its count from: its
+// count source option, or else the number of tasks of the process at the
+// other end of its connections, named when `program` is given.
+function countTrait(program: Program | undefined, process: ProgramProcess, option: ProgramOption): string | null {
+  if (option.countSourceOptionId) {
+    return `count from ${labelOf(process, option.countSourceOptionId)}`;
+  }
+  if (process.optionsHandler.mode !== "standard" || !isFanoutOption(option.label)) {
+    return null;
+  }
+  const ends = program ? fanoutCountProcesses(program, process, option) : [];
+  return ends.length === 1
+    ? `count from the tasks of ${ends[0].name}`
+    : "count from the tasks of the process at the other end of its connections";
+}
+
+export function optionLine(process: ProgramProcess, option: ProgramOption, program?: Program): string {
   const traits = [
     option.direction,
     option.dataType,
@@ -37,7 +55,7 @@ export function optionLine(process: ProgramProcess, option: ProgramOption): stri
     option.taskShaping ? "task shaping" : null,
     option.fromProcessSpec ? "from process spec" : null,
     option.mandatory ? "mandatory" : null,
-    option.countSourceOptionId ? `count from ${labelOf(process, option.countSourceOptionId)}` : null,
+    countTrait(program, process, option),
     option.value ? `value ${quoted(option.value)}` : null,
     option.subpath ? `subpath ${quoted(option.subpath)}` : null,
   ].filter(Boolean);
@@ -56,11 +74,11 @@ function processHeader(process: ProgramProcess): string {
   return `${process.name} (${traits.join(", ")})`;
 }
 
-function processLines(process: ProgramProcess): string[] {
+function processLines(program: Program, process: ProgramProcess): string[] {
   return [
     processHeader(process),
     ...(process.description ? [`  ${process.description}`] : []),
-    ...process.options.map(option => `  ${optionLine(process, option)}`),
+    ...process.options.map(option => `  ${optionLine(process, option, program)}`),
   ];
 }
 
@@ -109,7 +127,7 @@ export function settingsLines(program: Program): string[] {
 export function describeProgram(program: Program): string {
   return [
     ...settingsLines(program),
-    ...section("Processes", program.processes.flatMap(processLines)),
+    ...section("Processes", program.processes.flatMap(process => processLines(program, process))),
     ...(program.programType === "general"
       ? section("Sequential processes", program.seqProcesses.map(seqProcessLine))
       : []),
@@ -128,7 +146,7 @@ export function describeProcess(program: Program, process: ProgramProcess): stri
     line.startsWith(`${process.name} `) || line.includes(`-> ${process.name} `)
   );
   return [
-    ...processLines(process),
+    ...processLines(program, process),
     `Computational specs: ${setFields(computationalSpecs) || "none"}`,
     `Additional specs: ${setFields(additionalSpecs) || "none"}`,
     ...section("Connections", connections),
@@ -173,7 +191,7 @@ function selfContainedLines(program: Program): string[] {
       return [
         `${at}: ${processHeader(process)}`,
         ...(process.description ? [`${at} description: ${process.description}`] : []),
-        ...process.options.map(option => `${at} option ${optionLine(process, option)}`),
+        ...process.options.map(option => `${at} option ${optionLine(process, option, program)}`),
         `${at} computational specs: ${setFields(computationalSpecs) || "none"}`,
         `${at} additional specs: ${setFields(additionalSpecs) || "none"}`,
         ...codeLines(`${at} options handler code | `, optionsHandler.arrayCode ?? optionsHandler.generatorSizeCode ?? optionsHandler.manualCode),

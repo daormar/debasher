@@ -77,8 +77,10 @@ class ProgramOption(BaseModel):
     fromProcessSpec: bool = False
     # On a "standard"-mode process only, the id of another option on the
     # same process (with commandLine=True) supplying the runtime count
-    # for a fanout family (a label ending in "-ith"); see
-    # script_generation.py's _is_fanout_label/_fanout_definition_lines.
+    # for a fanout family (a label ending in "-ith"). None means the
+    # family counts the tasks of the generator at the other end of its
+    # connections; see script_generation.py's _is_fanout_label/
+    # _fanout_definition_lines/_fanout_count_process.
     countSourceOptionId: Optional[str] = None
     # A task shaping option: a command line option that only the options
     # handler of the process reads (arrayCode, generatorSizeCode or the

@@ -154,6 +154,18 @@ describe("buildCodePrompt", () => {
     const prompt = buildCodePrompt({ ...program, processes: [dispatch], edges: [] } as Program, dispatch, "", "");
     expect(prompt).toContain("A fanout family: the options `-outf0`, `-outf1`, ..., as many as the value of `-w`.");
     expect(prompt).not.toContain("someone outside the program");
+    expect(prompt).not.toContain("The task does not receive that number");
+  });
+
+  it("names the generator whose tasks count a fanout family without a count source", () => {
+    const worker = process("worker", [createOption("outd", "-outd", { direction: "output", dataType: "dir" })], {
+      optionsHandler: { mode: "generator", generatorSizeCode: "echo 2" },
+    });
+    const collect = process("collect", [createOption("ind", "-ind-ith", { dataType: "dir" })]);
+    const edges = [{ id: "e", sourceProcessId: "worker", sourceOptionId: "outd", targetProcessId: "collect", targetOptionId: "ind" }];
+    const prompt = buildCodePrompt({ ...program, processes: [worker, collect], edges } as Program, collect, "", "");
+    expect(prompt).toContain("A fanout family: the options `-ind0`, `-ind1`, ..., as many as the tasks of `worker`.");
+    expect(prompt).toContain("The task does not receive that number: count the options of the family among the arguments.");
   });
 
   it("gives the language rules of the language of the process", () => {

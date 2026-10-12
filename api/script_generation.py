@@ -368,6 +368,30 @@ def _connections_by_option(program: Program) -> dict[tuple[str, str], Connection
     return result
 
 
+# The processes that read one output: (target process name, target
+# process mode) for each edge that leaves it.
+Readers = list[tuple[str, str]]
+
+
+def _readers_by_option(program: Program) -> dict[tuple[str, str], Readers]:
+    """
+    Maps a source option, as (process id, option id), to the processes
+    that its edges reach. Only a fanout family without a count source
+    option reads it (see _fanout_count_process): its count is then the
+    number of tasks of the process that reads it.
+    """
+    processes_by_id = {process.id: process for process in program.processes}
+    result: dict[tuple[str, str], Readers] = {}
+    for edge in program.edges:
+        target_process = processes_by_id.get(edge.targetProcessId)
+        if target_process is None:
+            continue
+        result.setdefault((edge.sourceProcessId, edge.sourceOptionId), []).append(
+            (target_process.name, target_process.optionsHandler.mode)
+        )
+    return result
+
+
 # Modes whose _define_opts/_generate_opts is guaranteed to produce one
 # save_opt_list call per task, numbered 0..N-1, generator via the
 # engine calling _generate_opts once per task_idx, array via a loop that
@@ -414,6 +438,13 @@ def _fanout_count_var(count_source_label: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "_", count_source_label.lstrip("-")) or "n"
 
 
+def _fanout_tasks_count_var(option_label: str) -> str:
+    # The count of a family counted by the tasks of another process,
+    # named after the family itself ("-reportdir-ith" -> "n_reportdir"),
+    # so that two families of a process never share it.
+    return "n_" + (re.sub(r"[^a-zA-Z0-9]+", "_", _fanout_base_label(option_label).lstrip("-")) or "family")
+
+
 def _fanout_count_source_option(process, option):
     source = next(
         (o for o in process.options if o.id == option.countSourceOptionId),
@@ -421,8 +452,10 @@ def _fanout_count_source_option(process, option):
     )
     if source is None:
         raise ValueError(
-            f'Fanout option "{option.label}" on process "{process.name}" needs '
-            "countSourceOptionId set to a command-line option declared on the same process."
+            f'Fanout option "{option.label}" on process "{process.name}" has as its count '
+            "source an option that the process does not have: choose a command line option "
+            "of the same process, or none, to count the tasks of the generator at the other "
+            "end of its connections."
         )
     if not source.commandLine:
         raise ValueError(
@@ -439,6 +472,42 @@ def _fanout_count_source_option(process, option):
             "could not tell how many options of the family it gets."
         )
     return source
+
+
+def _fanout_count_process(process, option, process_modes, connections: Connections, readers: Readers) -> str:
+    """
+    The process whose number of tasks counts a fanout family without a
+    count source option: the one at the other end of its connections, the
+    process that it reads for an input family and the one that reads it
+    for an output family. The engine lets a process without an option
+    generator ask only for the number of tasks of a process with one, so
+    that process has to be in "generator" mode.
+    """
+    ends = {name for name, _, _ in connections} if option.direction == "input" else {name for name, _ in readers}
+    if not ends:
+        raise ValueError(
+            f'Fanout output "{option.label}" on "{process.name}" has no count source option '
+            "and no connection: choose a command line option of the same process as its count "
+            'source, or connect it to a "generator"-mode process, whose number of tasks then '
+            "counts it."
+        )
+    if len(ends) > 1:
+        raise ValueError(
+            f'Fanout output "{option.label}" on "{process.name}" has no count source option '
+            f'and is read by several processes ({", ".join(sorted(ends))}): it can count the '
+            "tasks of only one, so choose a command line option of the same process as its "
+            "count source, or connect it to one process."
+        )
+    end = next(iter(ends))
+    if process_modes.get(end) != "generator":
+        raise ValueError(
+            f'Fanout option "{option.label}" on "{process.name}" has no count source option, '
+            f'so it would count the tasks of "{end}", which is in "{process_modes.get(end)}" '
+            "mode: a process without an option generator can ask only for the number of tasks "
+            f'of a process with one. Put "{end}" in "generator" mode, or choose a command line '
+            "option of the same process as the count source of the family."
+        )
+    return end
 
 
 def _validate_fanout_option(process, option, process_modes, connections: Connections) -> None:
@@ -489,29 +558,42 @@ def _validate_fanout_option(process, option, process_modes, connections: Connect
             )
 
 
-def _fanout_definition_lines(process, option, process_modes, connections_by_option, indent: str) -> list[str]:
+def _fanout_definition_lines(
+    process, option, process_modes, connections_by_option, readers_by_option, indent: str
+) -> list[str]:
     """
     Multi-line _define_opts codegen for a fanout family option on a
     "standard" process: reads its runtime count off another cmdline
-    option on the same process (option.countSourceOptionId), then loops
-    0..count-1 emitting one define_opt (scatter, an unconnected output
-    with a literal "$i"-referencing value) or one
-    define_opt_from_proc_task_out (gather, an input connected to an
-    "array"- or "generator"-mode process's output) per iteration, see
-    data/programs/debasher_dynamic_fanout.sh's dispatch_define_opts/
-    aggregate_define_opts for the hand-written equivalent.
+    option on the same process (option.countSourceOptionId), or, without
+    one, asks the engine for the number of tasks of the process at the
+    other end of its connections (see _fanout_count_process), then loops
+    0..count-1 emitting one define_opt (scatter, an output with a literal
+    "$i"-referencing value) or one define_opt_from_proc_task_out (gather,
+    an input connected to an "array"- or "generator"-mode process's
+    output) per iteration, see data/programs/debasher_dynamic_fanout.sh's
+    dispatch_define_opts/aggregate_define_opts for the hand-written
+    equivalent. The number of tasks is assigned apart from the "local"
+    that declares it, so that a failure to know it stops the function.
     """
     connections = connections_by_option.get((process.id, option.id), [])
     _validate_fanout_option(process, option, process_modes, connections)
-
-    count_source = _fanout_count_source_option(process, option)
-    count_var = _fanout_count_var(count_source.label)
     base_label = _fanout_base_label(option.label)
 
-    lines = [
-        f'{indent}local {count_var}=$(debasher::read_opt_value_from_line "${{cmdline}}" "{count_source.label}")',
-        f'{indent}for ((i=0; i<{count_var}; i++)); do',
-    ]
+    if option.countSourceOptionId:
+        count_source = _fanout_count_source_option(process, option)
+        count_var = _fanout_count_var(count_source.label)
+        lines = [
+            f'{indent}local {count_var}=$(debasher::read_opt_value_from_line "${{cmdline}}" "{count_source.label}")',
+        ]
+    else:
+        readers = readers_by_option.get((process.id, option.id), [])
+        count_process = _fanout_count_process(process, option, process_modes, connections, readers)
+        count_var = _fanout_tasks_count_var(option.label)
+        lines = [
+            f'{indent}local {count_var}',
+            f'{indent}{count_var}=$(debasher::get_process_num_tasks "{count_process}") || return 1',
+        ]
+    lines.append(f'{indent}for ((i=0; i<{count_var}; i++)); do')
 
     if option.direction == "output":
         func = "define_fifo_opt" if option.channel == "fifo" else "define_opt"
@@ -722,14 +804,18 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     return _literal_lines(process, option)
 
 
-def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option):
+def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option, readers_by_option):
     lines = [f"{process.name}{suffix}()", "{"]
     lines.extend(header_lines)
     lines.append("")
     if process.options:
         for option in process.options:
             if process.optionsHandler.mode == "standard" and _is_fanout_label(option.label):
-                lines.extend(_fanout_definition_lines(process, option, process_modes, connections_by_option, INDENT))
+                lines.extend(
+                    _fanout_definition_lines(
+                        process, option, process_modes, connections_by_option, readers_by_option, INDENT
+                    )
+                )
             else:
                 lines.extend(
                     INDENT + line
@@ -799,18 +885,28 @@ def _add_generate_opts_size_func(process):
     return lines
 
 
-def _add_opts_handler(process, process_modes, connections_by_option):
+def _add_opts_handler(process, process_modes, connections_by_option, readers_by_option):
     handler = process.optionsHandler
     if handler.mode == "standard":
         return _add_opts_definition_func(
-            process, PROCESS_METHOD_DEFINE_OPTS_SUFFIX, _define_opts_func_header(), process_modes, connections_by_option
+            process,
+            PROCESS_METHOD_DEFINE_OPTS_SUFFIX,
+            _define_opts_func_header(),
+            process_modes,
+            connections_by_option,
+            readers_by_option,
         )
     if handler.mode == "generator":
         lines = _add_generate_opts_size_func(process)
         lines.extend(["", ""])
         lines.extend(
             _add_opts_definition_func(
-                process, PROCESS_METHOD_GENERATE_OPTS_SUFFIX, _generate_opts_func_header(), process_modes, connections_by_option
+                process,
+                PROCESS_METHOD_GENERATE_OPTS_SUFFIX,
+                _generate_opts_func_header(),
+                process_modes,
+                connections_by_option,
+                readers_by_option,
             )
         )
         return lines
@@ -1031,6 +1127,7 @@ def _build_script(
     process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
     _check_connected_input_channels(program)
     connections_by_option = _connections_by_option(program)
+    readers_by_option = _readers_by_option(program)
 
     # Add preamble
     preamble_lines = _add_preamble(program.preamble)
@@ -1067,7 +1164,7 @@ def _build_script(
         lines.extend(_add_identify_cmdline_opts_func(process))
         lines.extend(["", ""])
 
-        lines.extend(_add_opts_handler(process, process_modes, connections_by_option))
+        lines.extend(_add_opts_handler(process, process_modes, connections_by_option, readers_by_option))
         lines.extend(["", ""])
 
         if process.name not in skip_exec_for:

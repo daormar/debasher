@@ -289,10 +289,17 @@ export function updateOption(
   }));
 }
 
+// A fanout family counted by the removed option loses its count source
+// option, and then counts the tasks of the process at the other end of its
+// connections, rather than keep the id of an option that no longer exists.
 export function removeOption(program: Program, processId: string, optionId: string): Program {
   return mapProcess(program, processId, process => ({
     ...process,
-    options: process.options.filter(option => option.id !== optionId),
+    options: process.options
+      .filter(option => option.id !== optionId)
+      .map(option =>
+        option.countSourceOptionId === optionId ? { ...option, countSourceOptionId: undefined } : option
+      ),
   }));
 }
 

@@ -9,6 +9,7 @@ import type {
 import type { ProgramType } from "../models/program";
 import { optionLabelProblem } from "../models/process";
 import { channelDataType, ownDataType } from "../models/dataTypes";
+import { fanoutCountProcesses } from "../models/connections";
 import {
   DIRECTORY_CHANNELS,
   getOptionDirection,
@@ -159,6 +160,16 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   // the task needs the count to read the family
   const countSourceCandidates =
     ownerProcess?.options.filter(o => o.commandLine && !o.taskShaping && o.id !== option.id) ?? [];
+
+  // Without a count source option, the family counts the tasks of the
+  // process at the other end of its connections, which has to be a
+  // generator (see fanoutCountProcesses)
+  const countProcesses = ownerProcess ? fanoutCountProcesses(program, ownerProcess, option) : [];
+  const tasksCountText = countProcesses.length === 1
+    ? `Number of tasks of ${countProcesses[0].name}${countProcesses[0].optionsHandler.mode === "generator" ? "" : " (not a generator: choose an option)"}`
+    : countProcesses.length === 0
+      ? "Number of tasks of the connected generator (not connected yet)"
+      : "Number of tasks of the connected process (connected to several: choose an option)";
 
   const [countSourceOptionId, setCountSourceOptionId] =
     useState(option.countSourceOptionId ?? "");
@@ -349,14 +360,24 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
           {direction === "output" ? "Output Option" : "Input Option"}
         </h3>
 
-        {isScatterConsumer && (
+        {isScatterConsumer && scatterCountSource && (
           <p style={{ margin: 0, color: "#c0392b", fontSize: 13 }}>
             ⚠ This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
             fanout family "{connectedSourceOption.sourceOption.label}", whose size is set by{" "}
-            {scatterCountSource
-              ? `that process's own "${scatterCountSource.label}" option`
-              : "that process's count source (not configured yet)"}
+            {`that process's own "${scatterCountSource.label}" option`}
             {", so this process's "}{scatterConsumerModeNoun} must produce exactly that many tasks.
+          </p>
+        )}
+
+        {/* Without a count source option, the family counts the tasks of
+            this process, which only a generator can give */}
+        {isScatterConsumer && !scatterCountSource && ownerProcess?.optionsHandler.mode !== "generator" && (
+          <p style={{ margin: 0, color: "#c0392b", fontSize: 13 }}>
+            ⚠ This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
+            fanout family "{connectedSourceOption.sourceOption.label}", which has no count source option{" "}
+            and so counts the tasks of this process, but only a generator can give its number of tasks{" "}
+            to a standard process: put this process in generator mode, or choose a count source option{" "}
+            for the family.
           </p>
         )}
 
@@ -389,7 +410,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
           <>
 
             <label>
-              Count source (command-line option on this process)
+              Count source
             </label>
 
             <select
@@ -407,7 +428,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             >
 
               <option value="">
-                (none selected)
+                {tasksCountText}
               </option>
 
               {countSourceCandidates.map(candidate => (

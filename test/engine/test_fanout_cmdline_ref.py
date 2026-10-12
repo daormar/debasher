@@ -5,13 +5,19 @@ sends each message from outside to the next task of worker, the tasks
 forward it to collect, and a Supervisor that declares no port of its own
 watches every node and relays a manual trigger to start. Checks that the
 number of ports and of nodes follows -w, including the nodes the Supervisor
-watches, and that it relaunches one task of the array like any other node.
+watches, and that it relaunches one task of the array, or the node that fans
+in, like any other node. Every test runs too on debasher_fanout_tasks_ref.sh,
+the same program with worker as an option generator whose number of tasks -w
+gives, and the other processes asking the engine for it: a relaunched node
+asks again and finds as many ports as before.
 """
 
 import json
 import os
 import signal
 from pathlib import Path
+
+import pytest
 
 from resident_run import (
     find_fifo,
@@ -25,7 +31,12 @@ from resident_run import (
 
 pytestmark = real_run
 
-PFILE = Path(__file__).resolve().parent / "debasher_fanout_cmdline_ref.sh"
+_REFS_DIR = Path(__file__).resolve().parent
+
+
+@pytest.fixture(params=["debasher_fanout_cmdline_ref.sh", "debasher_fanout_tasks_ref.sh"])
+def pfile(request):
+    return _REFS_DIR / request.param
 
 
 def _execdir(outdir, processname):
@@ -81,7 +92,7 @@ def _round_until(outdir, w, first_epoch, done, timeout=30.0):
     return epoch
 
 
-def test_the_fanout_and_the_fanin_have_as_many_ports_as_the_option_says(outdir):
+def test_the_fanout_and_the_fanin_have_as_many_ports_as_the_option_says(pfile, outdir):
     """
     With -w 4, start sends eight messages from outside to the four tasks of
     worker in turn, and collect gets two on each of its four ports. The
@@ -89,7 +100,7 @@ def test_the_fanout_and_the_fanin_have_as_many_ports_as_the_option_says(outdir):
     Supervisor, and each round reaches every task.
     """
     w = 4
-    launch(PFILE, outdir, "-w", str(w))
+    launch(pfile, outdir, "-w", str(w))
     _wait_until_every_node_started(outdir, w)
 
     ext = find_fifo(outdir, "start_ext")
@@ -101,17 +112,40 @@ def test_the_fanout_and_the_fanin_have_as_many_ports_as_the_option_says(outdir):
     assert _node_state(_checkpoint(outdir, "start", epoch)) == {"sent": 2 * w}
 
 
-def test_the_supervisor_relaunches_one_task_of_the_array(outdir):
+def test_the_supervisor_relaunches_one_task_of_the_array(pfile, outdir):
     """
     A task of worker killed with its process group is relaunched by the
     Supervisor on its own, with its own .id, and goes on forwarding what
     start sends it.
     """
     w = 3
-    launch(PFILE, outdir, "-w", str(w))
+    launch(pfile, outdir, "-w", str(w))
     _wait_until_every_node_started(outdir, w)
 
     id_path = os.path.join(_execdir(outdir, "worker"), "worker_1.id")
+    old_pid = read_pid(id_path)
+    os.killpg(int(old_pid), signal.SIGKILL)
+    assert wait_until(lambda: read_pid(id_path) not in (None, old_pid), timeout=15.0)
+
+    ext = find_fifo(outdir, "start_ext")
+    for i in range(w):
+        write_line(ext, {"type": "DATA", "payload": i})
+
+    expected = {f"ind{idx}": 1 for idx in range(w)}
+    _round_until(outdir, w, 0, lambda state: state["counts"] == expected)
+
+
+def test_the_supervisor_relaunches_the_node_that_fans_in_with_all_its_ports(pfile, outdir):
+    """
+    collect killed with its process group is relaunched by the Supervisor,
+    and gets as many ports as before: what start sends to every task of
+    worker afterwards reaches it on each of them.
+    """
+    w = 3
+    launch(pfile, outdir, "-w", str(w))
+    _wait_until_every_node_started(outdir, w)
+
+    id_path = os.path.join(_execdir(outdir, "collect"), "collect.id")
     old_pid = read_pid(id_path)
     os.killpg(int(old_pid), signal.SIGKILL)
     assert wait_until(lambda: read_pid(id_path) not in (None, old_pid), timeout=15.0)

@@ -56,6 +56,8 @@ export interface ProgramOption {
   // another option on the SAME process (with commandLine=true) whose
   // value supplies the runtime count for this fanout family — e.g.
   // "-outf-ith"'s countSourceOptionId points at that process's own "-w".
+  // Unset, the family counts the tasks of the generator at the other end
+  // of its connections (see fanoutCountProcesses).
   countSourceOptionId?: string;
   // A task shaping option: a mandatory command line option that only the
   // options handler of the process reads (the code that builds the array,

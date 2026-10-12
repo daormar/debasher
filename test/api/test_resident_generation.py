@@ -179,6 +179,40 @@ def _fanout(with_supervisor=True, array_initiator=False):
     return _program("fan", processes, edges)
 
 
+def _generator_fanout(with_supervisor=True, generator_initiator=False):
+    """As _fanout, with worker a generator: neither family has a count
+    source option, so both count the tasks of worker, and so do the
+    families of the Supervisor that face it."""
+    start = _process(
+        "start",
+        "FBPProcess",
+        [
+            _option("s-ext", "-ext", "input", channel="fifo", fifoTag="external", value="start_ext"),
+            _option("s-outf", "-outf-ith", "output", channel="fifo", value="start_out_${i}"),
+        ],
+        initiator=True,
+    )
+    worker = _process(
+        "worker",
+        "FBPProcess",
+        [
+            _option("w-w", "-w", "input", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
+            _option("w-in", "-inf", "input", value="[start;-outf-ith]"),
+            _option("w-outf", "-outf", "output", channel="fifo", value="worker_out_${task_idx}"),
+        ],
+        optionsHandler=OptionsHandler(
+            mode="generator", generatorSizeCode='debasher::read_opt_value_from_line "${cmdline}" "-w"'
+        ),
+        initiator=generator_initiator,
+    )
+    collect = _process("collect", "FBPProcess", [_option("k-in", "-ind-ith", "input", value="[worker;-outf]")])
+    processes = [start, worker, collect]
+    if with_supervisor:
+        processes.append(_process("sup", "Supervisor"))
+    edges = [_edge("start", "s-outf", "worker", "w-in"), _edge("worker", "w-outf", "collect", "k-in")]
+    return _program("genfan", processes, edges)
+
+
 def _function(script, name):
     """The body of the Bash function `name` of a generated module."""
     lines = script.splitlines()
@@ -366,6 +400,18 @@ def test_a_supervisor_with_options_of_its_own_is_refused():
     _refused(program, "takes no options of its own")
 
 
+def test_the_supervisor_counts_the_tasks_of_a_generator_that_reaches_no_counted_family():
+    script = generate_script(_generator_fanout(generator_initiator=True))
+
+    sup = _function(script, "sup_define_opts")
+    assert 'n_worker_hb=$(debasher::get_process_num_tasks "worker") || return 1' in sup
+    assert 'debasher::define_opt_from_proc_task_out "-worker_hb${i}" "worker" "${i}" "-outhb" optlist || return 1' in sup
+    assert 'n_outworker_trig=$(debasher::get_process_num_tasks "worker") || return 1' in sup
+    # No command line option is added to the Supervisor to count them
+    assert "read_opt_value_from_line" not in sup
+    assert _function(script, "sup_identify_cmdline_opts") == 'debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"'
+
+
 def test_an_array_that_reaches_no_counted_fanout_family_is_refused_with_a_supervisor():
     program = _fanout()
     start = program.processes[0]
@@ -388,8 +434,18 @@ _DEBASHER_EXEC = paths.find_bin_tool("debasher_exec")
         (_fanout(), ["-w", "3"]),
         (_fanout(with_supervisor=False), ["-w", "3"]),
         (_fanout(array_initiator=True), ["-w", "3"]),
+        (_generator_fanout(generator_initiator=True), ["-w", "3"]),
+        (_generator_fanout(with_supervisor=False), ["-w", "3"]),
     ],
-    ids=["relay", "relay-no-supervisor", "fanout", "fanout-no-supervisor", "fanout-array-initiator"],
+    ids=[
+        "relay",
+        "relay-no-supervisor",
+        "fanout",
+        "fanout-no-supervisor",
+        "fanout-array-initiator",
+        "generator-fanout-initiator",
+        "generator-fanout-no-supervisor",
+    ],
 )
 def test_the_engine_accepts_the_generated_module(tmp_path, program, program_opts):
     pfile = tmp_path / f"{program.name}.sh"

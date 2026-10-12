@@ -2,6 +2,7 @@ import { isConnectedInputChannel } from "./dataTypes";
 import type { ProgramEdge } from "./edge";
 import { edgeEndText } from "./edge";
 import { isFanoutOption } from "./option";
+import type { ProgramOption } from "./option";
 import { isBusinessInputCandidate, isBusinessOutput } from "./node";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
@@ -12,6 +13,42 @@ import type { Program } from "./program";
 
 // The two ends of an edge.
 export type EdgeEndpoints = Omit<ProgramEdge, "id">;
+
+// The processes at the other end of the connections of a fanout family of
+// `process`: the one that an input family reads, the ones that read an
+// output family. A family without a count source option counts the tasks
+// of that process, which has to be the only one and in "generator" mode
+// (see _fanout_count_process in api/script_generation.py).
+export function fanoutCountProcesses(
+  program: Program,
+  process: ProgramProcess,
+  option: ProgramOption
+): ProgramProcess[] {
+  const ids = new Set(
+    program.edges.flatMap(edge => {
+      if (option.direction === "input") {
+        return edge.targetProcessId === process.id && edge.targetOptionId === option.id ? [edge.sourceProcessId] : [];
+      }
+      return edge.sourceProcessId === process.id && edge.sourceOptionId === option.id ? [edge.targetProcessId] : [];
+    })
+  );
+  return program.processes.filter(p => ids.has(p.id));
+}
+
+// What gives the number of options of a fanout family of `process`, for a
+// sentence "as many as ...": the value of its count source option, or the
+// number of tasks of the process at the other end of its connections (see
+// fanoutCountProcesses).
+export function fanoutCountText(program: Program, process: ProgramProcess, option: ProgramOption): string {
+  const countSource = process.options.find(o => o.id === option.countSourceOptionId);
+  if (countSource) {
+    return `the value of \`${countSource.label}\``;
+  }
+  const ends = fanoutCountProcesses(program, process, option);
+  return ends.length === 1
+    ? `the tasks of \`${ends[0].name}\``
+    : "the tasks of the process at the other end of its connections, a generator";
+}
 
 /**
  * Whether `option` (declared on `process`) is a fanout family option

@@ -288,6 +288,53 @@ def _downgrade_unverifiable_task_indexed_connections(
         target.optionsHandler = OptionsHandler(mode="manual", manualCode=combined)
 
 
+def _downgrade_unverifiable_fanout_counts(
+    processes: list[ProgramProcess],
+    pending_connections: list[tuple[str, ConnectionRef]],
+    pending_count_processes: list[tuple[str, str, str]],
+    option_handler_code_by_process: dict[str, dict[str, str]],
+) -> None:
+    """
+    A fanout family without a count source option is counted by the number
+    of tasks of the process at the other end of its connections, which has
+    to be in "generator" mode (see _fanout_count_process in
+    script_generation.py): that is all that the model can say. A family
+    whose block asks for the number of tasks of any other process, as
+    `pending_count_processes` (process, family label, process asked) tells,
+    could not be regenerated that way, so its process is downgraded to
+    "manual" with its _define_opts kept as it was, as
+    _downgrade_unverifiable_task_indexed_connections does.
+    """
+    processes_by_name = {process.name: process for process in processes}
+
+    for process_name, fanout_label, count_process in pending_count_processes:
+        process = processes_by_name.get(process_name)
+        if process is None or process.optionsHandler.mode != "standard":
+            continue
+        option = next((o for o in process.options if o.label == fanout_label), None)
+        if option is None:
+            continue
+        if option.direction == "input":
+            ends = {
+                connection.source_process
+                for target_name, connection in pending_connections
+                if target_name == process_name and connection.option_label == fanout_label
+            }
+        else:
+            ends = {
+                target_name
+                for target_name, connection in pending_connections
+                if connection.source_process == process_name and connection.source_option == fanout_label
+            }
+        asked = processes_by_name.get(count_process)
+        if ends == {count_process} and asked is not None and asked.optionsHandler.mode == "generator":
+            continue
+        raw = option_handler_code_by_process.get(process_name, {})
+        process.optionsHandler = OptionsHandler(
+            mode="manual", manualCode=raw.get(PROCESS_METHOD_DEFINE_OPTS_SUFFIX, "")
+        )
+
+
 def _build_edges(
     processes: list[ProgramProcess],
     pending_connections: list[tuple[str, ConnectionRef]],
@@ -484,6 +531,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
     pending_shared_dir_refs: list[tuple[str, str, SharedDirRef]] = []
+    pending_count_processes: list[tuple[str, str, str]] = []
     option_handler_code_by_process: dict[str, dict[str, str]] = {}
 
     for process_name, chunk in process_chunks:
@@ -541,6 +589,10 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
             if fanout_option is not None and count_source_option is not None:
                 fanout_option.countSourceOptionId = count_source_option.id
 
+        pending_count_processes.extend(
+            (process_name, fanout_label, count_process)
+            for fanout_label, count_process in result.fanout_count_processes.items()
+        )
         pending_connections.extend((process_name, connection) for connection in result.connections)
         pending_shared_dir_refs.extend(
             (process_name, option_label, ref) for option_label, ref in result.shared_dir_refs.items()
@@ -565,6 +617,9 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
         )
 
     _downgrade_unverifiable_task_indexed_connections(processes, pending_connections, option_handler_code_by_process)
+    _downgrade_unverifiable_fanout_counts(
+        processes, pending_connections, pending_count_processes, option_handler_code_by_process
+    )
 
     available_shared_dirs = _resolve_shared_dir_refs(
         processes, pending_shared_dir_refs, script_path, debasher_mod_dir

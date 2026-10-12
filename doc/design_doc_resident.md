@@ -3563,12 +3563,21 @@ Design ideas from Future work move here once they are actually built.
     the same generated script, so it gets the same `-w`; a run with another
     `-w` has to start afresh (see "`debasher_reset_resident`: a clean
     start").
+  - The family may instead take its size from the number of tasks of an
+    option generator, which a process without one asks for with
+    `get_process_num_tasks` (see "Arrays and option generators" in
+    `doc/design_doc_engine.md`): the nodes then read no `-w` of their own.
+    A relaunched node asks again inside its task, where the number comes from
+    the execution context, so it gets the ports it had.
 
   `test/engine/debasher_fanout_cmdline_ref.sh` is the reference: `start`
   sends each message from outside to the next of the `-w` tasks of `worker`,
   with a counter in its node state, the tasks forward it to `collect`, and a
   `Supervisor` that declares no port watches every node and relaunches a task
-  of the array like any other node.
+  of the array, or `collect`, like any other node. Its twin
+  `test/engine/debasher_fanout_tasks_ref.sh` is the same program with `worker`
+  an option generator whose number of tasks the task shaping option `-w`
+  gives, and every other process asking for that number.
 - **A node that emits on its own: a self-loop.** A node acts only in reaction
   to what it receives, so what starts the activity of a program comes from
   outside. A node that has to go on emitting after that, a counter or the

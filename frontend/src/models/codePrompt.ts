@@ -1,3 +1,4 @@
+import { fanoutCountText } from "./connections";
 import { deliveryChannel, receivesPath } from "./dataTypes";
 import type { ProgramOption } from "./option";
 import { fanoutBaseLabel, isFanoutOption } from "./option";
@@ -136,10 +137,10 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
   const fanoutFamily = process.optionsHandler.mode === "standard" && isFanoutOption(option.label);
   if (fanoutFamily) {
     const base = fanoutBaseLabel(option.label);
-    const countSource = process.options.find(o => o.id === option.countSourceOptionId);
-    notes.push(countSource
-      ? `A fanout family: the options \`${base}0\`, \`${base}1\`, ..., as many as the value of \`${countSource.label}\`.`
-      : `A fanout family: the options \`${base}0\`, \`${base}1\`, ..., as many as an option that is not chosen yet says.`);
+    notes.push(`A fanout family: the options \`${base}0\`, \`${base}1\`, ..., as many as ${fanoutCountText(program, process, option)}.`);
+    if (!option.countSourceOptionId) {
+      notes.push("The task does not receive that number: count the options of the family among the arguments.");
+    }
   }
 
   const connected = program.edges.some(e => e.targetProcessId === process.id && e.targetOptionId === option.id);

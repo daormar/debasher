@@ -47,7 +47,7 @@ export const optionFields = z.object({
   fromProcessSpec: z.boolean().optional()
     .describe("The value comes from an attribute of the process specifications, which `value` names."),
   countSource: z.string().optional()
-    .describe('On a fanout family such as "-outf-ith": the label of the option of the same process whose value gives its count.'),
+    .describe('On a fanout family such as "-outf-ith": the label of the command line option of the same process whose value gives its count, or "" for none. Without one, the family counts the tasks of the process at the other end of its connections (the one that an input family reads, the only one that reads an output family), which must be in generator mode.'),
 }).strict();
 
 export const newOption = optionFields.extend({ label: optionLabel }).strict();

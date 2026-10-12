@@ -242,9 +242,16 @@ what a task is when nothing says so.
 
 An option of a standard process whose label ends in ``-ith``, such as
 ``-outf-ith``, is a *fanout family*: it stands for as many numbered
-options (``-outf0``, ``-outf1``, ...) as a command line option of the
-same process says, and it connects to an array or generator process,
-one option for each task.
+options (``-outf0``, ``-outf1``, ...) as its count source says, and it
+connects to an array or generator process, one option for each task.
+The count source, chosen in the editor of the option, is a command line
+option of the same process, or the number of tasks of the process at
+the other end of the connections of the family when that process is a
+generator: the family then asks the engine for it (see "Gathering every
+task of a process" in the :ref:`design_patterns` Section), and no option
+has to be kept equal to the number of tasks by hand. A family that
+gathers the tasks of an array still needs a command line option, since
+the engine cannot tell a standard process how many tasks an array has.
 
 A command line option that only decides the tasks of a process, such
 as the number of workers that the code of an array reads to build it,

@@ -198,7 +198,21 @@ describe("buildNodeCodePrompt", () => {
       createOption("outw", "-outw-ith", { direction: "output", channel: "fifo", countSourceOptionId: "w" }),
     ]);
     const prompt = buildNodeCodePrompt({ ...program, processes: [dispatch], edges: [] } as Program, dispatch, emptyNodeCode(), "", library);
-    expect(prompt).toContain("A fanout family: the ports `outw0`, `outw1`, ..., as many as the value of `-w` says; send on one with `self.send_data(f\"outw{i}\", payload)`.");
+    expect(prompt).toContain("A fanout family: the ports `outw0`, `outw1`, ..., as many as the value of `-w`; send on one with `self.send_data(f\"outw{i}\", payload)`.");
+    expect(prompt).not.toContain("self.OUTPUT_PORTS");
+  });
+
+  it("names the generator whose tasks count a fanout family without a count source", () => {
+    const dispatch = node("Dispatch", "FBPProcess", [
+      createOption("outw", "-outw-ith", { direction: "output", channel: "fifo" }),
+    ]);
+    const worker = node("Worker", "FBPProcess", [createOption("in", "-in")], {
+      optionsHandler: { mode: "generator", generatorSizeCode: "echo 2" },
+    });
+    const edges = [{ id: "e", sourceProcessId: "Dispatch", sourceOptionId: "outw", targetProcessId: "Worker", targetOptionId: "in" }];
+    const prompt = buildNodeCodePrompt({ ...program, processes: [dispatch, worker], edges } as Program, dispatch, emptyNodeCode(), "", library);
+    expect(prompt).toContain("as many as the tasks of `Worker`; send on one");
+    expect(prompt).toContain("The node does not receive that number: count the ports of `self.OUTPUT_PORTS` named `outw<i>`.");
   });
 
   it("carries every part, its code or that it is empty", () => {

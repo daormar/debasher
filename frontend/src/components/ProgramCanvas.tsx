@@ -126,11 +126,22 @@ const LEGEND_PANEL_STYLE = {
   flexDirection: "column" as const,
 };
 
+// The number of options "<base>0", "<base>1", ... in `resolvedValues`,
+// counted up to the first missing index.
+function countIndexedOptions(base: string, resolvedValues: Record<string, string>): number {
+  let count = 0;
+  while (`${base}${count}` in resolvedValues) {
+    count++;
+  }
+  return count;
+}
+
 // On a "standard"-mode process, a fanout/fanin option's label (e.g.
 // "-outf-ith", "-ind-ith", see isFanoutOption) is only a template: the
 // process actually runs with one concrete option per index ("-outf0",
-// "-outf1", ..., "-ind0", "-ind1", ...), one per its countSourceOptionId
-// sibling's value (e.g. "-w"). Splits each template into either its
+// "-outf1", ..., "-ind0", "-ind1", ...), as many as its
+// countSourceOptionId sibling's value (e.g. "-w") or, without one, as many
+// as the task received (see countIndexedOptions). Splits each template into either its
 // expanded indexed rows (looked up in resolvedValues the same way as
 // any other option) when there are few enough, or a FanoutFamily for
 // ProcessIOModal to render as a "Pick index" row instead, which,
@@ -155,9 +166,16 @@ function expandFanoutOptions(
       ? byId.get(option.countSourceOptionId)
       : undefined;
 
+    const base = fanoutBaseLabel(option.label);
+
+    // Without a count source option, the family counts the tasks of
+    // another process, a number that the task does not receive: the
+    // options of the family that the task received count it instead
     const countValue = countSource
       ? resolvedValues[countSource.label] ?? countSource.value
-      : undefined;
+      : option.countSourceOptionId
+        ? undefined
+        : String(countIndexedOptions(base, resolvedValues));
 
     const count = countValue !== undefined ? Number(countValue) : NaN;
 
@@ -167,8 +185,6 @@ function expandFanoutOptions(
     if (!Number.isInteger(count) || count <= 0) {
       return [option];
     }
-
-    const base = fanoutBaseLabel(option.label);
 
     if (count > MAX_FANOUT_INLINE) {
       families.push({ option, baseLabel: base, count });

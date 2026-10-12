@@ -15,6 +15,7 @@ import {
   mergeRefusal,
   normalizeProgram,
   prepareMerge,
+  removeOption,
   removeProcess,
   setEdgeDisplay,
   updateProcess,
@@ -112,6 +113,19 @@ describe("the edits of a program", () => {
     expect(renamed.processes[1].options[0].value).toBe("[a;-outf]");
 
     expect(normalizeProgram(renamed).processes[1].options[0].value).toBe("[producer;-outf]");
+  });
+
+  it("take the count source option away from the fanout families it counts when it is removed", () => {
+    const counted = { ...option("bf", "-in-ith"), countSourceOptionId: "bw" };
+    const other = { ...option("bg", "-x-ith"), countSourceOptionId: "by" };
+    const source: Program = {
+      ...program(),
+      processes: [process("a", []), process("b", [option("bw", "-w"), option("by", "-y"), counted, other])],
+    };
+
+    const options = removeOption(source, "id-b", "bw").processes[1].options;
+
+    expect(options.map(o => [o.id, o.countSourceOptionId])).toEqual([["by", undefined], ["bf", undefined], ["bg", "by"]]);
   });
 
 });

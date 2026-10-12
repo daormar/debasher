@@ -396,6 +396,88 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
     _assert_model_round_trip(program, tmp_path)
 
 
+def _fanout_counted_by_tasks() -> Program:
+    """dispatch scatters to the tasks of worker, a generator, and collect
+    gathers from them: neither family has a count source option, so both
+    count the tasks of worker."""
+    dispatch = _process("dispatch", [_option("-outf-ith", value="${process_outdir}/part_${i}")])
+    worker = _process(
+        "worker",
+        [
+            _option("-n", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
+            _option("-inf", value="[dispatch;-outf-ith]"),
+            _option("-outf", value="${process_outdir}/out_${task_idx}"),
+        ],
+        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"'),
+    )
+    other = _process(
+        "other",
+        [
+            _option("-n", dataType="int", commandLine=True, mandatory=True, taskShaping=True),
+            _option("-outf", value="${process_outdir}/out_${task_idx}"),
+        ],
+        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"'),
+    )
+    collect = _process("collect", [_option("-ind-ith", value="[worker;-outf]")])
+    return _program(
+        "rt_tasks",
+        [dispatch, worker, other, collect],
+        [_edge("dispatch", "-outf-ith", "worker", "-inf"), _edge("worker", "-outf", "collect", "-ind-ith")],
+    )
+
+
+def test_fanout_families_counted_by_the_tasks_of_a_generator_survive_the_round_trip(tmp_path):
+    program = _fanout_counted_by_tasks()
+
+    script = script_generation.generate_script(program)
+    assert "n_outf=$(debasher::get_process_num_tasks \"worker\") || return 1" in script
+    assert "n_ind=$(debasher::get_process_num_tasks \"worker\") || return 1" in script
+    _assert_model_round_trip(program, tmp_path)
+
+
+def _import_edited_script(program: Program, tmp_path: Path, old: str, new: str) -> Program:
+    """Imports the generated script of `program` with `old` replaced by `new`."""
+    script = script_generation.generate_script(program)
+    assert old in script
+    script_path = tmp_path / f"{program.name}.sh"
+    script_path.write_text(script.replace(old, new))
+    return import_program_from_script(script_path, str(tmp_path))
+
+
+def test_a_hand_written_count_by_tasks_is_imported_as_a_family_without_count_source(tmp_path):
+    # The form of the rtdocs pattern: the loop variable declared with the
+    # count, and get_process_num_tasks without its namespace
+    imported = _import_edited_script(
+        _fanout_counted_by_tasks(),
+        tmp_path,
+        "    local n_ind\n    n_ind=$(debasher::get_process_num_tasks \"worker\") || return 1\n"
+        "    for ((i=0; i<n_ind; i++)); do",
+        "    local n i\n    n=$(get_process_num_tasks \"worker\") || return 1\n    for ((i=0; i<n; i++)); do",
+    )
+
+    collect = next(process for process in imported.processes if process.name == "collect")
+    assert collect.optionsHandler.mode == "standard"
+    [family] = collect.options
+    assert family.countSourceOptionId is None
+
+
+@pytest.mark.parametrize("family", ["outf", "ind"])
+def test_a_family_that_counts_the_tasks_of_a_process_it_is_not_connected_to_is_imported_as_manual(
+    tmp_path, family
+):
+    imported = _import_edited_script(
+        _fanout_counted_by_tasks(),
+        tmp_path,
+        f'n_{family}=$(debasher::get_process_num_tasks "worker")',
+        f'n_{family}=$(debasher::get_process_num_tasks "other")',
+    )
+
+    process_name = "dispatch" if family == "outf" else "collect"
+    process = next(process for process in imported.processes if process.name == process_name)
+    assert process.optionsHandler.mode == "manual"
+    assert 'get_process_num_tasks "other"' in process.optionsHandler.manualCode
+
+
 def test_a_self_loop_survives_the_round_trip(tmp_path):
     counter = _process(
         "counter",
@@ -773,3 +855,16 @@ def test_the_wiring_of_an_array_survives_the_round_trip(tmp_path, with_superviso
     from test_resident_generation import _fanout
 
     _assert_model_round_trip(_fanout(with_supervisor, array_initiator), tmp_path)
+
+
+@pytest.mark.parametrize(
+    "with_supervisor, generator_initiator",
+    [(True, False), (True, True), (False, False), (False, True)],
+    ids=["supervisor", "supervisor-generator-initiator", "no-supervisor", "no-supervisor-generator-initiator"],
+)
+def test_the_wiring_of_a_generator_counted_by_its_tasks_survives_the_round_trip(
+    tmp_path, with_supervisor, generator_initiator
+):
+    from test_resident_generation import _generator_fanout
+
+    _assert_model_round_trip(_generator_fanout(with_supervisor, generator_initiator), tmp_path)

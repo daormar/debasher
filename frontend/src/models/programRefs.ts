@@ -150,6 +150,11 @@ function optionFields(process: ProgramProcess | null, fields: NamedOptionFields)
   if (countSource === undefined) {
     return rest;
   }
+  // No count source option: the family counts the tasks of the process
+  // at the other end of its connections
+  if (countSource === "") {
+    return { ...rest, countSourceOptionId: undefined };
+  }
   if (!process) {
     throw new NameError(`The count source ${countSource} names an option of a process that does not exist yet.`);
   }

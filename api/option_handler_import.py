@@ -159,6 +159,13 @@ class OptionHandlerResult:
     # program_import.py resolves the label into an actual
     # ProgramOption.countSourceOptionId once both options have real ids.
     fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
+    # Fanout family option label -> the name of the process whose number of
+    # tasks counts it (get_process_num_tasks), for a family without a count
+    # source option. program_import.py keeps it only when that process is
+    # the one at the other end of the connections of the family, which is
+    # all that the model can say (see _fanout_count_process in
+    # script_generation.py).
+    fanout_count_processes: dict[str, str] = field(default_factory=dict)
     # Option label -> SharedDirRef, for every define_opt_from_shared_dir
     # call (see the dispatch in _parse_primitive_calls). Additive: a
     # matched label also keeps its ordinary option_values[label] entry
@@ -394,17 +401,28 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
 #     for ((i=0; i<<var>; i++)); do
 #         <one define_opt or define_opt_from_proc_task_out call, label "<base>${i}">
 #     done
-# but `declare -f` always reprints a for loop's "do" on its own line
+# or, for a family counted by the number of tasks of another process,
+# with the count read in two lines instead of one:
+#     local <var>
+#     <var>=$(debasher::get_process_num_tasks "<process>") || return 1
+# (the declaration may also name the loop variable, "local <var> i", and
+# the call may omit "debasher::", as a hand-written module does). But
+# `declare -f` always reprints a for loop's "do" on its own line
 # (verified against real bash — same as _ARRAY_FOR_RE/_ARRAY_DO_LINE's
 # "for task_idx in ...; do" below), so the shape actually recovered here is
-# five lines: the count-read, the bare "for ((...))" header, "do", the
-# one inner call, "done". Recognized as a unit (see
+# the count-read (one or two lines), the bare "for ((...))" header, "do",
+# the one inner call, "done". Recognized as a unit (see
 # _try_parse_fanout_block) only when allow_fanout_blocks is set — i.e.
 # only inside a "standard"-mode _define_opts body, never inside
 # array/generator ones, which have no notion of a fanout family option.
 _FANOUT_COUNT_RE = re.compile(
     r'^local\s+(?P<var>[A-Za-z_][A-Za-z0-9_]*)=\$\(debasher::read_opt_value_from_line'
     r'\s+"\$\{cmdline\}"\s+"(?P<count_label>[^"]*)"\)$'
+)
+_FANOUT_TASKS_DECL_RE = re.compile(r"^local\s+(?P<names>[A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_][A-Za-z0-9_]*)*)$")
+_FANOUT_TASKS_COUNT_RE = re.compile(
+    r'^(?P<var>[A-Za-z_][A-Za-z0-9_]*)=\$\((?:debasher::)?get_process_num_tasks'
+    r'\s+"(?P<count_process>[^"$`\\]+)"\)\s*\|\|\s*return\s+1$'
 )
 _FANOUT_BLOCK_LABEL_RE = re.compile(r'^(?P<base>-[^"$]+)\$\{i\}$')
 _FANOUT_DO_LINE = "do"
@@ -462,39 +480,66 @@ def _fanout_for_re(var: str) -> re.Pattern:
 _FANOUT_CONSUMER_OPT_RE = re.compile(rf'^(?P<base>-[^"$]+)\$\{{{TASK_IDX_VAR}\}}$')
 
 
+def _parse_fanout_count(body: list[str], start: int) -> tuple[int, str, str | None, str | None] | None:
+    """
+    The count-read of a fanout-family block (see the comment above
+    _FANOUT_COUNT_RE) at body[start]: (lines it takes, its variable, the
+    label of the count source option or None, the process whose number of
+    tasks it asks for or None), exactly one of the last two set. None if
+    body[start] starts no count-read.
+    """
+    count_match = _FANOUT_COUNT_RE.match(body[start])
+    if count_match:
+        return 1, count_match.group("var"), count_match.group("count_label"), None
+    decl_match = _FANOUT_TASKS_DECL_RE.match(body[start])
+    if decl_match is None or start + 1 >= len(body):
+        return None
+    tasks_match = _FANOUT_TASKS_COUNT_RE.match(body[start + 1])
+    if tasks_match is None:
+        return None
+    var = tasks_match.group("var")
+    names = decl_match.group("names").split()
+    if var not in names or not set(names) <= {var, "i"}:
+        return None
+    return 2, var, None, tasks_match.group("count_process")
+
+
 def _try_parse_fanout_block(
     body: list[str], start: int
-) -> tuple[int, str, str, str | None, ConnectionRef | None, bool] | None:
+) -> tuple[int, str, str | None, str | None, str | None, ConnectionRef | None, bool] | None:
     """
     Recognizes one fanout-family block (see the comment above
     _FANOUT_COUNT_RE) starting at body[start]. Returns (lines consumed,
     fanout option label (e.g. "-outf-ith"), count-source option label
-    (e.g. "-w"), literal value text or None, ConnectionRef or None, is a
-    fifo name rather than a plain value); the value/connection pair is
-    mutually exclusive, matching define_opt/define_fifo_opt (scatter,
-    unconnected) vs define_opt_from_proc_task_out (gather, connected to
-    an array-mode process's per-task output) respectively — the last
-    element is only ever True for a define_fifo_opt scatter (see
+    (e.g. "-w") or None, the process whose number of tasks counts the
+    family or None (see _parse_fanout_count), literal value text or None,
+    ConnectionRef or None, is a fifo name rather than a plain value); the
+    value/connection pair is mutually exclusive, matching
+    define_opt/define_fifo_opt (scatter) vs define_opt_from_proc_task_out
+    (gather, connected to an array-mode process's per-task output)
+    respectively — the last element is only ever True for a
+    define_fifo_opt scatter (see
     data/programs/debasher_dynamic_fanout_fifos.sh's dispatch). None if
     body[start:] doesn't match this exact shape, leaving the caller to
     fall back to normal single-line parsing of body[start] itself.
     """
-    if start + 4 >= len(body):
+    count = _parse_fanout_count(body, start)
+    if count is None:
+        return None
+    header_len, count_var, count_label, count_process = count
+    loop = start + header_len
+    if loop + 3 >= len(body):
         return None
 
-    count_match = _FANOUT_COUNT_RE.match(body[start])
-    if not count_match:
+    if not _fanout_for_re(count_var).match(body[loop]):
         return None
-    count_var = count_match.group("var")
+    if body[loop + 1] != _FANOUT_DO_LINE:
+        return None
+    if body[loop + 3] != _FANOUT_DONE_LINE:
+        return None
+    consumed = header_len + 4
 
-    if not _fanout_for_re(count_var).match(body[start + 1]):
-        return None
-    if body[start + 2] != _FANOUT_DO_LINE:
-        return None
-    if body[start + 4] != _FANOUT_DONE_LINE:
-        return None
-
-    call_match = _DEFINE_OPTS_CALL_RE.match(body[start + 3])
+    call_match = _DEFINE_OPTS_CALL_RE.match(body[loop + 2])
     if not call_match:
         return None
     func = call_match.group("func")
@@ -506,14 +551,12 @@ def _try_parse_fanout_block(
     if len(tokens) != _CALL_TOKEN_COUNTS.get(func, -1):
         return None
 
-    count_label = count_match.group("count_label")
-
     if func in ("define_opt", "define_fifo_opt"):
         label_match = _FANOUT_BLOCK_LABEL_RE.match(tokens[0][0])
         if label_match is None or tokens[-1][0] != "optlist":
             return None
         fanout_label = f"{label_match.group('base')}-ith"
-        return (5, fanout_label, count_label, tokens[1][0], None, func == "define_fifo_opt")
+        return (consumed, fanout_label, count_label, count_process, tokens[1][0], None, func == "define_fifo_opt")
 
     if func == "define_opt_from_proc_task_out":
         label_match = _FANOUT_BLOCK_LABEL_RE.match(tokens[0][0])
@@ -531,7 +574,7 @@ def _try_parse_fanout_block(
             source_process=tokens[1][0],
             source_option=tokens[3][0],
         )
-        return (5, fanout_label, count_label, None, connection, False)
+        return (consumed, fanout_label, count_label, count_process, None, connection, False)
 
     return None
 
@@ -551,6 +594,7 @@ class _OptionFacts:
     mirrored_fifo_labels: set[str] = field(default_factory=set)
     procspec_labels: set[str] = field(default_factory=set)
     fanout_count_source_labels: dict[str, str] = field(default_factory=dict)
+    fanout_count_processes: dict[str, str] = field(default_factory=dict)
     shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
     process_outdir_labels: set[str] = field(default_factory=set)
     subpaths: dict[str, str] = field(default_factory=dict)
@@ -601,8 +645,11 @@ def _record_local(state: _ParseState, line: str) -> bool:
 
 
 def _record_fanout_block(state: _ParseState, fanout_match) -> None:
-    _consumed, fanout_label, count_label, value_text, connection, is_fifo = fanout_match
-    state.facts.fanout_count_source_labels[fanout_label] = count_label
+    _consumed, fanout_label, count_label, count_process, value_text, connection, is_fifo = fanout_match
+    if count_label is not None:
+        state.facts.fanout_count_source_labels[fanout_label] = count_label
+    else:
+        state.facts.fanout_count_processes[fanout_label] = count_process
     if connection is not None:
         state.facts.connections.append(connection)
     else:
@@ -1265,6 +1312,7 @@ def _result(handler: OptionsHandler, facts: _OptionFacts | None = None) -> Optio
         mirrored_fifo_labels=facts.mirrored_fifo_labels,
         procspec_labels=facts.procspec_labels,
         fanout_count_source_labels=facts.fanout_count_source_labels,
+        fanout_count_processes=facts.fanout_count_processes,
         shared_dir_refs=facts.shared_dir_refs,
         process_outdir_labels=facts.process_outdir_labels,
         subpaths=facts.subpaths,

@@ -52,59 +52,65 @@ function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
     : [];
 }
 
-// A fanout family as a template reads it: the engine passes "<base>0", "<base>1", ... (never the "-outf-ith"
-// label itself), as many as the value of the count source option, which
-// the template has already read into the identifier countId. Null when
-// the family has no count source configured yet.
+// A fanout family as a template reads it: the engine passes "<base>0",
+// "<base>1", ... (never the "-outf-ith" label itself). With a count source
+// option, as many as its value, which the template has already read into
+// the identifier countId; without one, as many as the tasks of the process
+// at the other end of its connections (see _fanout_count_process in
+// api/script_generation.py), a number that the task does not receive, so
+// countId is null and the template counts the options of the family among
+// its arguments.
 interface FanoutRead {
   option: ProgramOption;
   baseLabel: string;
   id: string;
-  countId: string;
+  countId: string | null;
 }
 
-function fanoutRead(process: ProgramProcess, option: ProgramOption): FanoutRead | null {
-  const countSource = process.options.find(o => o.id === option.countSourceOptionId);
-  if (!countSource) {
-    return null;
-  }
-  const baseLabel = fanoutBaseLabel(option.label);
-  return { option, baseLabel, id: toIdentifier(baseLabel), countId: toIdentifier(countSource.label) };
+function fanoutReads(process: ProgramProcess): FanoutRead[] {
+  return fanoutOptionsOf(process).map(option => {
+    const countSource = process.options.find(o => o.id === option.countSourceOptionId);
+    const baseLabel = fanoutBaseLabel(option.label);
+    return {
+      option,
+      baseLabel,
+      id: toIdentifier(baseLabel),
+      countId: countSource ? toIdentifier(countSource.label) : null,
+    };
+  });
 }
 
-// The fanout families of a process that a template can read, and a TODO
-// comment for each one that it cannot.
-function fanoutReads(process: ProgramProcess, commentPrefix: string): { reads: FanoutRead[]; todoLines: string[] } {
-  const reads: FanoutRead[] = [];
-  const todoLines: string[] = [];
-  for (const option of fanoutOptionsOf(process)) {
-    const read = fanoutRead(process, option);
-    if (read) {
-      reads.push(read);
-    } else {
-      todoLines.push(`${commentPrefix} TODO: fanout option "${option.label}" has no count source configured yet`);
-    }
-  }
-  return { reads, todoLines };
+// The identifier of the number of options of a family that a template
+// counts among its arguments.
+function argsCountId(read: FanoutRead): string {
+  return `${read.id}_count`;
 }
 
 // Bash template lines for one fanout family option (see isFanoutOption):
 // a runtime loop, driven by its count-source option's own identifier
 // (already declared earlier in the template — fanout blocks are always
-// emitted after all plain option reads, see generateBashTemplate),
-// reading "<base-label>$i" for each i into an array.
-function fanoutReadLines(process: ProgramProcess, option: ProgramOption): string[] {
-  const read = fanoutRead(process, option);
-  if (!read) {
-    return [`    # TODO: fanout option "${option.label}" has no count source configured yet`];
+// emitted after all plain option reads, see generateBashTemplate), or by
+// the number of options of the family found among the arguments, reading
+// "<base-label>$i" for each i into an array.
+function fanoutReadLines(read: FanoutRead): string[] {
+  const lines: string[] = [];
+  let countId = read.countId;
+  if (countId === null) {
+    countId = argsCountId(read);
+    lines.push(
+      `    local ${countId}=0`,
+      `    while [ "$(read_opt_value_from_func_args "${read.baseLabel}\${${countId}}" "$@")" != "\${DEBASHER_OPT_NOT_FOUND}" ]; do`,
+      `        ${countId}=$((${countId} + 1))`,
+      `    done`,
+    );
   }
-
-  return [
+  lines.push(
     `    local ${read.id}=()`,
-    `    for ((i=0; i<${read.countId}; i++)); do`,
+    `    for ((i=0; i<${countId}; i++)); do`,
     `        ${read.id}+=($(read_opt_value_from_func_args "${read.baseLabel}\${i}" "$@"))`,
     `    done`,
-  ];
+  );
+  return lines;
 }
 
 function generateBashTemplate(process: ProgramProcess): string {
@@ -113,8 +119,9 @@ function generateBashTemplate(process: ProgramProcess): string {
   const fanoutOptions = fanoutOptionsOf(process);
   const plainOptions = taskOptionsOf(process).filter(o => !fanoutOptions.includes(o));
   const optionsWithIds = withIdentifiers(plainOptions);
+  const reads = fanoutReads(process);
 
-  if (optionsWithIds.length > 0 || fanoutOptions.length > 0) {
+  if (optionsWithIds.length > 0 || reads.length > 0) {
     lines.push("    # Initialize variables");
     for (const [option, id] of optionsWithIds) {
       if (option.dataType === "None") {
@@ -131,8 +138,8 @@ function generateBashTemplate(process: ProgramProcess): string {
         }
       }
     }
-    for (const fanoutOption of fanoutOptions) {
-      lines.push(...fanoutReadLines(process, fanoutOption));
+    for (const read of reads) {
+      lines.push(...fanoutReadLines(read));
     }
     lines.push("");
   }
@@ -198,15 +205,25 @@ function generatePythonTemplate(process: ProgramProcess, argumentType: ArgumentT
     }
   }
 
-  const { reads, todoLines } = fanoutReads(process, "#");
+  const reads = fanoutReads(process);
 
   if (reads.length > 0) {
     // The options of a fanout family are known only once its count is,
-    // so they are registered after a first parse of the others.
-    lines.push("", "args, _ = parser.parse_known_args()");
+    // so they are registered after a first parse of the others, which
+    // leaves them among the unknown arguments, where a family without a
+    // count source option is counted.
+    const countsArgs = reads.some(read => read.countId === null);
+    lines.push("", `args, ${countsArgs ? "unknown" : "_"} = parser.parse_known_args()`);
     for (const read of reads) {
       const help = JSON.stringify(read.option.description ?? "");
-      lines.push(`for i in range(int(args.${read.countId})):`);
+      let count = `int(args.${read.countId})`;
+      if (read.countId === null) {
+        count = argsCountId(read);
+        lines.push(
+          `${count} = sum(1 for arg in unknown if arg.startswith('${read.baseLabel}') and arg[${read.baseLabel.length}:].isdigit())`
+        );
+      }
+      lines.push(`for i in range(${count}):`);
       lines.push(
         `    parser.add_argument(f'${read.baseLabel}{i}', type=${pythonArgparseType(argumentType(read.option))}, required=True, help=${help})`
       );
@@ -221,11 +238,10 @@ function generatePythonTemplate(process: ProgramProcess, argumentType: ArgumentT
       lines.push(`${id} = args.${id}`);
     }
     for (const read of reads) {
-      lines.push(`${read.id} = [getattr(args, f'${pythonDest(read.baseLabel)}{i}') for i in range(int(${read.countId}))]`);
+      const count = read.countId === null ? argsCountId(read) : `int(${read.countId})`;
+      lines.push(`${read.id} = [getattr(args, f'${pythonDest(read.baseLabel)}{i}') for i in range(${count})]`);
     }
   }
-
-  lines.push(...todoLines);
 
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
@@ -266,11 +282,9 @@ function generatePerlTemplate(process: ProgramProcess, argumentType: ArgumentTyp
     "use Getopt::Long;",
   ];
 
-  // A fanout family always has a count source among the other options,
-  // so there is something to parse whenever there is a family to read.
-  const { reads, todoLines } = fanoutReads(process, "#");
+  const reads = fanoutReads(process);
 
-  if (optionsWithIds.length > 0) {
+  if (optionsWithIds.length > 0 || reads.length > 0) {
     lines.push("");
     for (const [option, id] of optionsWithIds) {
       lines.push(`my $${id} = ${perlDefaultLiteral(argumentType(option))};`);
@@ -280,32 +294,40 @@ function generatePerlTemplate(process: ProgramProcess, argumentType: ArgumentTyp
     }
 
     lines.push("");
-    if (reads.length > 0) {
-      // The options of a fanout family are known only once its count is:
-      // the first parse leaves them in @ARGV for the second.
-      lines.push('Getopt::Long::Configure("pass_through");');
+    if (optionsWithIds.length > 0) {
+      if (reads.length > 0) {
+        // The options of a fanout family are known only once its count
+        // is: the first parse leaves them in @ARGV for the second.
+        lines.push('Getopt::Long::Configure("pass_through");');
+      }
+      const specs = optionsWithIds.map(([option, id]) => {
+        const flagName = option.label.replace(/^-+/, "");
+        const suffix = option.dataType === "None" ? "" : getoptLongSuffix(argumentType(option));
+        return `"${flagName}${suffix}" => \\$${id}`;
+      });
+      lines.push(`GetOptions(${specs.join(", ")})`);
+      lines.push('    or die "Error in command line arguments\\n";');
     }
-    const specs = optionsWithIds.map(([option, id]) => {
-      const flagName = option.label.replace(/^-+/, "");
-      const suffix = option.dataType === "None" ? "" : getoptLongSuffix(argumentType(option));
-      return `"${flagName}${suffix}" => \\$${id}`;
-    });
-    lines.push(`GetOptions(${specs.join(", ")})`);
-    lines.push('    or die "Error in command line arguments\\n";');
 
     if (reads.length > 0) {
-      lines.push('Getopt::Long::Configure("no_pass_through");');
+      if (optionsWithIds.length > 0) {
+        lines.push('Getopt::Long::Configure("no_pass_through");');
+      }
+      // A family without a count source option is counted among the
+      // arguments that are left
+      for (const read of reads.filter(read => read.countId === null)) {
+        const flagName = read.baseLabel.replace(/^-+/, "");
+        lines.push(`my $${argsCountId(read)} = grep { /^--?\\Q${flagName}\\E[0-9]+$/ } @ARGV;`);
+      }
       const fanoutSpecs = reads.map(read => {
         const flagName = read.baseLabel.replace(/^-+/, "");
         const suffix = getoptLongSuffix(argumentType(read.option));
-        return `(map { my $i = $_; ("${flagName}$i${suffix}" => \\$${read.id}[$i]) } 0 .. $${read.countId} - 1)`;
+        return `(map { my $i = $_; ("${flagName}$i${suffix}" => \\$${read.id}[$i]) } 0 .. $${read.countId ?? argsCountId(read)} - 1)`;
       });
       lines.push(`GetOptions(${fanoutSpecs.join(", ")})`);
       lines.push('    or die "Error in command line arguments\\n";');
     }
   }
-
-  lines.push(...todoLines);
 
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
@@ -319,12 +341,12 @@ function generateRTemplate(process: ProgramProcess): string {
 
   const lines: string[] = ["args <- commandArgs(trailingOnly = TRUE)"];
 
-  // A fanout family always has a count source among the other options,
-  // so there is a parser whenever there is a family to read. Its values
-  // are kept by label, and taken in order once the count is known.
-  const { reads, todoLines } = fanoutReads(process, "#");
+  // The values of a fanout family are kept by label, and taken in order
+  // once the count is known: that of its count source option, or, without
+  // one, the number of values kept.
+  const reads = fanoutReads(process);
 
-  if (optionsWithIds.length > 0) {
+  if (optionsWithIds.length > 0 || reads.length > 0) {
     lines.push("", "parse_args <- function(args) {");
 
     const defaults = [
@@ -345,11 +367,12 @@ function generateRTemplate(process: ProgramProcess): string {
         lines.push("      i <- i + 1");
       }
     });
-    for (const read of reads) {
-      lines.push(`    } else if (startsWith(args[i], "${read.baseLabel}") && grepl("^[0-9]+$", substring(args[i], ${read.baseLabel.length + 1}))) {`);
+    reads.forEach((read, index) => {
+      const branch = optionsWithIds.length + index === 0 ? "if" : "} else if";
+      lines.push(`    ${branch} (startsWith(args[i], "${read.baseLabel}") && grepl("^[0-9]+$", substring(args[i], ${read.baseLabel.length + 1}))) {`);
       lines.push(`      options$${read.id}[[args[i]]] <- args[i + 1]`);
       lines.push("      i <- i + 1");
-    }
+    });
     lines.push("    }", "    i <- i + 1", "  }", "  return(options)", "}");
 
     lines.push("", "options <- parse_args(args)", "");
@@ -357,11 +380,10 @@ function generateRTemplate(process: ProgramProcess): string {
       lines.push(`${id} <- options$${id}`);
     }
     for (const read of reads) {
-      lines.push(`${read.id} <- unlist(lapply(seq_len(as.integer(${read.countId})) - 1, function(k) options$${read.id}[[paste0("${read.baseLabel}", k)]]))`);
+      const count = read.countId === null ? `length(options$${read.id})` : `as.integer(${read.countId})`;
+      lines.push(`${read.id} <- unlist(lapply(seq_len(${count}) - 1, function(k) options$${read.id}[[paste0("${read.baseLabel}", k)]]))`);
     }
   }
-
-  lines.push(...todoLines);
 
   lines.push("", `# ${TEMPLATE_MARKER}`);
 
@@ -375,11 +397,11 @@ function generateGroovyTemplate(process: ProgramProcess): string {
 
   const lines: string[] = [];
 
-  // As in R: a parser whenever there is a family to read, whose values
-  // are kept by label and taken in order once the count is known.
-  const { reads, todoLines } = fanoutReads(process, "//");
+  // As in R: the values of a fanout family are kept by label and taken in
+  // order once the count is known.
+  const reads = fanoutReads(process);
 
-  if (optionsWithIds.length > 0) {
+  if (optionsWithIds.length > 0 || reads.length > 0) {
     lines.push("def parseArgs(args) {");
 
     const defaults = [
@@ -399,11 +421,12 @@ function generateGroovyTemplate(process: ProgramProcess): string {
         lines.push("            i++");
       }
     });
-    for (const read of reads) {
-      lines.push(`        } else if (args[i].startsWith('${read.baseLabel}') && args[i].substring(${read.baseLabel.length}).isInteger() && i + 1 < args.size()) {`);
+    reads.forEach((read, index) => {
+      const branch = optionsWithIds.length + index === 0 ? "if" : "} else if";
+      lines.push(`        ${branch} (args[i].startsWith('${read.baseLabel}') && args[i].substring(${read.baseLabel.length}).isInteger() && i + 1 < args.size()) {`);
       lines.push(`            options.${read.id}[args[i]] = args[i + 1]`);
       lines.push("            i++");
-    }
+    });
     lines.push("        }", "        i++", "    }", "", "    return options", "}");
 
     lines.push("", "def options = parseArgs(this.args)", "");
@@ -411,11 +434,10 @@ function generateGroovyTemplate(process: ProgramProcess): string {
       lines.push(`def ${id} = options.${id}`);
     }
     for (const read of reads) {
-      lines.push(`def ${read.id} = (0..<(${read.countId} as String).toInteger()).collect { options.${read.id}['${read.baseLabel}' + it] }`);
+      const count = read.countId === null ? `options.${read.id}.size()` : `(${read.countId} as String).toInteger()`;
+      lines.push(`def ${read.id} = (0..<${count}).collect { options.${read.id}['${read.baseLabel}' + it] }`);
     }
   }
-
-  lines.push(...todoLines);
 
   lines.push("", `// ${TEMPLATE_MARKER}`);
 
