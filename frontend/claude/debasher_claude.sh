@@ -37,6 +37,7 @@ usage()
 {
     echo "debasher_claude            --home-dir <string> [--url <string>]"
     echo "                           [--mode <string>] [--prompt <string>]"
+    echo "                           [--theme <string>]"
     echo "                           [--dry-run] [--help] [-- <claude options>]"
     echo ""
     echo "--home-dir <string>        Home directory of the program, where the web"
@@ -52,6 +53,9 @@ usage()
     echo "                           be called later as /debasher:<mode>"
     echo "--prompt <string>          First message of the session, given to the"
     echo "                           skill of the mode when there is one"
+    echo "--theme <string>           Color theme of Claude Code for this session"
+    echo "                           (light, dark, ...), without changing the one"
+    echo "                           of the user's settings"
     echo "--dry-run                  Print the command that starts Claude Code"
     echo "                           instead of running it"
     echo "--help                     Display this help and exit"
@@ -67,6 +71,7 @@ read_pars()
     url="${DEFAULT_URL}"
     mode=""
     prompt=""
+    theme=""
     dry_run=0
     claude_args=()
     while [ $# -ne 0 ]; do
@@ -95,6 +100,11 @@ read_pars()
                             prompt=$1
                         fi
                         ;;
+            "--theme") shift
+                       if [ $# -ne 0 ]; then
+                           theme=$1
+                       fi
+                       ;;
             "--dry-run") dry_run=1
                          ;;
             "--") shift
@@ -180,6 +190,17 @@ mcp_config="{\"mcpServers\":{\"debasher\":{\"command\":$(json_string "${debasher
 if ! settings=$("${debasher_bindir}/debasher_mcp" --claude-settings); then
     echo "Error: debasher_mcp could not give the settings of Claude Code" >&2
     exit 1
+fi
+
+# A theme given is one more setting of the session, which overrides the
+# user's own for this session only.
+if [ -n "${theme}" ]; then
+    rest=${settings#\{}
+    case "${rest}" in
+        "}"*) separator="" ;;
+        *) separator="," ;;
+    esac
+    settings="{\"theme\":$(json_string "${theme}")${separator}${rest}"
 fi
 
 system_prompt="You work on the DeBasher program whose home directory is ${home_dir}, the current directory: give it as home_dir to the tools of the debasher MCP server, which talk to the backend of the web UI at ${url}. The user may have the program open in the editor of the web UI, and you may be running in the terminal panel at the bottom of that editor. Your tools see the program only as saved: when the user names something that you do not find, ask them to save it. The editor loads what your tools save on its own, unless its tab holds unsaved changes: then it offers to load your save or to save its own changes over it. Reloading or closing that tab, Close in the toolbar of the editor, or stopping debasher_webui ends a session that runs in the editor (the conversation is kept, and starting a session from Claude Code... in the Help menu with Continue the last conversation takes it up): say so before suggesting any of them."

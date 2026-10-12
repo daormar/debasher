@@ -18,6 +18,16 @@ const MIN_HEIGHT = 120;
 // What the panel leaves above it, for the toolbar and some canvas.
 const ROOM_ABOVE = 200;
 
+// Light, as the canvas above it, which a dark terminal stood out from too
+// much. The backend starts Claude Code with its light theme to match.
+const TERMINAL_THEME = {
+  background: "#ffffff",
+  foreground: "#1e1e1e",
+  cursor: "#1e1e1e",
+  cursorAccent: "#ffffff",
+  selectionBackground: "#add6ff",
+};
+
 const encoder = new TextEncoder();
 
 export default function ClaudeTerminalPanel() {
@@ -63,7 +73,7 @@ export default function ClaudeTerminalPanel() {
         height,
         flexShrink: 0,
         borderTop: "1px solid #ccc",
-        background: "#1e1e1e",
+        background: TERMINAL_THEME.background,
       }}
     >
 
@@ -137,6 +147,7 @@ function TerminalView() {
       // the generic `monospace` to no font.
       fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace',
       fontSize: 13,
+      theme: TERMINAL_THEME,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

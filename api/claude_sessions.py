@@ -38,6 +38,10 @@ DRAIN_SECONDS = 0.5
 # The terminal that the terminal panel emulates (xterm.js).
 TERM = "xterm-256color"
 
+# The color theme of Claude Code in the page, for the light terminal of the
+# panel; the user's own setting, for their own terminal, stays as it is.
+THEME = "light"
+
 # Closing codes of the WebSocket: a ticket that is unknown or expired, and a
 # session that another tab took over.
 CLOSE_BAD_TICKET = 1008
@@ -63,9 +67,10 @@ _ACQUIRE_TERMINAL = (
 
 
 def claude_command(launcher: str, home_dir: str, url: str, start: Start) -> list[str]:
-    """The command of a session: debasher_claude on the program, and nothing
-    that the page could choose but the way the conversation starts."""
-    return [launcher, "--home-dir", home_dir, "--url", url, *START_ARGS[start]]
+    """The command of a session: debasher_claude on the program, in the theme
+    of the panel, and nothing that the page could choose but the way the
+    conversation starts."""
+    return [launcher, "--home-dir", home_dir, "--url", url, "--theme", THEME, *START_ARGS[start]]
 
 
 def session_env(base: dict[str, str]) -> dict[str, str]:

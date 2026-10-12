@@ -593,6 +593,8 @@ terminal of your own", and shows only what that way needs. With "In
 this editor", **Open in the page** runs the command in a terminal at
 the bottom of the editor, with the conversation chosen above; the
 server gives Claude Code its own address, so there is no URL to set.
+The terminal is light, like the canvas, and Claude Code runs there with
+its light theme, whatever theme you use in a terminal of your own.
 Claude Code is the same, with the same skills and permissions; what
 changes is where it runs:
 

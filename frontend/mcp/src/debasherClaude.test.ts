@@ -101,6 +101,14 @@ describe("debasher_claude", () => {
     expect(claudeArgs().at(-1)).toBe("what is a FIFO?");
   });
 
+  it("gives the session the theme given, besides the permissions, and no theme without one", () => {
+    expect(launch(["--home-dir", home, "--theme", "light"]).status).toBe(0);
+    expect(JSON.parse(option(claudeArgs(), "--settings"))).toEqual({ theme: "light", ...JSON.parse(SETTINGS) });
+
+    expect(launch(["--home-dir", home]).status).toBe(0);
+    expect(JSON.parse(option(claudeArgs(), "--settings"))).not.toHaveProperty("theme");
+  });
+
   it("talks to the backend at the default URL of the web UI when none is given", () => {
     launch(["--home-dir", home]);
 

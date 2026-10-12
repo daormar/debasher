@@ -201,7 +201,7 @@ async def _gone(pid: int) -> bool:
 
 
 def test_the_command_is_debasher_claude_on_the_program_and_how_it_starts():
-    base = ["claude_launcher", "--home-dir", "/p", "--url", "http://127.0.0.1:8000"]
+    base = ["claude_launcher", "--home-dir", "/p", "--url", "http://127.0.0.1:8000", "--theme", "light"]
 
     assert claude_command("claude_launcher", "/p", "http://127.0.0.1:8000", "new") == base
     assert claude_command("claude_launcher", "/p", "http://127.0.0.1:8000", "continue") == [
@@ -223,7 +223,8 @@ def test_a_ticket_opens_a_session_of_debasher_claude_in_a_terminal(fake):
         peer, task = await _open(fake.home, cols=100, rows=40)
 
         assert fake.args() == [
-            "--home-dir", os.path.realpath(fake.home), "--url", "http://127.0.0.1:8000"
+            "--home-dir", os.path.realpath(fake.home), "--url", "http://127.0.0.1:8000",
+            "--theme", "light",
         ]
         # The terminal is the controlling one, so that the hangup of a backend
         # that dies reaches the process.

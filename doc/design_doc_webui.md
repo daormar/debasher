@@ -4277,6 +4277,7 @@ dialog shows for each answer (`components/HelpMenu.test.tsx`).
 
 ```
 debasher_claude --home-dir <dir> [--url <url>] [--mode <mode>] [--prompt <text>]
+                [--theme <theme>]
 ```
 
 The launcher of Claude Code checks that a program is saved in the home
@@ -4288,7 +4289,9 @@ directory, and starts Claude Code there with:
   the user registered with Claude Code gives way to it for the session, and
   the user's other servers stay;
 - the permissions of the MCP tools (`--settings`, see "The permissions of the
-  MCP tools");
+  MCP tools"), and, with them, the color theme given with `--theme`, if any,
+  which overrides the user's own for the session alone and changes none of
+  the user's settings;
 - the plugin of DeBasher, from the package data (`--plugin-dir`), whose files
   Claude Code is allowed to read, and only to read, without asking
   (`--allowedTools` with a rule on Read, on the real path of the plugin, since
@@ -4697,14 +4700,17 @@ one, or one that Claude Code lists for the user to pick, as the selector of the
 "Claude Code" dialog offers. The backend builds the command itself:
 
 ```
-debasher_claude --home-dir <home dir> --url <backend URL> [-- --continue | -- --resume]
+debasher_claude --home-dir <home dir> --url <backend URL> --theme light
+                [-- --continue | -- --resume]
 ```
 
 with the URL of the backend that `GET /api/webui/info` gives (see "Claude Code
-on a program"). Nothing that the page sends becomes a command, an option or a
-variable of the session: the page chooses the program, and one of the three ways
-of starting the conversation. A shell, where the user would type any command, is
-not offered.
+on a program"), and the light theme of Claude Code, which matches the light
+terminal of the panel (see "The terminal panel"), whatever theme the user's own
+settings give Claude Code elsewhere. Nothing that the page sends becomes a
+command, an option or a variable of the session: the page chooses the program,
+and one of the three ways of starting the conversation. A shell, where the user
+would type any command, is not offered.
 
 A session lives as long as the WebSocket that carries its terminal (see "Opening
 a session in the page"). Each of these ends it: a tab that is reloaded or
@@ -4822,21 +4828,22 @@ outlives its backend.
 The terminal panel lies at the bottom of the editor, across its whole width,
 below the canvas and the inspector, so that Claude Code has the columns it needs
 and the canvas stays in sight while Claude Code changes the program. It shows
-the terminal with xterm.js, in a font named before the generic `monospace`:
-xterm.js measures its characters in that font, and draws nothing where the
-browser maps the generic family to no font. The user drags its upper edge to
-change its height, which the tab keeps in its memory only, and can fold it away
-with "Hide" while the session goes on: a hidden panel leaves a mini window in
-the bottom left corner of the canvas, beside its controls, with the state of the
-session and "Show", which brings the panel back. Where `GET /api/webui/info`
-says that the backend offers a session in the page (it does not in the cases
-where the request for one gets 503, see "Opening a session in the page"), the
-"Claude Code" dialog asks where Claude Code runs, with the two radio buttons of
-"Where", "In this editor" and "In a terminal of your own", below the selector of
-the conversation, which applies to both ways. Below them, the dialog shows what
-the way chosen needs. For the first, "Open in the page" opens the terminal panel
-and starts Claude Code the way the selector of the conversation shows; while the
-tab has a session, the button reads "Show it in the page" and shows the panel
+the terminal with xterm.js, light like the canvas above it (a white background
+and dark text), in a font named before the generic `monospace`: xterm.js
+measures its characters in that font, and draws nothing where the browser maps
+the generic family to no font. The user drags its upper edge to change its
+height, which the tab keeps in its memory only, and can fold it away with "Hide"
+while the session goes on: a hidden panel leaves a mini window in the bottom
+left corner of the canvas, beside its controls, with the state of the session
+and "Show", which brings the panel back. Where `GET /api/webui/info` says that
+the backend offers a session in the page (it does not in the cases where the
+request for one gets 503, see "Opening a session in the page"), the "Claude
+Code" dialog asks where Claude Code runs, with the two radio buttons of "Where",
+"In this editor" and "In a terminal of your own", below the selector of the
+conversation, which applies to both ways. Below them, the dialog shows what the
+way chosen needs. For the first, "Open in the page" opens the terminal panel and
+starts Claude Code the way the selector of the conversation shows; while the tab
+has a session, the button reads "Show it in the page" and shows the panel
 instead. For the second, the dialog shows the URL of the backend and the command
 to copy. The first way is chosen when the dialog opens, as the more direct one.
 The command that installs Claude Code, where the backend gives one, is shown

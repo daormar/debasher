@@ -540,7 +540,8 @@ saves. It uses your own installation and account of Claude Code.
 ::
 
     $ debasher_claude --home-dir <string> [--url <string>]
-                      [--mode <string>] [--prompt <string>] [--dry-run]
+                      [--mode <string>] [--prompt <string>]
+                      [--theme <string>] [--dry-run]
                       [-- <claude options>]
 
 * ``--home-dir <string>``: home directory of the program.
@@ -551,6 +552,9 @@ saves. It uses your own installation and account of Claude Code.
   later in the same session.
 * ``--prompt <string>``: the first message of the session, given to the
   skill of the mode when there is one.
+* ``--theme <string>``: the color theme of Claude Code for this
+  session (``light``, ``dark``, ...), without changing the one of your
+  settings.
 * ``--dry-run``: prints the command that starts Claude Code instead of
   running it.
 
