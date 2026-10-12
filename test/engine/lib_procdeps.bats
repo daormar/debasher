@@ -7,6 +7,8 @@
 # out from the options of the processes, so setup() sources the whole
 # engine from ENGINE_BUILDDIR.
 
+load fifo_registries
+
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
     debasher_pkglibdir="${ENGINE_BUILDDIR}"
@@ -304,4 +306,83 @@ setup() {
     run debasher::_get_procdeps_for_process "" "cons"
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"cannot both be satisfied"* ]]
+}
+
+# --- the fifos of the tasks of an array ----------------------------------
+
+@test "debasher::_describe_task_indices names one task, and joins consecutive ones in increasing order" {
+    run debasher::_describe_task_indices 3
+    [ "${output}" = "task 3" ]
+
+    run debasher::_describe_task_indices 5 0 2 1
+    [ "${output}" = "tasks 0-2, 5" ]
+
+    run debasher::_describe_task_indices 4 7
+    [ "${output}" = "tasks 4, 7" ]
+}
+
+@test "debasher::_check_fifos_read_alike accepts an array whose fifos are all read inside the program" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    local idx
+    for idx in 0 1 2; do
+        add_fifo "p/p_${idx}" "$(end_of p "${idx}")" "$(end_of c "${idx}")" "" -outf
+    done
+
+    run debasher::_check_fifos_read_alike
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_fifos_read_alike accepts an array whose fifos all have an external end" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    local idx
+    for idx in 0 1 2; do
+        add_fifo "p/p_${idx}" "$(end_of p "${idx}")" outside "" -outf
+    done
+
+    run debasher::_check_fifos_read_alike
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_fifos_read_alike refuses an array whose fifos are read inside the program for some tasks only" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    add_fifo p/p_0 "$(end_of p 0)" "$(end_of c 0)" "" -outf
+    add_fifo p/p_1 "$(end_of p 1)" "$(end_of c 1)" "" -outf
+    add_fifo p/p_2 "$(end_of p 2)" outside "" -outf
+    add_fifo p/p_3 "$(end_of p 3)" "$(end_of c 2)" "" -outf
+
+    run debasher::_check_fifos_read_alike
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the fifos that process p defines through -outf are read inside the program for tasks 0-1, 3 but not for task 2, whose owner would block waiting for a reader"* ]]
+    [[ "${output}" == *"define_opt_from_proc_out"* ]]
+}
+
+@test "debasher::_check_fifos_read_alike tells the fifos of an array apart by the option that defines them" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    local idx
+    for idx in 0 1; do
+        add_fifo "p/p_data_${idx}" "$(end_of p "${idx}")" "$(end_of c "${idx}")" "" -outdata
+        add_fifo "p/p_log_${idx}" "$(end_of p "${idx}")" outside "" -outlog
+    done
+
+    run debasher::_check_fifos_read_alike
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_fifos_read_alike leaves out the fifos with a tag" {
+    set_up_registries
+    add_process p fbpprocess 2
+    add_process c fbpprocess
+    add_fifo p/p_ctl_0 "$(end_of p 0)" "$(end_of c)" "" -in
+    add_fifo p/p_ctl_1 "$(end_of p 1)" outside external -in
+
+    run debasher::_check_fifos_read_alike
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
 }

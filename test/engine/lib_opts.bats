@@ -9,6 +9,8 @@
 # shown, the owner of each fifo, and the number of tasks of another
 # process.
 
+load fifo_registries
+
 setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
     debasher_pkglibdir="${ENGINE_BUILDDIR}"
@@ -528,4 +530,56 @@ record_definition() {
     run debasher::_define_opts_for_program_processes ""
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"depends on itself (cyclegena -> cyclegenb -> cyclegena)"* || "${output}" == *"depends on itself (cyclegenb -> cyclegena -> cyclegenb)"* ]]
+}
+
+# --- fifo tags -----------------------------------------------------------
+
+@test "debasher::define_fifo_opt records the tag of the fifo" {
+    set_up_registries
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    tagproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-trigger" "tagproc_trigger" optlist --control
+        define_fifo_opt "-ext" "tagproc_ext" optlist --external
+        define_fifo_opt "-out" "tagproc_out" optlist
+    }
+    tagproc_define_opts
+
+    [ "${DEBASHER_FIFO_KINDS["tagproc/tagproc_trigger"]}" = "control" ]
+    [ "${DEBASHER_FIFO_KINDS["tagproc/tagproc_ext"]}" = "external" ]
+    [ -z "${DEBASHER_FIFO_KINDS["tagproc/tagproc_out"]+x}" ]
+    [ "${DEBASHER_FIFO_OWNER_OPTS["tagproc/tagproc_trigger"]}" = "-trigger" ]
+    [ "${DEBASHER_FIFO_OWNER_OPTS["tagproc/tagproc_out"]}" = "-out" ]
+}
+
+@test "debasher::define_fifo_opt refuses both tags on one fifo, and an unknown flag" {
+    set_up_registries
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    bothproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-x" "bothproc_x" optlist --control --external
+    }
+    run bothproc_define_opts
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, a fifo takes at most one of --control and --external"* ]]
+
+    unknownproc_define_opts() {
+        local optlist=""
+        define_fifo_opt "-x" "unknownproc_x" optlist --bogus
+    }
+    run unknownproc_define_opts
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"define_fifo_opt: Error, unknown flag --bogus"* ]]
+}
+
+# --- debasher::define_opt_from_proc_out ----------------------------------
+
+@test "debasher::define_opt_from_proc_out refuses to connect to an option that is not an output" {
+    run debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-to_loop" optlist
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"connected process option should start with -out or --out"* ]]
+
+    local optlist=""
+    debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-outloop" optlist
+    [ -n "${optlist}" ]
 }
