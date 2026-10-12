@@ -289,6 +289,19 @@ def test_a_sequential_process_with_an_alias_gets_no_code():
     assert 'add_debasher_seq_process "aliased" "" "alias=target"' in script
 
 
+def test_the_scheduler_of_the_steps_of_a_sequential_process_is_written_in_sched():
+    step = SeqProcess(
+        id="s",
+        name="heavy",
+        code="heavy()\n{\n    :\n}",
+        computationalSpecs=SeqComputationalSpecs(cpus=4),
+        additionalSpecs=SeqAdditionalSpecs(sched="SLURM"),
+    )
+    script = generate_script(_seq_program([step]), skip_redundant_check=True)
+
+    assert 'add_debasher_seq_process "heavy" "cpus=4" "sched=SLURM"' in script
+
+
 def test_a_name_shared_by_a_process_and_a_sequential_process_is_refused():
     clash = SeqProcess(id="c", name="count", code="count()\n{\n    :\n}")
     with pytest.raises(ValueError, match="has the name of a process"):

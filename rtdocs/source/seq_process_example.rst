@@ -8,9 +8,10 @@ Sequential Processes Example
     # launches. The process "calculate" runs two steps, one after another,
     # from its own implementation. The first one, "double", is Python code,
     # which only becomes a function that a step can run because the program
-    # declares it with add_debasher_seq_process; its computational
-    # specifications are asked from Slurm when the program runs under it.
-    # The second one, "add_one", is an alias of "increment", a sequential
+    # declares it with add_debasher_seq_process. Its steps run in the shell
+    # of the task, so that the example runs on any machine; declared with
+    # "sched=SLURM", they would go to Slurm through srun, which would get its
+    # computational specifications. The second one, "add_one", is an alias of "increment", a sequential
     # process written in Bash. The process checks the result itself, so that
     # a step that misbehaves makes it fail.
 

@@ -220,7 +220,7 @@ worker()
             seq_execute_slurm transformation_a "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         else
-            seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
+            seq_execute transformation_b "${value}" "${outd}/transformation_result.txt"
             value=$(cat "${outd}/transformation_result.txt")
         fi
 
@@ -249,7 +249,7 @@ debasher_cycle_dyn_sched_program()
     add_debasher_process "worker" "cpus=1 mem=32 time=00:10:00"
 
     # transformation_b is Python code, which the worker runs as a step:
-    # declaring it as a sequential process turns it into a function, and
-    # gives the resources that its step asks Slurm for
-    add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00"
+    # declaring it as a sequential process turns it into a function, sends
+    # its steps to Slurm, and gives the resources that they ask Slurm for
+    add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00" "sched=SLURM"
 }

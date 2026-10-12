@@ -198,3 +198,85 @@ EOS
     [ "$status" -eq 0 ]
     [ "$output" = "SCRIPT hello ${BATS_TEST_TMPDIR}/out/result.txt" ]
 }
+
+# Runs a step of the sequential process "step", declared with the
+# additional specifications $2, with the call $1 (seq_execute or
+# seq_execute_slurm), from a run on the Slurm scheduler, with an srun
+# that records its arguments and runs the script. Prints "srun <args>"
+# when the step went through srun, with the script replaced by SCRIPT,
+# or "shell" when it ran in the shell of the task, and then the exit
+# code of the call
+run_step_of_seq_process() {
+    local outd="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outd}/__exec__"
+    cat > "${BATS_TEST_TMPDIR}/srun" <<EOS
+#!${BASH}
+echo "\$*" > "${BATS_TEST_TMPDIR}/srun_args"
+while [[ "\$1" != */__exec__/* ]]; do shift; done
+exec "\$@"
+EOS
+    chmod +x "${BATS_TEST_TMPDIR}/srun"
+    env -i PATH="/usr/bin:/bin" HOME=/tmp ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" \
+        OUTD="${outd}" SRUN_STUB="${BATS_TEST_TMPDIR}/srun" CALL="$1" ADD_SPECS="$2" \
+        "${BASH}" -c '
+            debasher_pkglibdir="${ENGINE_BUILDDIR}"
+            CAT="$(command -v cat)"
+            MKTEMP="$(command -v mktemp)"
+            RM="$(command -v rm)"
+            DIRNAME="$(command -v dirname)"
+            SRUN="${SRUN_STUB}"
+            source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+            DEBASHER_SCHEDULER="${DEBASHER_SLURM_SCHEDULER}"
+            step() { echo "step $1" > "$2"; }
+            DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK=("${OUTD}/mod.sh")
+            add_debasher_seq_process step "cpus=2" "${ADD_SPECS}"
+            DEBASHER_PROGRAM_OUTDIR="${OUTD}"
+            debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${OUTD}")"
+            "${CALL}" step hello "${OUTD}/result.txt"
+            echo "rc=$?"
+        '
+    if [ -f "${BATS_TEST_TMPDIR}/srun_args" ]; then
+        echo "srun $(sed "s|${outd}/__exec__/[^ ]*|SCRIPT|" "${BATS_TEST_TMPDIR}/srun_args")"
+    else
+        echo "shell"
+    fi
+}
+
+@test "seq_execute runs the step of a sequential process without sched in the shell of the task, under the Slurm scheduler too" {
+    run run_step_of_seq_process seq_execute ""
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf 'rc=0\nshell')" ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/out/result.txt")" = "step hello" ]
+}
+
+@test "seq_execute runs the step of a sequential process with sched=BUILTIN in the shell of the task" {
+    run run_step_of_seq_process seq_execute "sched=BUILTIN"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf 'rc=0\nshell')" ]
+}
+
+@test "seq_execute sends the step of a sequential process with sched=SLURM through srun, with its computational specifications" {
+    run run_step_of_seq_process seq_execute "sched=SLURM"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf 'rc=0\nsrun --cpus-per-task=2 SCRIPT hello %s' "${BATS_TEST_TMPDIR}/out/result.txt")" ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/out/result.txt")" = "step hello" ]
+}
+
+@test "seq_execute_slurm sends the step of a sequential process without sched through srun" {
+    run run_step_of_seq_process seq_execute_slurm ""
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(printf 'rc=0\nsrun --cpus-per-task=2 SCRIPT hello %s' "${BATS_TEST_TMPDIR}/out/result.txt")" ]
+}
+
+@test "seq_execute_slurm refuses a sequential process with sched=BUILTIN, without running the step" {
+    run run_step_of_seq_process seq_execute_slurm "sched=BUILTIN"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"sched=BUILTIN"*"rc=1"*"shell" ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/out/result.txt" ]
+}
+
+@test "seq_execute runs a function that is not a sequential process in the shell of the task, under the Slurm scheduler too" {
+    run run_with_engine 'DEBASHER_SCHEDULER="${DEBASHER_SLURM_SCHEDULER}"; SRUN=false; f() { echo "ran $1"; }; seq_execute f here'
+    [ "$status" -eq 0 ]
+    [ "$output" = "ran here" ]
+}

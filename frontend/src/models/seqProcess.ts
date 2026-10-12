@@ -1,8 +1,8 @@
 import type { AliasOptMapping, GroupSource, ProcessLanguage } from "./process";
 
 // The computational specifications that a sequential process may have,
-// each optional: under Slurm they become options of srun when a task runs
-// it as a step, and the built-in scheduler uses none of them.
+// each optional: they become options of srun when a task runs it as a step
+// on Slurm, and the built-in scheduler uses none of them.
 export interface SeqComputationalSpecs {
 
   cpus?: number;
@@ -13,6 +13,10 @@ export interface SeqComputationalSpecs {
 
 }
 
+// The scheduler of the steps of a sequential process: its steps run in the
+// shell of the task unless it names SLURM, which sends them through srun.
+export type SeqProcessScheduler = "BUILTIN" | "SLURM";
+
 // The additional specifications that the engine accepts on a sequential
 // process: "processdeps" and "force" belong to a scheduled process only.
 export interface SeqAdditionalSpecs {
@@ -22,6 +26,11 @@ export interface SeqAdditionalSpecs {
   aliasOptMap?: AliasOptMapping[];
 
   externalAlias?: string;
+
+  // "sched", the scheduler of its steps; none (or null, which a named edit
+  // gives to unset it) means the built-in one, whatever the scheduler of
+  // the run.
+  sched?: SeqProcessScheduler | null;
 
 }
 

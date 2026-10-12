@@ -305,6 +305,19 @@ ensure_scheduler_supports_fifos()
 }
 
 ########
+# A step of a sequential process with sched=SLURM runs through srun: a
+# run whose srun is missing is refused before any task runs, instead of
+# failing at the first such step.
+ensure_srun_for_slurm_seq_processes()
+{
+    local seqprocessname=$(debasher::_get_slurm_seq_process)
+    if [ -n "${seqprocessname}" ] && ! command -v "${SRUN}" >/dev/null 2>&1; then
+        echo "Error: sequential process ${seqprocessname} has sched=${DEBASHER_SLURM_SCHEDULER}, but ${SRUN} is not found on this machine; run the program where Slurm is installed, or leave sched unset" >&2
+        return 1
+    fi
+}
+
+########
 ensure_program_not_being_executed()
 {
     if there_are_in_progress_processes "${outd}"; then
@@ -1390,6 +1403,8 @@ check_process_opts "${command_line}" "${outd}" "${program_opts_file}" \
                    "${program_opts_exh_file}" "${program_fifos_file}" || exit 1
 
 ensure_scheduler_supports_fifos || exit 1
+
+ensure_srun_for_slurm_seq_processes || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
 gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1

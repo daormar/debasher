@@ -1661,7 +1661,8 @@ debasher::_check_process_explains_opts()
 #      process may also carry an "alias_opt_map" attribute
 #      ("OLD:NEW[,OLD:NEW...]") to rename its own option names into the
 #      ones its aliased implementation expects (e.g.
-#      "alias_opt_map=-l-a:-l") -- invalid without "alias"/"ext_alias".
+#      "alias_opt_map=-l-a:-l"), invalid without "alias"/"ext_alias".
+#      "sched", which only a sequential process has, is refused.
 #
 # Examples
 #
@@ -1678,6 +1679,13 @@ debasher::add_debasher_process()
     local processname=$1
     local process_computational_specs=$2
     local process_additional_specs=$3
+
+    # The scheduler of a process is that of the run: only a sequential
+    # process names one of its own
+    if [ "$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "sched")" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        echo "Error: process ${processname} cannot have the additional specification sched, which only a sequential process has. Aborting execution..." >&2
+        exit 1
+    fi
 
     # Check the name and build the process function, aborting execution
     # if necessary
@@ -1712,7 +1720,8 @@ debasher::add_debasher_process()
 #      process may also carry an "alias_opt_map" attribute
 #      ("OLD:NEW[,OLD:NEW...]") to rename its own option names into the
 #      ones its aliased implementation expects (e.g.
-#      "alias_opt_map=-l-a:-l") -- invalid without "alias"/"ext_alias".
+#      "alias_opt_map=-l-a:-l"), invalid without "alias"/"ext_alias".
+#      "sched", which only a sequential process has, is refused.
 #
 # Examples
 #
@@ -1732,7 +1741,7 @@ add_debasher_process() { debasher::add_debasher_process "$@"; }
 # carry an attribute that only a scheduled process can use: the
 # additional specifications "processdeps" and "force", the computational
 # specification "throttle", and a list of attempts in "mem" or "time",
-# since a step runs once.
+# since a step runs once; or if its "sched" names no scheduler.
 debasher::_check_seq_process_specs()
 {
     local processname=$1
@@ -1760,6 +1769,16 @@ debasher::_check_seq_process_specs()
             return 1
         fi
     done
+
+    value=$(debasher::extract_attr_from_process_additional_specs "${process_additional_specs}" "sched")
+    case "${value}" in
+        "${DEBASHER_ATTR_NOT_FOUND}"|"${DEBASHER_BUILTIN_SCHEDULER}"|"${DEBASHER_SLURM_SCHEDULER}")
+            ;;
+        *)
+            echo "Error: sequential process ${processname} gives the scheduler ${value} in sched, which is not ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}. Aborting execution..." >&2
+            return 1
+            ;;
+    esac
 }
 
 ########
@@ -1770,20 +1789,23 @@ debasher::_check_seq_process_specs()
 # Its name and its process function are checked and built as those of
 # a process are, so it can be a heredoc process or an alias, and its
 # name cannot be that of a process or of another sequential process.
-# Every computational specification is optional, and is only used when
-# the step runs under Slurm, as options of srun. A resident program
-# cannot have sequential processes.
+# Its steps run in the shell of the task, whatever the scheduler of the
+# run, unless "sched=SLURM" sends them to Slurm through srun. Every
+# computational specification is optional, and is only used when the
+# step runs on Slurm, as options of srun. A resident program cannot have
+# sequential processes.
 #
 # $1 - Name of the sequential process.
 # $2 - Computational specifications. "throttle" and a list of values in
 #      "mem" or "time" are refused.
 # $3 - Additional specifications: "alias", "ext_alias" and
-#      "alias_opt_map", as for a process. "processdeps" and "force" are
-#      refused.
+#      "alias_opt_map", as for a process, and "sched", the scheduler of
+#      its steps ("BUILTIN", the default, or "SLURM"). "processdeps" and
+#      "force" are refused.
 #
 # Examples
 #
-#    debasher::add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00"
+#    debasher::add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00" "sched=SLURM"
 debasher::add_debasher_seq_process()
 {
     # Initialize variables
@@ -1805,8 +1827,8 @@ debasher::add_debasher_seq_process()
     debasher::_resolve_process "${processname}" "${process_additional_specs}" || exit 1
     DEBASHER_SEQ_PROCESSES["${processname}"]="${DEBASHER_RESOLVED_PROCESS_TYPE}"
 
-    # Store its specification, which seq_execute_slurm reads from the
-    # execution context
+    # Store its specification, which seq_execute and seq_execute_slurm
+    # read from the execution context
     DEBASHER_SEQ_PROCESS_SPEC["${processname}"]=$(debasher::_print_process_entry "${processname}" "${process_computational_specs}" "${process_additional_specs}")
 }
 
@@ -1819,21 +1841,24 @@ debasher::add_debasher_seq_process()
 # a process are, so its code can be a heredoc in Python, R, Perl or
 # Groovy ("<name>_heredoc_py", ...) or an alias, and its name cannot be
 # that of a process or of another sequential process. It needs no
-# methods besides its process function. A resident program cannot have
+# methods besides its process function. Its steps run in the shell of
+# the task, whatever the scheduler of the run, unless "sched=SLURM"
+# sends them to Slurm through srun. A resident program cannot have
 # sequential processes.
 #
 # $1 - Name of the sequential process.
 # $2 - Computational specifications, each optional ("cpus", "mem",
 #      "time", "nodes", "account", "partition"), which become options of
-#      srun when the step runs under Slurm. "throttle" and a list of
-#      values in "mem" or "time" are refused.
+#      srun when the step runs on Slurm. "throttle" and a list of values
+#      in "mem" or "time" are refused.
 # $3 - Additional specifications: "alias", "ext_alias" and
-#      "alias_opt_map", as for a process. "processdeps" and "force" are
-#      refused.
+#      "alias_opt_map", as for a process, and "sched", the scheduler of
+#      its steps ("BUILTIN", the default, or "SLURM"). "processdeps" and
+#      "force" are refused.
 #
 # Examples
 #
-#    add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00"
+#    add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00" "sched=SLURM"
 add_debasher_seq_process() { debasher::add_debasher_seq_process "$@"; }
 
 ########
@@ -1882,6 +1907,20 @@ add_debasher_program() { debasher::add_debasher_program "$@"; }
 debasher::_get_num_processes()
 {
     echo "${#DEBASHER_PROGRAM_PROCESSES[@]}"
+}
+
+########
+# Prints the name of a sequential process of the program that sends its
+# steps to Slurm, with "sched=SLURM", or nothing when there is none.
+debasher::_get_slurm_seq_process()
+{
+    local processname
+    for processname in "${!DEBASHER_SEQ_PROCESSES[@]}"; do
+        if [ "$(debasher::_extract_sched_from_process_spec "${DEBASHER_SEQ_PROCESS_SPEC[${processname}]}")" = "${DEBASHER_SLURM_SCHEDULER}" ]; then
+            echo "${processname}"
+            return 0
+        fi
+    done
 }
 
 ########

@@ -140,9 +140,16 @@ relative to the output directory of the run.
   `mem` and `time`, always given, and `nodes`, `account`, `partition` and
   `throttle`.
 - **additional specification**: an attribute that changes how the engine treats
-  a process: `processdeps`, `force`, `alias`, `ext_alias` and `alias_opt_map`.
+  a process or a sequential process: `processdeps`, `force`, `alias`,
+  `ext_alias` and `alias_opt_map`, and, for a sequential process only, `sched`.
 - **step**: an execution of a function or a command from inside a task, with
   `seq_execute` or `seq_execute_slurm`, which waits for it to end.
+- **scheduler of a step**: where a step runs, named after a scheduler: in the
+  shell of its task (the built-in scheduler) or through `srun` (the Slurm
+  scheduler). It is Slurm for `seq_execute_slurm` (which is refused on a
+  sequential process with `sched=BUILTIN`); for `seq_execute`, it is the
+  one that the `sched` additional specification of the sequential process
+  names, or else the built-in scheduler, whatever the scheduler of the run.
 - **sequential process**: a function with a name and a process
   specification, added with `add_debasher_seq_process`, that the engine never
   schedules: it runs only as a step. It is not a process of the program.
@@ -764,6 +771,8 @@ process can also pass one of its specifications to its tasks as an option
 how the engine treats the process:
 `processdeps` gives its explicit dependencies, `force=yes` marks it to rerun on
 every run, and `alias`, `ext_alias` and `alias_opt_map` are described above.
+`sched`, which only a sequential process has, is described in "Sequential
+processes", and a process that gives it is refused when it is added.
 
 The name, the process function and the aliases are checked when the process is
 added, since an error there leaves the program without a process. The rest of
@@ -831,52 +840,96 @@ that runs it, which includes the other functions of its module that the process
 calls.
 
 The additional specifications `alias`, `ext_alias` and `alias_opt_map` mean what
-they mean for a process. `processdeps` and `force`, which only a scheduled
-process can use, are refused. Every computational specification is optional,
-`cpus`, `mem` and `time` included, since the built-in scheduler uses none of
-them for a step. `throttle` is refused, and so is a list of values in `mem` or
-`time`, since a step runs once and has no further attempts. A resident program
-cannot have sequential processes, as "Defining a node" in
+they mean for a process, and `sched`, which only a sequential process has,
+chooses the scheduler of its steps (see below). `processdeps` and `force`, which
+only a scheduled process can use, are refused. Every computational specification
+is optional, `cpus`, `mem` and `time` included, since the built-in scheduler
+uses none of them for a step. `throttle` is refused, and so is a list of values
+in `mem` or `time`, since a step runs once and has no further attempts. A
+resident program cannot have sequential processes, as "Defining a node" in
 `doc/design_doc_resident.md` explains. These checks run when the sequential
 process is added, so an error stops the preparation of the run.
 
-**Running a step.** `seq_execute` runs the step on the scheduler of the run.
-Under the built-in scheduler it calls the function in the shell of the task,
-and the computational specifications are not used. Under the Slurm scheduler
-it hands the step to `seq_execute_slurm`, which a process function can also
-call directly to send a step to Slurm whatever the scheduler of the run: a
-program with FIFOs runs on the built-in scheduler, and can still send a heavy
-step to the cluster. `seq_execute_slurm` writes a script in `__exec__`, made of
-the execution context and a call to the function with its arguments, runs it
-with `srun`, and removes it once it ends. When the function is a sequential
-process, its computational specifications become options of `srun`, as those
-of a process become options of `sbatch` (see "The Slurm scheduler"). Called
-outside a Slurm job, as by a task of the built-in scheduler, `srun` gets a job
-of its own with those resources. Called from a task of a Slurm job, it runs
-the step as a job step of Slurm inside that job, which takes its resources
-from the allocation of the job, and a step that asks for more than the job has
-fails.
+**Running a step.** `seq_execute` runs the step on the scheduler of the step,
+which is the built-in one, whatever the scheduler of the run, unless the
+sequential process names another (see below). When the scheduler of the step is
+the built-in one, `seq_execute` calls the function in the shell of the task and
+the computational specifications are not used; when the run is on the Slurm
+scheduler, the step then runs inside the allocation of the job of its task. When
+the scheduler of the step is Slurm, `seq_execute` hands the step to
+`seq_execute_slurm`, which a process function can also call directly to send a
+step to Slurm. `seq_execute_slurm` writes a script in `__exec__`, made of the
+execution context and a call to the function with its arguments, runs it with
+`srun`, and removes it once it ends. When the function is a sequential process,
+its computational specifications become options of `srun`, as those of a process
+become options of `sbatch` (see "The Slurm scheduler"). Called outside a Slurm
+job, as by a task of the built-in scheduler, `srun` gets a job of its own with
+those resources. Called from a task of a Slurm job, it runs the step as a job
+step of Slurm inside that job, which takes its resources from the allocation of
+the job, and a step that asks for more than the job has fails.
 
 The function given to `seq_execute` need not be a sequential process: any
-function of the execution context, or any command, can run as a step, with no
-resources asked for. A sequential process is needed only when the code is not
-a Bash function, or when the step asks for resources of its own.
+function of the execution context, or any command, can run as a step, on the
+built-in scheduler and with no resources asked for. A sequential process is
+needed only when the code is not a Bash function, or when the step asks for a
+scheduler or resources of its own.
 
 The arguments reach the function as they are given. The engine builds no option
 list for a step, so a function can take positional arguments or options, and
 `alias_opt_map` renames an argument equal to one of its option names, wherever
-it appears. The step reads the standard input of the call, under both
-schedulers, so a step called inside a loop that reads its standard input has to
-take its own from `/dev/null`: under the built-in scheduler a step that reads
-its standard input consumes what the loop has still to read, and under the Slurm
-scheduler `srun` consumes it whether the step reads it or not. What the step
-prints to its standard output goes to the standard output of `seq_execute`, and
-so to the `.stdout` file of the task unless the caller captures it; what it
-prints to its standard error goes to the log of the task. `seq_execute` returns
-an error when the step fails, or when `srun` cannot launch it. The engine
-records nothing of a step, and the process function that called it decides what
-a failure means. Under the built-in scheduler, a step that calls `exit` ends the
-whole task, as a process function does (see "Executing a task").
+it appears. The step reads the standard input of the call, whatever its
+scheduler, so a step called inside a loop that reads its standard input has to
+take its own from `/dev/null`: in the shell of the task, a step that reads its
+standard input consumes what the loop has still to read, and `srun` consumes it
+whether the step reads it or not. What the step prints to its standard output
+goes to the standard output of `seq_execute`, and so to the `.stdout` file of
+the task unless the caller captures it; what it prints to its standard error
+goes to the log of the task. `seq_execute` returns an error when the step fails,
+or when `srun` cannot launch it. The engine records nothing of a step, and the
+process function that called it decides what a failure means. When the scheduler
+of the step is the built-in one, a step that calls `exit` ends the whole task,
+as a process function does (see "Executing a task").
+
+**Choosing the scheduler of a step.** The additional specification `sched` of a
+sequential process names the scheduler of its steps, `BUILTIN` or `SLURM`, the
+values that `--sched` takes; without it, its steps run on the built-in
+scheduler:
+
+```
+add_debasher_seq_process "transformation_b" "cpus=1 mem=64 time=00:05:00" "sched=SLURM"
+add_debasher_seq_process "format_line" "" "sched=BUILTIN"
+```
+
+With `sched=SLURM`, `seq_execute` sends each step to Slurm as
+`seq_execute_slurm` does, under either scheduler of the run: a program that runs
+on the built-in scheduler, as a program with FIFOs does, sends a heavy step to
+the cluster, and a program that runs on the Slurm scheduler runs the step as a
+job step, with the resources that the sequential process asks for out of the
+allocation of the job. Any other value of `sched` is refused when the sequential
+process is added, and so the preparation of the run stops. When a sequential
+process of the program has `sched=SLURM`, `debasher_exec` also checks, while it
+prepares the run, that `srun` is found on the machine where it runs, and refuses
+to start the run otherwise, so that a missing `srun` is found before any task
+runs and not at the first step that needs it. A process function that calls
+`seq_execute_slurm` directly gets no such check: the engine does not read the
+code of a process function, and a missing `srun` makes its first step fail.
+
+The built-in scheduler is the one that runs anywhere, since every task has a
+shell of its own, which is why it is the scheduler of a step that names none.
+`sched=SLURM` ties the program to a machine with Slurm, as a call to
+`seq_execute_slurm` in the process function does, and the author of a module
+meant to run on other machines leaves it out. The engine does not enforce this:
+where the steps of a module may run is a decision of its author, as the
+`account` and `partition` of a process, which name the resources of one
+cluster, are.
+
+`seq_execute_slurm` sends a step to Slurm whatever the scheduler of the run,
+also for a sequential process without `sched`, since the call names the
+scheduler itself. A call that contradicts the declaration, `seq_execute_slurm`
+on a sequential process with `sched=BUILTIN`, is refused: the step does not run
+and the call returns an error, so that the two places that can name the
+scheduler of a step never disagree without notice. On a sequential process with
+`sched=SLURM`, `seq_execute_slurm` and `seq_execute` do the same.
 
 **Recording finished steps.** When a task fails, or is stopped, halfway through
 its steps, the next run runs all of them again, since the engine records nothing
@@ -1785,12 +1838,14 @@ be launched, and how each of the two schedulers answers.
 
 ## The scheduler abstraction
 
-The scheduler of a run is decided once, while the run is prepared: the one
-named with `--sched` (`BUILTIN` or `SLURM`), or else the Slurm scheduler when
-`sbatch` is found on the machine where `debasher_exec` runs, and the built-in
-scheduler otherwise. The command line file records the scheduler that the run
-used, so that the tools that read the run later take the same one, wherever
-they run. A resident program always runs on the built-in scheduler.
+The scheduler of a run is decided once, while the run is prepared: the one named
+with `--sched` (`BUILTIN` or `SLURM`), or else the Slurm scheduler when `sbatch`
+is found on the machine where `debasher_exec` runs, and the built-in scheduler
+otherwise. The command line file records the scheduler that the run used, so
+that the tools that read the run later take the same one, wherever they run. A
+resident program always runs on the built-in scheduler. A step that a task runs
+can use a scheduler other than that of the run, as "Sequential processes"
+describes.
 
 The rest of the engine does not depend on the scheduler, and asks it for a few
 things only: to write the process script of a process, to launch it, to give the
@@ -2753,7 +2808,13 @@ leaves, by design, to the program or to whoever runs it.
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step
   markers, which the engine never invalidates on its own account (see
-  "Sequential processes").
+  "Sequential processes"). A step of `seq_execute` runs on the built-in
+  scheduler, whatever the scheduler of the run, unless its sequential process
+  has `sched=SLURM`; `seq_execute_slurm` always sends it to Slurm, and is
+  refused without running on a sequential process with `sched=BUILTIN`. A run
+  with a sequential process with `sched=SLURM` does not start unless `srun` is
+  found, but a missing `srun` goes unnoticed until the first step of a process
+  function that calls `seq_execute_slurm` directly.
 - **Mirror taps.** A mirror tap forwards lines of text, and relies on opening
   a FIFO for reading and writing, which POSIX leaves undefined (see "Mirror
   taps").
@@ -2797,8 +2858,15 @@ What is known to be missing from the design, or left open by it:
   that of a file of the engine in the output directory.
 - **Choosing the tests to run.** Giving the test runner the test files, or a
   filter, so that it runs only some of the tests of a program.
-- **Sequential processes in the web UI.** The web UI neither shows the
-  sequential processes of a program nor keeps them when it saves the program.
+- **Choosing the scheduler of the steps at launch.** An option of
+  `debasher_exec` could give the scheduler of the steps whose sequential
+  process has no `sched`, and of the steps of functions that are not sequential
+  processes, in place of the built-in scheduler, so that whoever runs a
+  program, who knows whether there is a cluster, sends those steps to it
+  without editing the module. The `sched` of a sequential process would still
+  take precedence. Such an option would apply to every one of those steps
+  alike, light or heavy, which is why the choice for a single step stays in its
+  declaration.
 - **Gathering the runs of a batch.** `debasher_exec_batch` executes a file of
   `debasher_exec` commands, one per line, each a run with its own output
   directory, at most a given number at the same time, such as one run of the

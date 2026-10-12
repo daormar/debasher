@@ -214,8 +214,8 @@ class ProgramProcess(BaseModel):
 
 class SeqComputationalSpecs(BaseModel):
     # The computational specifications that a sequential process may have,
-    # each optional: under Slurm they become options of srun when a task
-    # runs it as a step, and the built-in scheduler uses none of them (see
+    # each optional: they become options of srun when a task runs it as a
+    # step on Slurm, and the built-in scheduler uses none of them (see
     # "Sequential processes" in doc/design_doc_engine.md).
     cpus: Optional[float] = None
     mem: Optional[float] = None
@@ -229,6 +229,10 @@ class SeqAdditionalSpecs(BaseModel):
     alias: Optional[str] = None
     aliasOptMap: list[AliasOptMapping] = []
     externalAlias: Optional[str] = None
+    # "sched", the scheduler of its steps: none runs them in the shell of
+    # the task, whatever the scheduler of the run, and "SLURM" sends them
+    # through srun.
+    sched: Optional[Literal["BUILTIN", "SLURM"]] = None
 
 
 class SeqProcess(BaseModel):

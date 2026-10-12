@@ -366,6 +366,20 @@ describe("editing a program", () => {
     expect(savedProgram(backend).seqProcesses).toEqual([]);
   });
 
+  it("sets the scheduler of the steps of a sequential process, keeps it through other changes and unsets it with null", async () => {
+    const backend = fakeBackend([program()]);
+
+    await call(backend, "set_seq_processes", { home_dir: HOME, seq_processes: [{ name: "heavy", additionalSpecs: { sched: "SLURM" } }] });
+    expect(savedProgram(backend).seqProcesses[0].additionalSpecs.sched).toBe("SLURM");
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("heavy (bash, steps on Slurm)");
+
+    await call(backend, "set_seq_processes", { home_dir: HOME, seq_processes: [{ name: "heavy", computationalSpecs: { cpus: 4 } }] });
+    expect(savedProgram(backend).seqProcesses[0].additionalSpecs.sched).toBe("SLURM");
+
+    await call(backend, "set_seq_processes", { home_dir: HOME, seq_processes: [{ name: "heavy", additionalSpecs: { sched: null } }] });
+    expect(savedProgram(backend).seqProcesses[0].additionalSpecs.sched).toBeNull();
+  });
+
   it("lays out every process again in layers", async () => {
     const backend = fakeBackend([program({ edges: [{ id: "e1", sourceProcessId: "id-a", sourceOptionId: "a-outf", targetProcessId: "id-b", targetOptionId: "b-in" }] })]);
 

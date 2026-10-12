@@ -300,16 +300,18 @@ one. The same holds for a sequential process that the group brought in.
 Sequential Processes
 ^^^^^^^^^^^^^^^^^^^^
 
-The sequential processes of a general program (see :ref:`steps`) are
-not drawn on the canvas: they have no options and no connections. The
+The sequential processes of a general program (see :ref:`steps`) are not
+drawn on the canvas: they have no options and no connections. The
 "Sequential processes" dialog of the toolbar lists them, adds, renames
-and removes them, and edits the one selected: its name, description,
-computational specifications, alias, and code, in Bash or in another
-language. A new one starts with a Bash function of its name that does
-nothing. Saving the dialog checks the names (not blank, not that of a
-process or of another sequential process, valid as a process name) and
-that the Bash code of each one defines a function of its name, which
-the step runs.
+and removes them, and edits the one selected: its name, description, the
+scheduler of its steps (not set or BUILTIN, in the shell of the task, or
+SLURM, through ``srun``, which the machine of the run then needs; see
+:ref:`seq_processes`), computational specifications, alias, and code, in
+Bash or in another language. A new one starts with a Bash function of
+its name that does nothing. Saving the dialog checks the names (not
+blank, not that of a process or of another sequential process, valid as
+a process name) and that the Bash code of each one defines a function of
+its name, which the step runs.
 
 The web interface does not read the code of the processes: renaming or
 removing a sequential process does not change the calls to

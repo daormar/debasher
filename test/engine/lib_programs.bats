@@ -1226,6 +1226,43 @@ PYEOF
     [[ "${output}" == *"list of values for time"* ]]
 }
 
+@test "add_debasher_seq_process accepts the schedulers BUILTIN and SLURM in sched, and refuses any other" {
+    prepare_add_process
+    builtinstep() { :; }
+    slurmstep() { :; }
+    badstep() { :; }
+
+    add_debasher_seq_process builtinstep "" "sched=BUILTIN"
+    add_debasher_seq_process slurmstep "" "sched=SLURM"
+    [ "$(debasher::_extract_sched_from_process_spec "${DEBASHER_SEQ_PROCESS_SPEC[slurmstep]}")" = "SLURM" ]
+
+    run add_debasher_seq_process badstep "" "sched=PBS"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"gives the scheduler PBS in sched"* ]]
+}
+
+@test "_get_slurm_seq_process names a sequential process with sched=SLURM, or none" {
+    prepare_add_process
+    plainstep() { :; }
+    slurmstep() { :; }
+
+    add_debasher_seq_process plainstep "" "sched=BUILTIN"
+    [ -z "$(debasher::_get_slurm_seq_process)" ]
+
+    add_debasher_seq_process slurmstep "" "sched=SLURM"
+    [ "$(debasher::_get_slurm_seq_process)" = "slurmstep" ]
+}
+
+@test "add_debasher_process refuses sched, which only a sequential process has" {
+    prepare_add_process
+    proc() { :; }
+    proc_explain_opts() { :; }
+
+    run add_debasher_process proc "cpus=1 mem=32 time=00:01:00" "sched=SLURM"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"cannot have the additional specification sched"* ]]
+}
+
 @test "add_debasher_seq_process refuses a name that a process or a sequential process already has" {
     prepare_add_process
     first() { :; }

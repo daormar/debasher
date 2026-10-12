@@ -499,7 +499,10 @@ def _to_seq_process(name: str, chunk: str, script_path: Path, debasher_mod_dir: 
         code=_verbatim_code(script_path, info.code, debasher_mod_dir),
         computationalSpecs=SeqComputationalSpecs(cpus=comp.cpus, mem=comp.mem, time=comp.time),
         additionalSpecs=SeqAdditionalSpecs(
-            alias=add.alias, aliasOptMap=add.aliasOptMap, externalAlias=add.externalAlias
+            alias=add.alias,
+            aliasOptMap=add.aliasOptMap,
+            externalAlias=add.externalAlias,
+            sched=info.additionalSpecs.get("sched"),
         ),
     )
 

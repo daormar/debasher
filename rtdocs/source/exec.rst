@@ -148,6 +148,13 @@ only meet when they run on the same machine, which the jobs of Slurm
 are not bound to, so ``debasher_exec`` refuses such a program and
 suggests the built-in scheduler.
 
+A program on the built-in scheduler can still send some of its steps
+to Slurm, through ``srun``: those of a sequential process declared with
+``sched=SLURM`` (see :ref:`seq_processes`), and those run with
+``seq_execute_slurm``. ``debasher_exec`` refuses to start a program
+with a ``sched=SLURM`` sequential process on a machine where ``srun``
+is not found, whatever ``--sched`` says.
+
 .. _outdstruct:
 
 Structure of the Output Directory

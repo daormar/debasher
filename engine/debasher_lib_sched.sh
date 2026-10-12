@@ -585,17 +585,31 @@ debasher::_write_env_vars_and_funcs()
 }
 
 ########
+# Prints the scheduler that the "sched" additional specification of a
+# sequential process names, or nothing when the name is not that of a
+# sequential process or it names none.
+debasher::_get_seq_process_sched()
+{
+    local processname=$1
+
+    [[ -v 'DEBASHER_SEQ_PROCESSES["${processname}"]' ]] || return 0
+
+    local sched=$(debasher::_extract_sched_from_process_spec "${DEBASHER_SEQ_PROCESS_SPEC[${processname}]}")
+    [ "${sched}" = "${DEBASHER_ATTR_NOT_FOUND}" ] || echo "${sched}"
+}
+
+########
 # Public: Runs a function or command as a step: from the process
 # function of a task, it runs it, waits for it to end and returns an
 # error if it fails.
 #
-# Under the built-in scheduler the function runs in the shell of the
-# task; under the Slurm scheduler it runs as a job step through srun
-# (see seq_execute_slurm), with the computational specifications of
-# the function when it is a sequential process (see
-# add_debasher_seq_process). The step reads the standard input of the
-# call, so a step inside a loop that reads its standard input takes
-# its own from /dev/null.
+# The step runs in the shell of the task, whatever the scheduler of the
+# run, unless the function is a sequential process with "sched=SLURM"
+# (see add_debasher_seq_process): such a step runs through srun (see
+# seq_execute_slurm), with the computational specifications of the
+# sequential process. The step reads the standard input of the call, so
+# a step inside a loop that reads its standard input takes its own from
+# /dev/null.
 #
 # $1 - Function or command to execute.
 # $2.. - Its arguments, passed as they are given.
@@ -607,22 +621,13 @@ debasher::_write_env_vars_and_funcs()
 # Returns 1 if the step failed or could not be launched.
 debasher::seq_execute()
 {
-    local sched=$(debasher::_get_scheduler)
+    local process_to_launch=$1
 
-    case $sched in
-        ${DEBASHER_SLURM_SCHEDULER})
-            debasher::seq_execute_slurm "$@"
-            ;;
-        ${DEBASHER_BUILTIN_SCHEDULER})
-            debasher::_seq_execute_builtin "$@"
-            ;;
-        *)
-            local process_to_launch=$1
-            # Execute process
-            shift
-            "${process_to_launch}" "$@" || return 1
-            ;;
-    esac
+    if [ "$(debasher::_get_seq_process_sched "${process_to_launch}")" = "${DEBASHER_SLURM_SCHEDULER}" ]; then
+        debasher::seq_execute_slurm "$@"
+    else
+        debasher::_seq_execute_builtin "$@"
+    fi
 }
 
 ########
@@ -630,13 +635,13 @@ debasher::seq_execute()
 # function of a task, it runs it, waits for it to end and returns an
 # error if it fails.
 #
-# Under the built-in scheduler the function runs in the shell of the
-# task; under the Slurm scheduler it runs as a job step through srun
-# (see seq_execute_slurm), with the computational specifications of
-# the function when it is a sequential process (see
-# add_debasher_seq_process). The step reads the standard input of the
-# call, so a step inside a loop that reads its standard input takes
-# its own from /dev/null.
+# The step runs in the shell of the task, whatever the scheduler of the
+# run, unless the function is a sequential process with "sched=SLURM"
+# (see add_debasher_seq_process): such a step runs through srun (see
+# seq_execute_slurm), with the computational specifications of the
+# sequential process. The step reads the standard input of the call, so
+# a step inside a loop that reads its standard input takes its own from
+# /dev/null.
 #
 # $1 - Function or command to execute.
 # $2.. - Its arguments, passed as they are given.

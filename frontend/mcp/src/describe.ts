@@ -85,6 +85,7 @@ function processLines(program: Program, process: ProgramProcess): string[] {
 function seqProcessLine(seqProcess: SeqProcess): string {
   const traits = [
     seqProcess.language,
+    seqProcess.additionalSpecs.sched === "SLURM" ? "steps on Slurm" : null,
     seqProcess.groupSource ? `added with program ${quoted(seqProcess.groupSource.programName)}` : null,
   ].filter(Boolean);
   const description = seqProcess.description ? `: ${seqProcess.description}` : "";

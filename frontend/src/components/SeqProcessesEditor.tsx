@@ -5,7 +5,7 @@ import { useProgram } from "../store/ProgramContext";
 import { validateProcessName } from "../api/processApi";
 import { languageExtensions, PROCESS_LANGUAGES } from "./codeLanguages";
 import type { ProcessLanguage } from "../models/process";
-import type { SeqProcess } from "../models/seqProcess";
+import type { SeqProcess, SeqProcessScheduler } from "../models/seqProcess";
 import {
   aliasOptMapFromText,
   aliasOptMapToText,
@@ -223,6 +223,26 @@ export default function SeqProcessesEditor({ onClose }: Props) {
               </label>
 
               <div style={{ display: "flex", gap: 8 }}>
+                <label style={fieldStyle}>
+                  Scheduler of its steps
+                  <select
+                    value={selected.additionalSpecs.sched ?? ""}
+                    title="Where seq_execute runs its steps: in the shell of the task, or on Slurm through srun"
+                    onChange={event =>
+                      update({
+                        additionalSpecs: {
+                          ...selected.additionalSpecs,
+                          sched: (event.target.value || undefined) as SeqProcessScheduler | undefined,
+                        },
+                      })
+                    }
+                    style={{ width: 170 }}
+                  >
+                    <option value="">Not set (built-in)</option>
+                    <option value="BUILTIN">BUILTIN</option>
+                    <option value="SLURM">SLURM</option>
+                  </select>
+                </label>
                 <label style={fieldStyle}>
                   CPUs
                   <input

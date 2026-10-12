@@ -157,8 +157,8 @@ worker_stepdone()
         stepid="${base}_${sum}"
 
         # Execute the step of the worker, only if it is not marked as
-        # done. The step reads its standard input from /dev/null, since
-        # under Slurm srun would take the rest of the list from the loop
+        # done. The step reads its standard input from /dev/null, since a
+        # step that reads it would take the rest of the list from the loop
         if is_step_done "${outd}" "${stepid}"; then
             echo "Step ${stepid} was already completed and marked as done" >&2
         else

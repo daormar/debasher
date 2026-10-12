@@ -1253,14 +1253,34 @@ if command -v "${SBATCH}" > /dev/null 2>&1; then
             ;;
     esac
 
-    # Check debasher_seq_process_example, whose steps run as job steps of
-    # Slurm, with the computational specifications of its sequential
-    # process as options of srun
+    # Check debasher_seq_process_example, whose steps, declared with no
+    # scheduler of their own, run in the shell of the task inside its job
     progname="debasher_seq_process_example"
     sched="SLURM"
     bs_cpus=1   # Not used with SLURM scheduler
     bs_mem=1024 # Not used with SLURM scheduler
     check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 20"
+    case $? in
+        0)
+            ((checks_passed++))
+            ;;
+        1)
+            ((checks_failed++))
+            ;;
+        124)
+            ((checks_timedout++))
+            ;;
+    esac
+
+    # Check debasher_cycle_dyn_sched, a program with fifos that runs on
+    # the built-in scheduler and sends the steps of its sequential process
+    # with sched=SLURM to Slurm through srun, with its computational
+    # specifications as options of srun
+    progname="debasher_cycle_dyn_sched"
+    sched="BUILTIN"
+    bs_cpus=2
+    bs_mem=128
+    check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10 -value 0 -threshold 3"
     case $? in
         0)
             ((checks_passed++))

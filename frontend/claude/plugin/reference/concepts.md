@@ -52,9 +52,15 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Shared directories.** Named directories created once before any process
   runs, which processes reach without a connection.
 - **Sequential processes** (general programs only): code that a process runs
-  itself as a step (`seq_execute`), never scheduled on its own. Needed only for
-  special cases (non-Bash steps inside a Bash process, aliases); prefer
-  processes.
+  itself as a step (`seq_execute`), never scheduled on its own. Its steps run
+  in the shell of the task, whatever the scheduler of the run, unless its
+  `sched` is `SLURM`, which sends them through `srun` with its
+  `computationalSpecs` (used only then). `seq_execute_slurm` sends a step to
+  Slurm whatever its `sched`, and refuses one whose `sched` is `BUILTIN`. A
+  program with `sched` `SLURM` runs only where `srun` is found, and on the
+  Slurm scheduler the step takes its resources from the job of the task that
+  calls it. Needed only for special cases (non-Bash steps inside a Bash
+  process, aliases, a heavy step sent to Slurm); prefer processes.
 
 ## Processes
 

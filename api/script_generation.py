@@ -110,6 +110,10 @@ def _additional_specs_str(specs: AdditionalSpecs | SeqAdditionalSpecs) -> str:
             alias_opt_map = _alias_opt_map_str(specs)
             if alias_opt_map:
                 parts.append(f"alias_opt_map={alias_opt_map}")
+    # Only a sequential process has "sched"
+    sched = getattr(specs, "sched", None)
+    if sched:
+        parts.append(f"sched={sched}")
     # The engine's extract_attr_from_process_additional_specs (unlike
     # its comp-specs counterpart) always splits on ";", with no
     # legacy-space fallback, so joining with anything else here would

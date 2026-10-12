@@ -25,13 +25,15 @@ it in this session.
   preamble, its processes and connections. Look at `search_library` too: a
   process that a module of the preamble already defines is better reused than
   written again.
-- Ask what the program has to do, if the user has not said: what comes in,
-  what comes out, the steps in between, how much data, whether it runs once
-  or keeps running (a resident program), where it runs (the built-in
-  scheduler or Slurm). When the input holds several entries (the samples of
-  a sample sheet), ask whether they go into one run, one task each, or one
-  run each, where failures stay apart and entries can come later. Ask only
-  what changes the design, a few questions at a time.
+- Ask what the program has to do, if the user has not said: what comes in, what
+  comes out, the steps in between, how much data, whether it runs once or keeps
+  running (a resident program), where it runs (the built-in scheduler or Slurm;
+  a program on the built-in scheduler, such as one with FIFOs, can still send a
+  heavy step to Slurm with a sequential process whose `sched` is `SLURM`, which
+  then needs `srun` where it runs). When the input holds several entries (the
+  samples of a sample sheet), ask whether they go into one run, one task each,
+  or one run each, where failures stay apart and entries can come later. Ask
+  only what changes the design, a few questions at a time.
 - For the usual shapes (a chain of steps for each entry, a pool of workers,
   a step that gathers every task of another, tasks that stream to each
   other), start from the patterns of

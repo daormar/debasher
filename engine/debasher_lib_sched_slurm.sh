@@ -1104,14 +1104,15 @@ debasher::_get_srun_opts_for_seq_process()
 # Public: Executes a function or command as a job step of Slurm, with
 # srun, and waits for it to end.
 #
-# Unlike seq_execute, which runs it on the scheduler of the program, it
-# always goes to Slurm: a program that uses fifos runs on the built-in
-# scheduler, and can still send a heavy step of one of its processes to
-# the cluster. The step runs with the context of the process scripts of
-# the program, so it can call the functions of its modules. When the
-# function is a sequential process (see add_debasher_seq_process), its
-# computational specifications become options of srun; any other
-# function or command runs with no resources asked for.
+# Unlike seq_execute, which runs a step in the shell of the task unless
+# its sequential process has "sched=SLURM", it always goes to Slurm,
+# whatever the scheduler of the run. The step runs with the context of
+# the process scripts of the program, so it can call the functions of
+# its modules. When the function is a sequential process (see
+# add_debasher_seq_process), its computational specifications become
+# options of srun; any other function or command runs with no resources
+# asked for. A sequential process with "sched=BUILTIN" is refused, since
+# its declaration says that its steps do not go to Slurm.
 #
 # $1 - Function or command to execute.
 # $2.. - Its arguments.
@@ -1120,7 +1121,7 @@ debasher::_get_srun_opts_for_seq_process()
 #
 #   debasher::seq_execute_slurm transform "${value}" "${outd}/result.txt"
 #
-# Returns 1 if the step could not be launched or failed.
+# Returns 1 if the step could not be launched or failed, or was refused.
 debasher::seq_execute_slurm()
 {
     create_seq_execute_script()
@@ -1144,6 +1145,14 @@ debasher::seq_execute_slurm()
     }
 
     local process_to_launch=$1
+
+    # A call that contradicts the declaration of the sequential process
+    # is refused, so that the two places that name the scheduler of a
+    # step never disagree without notice
+    if [ "$(debasher::_get_seq_process_sched "${process_to_launch}")" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        echo "Error: sequential process ${process_to_launch} has sched=${DEBASHER_BUILTIN_SCHEDULER}, and cannot be run with seq_execute_slurm; use seq_execute instead" >&2
+        return 1
+    fi
 
     # Obtain template for tmp file
     local tmpfile_templ
@@ -1174,7 +1183,8 @@ debasher::seq_execute_slurm()
 # srun, and waits for it to end, whatever the scheduler of the program
 # (see debasher::seq_execute_slurm). When the function is a sequential
 # process (see add_debasher_seq_process), its computational
-# specifications become options of srun.
+# specifications become options of srun; a sequential process with
+# "sched=BUILTIN" is refused.
 #
 # $1 - Function or command to execute.
 # $2.. - Its arguments, passed as they are given.
@@ -1183,5 +1193,5 @@ debasher::seq_execute_slurm()
 #
 #   seq_execute_slurm transform "${value}" "${outd}/result.txt"
 #
-# Returns 1 if the step could not be launched or failed.
+# Returns 1 if the step could not be launched or failed, or was refused.
 seq_execute_slurm() { debasher::seq_execute_slurm "$@"; }

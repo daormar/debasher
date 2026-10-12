@@ -228,6 +228,8 @@ debasher::_show_proc_specs()
     [ "${alias_opt_map}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`alias_opt_map\`: ${alias_opt_map}"
     local ext_alias=$(debasher::_extract_ext_alias_from_process_spec "${process_spec}")
     [ "${ext_alias}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`ext_alias\`: ${ext_alias}"
+    local sched=$(debasher::_extract_sched_from_process_spec "${process_spec}")
+    [ "${sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`sched\`: ${sched}"
 }
 
 ########

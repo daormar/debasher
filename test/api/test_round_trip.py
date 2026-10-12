@@ -52,6 +52,7 @@ from api.models import (
     ProgramEdge,
     ProgramOption,
     ProgramProcess,
+    SeqAdditionalSpecs,
     SeqComputationalSpecs,
     SeqProcess,
 )
@@ -168,10 +169,11 @@ def test_the_sequential_process_of_a_module_is_imported():
     assert seq_processes["transformation_b"].computationalSpecs == SeqComputationalSpecs(
         cpus=1, mem=32, time="00:01:00"
     )
+    assert seq_processes["transformation_b"].additionalSpecs.sched == "SLURM"
     # Its code is that of the sequential process only, never also in the
     # code of the process that runs it
     worker = next(process for process in imported.processes if process.name == "worker")
-    assert "transformation_b" not in worker.code.replace("seq_execute_slurm transformation_b", "")
+    assert "transformation_b" not in worker.code.replace("seq_execute transformation_b", "")
 
 
 def test_the_task_shaping_option_of_a_module_is_imported():
@@ -631,6 +633,7 @@ def test_sequential_processes_survive_the_round_trip(tmp_path):
                 language="python",
                 code="import sys\nprint(sys.argv)",
                 computationalSpecs=SeqComputationalSpecs(cpus=2, mem=128, time="00:02:00"),
+                additionalSpecs=SeqAdditionalSpecs(sched="SLURM"),
             ),
         ],
     )

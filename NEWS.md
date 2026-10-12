@@ -73,6 +73,13 @@ make each one.
   function of that name; the same works for an `alias` or an
   `ext_alias`.
 
+- **Where a step runs.** `seq_execute` runs a step in the shell of the
+  task whatever the scheduler of the program; in 1.0, under Slurm, it
+  sent every step through `srun`. To keep a step on Slurm, declare it
+  with `add_debasher_seq_process <name> "<specs>" "sched=SLURM"`, which
+  sends it through `srun` with those specifications under either
+  scheduler, or call `seq_execute_slurm`.
+
 - **Cycles of modules.** Modules that load each other, and a module that
   loads itself, are an error that names the cycle, instead of loading
   forever.
@@ -131,7 +138,9 @@ make each one.
   the options of their target (`alias_opt_map`).
 - Sequential processes (`add_debasher_seq_process`): code that a
   process runs as a step with `seq_execute`, in any language or through
-  an alias, and that under Slurm asks `srun` for resources of its own.
+  an alias, and that with `sched=SLURM` goes to Slurm through `srun`,
+  with resources of its own, even from a program on the built-in
+  scheduler.
   `mark_step_done` and `is_step_done` let a process skip the steps that
   an earlier run finished. The web interface edits them in a dialog of
   its own, and keeps them through import and "Add program".

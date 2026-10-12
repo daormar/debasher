@@ -1173,15 +1173,13 @@ first produced no words:
     ...
     seq_execute recomposer -c "${char_lim}" -inf "${outd}"/words.txt -outf "${outd}"/output.txt || return 1
 
-How the step runs depends on the scheduler of the program:
-
-* With the built-in scheduler, the function runs in the shell of the
-  task. A step that calls ``exit`` therefore ends the whole task, as the
-  implementation of a process would.
-* With the SLURM scheduler, the step runs as a job step, through
-  ``srun``. ``seq_execute_slurm`` does the same whatever the scheduler of
-  the program: a program that uses FIFOs runs on the built-in scheduler,
-  and can still send a heavy step to the cluster.
+The step runs in the shell of the task, whatever the scheduler of the
+program, so a step that calls ``exit`` ends the whole task, as the
+implementation of a process would. Under the SLURM scheduler it runs
+inside the allocation of the job of the task. A sequential process can
+send its steps to SLURM instead, with ``sched=SLURM`` (see
+:ref:`seq_processes` below). ``seq_execute_slurm`` sends a step to
+SLURM, through ``srun``, whatever the scheduler of the program.
 
 The arguments reach the function as they are given, positional or
 options. What the step prints to its standard output goes to that of
@@ -1190,9 +1188,12 @@ caller captures it; its standard error goes to the log of the task.
 
 **HINT**: the step reads the standard input of the call. Inside a loop
 that reads its own standard input, such as ``while read``, give the
-step ``/dev/null`` (``seq_execute f "$x" < /dev/null``): under SLURM,
-``srun`` would otherwise take the rest of the loop's input, whether the
-step reads it or not.
+step ``/dev/null`` (``seq_execute f "$x" < /dev/null``): a step that
+reads its standard input would take the rest of the loop's input, and
+a step sent to SLURM takes it whether it reads it or not, since ``srun``
+does.
+
+.. _seq_processes:
 
 Sequential processes
 ^^^^^^^^^^^^^^^^^^^^
@@ -1202,10 +1203,11 @@ Any function of the program can run as a step. Declaring it as a
 ``program`` method, is needed only when its code is not a Bash function
 (a heredoc in Python, R, Perl or Groovy), when it borrows the code of
 another process or of an external script (``alias``, ``ext_alias``), or
-when the step asks SLURM for resources of its own. The
+when its steps go to SLURM, with resources of their own. The
 ``debasher_cycle_dyn_sched`` module in ``data/programs`` does it for a
 transformation written in Python, which its ``worker`` process runs as
-a step:
+a step on SLURM, although the program, which uses FIFOs, runs on the
+built-in scheduler:
 
 .. code-block:: bash
 
@@ -1223,7 +1225,7 @@ a step:
     worker()
     {
         ...
-        seq_execute_slurm transformation_b "${value}" "${outd}/transformation_result.txt"
+        seq_execute transformation_b "${value}" "${outd}/transformation_result.txt"
         ...
     }
 
@@ -1231,22 +1233,28 @@ a step:
     {
         add_debasher_process "master" "cpus=1 mem=32 time=00:10:00"
         add_debasher_process "worker" "cpus=1 mem=32 time=00:10:00"
-        add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00"
+        add_debasher_seq_process "transformation_b" "cpus=1 mem=32 time=00:01:00" "sched=SLURM"
     }
 
 ``add_debasher_seq_process`` takes the same arguments as
 ``add_debasher_process``, with these differences:
 
-* Every computational specification is optional. Under SLURM, ``cpus``,
-  ``mem``, ``time``, ``nodes``, ``account`` and ``partition`` become
-  options of ``srun``; the built-in scheduler uses none of them. Inside
-  a SLURM job, a step gets its resources from the allocation of the job,
-  and one that asks for more than the job has fails. ``throttle`` and a
-  list of values in ``mem`` or ``time`` are refused, since a step runs
-  once.
+* Every computational specification is optional. When a step goes to
+  SLURM, ``cpus``, ``mem``, ``time``, ``nodes``, ``account`` and
+  ``partition`` become options of ``srun``; a step in the shell of the
+  task uses none of them. Inside a SLURM job, a step gets its resources
+  from the allocation of the job, and one that asks for more than the
+  job has fails. ``throttle`` and a list of values in ``mem`` or
+  ``time`` are refused, since a step runs once.
 * Of the additional specifications, ``alias``, ``ext_alias`` and
   ``alias_opt_map`` mean what they mean for a process; ``processdeps``
-  and ``force`` are refused.
+  and ``force`` are refused. ``sched``, which only a sequential process
+  has, names where ``seq_execute`` runs its steps: ``BUILTIN`` (the
+  default) in the shell of the task, whatever the scheduler of the
+  program, or ``SLURM`` through ``srun``. ``debasher_exec`` refuses to
+  start a program with ``sched=SLURM`` on a machine without ``srun``,
+  and ``seq_execute_slurm`` refuses a sequential process with
+  ``sched=BUILTIN``.
 * A sequential process needs no method besides its implementation (no
   ``explain_opts``, ``define_opts``, ...): DeBasher never schedules it,
   and it has no options, tasks or status of its own.
@@ -1254,6 +1262,10 @@ a step:
   process.
 * A resident program cannot have sequential processes (see
   :ref:`resident`).
+
+**HINT**: a module meant to run on machines without SLURM leaves
+``sched=SLURM`` out, and calls ``seq_execute`` rather than
+``seq_execute_slurm``: its steps then run anywhere.
 
 The ``debasher_seq_process_example`` example (see :ref:`Examples`)
 runs two sequential processes with ``seq_execute``: one in Python, and

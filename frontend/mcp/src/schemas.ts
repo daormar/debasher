@@ -119,11 +119,14 @@ export const seqProcessChanges = z.object({
     cpus: z.number().optional(),
     mem: z.number().optional(),
     time: z.string().optional(),
-  }).strict().optional(),
+  }).strict().optional()
+    .describe('Options of srun for its steps, used only when a step goes to Slurm (sched "SLURM", or a call of seq_execute_slurm); ignored in the shell of the task.'),
   additionalSpecs: z.object({
     alias: z.string().optional(),
     aliasOptMap: aliasOptMap.optional(),
     externalAlias: z.string().optional(),
+    sched: z.enum(["BUILTIN", "SLURM"]).nullable().optional()
+      .describe('Where seq_execute runs its steps: in the shell of the task when not set, whatever the scheduler of the run; "SLURM" sends them through srun with its computationalSpecs, and the run then needs srun. seq_execute_slurm sends a step to Slurm whatever its sched, and refuses one whose sched is "BUILTIN". Leave it unset unless a step has to go to Slurm or must never go there; null unsets it.'),
   }).strict().optional(),
 }).strict();
 
