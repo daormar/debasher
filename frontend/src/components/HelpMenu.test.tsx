@@ -28,6 +28,7 @@ describe("HelpMenu", () => {
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -138,25 +139,59 @@ describe("HelpMenu", () => {
     );
   });
 
-  it("parts the two ways of running Claude Code, with the conversation above both, where the backend offers both", async () => {
+  it("shows only what the way chosen to run Claude Code needs, where the backend offers both", async () => {
     stubWebuiInfo(true, { claudeCodeTerminal: true });
     render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
     openClaudeCodeDialog();
 
-    const inEditor = await screen.findByRole("region", { name: "In this editor" });
-    const ownTerminal = screen.getByRole("region", { name: "In a terminal of your own" });
-    expect(within(inEditor).getByRole("heading", { name: "In this editor" })).toBeInTheDocument();
-    expect(within(inEditor).getByRole("button", { name: "Open in the page" })).toBeInTheDocument();
-    expect(within(ownTerminal).getByRole("heading", { name: "In a terminal of your own" })).toBeInTheDocument();
-    expect(within(ownTerminal).getByRole("textbox", { name: "Command" })).toBeInTheDocument();
-    expect(within(ownTerminal).getByRole("textbox", { name: /Backend URL/ })).toBeInTheDocument();
-    // The conversation is for both, so it belongs to neither.
-    const conversation = screen.getByRole("combobox", { name: /Conversation/ });
-    expect(inEditor).not.toContainElement(conversation);
-    expect(ownTerminal).not.toContainElement(conversation);
+    const where = await screen.findByRole("radiogroup", { name: "Where" });
+    const inEditor = within(where).getByRole("radio", { name: "In this editor" });
+    const ownTerminal = within(where).getByRole("radio", { name: "In a terminal of your own" });
+    // The editor first, the more direct way.
+    expect(inEditor).toBeChecked();
+    expect(screen.getByRole("button", { name: "Open in the page" })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /Backend URL/ })).toBeNull();
+
+    fireEvent.click(ownTerminal);
+    expect(screen.getByRole("textbox", { name: "Command" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /Backend URL/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open in the page" })).toBeNull();
+
+    // The conversation is for both ways, and the command follows it.
+    fireEvent.change(screen.getByRole("combobox", { name: /Conversation/ }), { target: { value: "continue" } });
+    expect(screen.getByRole("textbox", { name: "Command" })).toHaveValue(
+      `debasher_claude --home-dir /home/me/wc --url ${window.location.origin} -- --continue`
+    );
   });
 
-  it("says how to install Claude Code above both ways, which both need", async () => {
+  it("keeps its size whichever way of running Claude Code is chosen", async () => {
+    stubWebuiInfo(true, { claudeCodeTerminal: true });
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    const dialog = await screen.findByRole("dialog", { name: "Claude Code" });
+    await screen.findByRole("radiogroup", { name: "Where" });
+    const height = dialog.style.height;
+    expect(height).not.toBe("");
+
+    fireEvent.click(screen.getByRole("radio", { name: "In a terminal of your own" }));
+    expect(dialog.style.height).toBe(height);
+  });
+
+  it("makes the box of the command as tall as the command", async () => {
+    // jsdom lays nothing out: the command takes 90 pixels, as a browser
+    // would measure it.
+    vi.spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get").mockReturnValue(90);
+    stubWebuiInfo(true);
+    render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
+    openClaudeCodeDialog();
+
+    const command = await screen.findByRole("textbox", { name: "Command" });
+    expect(command.style.height).toBe("90px");
+  });
+
+  it("says how to install Claude Code whichever way is chosen", async () => {
     stubWebuiInfo(true, {
       claudeCodeTerminal: true,
       claudeCodeInstall: "docker compose exec -it debasher install-claude-code",
@@ -164,19 +199,18 @@ describe("HelpMenu", () => {
     render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
     openClaudeCodeDialog();
 
-    const install = await screen.findByText("docker compose exec -it debasher install-claude-code");
-    expect(screen.getByRole("region", { name: "In this editor" })).not.toContainElement(install);
-    expect(screen.getByRole("region", { name: "In a terminal of your own" })).not.toContainElement(install);
+    expect(await screen.findByText("docker compose exec -it debasher install-claude-code")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "In a terminal of your own" }));
+    expect(screen.getByText("docker compose exec -it debasher install-claude-code")).toBeInTheDocument();
   });
 
-  it("gives the command alone, with no headings, where the backend offers no session in the page", async () => {
+  it("gives the command alone, with no choice of where, where the backend offers no session in the page", async () => {
     stubWebuiInfo(true);
     render(<HelpMenu homeDir="/home/me/wc" unsavedChanges={false} />);
     openClaudeCodeDialog();
 
     await screen.findByRole("textbox", { name: "Command" });
-    expect(screen.queryByRole("heading", { name: "In this editor" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "In a terminal of your own" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Where" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Open in the page" })).toBeNull();
   });
 

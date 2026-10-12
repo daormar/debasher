@@ -4825,18 +4825,22 @@ browser maps the generic family to no font. The user drags its upper edge to
 change its height, which the tab keeps in its memory only, and can fold it away
 while the session goes on. Where `GET /api/webui/info` says that the backend
 offers a session in the page (it does not in the cases where the request for one
-gets 503, see "Opening a session in the page"), the "Claude Code" dialog sets
-out its two ways of running Claude Code under two headings, "In this editor" and
-"In a terminal of your own". The selector of the conversation sits above both,
-since it applies to both, and so does the command that installs Claude Code
-where the backend gives one; the URL of the backend and the command to copy sit
-under the second, since only that way uses them. Elsewhere the dialog has no
-headings and shows only the command, with the selector of the conversation and
-the command that installs Claude Code among its fields. "Open in the page",
-under "In this editor", opens the terminal panel with the way of starting that
-the selector of the conversation shows; while the tab has a session, the button
-reads "Show it in the page" and shows the panel instead. Once the tab has asked
-for a session, a button of the toolbar ("Claude Code") shows and hides the
+gets 503, see "Opening a session in the page"), the "Claude Code" dialog asks
+where Claude Code runs, with the two radio buttons of "Where", "In this editor"
+and "In a terminal of your own", below the selector of the conversation, which
+applies to both ways. Below them, the dialog shows what the way chosen needs.
+For the first, "Open in the page" opens the terminal panel and starts Claude
+Code the way the selector of the conversation shows; while the tab has a
+session, the button reads "Show it in the page" and shows the panel instead. For
+the second, the dialog shows the URL of the backend and the command to copy. The
+first way is chosen when the dialog opens, as the more direct one. The command
+that installs Claude Code, where the backend gives one, is shown whichever way
+is chosen. The dialog keeps one size whichever way is chosen, so that the choice
+does not make it jump, and scrolls what does not fit; the box of the command is
+as tall as the command. Elsewhere the dialog asks nothing and shows only the URL
+of the backend and the command to copy, with the selector of the conversation
+and the command that installs Claude Code among its fields. Once the tab has
+asked for a session, a button of the toolbar ("Claude Code") shows and hides the
 panel. The keys typed in the terminal go to it alone, never to the shortcuts of
 the canvas.
 

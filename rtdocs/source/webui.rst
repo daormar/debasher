@@ -543,8 +543,9 @@ Starting a Session
 1. Save the program: Claude Code works on the program as saved in its
    home directory, and does not see changes that are not saved.
 2. Choose **Claude Code...** in the Help menu. It shows a command
-   (under "In a terminal of your own" when the dialog also offers a
-   session in the editor, see `A Session in the Editor`_) such as::
+   (once "Where" is set to "In a terminal of your own", when the
+   dialog also offers a session in the editor, see
+   `A Session in the Editor`_) such as::
 
        debasher_claude --home-dir /home/me/programs/wordcount \
                        --url http://127.0.0.1:8000
@@ -588,12 +589,12 @@ work asks for them, and which you can also call by their command:
 A Session in the Editor
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Where the server can run Claude Code itself, the dialog has two parts,
-"In this editor" and "In a terminal of your own", with "Conversation"
-above both. Instead of copying the command, **Open in the page**, under
-"In this editor", runs it in a terminal at the bottom of the editor,
-with the conversation chosen above. The URL field is only for the
-command to copy: the server gives Claude Code its own address.
+Where the server can run Claude Code itself, the dialog asks "Where",
+under "Conversation": "In this editor", chosen when it opens, or "In a
+terminal of your own", and shows only what that way needs. With "In
+this editor", **Open in the page** runs the command in a terminal at
+the bottom of the editor, with the conversation chosen above; the
+server gives Claude Code its own address, so there is no URL to set.
 Claude Code is the same, with the same skills and permissions; what
 changes is where it runs:
 
@@ -602,10 +603,12 @@ changes is where it runs:
   installation and the account of Claude Code of that user there.
   Whoever holds the token of the server can therefore use that
   account, as they can already run any command as that user.
-* The button is there only when the server was started with
-  ``debasher_webui`` and finds ``debasher_claude``; the
-  ``DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL`` environment variable turns
-  it off (see the :ref:`tools` Section, ``debasher_webui``).
+* The choice of "Where", and with it the button, is there only when
+  the server was started with ``debasher_webui`` and finds
+  ``debasher_claude``; without it, the dialog gives the command
+  alone. The ``DEBASHER_WEBUI_CLAUDE_CODE_TERMINAL`` environment
+  variable turns it off (see the :ref:`tools` Section,
+  ``debasher_webui``).
 * The session lasts as long as the page and the server: reloading or
   closing the tab, closing the program, or stopping the server ends it,
   and the browser or **Close** asks first. Claude Code keeps the
