@@ -145,8 +145,8 @@ get_mirror()
 
     # debasher::_get_fifo_mirror_filename resolves the mirror path via
     # DEBASHER_PROGRAM_OUTDIR (same as every other fifo path helper in
-    # engine/debasher_lib_opts.sh), which is only set as a side effect of
-    # a full program execution — set it explicitly here since this is a
+    # engine/debasher_lib_dirs.sh), which is only set as a side effect of
+    # a full program execution: set it explicitly here since this is a
     # standalone CLI invocation.
     debasher::_set_debasher_outdir "${absdirname}"
 

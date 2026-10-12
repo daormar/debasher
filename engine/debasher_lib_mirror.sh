@@ -35,7 +35,7 @@
 
 ########
 # FIFO MIRRORING path helpers. A mirrored fifo's real path (returned by
-# debasher::_get_absolute_fifoname in debasher_lib_opts.sh) is untouched and
+# debasher::_get_absolute_fifoname in debasher_lib_dirs.sh) is untouched and
 # still handed to the fifo's real reader; only the writer's own resolved
 # option value gets swapped for the shim path (see
 # debasher::_start_fifo_mirror_taps_for_process), which a background tap
