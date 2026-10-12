@@ -16,7 +16,7 @@ data/programs/debasher_dynamic_fanout*.sh:
 - a sibling process's code must NOT be pulled in just because its name
   also happens to be used as a local variable, or appears as a word
   inside a string or an embedded other-language script (see
-  engine/debasher_lib_processes.sh's debasher::_collect_func_deps).
+  engine/debasher_lib_proc_doc.sh's debasher::_collect_func_deps).
 """
 
 import re

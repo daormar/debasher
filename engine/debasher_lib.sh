@@ -498,7 +498,7 @@ declare DEBASHER_RESOLVED_PROCESS_TYPE
 # Declare associative arrays to recover, for an alias/ext_alias process,
 # what it actually delegates to -- the alias's target process name, or
 # the ext_alias's resolved external file -- so debasher::_show_proc_implem
-# (engine/debasher_lib_processes.sh) can document the real implementation
+# (engine/debasher_lib_proc_doc.sh) can document the real implementation
 # instead of the synthesized wrapper function
 # debasher::_create_process_func_alias/_ext_alias creates for it (see
 # debasher::_add_debasher_alias_process/_add_debasher_ext_alias_process in
@@ -608,6 +608,7 @@ declare -A DEBASHER_EXIT_CODE
 . "${debasher_pkglibdir}"/debasher_lib_modules
 . "${debasher_pkglibdir}"/debasher_lib_process_spec
 . "${debasher_pkglibdir}"/debasher_lib_processes
+. "${debasher_pkglibdir}"/debasher_lib_proc_doc
 . "${debasher_pkglibdir}"/debasher_lib_args
 . "${debasher_pkglibdir}"/debasher_lib_opts
 . "${debasher_pkglibdir}"/debasher_lib_dirs

@@ -1437,7 +1437,7 @@ debasher::_get_interpreter_for_file()
 ########
 # Like debasher::_get_interpreter_for_file, but returns the Markdown
 # fence language for documenting the file's contents (see
-# debasher::_show_proc_implem_delegate in engine/debasher_lib_processes.sh)
+# debasher::_show_proc_implem_delegate in engine/debasher_lib_proc_doc.sh)
 # rather than the interpreter to run it with.
 debasher::_get_doc_language_for_file()
 {

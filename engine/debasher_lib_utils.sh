@@ -733,7 +733,7 @@ debasher::_search_process_func_nameref()
 # through its own matching closing brace/closing token -- byte for byte
 # as written in the file that defines it, comments and indentation
 # intact. Unlike "declare -f funcname" (used throughout
-# debasher_lib_processes.sh's debasher::_show_proc_* family), which
+# debasher_lib_proc_doc.sh's debasher::_show_proc_* family), which
 # reprints a reparsed, comment-stripped, re-indented reconstruction of
 # the function -- bash discards comments in its lexer before it ever
 # builds the parsed function object, so no introspection of the

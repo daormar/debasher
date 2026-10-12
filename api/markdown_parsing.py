@@ -12,7 +12,7 @@ from .debasher_constants import (
 )
 
 # Parses the Markdown produced by debasher::_show_process_documentation
-# (engine/debasher_lib_processes.sh) for a single process, e.g.:
+# (engine/debasher_lib_proc_doc.sh) for a single process, e.g.:
 #
 #   ## generate
 #
@@ -41,7 +41,7 @@ from .debasher_constants import (
 # title).
 
 _OPTION_LINE_RE = re.compile(r"^-\s*`(?P<label>[^`]+)`\s*(?P<rest>.*)$")
-# debasher::_show_proc_opts (engine/debasher_lib_processes) prints the
+# debasher::_show_proc_opts (engine/debasher_lib_proc_doc) prints the
 # option's type right after the label, verbatim from whatever was passed
 # as debasher::explain_opt's own $2 — angle-bracket-wrapped by
 # convention throughout every script in data/programs ("<int>",
@@ -65,7 +65,7 @@ _CODE_FENCE_START_RE = re.compile(r"^```(?P<lang>\S*)\s*$")
 
 _PROCESS_LANGUAGES: set[str] = {"bash", "python", "perl", "r", "groovy"}
 
-# debasher::_show_proc_opt_handler (engine/debasher_lib_processes) dumps
+# debasher::_show_proc_opt_handler (engine/debasher_lib_proc_doc) dumps
 # one ```bash ... ``` block per option-handler function it finds for the
 # process — any of _define_opts, _define_opt_deps, _generate_opts_size,
 # _generate_opts — each as its own `declare -f` fence, back to back
@@ -80,14 +80,14 @@ _OPT_HANDLER_FUNC_SUFFIXES = [
 ]
 _FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 
-# debasher::_show_proc_specs (engine/debasher_lib_processes) prints one
+# debasher::_show_proc_specs (engine/debasher_lib_proc_doc) prints one
 # "- `<attr>`: <value>" bullet per attribute actually set on the
 # process's add_debasher_process call, under "### Computational
 # Specifications"/"### Additional Specifications" — only present when
 # the Markdown was produced with --show-specs.
 _SPEC_LINE_RE = re.compile(r"^-\s*`(?P<key>[^`]+)`:\s*(?P<value>.*)$")
 
-# debasher::_show_proc_methods (engine/debasher_lib_processes) prints one
+# debasher::_show_proc_methods (engine/debasher_lib_proc_doc) prints one
 # "#### <label>" subheading per method (e.g. "reset_outfiles", "post",
 # "exec") followed by its own ```bash ... ``` `declare -f` fence, all
 # under the single "### Process Methods" heading — only present when the
@@ -262,7 +262,7 @@ def split_function_blocks(code: str) -> list[str]:
     """
     Splits a "Process Implementation" code fence back into its
     individual per-function `declare -f` dumps. debasher::_show_proc_
-    implem_bash_func (engine/debasher_lib_processes.sh) pulls in any
+    implem_bash_func (engine/debasher_lib_proc_doc.sh) pulls in any
     same-script helper function the process's exec function calls
     alongside it, one blank line apart, exec function always last — so
     a process with no such helpers still round-trips here as a single-
