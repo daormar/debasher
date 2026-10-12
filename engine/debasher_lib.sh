@@ -605,6 +605,7 @@ declare -A DEBASHER_EXIT_CODE
 
 . "${debasher_pkglibdir}"/debasher_lib_utils
 . "${debasher_pkglibdir}"/debasher_lib_programs
+. "${debasher_pkglibdir}"/debasher_lib_resident
 . "${debasher_pkglibdir}"/debasher_lib_modules
 . "${debasher_pkglibdir}"/debasher_lib_process_spec
 . "${debasher_pkglibdir}"/debasher_lib_processes
