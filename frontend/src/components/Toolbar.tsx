@@ -272,16 +272,6 @@ export default function Toolbar({ onClose }: Props) {
         }}
       >
 
-        {terminal.phase !== "none" && (
-          <button
-            aria-pressed={terminal.visible}
-            title={terminal.visible ? "Hide the Claude Code terminal" : "Show the Claude Code terminal"}
-            onClick={() => terminal.setVisible(!terminal.visible)}
-          >
-            Claude Code
-          </button>
-        )}
-
         <HelpMenu
           homeDir={program.homeDir}
           unsavedChanges={unsavedChanges}

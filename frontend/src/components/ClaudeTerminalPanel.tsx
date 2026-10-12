@@ -4,14 +4,14 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 
-import { CLAUDE_CONVERSATIONS } from "../models/claudeCommand";
-import type { ClaudeConversation } from "../models/claudeCommand";
 import { useClaudeTerminal } from "../store/ClaudeTerminalContext";
 
 // The terminal panel: at the bottom of the editor, across its whole width,
 // the terminal of the session of Claude Code in the page (see "The terminal
 // panel" in doc/design_doc_webui.md). Its upper edge changes its height; a
-// hidden panel keeps its session, and its terminal.
+// hidden panel keeps its session, and its terminal, and leaves a mini window
+// on the canvas (ClaudeTerminalMini) to show it again. "End", or "Close" once
+// the session ended, takes it away: a new session starts from the Help menu.
 
 const DEFAULT_HEIGHT = 320;
 const MIN_HEIGHT = 120;
@@ -27,9 +27,6 @@ export default function ClaudeTerminalPanel() {
 
   // Kept in the tab only.
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
-
-  // How a session starts again: by default with the conversation it had.
-  const [conversation, setConversation] = useState<ClaudeConversation>("continue");
 
   if (phase === "none") {
     return null;
@@ -96,36 +93,17 @@ export default function ClaudeTerminalPanel() {
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
 
-          {phase === "running" && (
-            <button onClick={terminal.end}>End</button>
-          )}
-
-          {phase === "ended" && (takeOverOffered ? (
-
+          {phase === "ended" && takeOverOffered && (
             <button onClick={() => terminal.start("continue", true)}>
               Bring it here
             </button>
-
-          ) : (
-
-            <>
-              <select
-                aria-label="Conversation"
-                value={conversation}
-                onChange={event => setConversation(event.target.value as ClaudeConversation)}
-              >
-                {CLAUDE_CONVERSATIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-              <button onClick={() => terminal.start(conversation)}>
-                Start again
-              </button>
-            </>
-
-          ))}
+          )}
 
           <button onClick={() => terminal.setVisible(false)}>Hide</button>
+
+          <button onClick={terminal.end}>
+            {phase === "ended" ? "Close" : "End"}
+          </button>
 
         </div>
 

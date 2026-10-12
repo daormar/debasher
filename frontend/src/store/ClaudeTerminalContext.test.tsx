@@ -181,7 +181,7 @@ describe("ClaudeTerminalProvider", () => {
     expect(result.current.notice).toMatch(/connection to the backend was lost/);
   });
 
-  it("ends the session when the user asks", async () => {
+  it("ends the session and takes the panel away when the user asks", async () => {
     stubSessionAnswers({ status: 200, body: { ticket: "t1" } });
     const { result } = renderTerminal();
 
@@ -190,10 +190,30 @@ describe("ClaudeTerminalProvider", () => {
     });
     const socket = await startedSocket(result);
     act(() => result.current.end());
-    expect(socket.closedByPage).toBe(true);
-    act(() => socket.end(CLOSE_NORMAL));
 
-    expect(result.current.notice).toBe("The session was ended.");
+    expect(socket.closedByPage).toBe(true);
+    expect(result.current.phase).toBe("none");
+    expect(result.current.visible).toBe(false);
+    // Its close, when it comes, changes nothing.
+    act(() => socket.end(CLOSE_NORMAL));
+    expect(result.current.phase).toBe("none");
+    expect(result.current.notice).toBeNull();
+  });
+
+  it("opens no session whose request was waiting when the user ended it", async () => {
+    stubSessionAnswers({ status: 200, body: { ticket: "t1" } });
+    const { result } = renderTerminal();
+
+    act(() => {
+      result.current.start("new");
+    });
+    act(() => result.current.end());
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(FakeWebSocket.instances).toHaveLength(0);
+    expect(result.current.phase).toBe("none");
   });
 
   it("offers to take over a session open in another page, and takes it over", async () => {

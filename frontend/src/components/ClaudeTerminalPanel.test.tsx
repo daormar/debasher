@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ProgramEditor from "./ProgramEditor";
@@ -156,25 +156,27 @@ describe("ClaudeTerminalPanel", () => {
     expect(screen.getByRole("button", { name: "End" })).toBeInTheDocument();
   });
 
-  it("hides and shows again from the toolbar, keeping its session", async () => {
+  it("hides into a mini window on the canvas, keeping its session, and shows again from it", async () => {
     stubBackend([{ status: 200, body: { ticket: "t1" } }]);
     renderEditor();
     await openInThePage();
     const socket = await runningSession();
-    const toggle = screen.getByRole("button", { name: "Claude Code" });
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("status", { name: "Claude Code session" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Claude Code" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(panel()).not.toBeVisible();
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(socket.closedByPage).toBe(false);
+    const mini = screen.getByRole("status", { name: "Claude Code session" });
+    expect(mini).toHaveTextContent("Claude Code: Running");
 
-    fireEvent.click(toggle);
+    fireEvent.click(within(mini).getByRole("button", { name: "Show" }));
     expect(panel()).toBeVisible();
+    expect(screen.queryByRole("status", { name: "Claude Code session" })).toBeNull();
   });
 
-  it("says why the session ended, and starts again with the last conversation", async () => {
-    const fetchMock = stubBackend([
+  it("takes the panel and its mini window away with End, and starts again from the Help menu", async () => {
+    stubBackend([
       { status: 200, body: { ticket: "t1" } },
       { status: 200, body: { ticket: "t2" } },
     ]);
@@ -182,17 +184,36 @@ describe("ClaudeTerminalPanel", () => {
     await openInThePage();
     const socket = await runningSession();
 
+    fireEvent.click(screen.getByRole("button", { name: "End" }));
+
+    expect(socket.closedByPage).toBe(true);
+    expect(document.querySelector('section[aria-label="Claude Code terminal"]')).toBeNull();
+    expect(screen.queryByRole("status", { name: "Claude Code session" })).toBeNull();
+
+    await openInThePage();
+    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
+  });
+
+  it("says why the session ended on its own, also in the mini window, and Close takes it away", async () => {
+    stubBackend([{ status: 200, body: { ticket: "t1" } }]);
+    renderEditor();
+    await openInThePage();
+    const socket = await runningSession();
+    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
+
     act(() => {
       socket.receive(JSON.stringify({ exit: 0 }));
       socket.end(CLOSE_NORMAL);
     });
 
+    expect(screen.getByRole("status", { name: "Claude Code session" })).toHaveTextContent("Claude Code ended.");
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
     expect(panel()).toHaveTextContent("Claude Code ended.");
-    expect(screen.getByRole("combobox", { name: "Conversation" })).toHaveValue("continue");
-    fireEvent.click(screen.getByRole("button", { name: "Start again" }));
+    expect(screen.queryByRole("button", { name: "Start again" })).toBeNull();
 
-    await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2));
-    expect(sessionRequests(fetchMock)[1]).toMatchObject({ start: "continue", takeOver: false });
+    // The panel's own Close, not the editor's.
+    fireEvent.click(within(panel()).getByRole("button", { name: "Close" }));
+    expect(document.querySelector('section[aria-label="Claude Code terminal"]')).toBeNull();
   });
 
   it("offers to bring here a session open in another page", async () => {

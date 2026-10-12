@@ -10,8 +10,9 @@ import { endingNotice, exitStatusOf, refusalNotice, resizeMessage } from "../mod
 // as long as its WebSocket, and which the terminal panel shows. The provider
 // owns the WebSocket; the panel gives it a terminal to write into.
 
-// "none" before the first session of the editor; "ended" keeps the panel,
-// with why it ended, to start again.
+// "none" while the editor has no panel: before its first session, and once
+// the user ended or closed one; "ended" keeps the panel, with why the session
+// ended on its own.
 export type TerminalPhase = "none" | "starting" | "running" | "ended";
 
 // The terminal of the panel, as the session sees it.
@@ -31,6 +32,8 @@ export interface ClaudeTerminal {
   // take over.
   takeOverOffered: boolean;
   start: (conversation: ClaudeConversation, takeOver?: boolean) => void;
+  // Ends the session, if any, and takes the panel away: a new one starts
+  // from the Help menu.
   end: () => void;
   setVisible: (visible: boolean) => void;
   attach: (sink: TerminalSink) => () => void;
@@ -79,8 +82,6 @@ export function ClaudeTerminalProvider({ homeDir, children }: Props) {
   const [takeOverOffered, setTakeOverOffered] = useState(false);
 
   const socketRef = useRef<WebSocket | null>(null);
-  // The socket that the user ended, to say so when it closes.
-  const endedRef = useRef<WebSocket | null>(null);
   const sinkRef = useRef<TerminalSink | null>(null);
   // What the session wrote before the panel gave it a terminal.
   const pendingRef = useRef<Uint8Array[]>([]);
@@ -159,20 +160,21 @@ export function ClaudeTerminalProvider({ homeDir, children }: Props) {
       }
       socketRef.current = null;
       setPhase("ended");
-      setNotice(
-        endedRef.current === socket
-          ? "The session was ended."
-          : endingNotice(event.code, exitStatus)
-      );
+      setNotice(endingNotice(event.code, exitStatus));
     };
   }, [homeDir, write]);
 
   const end = useCallback(() => {
+    // A request still waiting for its answer opens nothing once it comes.
+    attemptRef.current++;
     const socket = socketRef.current;
-    if (socket) {
-      endedRef.current = socket;
-      socket.close();
-    }
+    socketRef.current = null;
+    socket?.close();
+    pendingRef.current = [];
+    setPhase("none");
+    setVisible(false);
+    setNotice(null);
+    setTakeOverOffered(false);
   }, []);
 
   const attach = useCallback((sink: TerminalSink) => {

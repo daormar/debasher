@@ -418,6 +418,9 @@ See "Claude Code in the page".
 - **takeover**: a request for a session in the page on a program that has one,
   which ends the session of the other tab, waits for its process to end, and
   starts with the last conversation.
+- **mini window**: what a hidden terminal panel leaves in the bottom left
+  corner of the canvas: the state of its session, and "Show", which brings the
+  panel back.
 - **ticket**: a secret that serves once, within 30 seconds, which the backend
   gives to a request with the token for a session in the page, and which the
   WebSocket of the session carries instead of the token.
@@ -4823,37 +4826,40 @@ the terminal with xterm.js, in a font named before the generic `monospace`:
 xterm.js measures its characters in that font, and draws nothing where the
 browser maps the generic family to no font. The user drags its upper edge to
 change its height, which the tab keeps in its memory only, and can fold it away
-while the session goes on. Where `GET /api/webui/info` says that the backend
-offers a session in the page (it does not in the cases where the request for one
-gets 503, see "Opening a session in the page"), the "Claude Code" dialog asks
-where Claude Code runs, with the two radio buttons of "Where", "In this editor"
-and "In a terminal of your own", below the selector of the conversation, which
-applies to both ways. Below them, the dialog shows what the way chosen needs.
-For the first, "Open in the page" opens the terminal panel and starts Claude
-Code the way the selector of the conversation shows; while the tab has a
-session, the button reads "Show it in the page" and shows the panel instead. For
-the second, the dialog shows the URL of the backend and the command to copy. The
-first way is chosen when the dialog opens, as the more direct one. The command
-that installs Claude Code, where the backend gives one, is shown whichever way
-is chosen. The dialog keeps one size whichever way is chosen, so that the choice
-does not make it jump, and scrolls what does not fit; the box of the command is
-as tall as the command. Elsewhere the dialog asks nothing and shows only the URL
-of the backend and the command to copy, with the selector of the conversation
-and the command that installs Claude Code among its fields. Once the tab has
-asked for a session, a button of the toolbar ("Claude Code") shows and hides the
-panel. The keys typed in the terminal go to it alone, never to the shortcuts of
-the canvas.
+with "Hide" while the session goes on: a hidden panel leaves a mini window in
+the bottom left corner of the canvas, beside its controls, with the state of the
+session and "Show", which brings the panel back. Where `GET /api/webui/info`
+says that the backend offers a session in the page (it does not in the cases
+where the request for one gets 503, see "Opening a session in the page"), the
+"Claude Code" dialog asks where Claude Code runs, with the two radio buttons of
+"Where", "In this editor" and "In a terminal of your own", below the selector of
+the conversation, which applies to both ways. Below them, the dialog shows what
+the way chosen needs. For the first, "Open in the page" opens the terminal panel
+and starts Claude Code the way the selector of the conversation shows; while the
+tab has a session, the button reads "Show it in the page" and shows the panel
+instead. For the second, the dialog shows the URL of the backend and the command
+to copy. The first way is chosen when the dialog opens, as the more direct one.
+The command that installs Claude Code, where the backend gives one, is shown
+whichever way is chosen. The dialog keeps one size whichever way is chosen, so
+that the choice does not make it jump, and scrolls what does not fit; the box of
+the command is as tall as the command. Elsewhere the dialog asks nothing and
+shows only the URL of the backend and the command to copy, with the selector of
+the conversation and the command that installs Claude Code among its fields. The
+keys typed in the terminal go to it alone, never to the shortcuts of the canvas.
 
 The panel says what the session is doing. A refused request for a session is
-shown in words (the program is not saved, the session in the page is not
-offered here and why), and for a program with a session open elsewhere the panel
-offers to bring it here (see "The session in the page"). When the session ends,
-the panel keeps what the terminal last showed, says why it ended (Claude Code
-ended, with its exit status; the session was opened in another page; the
-backend stopped) and offers to start again, with the last conversation as the
-choice already made. What the launcher itself prints reaches the terminal as it
-is: its errors, such as a Claude Code that it does not find, and the login that
-Claude Code asks for on its first start.
+shown in words (the program is not saved, the session in the page is not offered
+here and why), and for a program with a session open elsewhere the panel offers
+to bring it here (see "The session in the page"). When the session ends, the
+panel keeps what the terminal last showed and says why it ended (Claude Code
+ended, with its exit status; the session was opened in another page; the backend
+stopped), as the mini window does while the panel is hidden. "End" ends a
+session that is starting or running and takes the panel and its mini window
+away, and so does "Close" once the session ended or the request for one was
+refused: a new session starts from the dialog, whose selector of the
+conversation continues the last one when asked. What the launcher itself prints
+reaches the terminal as it is: its errors, such as a Claude Code that it does
+not find, and the login that Claude Code asks for on its first start.
 
 The editor asks before it ends a session. Closing or reloading the tab while a
 session runs asks first, as with unsaved changes (see "Screens and the store"),

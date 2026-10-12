@@ -67,6 +67,7 @@ import type { EdgeDisplayAction } from "../models/edgeDisplay";
 import ConfirmDialog from "./ConfirmDialog";
 import ResidentRunIndicator from "./ResidentRunIndicator";
 import RunStatusIndicator from "./RunStatusIndicator";
+import ClaudeTerminalMini from "./ClaudeTerminalMini";
 import ProcessContextMenu, {
   type NodeAction,
   type ProcessMenuAction,
@@ -115,6 +116,10 @@ const MAX_FANOUT_INLINE = 10;
 // a small gap, so they cover neither the minimap nor the legend that
 // grows down from the top right.
 const RUN_INDICATOR_PANEL_STYLE = { marginRight: 15 + 200 + 8 };
+
+// The mini window of a hidden Claude Code terminal sits in the bottom left
+// corner, to the right of the controls (their margin, 15px, and their width).
+const CLAUDE_MINI_PANEL_STYLE = { marginLeft: 15 + 26 + 8 };
 
 // The legend in the top right corner stops above the minimap in the bottom
 // right one: the canvas less the margin of its own panel (15px), the margin
@@ -986,6 +991,10 @@ export default function ProgramCanvas() {
 
           <Panel position="top-right" style={LEGEND_PANEL_STYLE}>
             <CanvasLegend programType={program.programType} />
+          </Panel>
+
+          <Panel position="bottom-left" style={CLAUDE_MINI_PANEL_STYLE}>
+            <ClaudeTerminalMini />
           </Panel>
 
           {!isResident && runPhase !== "idle" && showsGeneralIndicator(runPhase, runEndSeen) &&

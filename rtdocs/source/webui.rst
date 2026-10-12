@@ -149,18 +149,16 @@ edits the selected process, and a toolbar above:
 * **Add program**: brings every process of another program saved with
   the web interface into this one (see `Groups`_ below).
 * **Save**, **Run** (the menu described in `Running a General Program`_
-  below), **Claude Code**, **Help** and **Close**, which goes back to
-  the home screen. **Claude Code** shows or hides the terminal of a
-  session of Claude Code in the editor, once one was opened (see
-  `A Session in the Editor`_). The Help menu links to this documentation
-  and to the repository of DeBasher, each in a new tab of the browser,
-  so that the program open in the editor stays as it is. Its "Claude
-  Code" gives the command that starts Claude Code on the program (see
-  the :ref:`tools` Section, ``debasher_claude``), to run in a terminal
-  of your own or in a terminal at the bottom of the editor, with a new
-  conversation or with an earlier one of the program (see
-  `Working with Claude Code`_), and its "How to cite DeBasher" gives the
-  reference of the article to cite, as text and as BibTeX.
+  below), **Help** and **Close**, which goes back to the home screen.
+  The Help menu links to this documentation and to the repository of
+  DeBasher, each in a new tab of the browser, so that the program open
+  in the editor stays as it is. Its "Claude Code" gives the command that
+  starts Claude Code on the program (see the :ref:`tools` Section,
+  ``debasher_claude``), to run in a terminal of your own or in a
+  terminal at the bottom of the editor, with a new conversation or with
+  an earlier one of the program (see `Working with Claude Code`_), and
+  its "How to cite DeBasher" gives the reference of the article to cite,
+  as text and as BibTeX.
 
 The name of the program, at the left of the toolbar, can be edited in
 place. It names the generated script and prefixes the functions of the
@@ -611,22 +609,25 @@ changes is where it runs:
   ``debasher_webui``).
 * The session lasts as long as the page and the server: reloading or
   closing the tab, closing the program, or stopping the server ends it,
-  and the browser or **Close** asks first. Claude Code keeps the
-  conversation, and **Start again**, with "Continue the last
-  conversation", takes it up.
-* Drag the upper edge of the terminal to change its height. **Hide**,
-  and the **Claude Code** button of the toolbar, hide and show it
-  without ending the session; **End** ends it. The toolbar button
-  appears with the first session of the editor, and while a session
-  runs, the button of the dialog reads **Show it in the page** and shows
-  its terminal.
+  and the browser or the **Close** of the toolbar asks first. Claude
+  Code keeps the conversation: open the session again from the Help
+  menu, with "Continue the last conversation", to take it up.
+* Drag the upper edge of the terminal to change its height. **Hide**
+  folds it into a mini window in the bottom left corner of the canvas,
+  next to the zoom buttons, which tells how the session goes and brings
+  the terminal back with **Show**; the session goes on meanwhile.
+  **End** ends the session and takes the terminal and its mini window
+  away; once a session ended on its own, **Close** takes them away.
+  While a session runs, the button of the dialog reads **Show it in the
+  page** and shows its terminal.
 * A program has one session in the editor at a time. If another tab, or
   another browser, has it, the terminal says so and offers **Bring it
   here**, which ends the other session and takes up its conversation
   here; the other tab says that the session was opened in another page,
-  and can bring it back the same way. A session that you started in a
-  terminal of your own does not count: avoid working on the program from
-  both at once.
+  and to bring it back there, open the session again from the Help menu
+  and choose **Bring it here**. A session that you started in a terminal
+  of your own does not count: avoid working on the program from both at
+  once.
 * If the server does not find Claude Code, the terminal says so: the
   server may have been started before Claude Code was installed, or
   without it in its ``PATH``. Start the server again from a new
