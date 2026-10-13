@@ -7,7 +7,15 @@
   </picture>
 </p>
 
-<!-- A screenshot of the editor with a program running goes here. -->
+<p align="center">
+  <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"
+       alt="The DeBasher web interface running a program: six processes on a canvas, two finished, three in progress and one to do, with the worker process open in the inspector"
+       width="880">
+</p>
+
+<p align="center"><em>A program running in the web interface: a file is
+cut into fragments that a dispatcher streams through FIFOs to a pool of
+workers.</em></p>
 
 # DeBasher
 
