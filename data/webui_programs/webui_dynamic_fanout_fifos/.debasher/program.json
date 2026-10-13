@@ -1,0 +1,705 @@
+{
+  "id": "f10b6246-9288-44fe-9156-287fa1d9045d",
+  "name": "webui_dynamic_fanout_fifos",
+  "programType": "general",
+  "description": "Example built with the web UI: a generated file is counted and cut into fragments, which a dispatcher streams through FIFOs to a pool of workers, and a last process merges their counts.",
+  "revision": 1,
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {
+    "-l": "200",
+    "-c": "20",
+    "-b": "20",
+    "-w": "4"
+  },
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "82cdfa22-7469-4d88-87a1-d4aa309c0f85",
+      "name": "count",
+      "description": "Counts characters of an input file in a conventional way. This process is added for debugging purposes.",
+      "position": {
+        "x": 60.0,
+        "y": 220.0
+      },
+      "options": [
+        {
+          "id": "dc30addb-684b-4d35-bb84-813538572d6f",
+          "label": "-inf",
+          "direction": "input",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "input file",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "1a10ce28-d90b-448e-a050-8f1871791689",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "output file",
+          "value": "${process_outdir}/counts.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "########\ncount_chars() {\n    local inf=\"$1\"\n\n    awk '\n        {\n            n = length($0)\n            for (i = 1; i <= n; i++) {\n                c = substr($0, i, 1)\n                count[c]++\n            }\n        }\n        END {\n            for (c in count) print c\",\"count[c]\n        }\n    ' \"$inf\"\n}\n\n########\ncount()\n{\n    # Initialize variables\n    local inf=$(read_opt_value_from_func_args \"-inf\" \"$@\")\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    # Extract counts\n    count_chars \"${inf}\" | sort > \"${outf}\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "29cbb96a-b3a2-4b00-aa59-279bcd9ccf43",
+      "name": "generate",
+      "description": "Generates a text file of a given size and random content.",
+      "position": {
+        "x": 260.0,
+        "y": 40.0
+      },
+      "options": [
+        {
+          "id": "e1380514-8cf5-4b9d-99d5-ab82cb5f956d",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "output file",
+          "value": "${process_outdir}/file.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "099fc5a0-72ec-4dda-9303-dcb2b39a040a",
+          "label": "-l",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Length of file in lines",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "3c576c1b-1736-4fb9-8f83-ef6d0dfb12c0",
+          "label": "-c",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Length of each line in characters",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "########\ngenerate()\n{\n    # Initialize variables\n    local numlines=$(read_opt_value_from_func_args \"-l\" \"$@\")\n    local numchars=$(read_opt_value_from_func_args \"-c\" \"$@\")\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    # Clear/create the output file\n    > \"$outf\"\n\n    local bytes_needed=$(( (numchars * numlines * 3 / 4) + numlines * 4 + 64 ))\n\n    head -c \"$bytes_needed\" /dev/urandom | base64 | tr -d '\\n' | \\\n        fold -w \"$numchars\" | head -n \"$numlines\" > \"$outf\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "8845a6b0-8098-471f-b23d-a149e6bd0986",
+      "name": "fragment",
+      "description": "Fragments an input file into a given number of equally sized blocks, inverting the file lines.",
+      "position": {
+        "x": 360.0,
+        "y": 220.0
+      },
+      "options": [
+        {
+          "id": "a6394cb7-0537-418f-abd8-2f4ca09c9f71",
+          "label": "-outd",
+          "direction": "output",
+          "dataType": "dir",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "name of output directory",
+          "value": "${process_outdir}",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "a449b2a8-bc83-4441-8e3c-24fca9ca888a",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "fifo",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "output fifo",
+          "value": "fragment_fifo",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "c9a1351b-257b-4de2-86cf-f4288a6f0ee3",
+          "label": "-inf",
+          "direction": "input",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "input file",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "68fa0a7d-3724-45d2-a7cf-ba10e291b670",
+          "label": "-b",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Number of blocks",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "########\nfragment()\n{\n    # Initialize variables\n    local numblocks=$(read_opt_value_from_func_args \"-b\" \"$@\")\n    local inf=$(read_opt_value_from_func_args \"-inf\" \"$@\")\n    local outd=$(read_opt_value_from_func_args \"-outd\" \"$@\")\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n\n    # Count the total number of lines in the input file\n    local total_lines\n    total_lines=$(wc -l < \"$inf\")\n\n    # Calculate how many lines correspond to each block (rounded up)\n    local lines_per_block=$(( (total_lines + numblocks - 1) / numblocks ))\n\n    # Open the output FIFO once, for the whole process\n    exec 3> \"$outf\"\n\n    # Fragment file\n    local i start_line end_line count blockfile\n    for ((i = 0; i < numblocks; i++)); do\n        start_line=$(( i * lines_per_block + 1 ))\n        [ \"$start_line\" -gt \"$total_lines\" ] && break   # no more lines left\n\n        end_line=$(( start_line + lines_per_block - 1 ))\n        [ \"$end_line\" -gt \"$total_lines\" ] && end_line=\"$total_lines\"\n        count=$(( end_line - start_line + 1 ))\n\n        blockfile=\"$outd/blk${i}.txt\"\n\n        # Extract lines [start_line, end_line] using tail + head,\n        # instead of reading and writing line by line in bash.\n        tail -n \"+$start_line\" \"$inf\" | head -n \"$count\" > \"$blockfile\"\n\n        echo \"$blockfile\" >&3   # announce this block as soon as it's ready\n    done\n\n    exec 3>&-\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": "afterok:count",
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "304b3d08-c45a-40ca-81bd-f21cf484919f",
+      "name": "aggregate",
+      "description": "Aggregates worker results.",
+      "position": {
+        "x": 360.0,
+        "y": 760.0
+      },
+      "options": [
+        {
+          "id": "7ef764ca-a07b-45d3-954b-78de138c1282",
+          "label": "-outf",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "output file",
+          "value": "${process_outdir}/result.txt",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "463c5f2d-cdb1-4810-ba3f-2b74a24e2470",
+          "label": "-w",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Number of workers.",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "cb435246-db47-4c86-8a0d-25b2b332108e",
+          "label": "-ind-ith",
+          "direction": "input",
+          "dataType": "dir",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "i'th input directory",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": "463c5f2d-cdb1-4810-ba3f-2b74a24e2470",
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "########\nmerge_counts() {\n    local count_files=(\"$@\")\n\n    awk -F',' '\n        {\n            total[$1] += $2\n        }\n        END {\n            for (c in total) print c\",\"total[c]\n        }\n    ' \"${count_files[@]}\"\n}\n\n########\naggregate()\n{\n    # Initialize variables\n    local outf=$(read_opt_value_from_func_args \"-outf\" \"$@\")\n    local w=$(read_opt_value_from_func_args \"-w\" \"$@\")\n    local dirs=()\n    for ((i=0; i<w; i++)); do\n        dirs+=($(read_opt_value_from_func_args \"-ind$i\" \"$@\"))\n    done\n\n    # Clear/create the output file\n    > \"$outf\"\n\n    # Collect all count files (blk${i}.txt.counts, or whatever naming\n    # convention the workers used) across all directories. Order doesn't\n    # matter here since aggregation is a sum, not a concatenation.\n    local count_files=()\n    local d f\n    for d in \"${dirs[@]}\"; do\n        for f in \"$d\"/blk*.txt; do\n            [ -e \"$f\" ] || continue\n            count_files+=(\"$f\")\n        done\n    done\n\n    if [ \"${#count_files[@]}\" -eq 0 ]; then\n        echo \"Warning: no count files found in any directory\" >&2\n        return 1\n    fi\n\n    merge_counts \"${count_files[@]}\" | sort > \"$outf\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "630fd002-d7e7-40e2-b701-dbc68948166b",
+      "name": "dispatch",
+      "description": "Dispatches file blocks to workers.",
+      "position": {
+        "x": 360.0,
+        "y": 400.0
+      },
+      "options": [
+        {
+          "id": "b21935cb-ce48-424d-8961-f5e1927168b8",
+          "label": "-outf-ith",
+          "direction": "output",
+          "dataType": "file",
+          "channel": "fifo",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "i'th output fifo",
+          "value": "dispatch_fifo_${i}",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": "c9bcc665-4215-4a3c-b415-60e7e002f2be",
+          "taskShaping": false
+        },
+        {
+          "id": "c9bcc665-4215-4a3c-b415-60e7e002f2be",
+          "label": "-w",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Number of workers.",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "83f6a6b9-b27a-462c-8dc5-b4d5eff0a35a",
+          "label": "-inf",
+          "direction": "input",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "input fifo",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "76882ae2-427e-4c93-b159-5bef9dae7f94",
+          "label": "--log-level",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO).",
+          "value": "",
+          "commandLine": true,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "python",
+      "code": "\"\"\"\ndynamic_fanout_dispatcher.py\n\nReads block file paths from an input FIFO (inf) and distributes each\npath to one of w output FIFOs based on the index i extracted from\n\"blk{i}.txt\", using i % w.\n\nEach output FIFO is served by its own WorkerFeeder thread with plain\nblocking I/O. Opening a FIFO for writing blocks until a reader connects;\nrunning each output FIFO in its own thread means that wait never blocks\nthe others or the main thread reading the input.\n\nNote: the actual workers that consume these FIFOs are separate external\nprocesses (e.g. bash scripts), this program does not run them. Each\nWorkerFeeder is just the thread on our side that owns the connection to\none worker's input FIFO and writes block paths to it.\n\nOutput FIFO paths are passed individually as -outf0, -outf1, ...,\n-outf{w-1}. Logging goes to stderr; verbosity is controlled with\n--log-level (use CRITICAL to effectively silence normal output while\nstill surfacing critical failures).\n\"\"\"\n\nimport argparse\nimport logging\nimport os\nimport queue\nimport re\nimport sys\nimport threading\n\nBLOCK_RE = re.compile(r\"blk(\\d+)\\.txt$\")\n\nlog = logging.getLogger(\"distribute_blocks\")\n\n\ndef setup_logging(level_name: str):\n    logging.basicConfig(\n        level=getattr(logging, level_name),\n        format=\"%(asctime)s %(levelname)-8s [%(threadName)s] %(message)s\",\n    )\n\n\ndef extract_workers_count():\n    \"\"\"\n    Minimal manual scan of sys.argv, just to find -w/--workers.\n    We need this value before we can tell argparse to expect\n    -outf0 .. -outf{w-1}, since argparse can't declare an unknown\n    number of options in a single pass.\n    \"\"\"\n    args = sys.argv[1:]\n    for i, flag in enumerate(args):\n        if flag in (\"-w\", \"--workers\"):\n            if i + 1 >= len(args):\n                print(f\"Error: {flag} requires a value\", file=sys.stderr)\n                sys.exit(1)\n            try:\n                return int(args[i + 1])\n            except ValueError:\n                print(f\"Error: {flag} must be an integer\", file=sys.stderr)\n                sys.exit(1)\n\n    print(\"Error: -w/--workers is required\", file=sys.stderr)\n    sys.exit(1)\n\n\ndef parse_args():\n    w = extract_workers_count()\n    if w <= 0:\n        print(\"Error: -w/--workers must be a positive integer\", file=sys.stderr)\n        sys.exit(1)\n\n    parser = argparse.ArgumentParser(\n        description=\"Distribute block file paths from an input FIFO to w output FIFOs.\"\n    )\n    parser.add_argument(\"-w\", \"--workers\", type=int, required=True,\n                         help=\"Number of output FIFOs / workers.\")\n    parser.add_argument(\"-inf\", required=True,\n                         help=\"Path to the input FIFO to read block paths from.\")\n    parser.add_argument(\"--log-level\", default=\"INFO\",\n                         choices=[\"DEBUG\", \"INFO\", \"WARNING\", \"ERROR\", \"CRITICAL\"],\n                         help=\"Logging verbosity (default: INFO). Use CRITICAL to \"\n                              \"effectively silence normal output.\")\n\n    for i in range(w):\n        parser.add_argument(f\"-outf{i}\", required=True,\n                             help=f\"Path to output FIFO for worker {i}.\")\n\n    args = parser.parse_args()\n\n    # Collect outf0..outf{w-1} into an ordered list for the rest of the program\n    outf_paths = [getattr(args, f\"outf{i}\") for i in range(w)]\n\n    return args, outf_paths\n\n\ndef extract_index(path):\n    \"\"\"Extract the integer i from a path ending in blk{i}.txt.\"\"\"\n    base = os.path.basename(path)\n    m = BLOCK_RE.search(base)\n    return int(m.group(1)) if m else None\n\n\nclass WorkerFeeder(threading.Thread):\n    \"\"\"\n    Feeds one external worker process with block paths, through its\n    output FIFO.\n\n    This is NOT the worker itself: the actual worker is a separate\n    process (e.g. a bash script) reading from this FIFO and doing the\n    real processing. This thread is only the channel on our side \u2014 it\n    owns the connection to that FIFO and writes to it.\n\n    Runs in its own thread because opening a FIFO for writing blocks\n    until a reader connects; keeping that wait in its own thread means\n    it never stalls the rest of the program.\n    \"\"\"\n\n    def __init__(self, path):\n        super().__init__(daemon=True, name=f\"feeder-{os.path.basename(path)}\")\n        self.path = path\n        self.q = queue.Queue()\n        self.lines_written = 0\n\n    def queue_line(self, line: str):\n        self.q.put(line)\n\n    def stop(self):\n        self.q.put(None)  # sentinel: tells the thread to finish and exit\n\n    def run(self):\n        log.debug(\"Waiting for a reader on %s\", self.path)\n        # Blocking open: this line waits here until the worker process\n        # opens the other end for reading. Since we're in our own\n        # thread, this doesn't block the rest of the program.\n        with open(self.path, \"w\") as f:\n            log.info(\"Connected to %s\", self.path)\n            while True:\n                line = self.q.get()\n                if line is None:  # sentinel received: no more lines coming\n                    break\n                f.write(line + \"\\n\")\n                f.flush()\n                self.lines_written += 1\n        log.info(\"Closed %s (%d lines written)\", self.path, self.lines_written)\n\n\ndef read_input_lines(inf_path):\n    \"\"\"Generator that yields lines from the input FIFO as they arrive.\n    Blocking reads are fine here: this runs in the main thread, and the\n    feeder threads run independently.\"\"\"\n    with open(inf_path, \"r\") as f:\n        for line in f:\n            yield line.rstrip(\"\\n\")\n\n\ndef main():\n    args, outf_paths = parse_args()\n    setup_logging(args.log_level)\n    w = args.workers\n\n    log.info(\"Starting dispatcher: w=%d inf=%s outf=%s\", w, args.inf, outf_paths)\n\n    feeders = [WorkerFeeder(path) for path in outf_paths]\n    for feeder in feeders:\n        feeder.start()\n\n    lines_read = 0\n    lines_skipped = 0\n\n    try:\n        for line in read_input_lines(args.inf):\n            line = line.strip()\n            if not line:\n                continue\n            lines_read += 1\n            idx = extract_index(line)\n            if idx is None:\n                log.warning(\"Could not parse index from '%s', skipping\", line)\n                lines_skipped += 1\n                continue\n            log.debug(\"Dispatching %s -> feeder %d (%s)\", line, idx % w, os.path.basename(feeders[idx % w].path))\n            feeders[idx % w].queue_line(line)\n\n        log.info(\"Input FIFO closed, no more blocks incoming \"\n                  \"(%d lines read, %d skipped)\", lines_read, lines_skipped)\n    finally:\n        log.info(\"Signalling feeders to finish...\")\n        for feeder in feeders:\n            feeder.stop()\n        for feeder in feeders:\n            feeder.join()\n\n    log.info(\"Dispatcher finished\")\n\n\nif __name__ == \"__main__\":\n    main()",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": "./dynamic_fanout_dispatcher.py"
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    },
+    {
+      "id": "eb4a1bc6-7fcc-482e-8116-5d0f65143abc",
+      "name": "worker",
+      "description": "Executes an array of w tasks. Each task takes a list of text files and generates another file for each one.",
+      "position": {
+        "x": 360.0,
+        "y": 580.0
+      },
+      "options": [
+        {
+          "id": "d295aea1-0b51-4e72-bc3d-3220d65e508b",
+          "label": "-outd",
+          "direction": "output",
+          "dataType": "dir",
+          "channel": "process_outdir",
+          "subpath": "${task_idx}",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "directory of the task, below the output directory of the process",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "37a54e33-a7c2-47e1-9bbb-06a093e16914",
+          "label": "-inf",
+          "direction": "input",
+          "dataType": "file",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "input fifo",
+          "value": "",
+          "commandLine": false,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        },
+        {
+          "id": "2c28f112-b843-4bad-838e-f1ef495b4313",
+          "label": "-w",
+          "direction": "input",
+          "dataType": "int",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "Number of workers.",
+          "value": "",
+          "commandLine": true,
+          "mandatory": true,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": true
+        }
+      ],
+      "optionsHandler": {
+        "mode": "array",
+        "generatorSizeCode": null,
+        "arrayCode": "# Build one array element per worker task\nlocal w=$(debasher::read_opt_value_from_line \"${cmdline}\" \"-w\")\nlocal array=()\nfor ((i=0; i<w; i++)); do\n    array+=(\"$i\")\ndone",
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "########\ncount_chars() {\n    local inf=\"$1\"\n\n    awk '\n        {\n            n = length($0)\n            for (i = 1; i <= n; i++) {\n                c = substr($0, i, 1)\n                count[c]++\n            }\n        }\n        END {\n            for (c in count) print c\",\"count[c]\n        }\n    ' \"$inf\"\n}\n\n########\nworker_task()\n{\n    local inf=$1\n    local outf=$2\n\n    count_chars \"${inf}\" > \"${outf}\"\n}\n\n########\nworker()\n{\n    # Initialize variables\n    local inf=$(read_opt_value_from_func_args \"-inf\" \"$@\")\n    local outd=$(read_opt_value_from_func_args \"-outd\" \"$@\")\n\n    # Read the input file line by line (each line is a file path)\n    while IFS= read -r filepath; do\n        [ -z \"$filepath\" ] && continue\n        [ -e \"$filepath\" ] || continue\n\n        local base\n        base=$(basename \"$filepath\")\n\n        # Execute worker task\n        worker_task \"$filepath\" \"$outd/$base\" || return 1\n    done < \"$inf\"\n}",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 32.0,
+        "time": "00:01:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "seqProcesses": [],
+  "edges": [
+    {
+      "id": "ab1de6ab-5b6e-4622-994f-994d67d797ab",
+      "sourceProcessId": "29cbb96a-b3a2-4b00-aa59-279bcd9ccf43",
+      "sourceOptionId": "e1380514-8cf5-4b9d-99d5-ab82cb5f956d",
+      "targetProcessId": "82cdfa22-7469-4d88-87a1-d4aa309c0f85",
+      "targetOptionId": "dc30addb-684b-4d35-bb84-813538572d6f",
+      "display": "line"
+    },
+    {
+      "id": "9331591d-1706-4446-8f97-c98e2bb8f0c1",
+      "sourceProcessId": "29cbb96a-b3a2-4b00-aa59-279bcd9ccf43",
+      "sourceOptionId": "e1380514-8cf5-4b9d-99d5-ab82cb5f956d",
+      "targetProcessId": "8845a6b0-8098-471f-b23d-a149e6bd0986",
+      "targetOptionId": "c9a1351b-257b-4de2-86cf-f4288a6f0ee3",
+      "display": "line"
+    },
+    {
+      "id": "0dafa980-7fc6-418b-b044-788c5b973ffa",
+      "sourceProcessId": "eb4a1bc6-7fcc-482e-8116-5d0f65143abc",
+      "sourceOptionId": "d295aea1-0b51-4e72-bc3d-3220d65e508b",
+      "targetProcessId": "304b3d08-c45a-40ca-81bd-f21cf484919f",
+      "targetOptionId": "cb435246-db47-4c86-8a0d-25b2b332108e",
+      "display": "line"
+    },
+    {
+      "id": "01e7a076-27c1-4b72-b3fd-3b6d6fefa3b7",
+      "sourceProcessId": "8845a6b0-8098-471f-b23d-a149e6bd0986",
+      "sourceOptionId": "a449b2a8-bc83-4441-8e3c-24fca9ca888a",
+      "targetProcessId": "630fd002-d7e7-40e2-b701-dbc68948166b",
+      "targetOptionId": "83f6a6b9-b27a-462c-8dc5-b4d5eff0a35a",
+      "display": "line"
+    },
+    {
+      "id": "d82b3084-6534-4995-8073-455ae365a9fa",
+      "sourceProcessId": "630fd002-d7e7-40e2-b701-dbc68948166b",
+      "sourceOptionId": "b21935cb-ce48-424d-8961-f5e1927168b8",
+      "targetProcessId": "eb4a1bc6-7fcc-482e-8116-5d0f65143abc",
+      "targetOptionId": "37a54e33-a7c2-47e1-9bbb-06a093e16914",
+      "display": "line"
+    }
+  ]
+}

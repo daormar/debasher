@@ -1071,6 +1071,27 @@ case $? in
         ;;
 esac
 
+# Check webui_dynamic_fanout_fifos, a general program with a pool of
+# workers fed through FIFOs; increased number of cpus to be able to
+# allocate all processes
+progname="webui_dynamic_fanout_fifos"
+sched="BUILTIN"
+bs_cpus=7
+bs_mem=1024
+check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                   "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 4"
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check webui_running_sum, a resident program: the running sum of 1, 2 and 3
 # is 6
 progname="webui_running_sum"

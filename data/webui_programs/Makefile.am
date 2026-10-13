@@ -19,6 +19,9 @@ webui_watch_tally/.debasher/program.json			\
 webui_watch_tally/test/test_watch_tally.py			\
 webui_conda_example/webui_conda_example.sh			\
 webui_conda_example/.debasher/program.json			\
-webui_conda_example/test/python_version.bats
+webui_conda_example/test/python_version.bats			\
+webui_dynamic_fanout_fifos/webui_dynamic_fanout_fifos.sh	\
+webui_dynamic_fanout_fifos/.debasher/program.json		\
+webui_dynamic_fanout_fifos/dynamic_fanout_dispatcher.py
 
 EXTRA_DIST = $(nobase_webuiprg_DATA)
