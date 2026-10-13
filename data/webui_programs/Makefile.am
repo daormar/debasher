@@ -22,6 +22,8 @@ webui_conda_example/.debasher/program.json			\
 webui_conda_example/test/python_version.bats			\
 webui_dynamic_fanout_fifos/webui_dynamic_fanout_fifos.sh	\
 webui_dynamic_fanout_fifos/.debasher/program.json		\
-webui_dynamic_fanout_fifos/dynamic_fanout_dispatcher.py
+webui_dynamic_fanout_fifos/dynamic_fanout_dispatcher.py	\
+webui_hello_world/webui_hello_world.sh				\
+webui_hello_world/.debasher/program.json
 
 EXTRA_DIST = $(nobase_webuiprg_DATA)

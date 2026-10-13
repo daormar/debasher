@@ -1,0 +1,98 @@
+{
+  "id": "29d2b2e3-1fc4-4f9d-a2de-3481368895b4",
+  "name": "webui_hello_world",
+  "programType": "general",
+  "description": "",
+  "revision": 2,
+  "preamble": "",
+  "envVars": {},
+  "homeDir": "",
+  "outputDir": "",
+  "sourceDir": "",
+  "executionOptions": {
+    "scheduler": "BUILTIN",
+    "builtinSchedCpus": "",
+    "builtinSchedMem": "",
+    "dfltNodes": "",
+    "dfltThrottle": "",
+    "rerunOutdatedProcs": false,
+    "condaSupport": false,
+    "dockerSupport": false,
+    "snapshotEverySecs": ""
+  },
+  "programOptions": {},
+  "sharedDirs": [],
+  "availableSharedDirs": [],
+  "processes": [
+    {
+      "id": "1b1b1720-8463-47ca-9d2c-70a429bebde6",
+      "name": "hello_world",
+      "description": "Prints a greeting.",
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "options": [
+        {
+          "id": "2c001515-4e53-4de6-bbfc-751625a40486",
+          "label": "-s",
+          "direction": "input",
+          "dataType": "string",
+          "channel": "none",
+          "subpath": "",
+          "mirror": false,
+          "fifoTag": null,
+          "description": "string to print ('Hello World!' by default)",
+          "value": "",
+          "commandLine": true,
+          "mandatory": false,
+          "fromProcessSpec": false,
+          "countSourceOptionId": null,
+          "taskShaping": false
+        }
+      ],
+      "optionsHandler": {
+        "mode": "standard",
+        "generatorSizeCode": null,
+        "arrayCode": null,
+        "manualCode": null
+      },
+      "language": "bash",
+      "code": "hello_world()\n{\n    local s=$(read_opt_value_from_func_args \"-s\" \"$@\")\n    if [ \"${s}\" = \"${DEBASHER_OPT_NOT_FOUND}\" ]; then\n        s=\"Hello World!\"\n    fi\n\n    echo \"${s}\"\n}\n",
+      "computationalSpecs": {
+        "cpus": 1.0,
+        "mem": 256.0,
+        "time": "01:00:00",
+        "input_log_max_mb": null,
+        "out_backlog_max_mb": null,
+        "out_backlog_fail_mb": null,
+        "gil_switch_interval_ms": null,
+        "startup_timeout_s": null,
+        "max_concurrent_runs": null,
+        "batch_sched": null,
+        "heartbeat_timeout_s": null
+      },
+      "additionalSpecs": {
+        "force": false,
+        "processdeps": null,
+        "alias": null,
+        "aliasOptMap": [],
+        "externalAlias": null
+      },
+      "additionalMethods": {
+        "resetOutfilesCode": null,
+        "postCode": null,
+        "outdirBasenameCode": null,
+        "skipCode": null,
+        "condaEnvsCode": null,
+        "dockerImgsCode": null
+      },
+      "groupSource": null,
+      "nodeKind": null,
+      "initiator": false,
+      "nodeCode": null
+    }
+  ],
+  "seqProcesses": [],
+  "edges": []
+}

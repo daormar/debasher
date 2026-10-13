@@ -1071,6 +1071,26 @@ case $? in
         ;;
 esac
 
+# Check webui_hello_world, the program of the quickstart of the
+# documentation; its only option has a default
+progname="webui_hello_world"
+sched="BUILTIN"
+bs_cpus=1
+bs_mem=256
+check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                   "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
+case $? in
+    0)
+        ((checks_passed++))
+        ;;
+    1)
+        ((checks_failed++))
+        ;;
+    124)
+        ((checks_timedout++))
+        ;;
+esac
+
 # Check webui_dynamic_fanout_fifos, a general program with a pool of
 # workers fed through FIFOs; increased number of cpus to be able to
 # allocate all processes
