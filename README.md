@@ -7,6 +7,8 @@
   </picture>
 </p>
 
+<!-- A screenshot of the editor with a program running goes here. -->
+
 # DeBasher
 
 DeBasher is a workflow system whose processes are Unix programs. Each
@@ -38,7 +40,29 @@ Among its features:
 - a visual editor to build, run and observe programs from a browser, with
   AI assistance.
 
+## Try it
+
+The quickest way to see DeBasher is its Docker demo image, which packs the
+engine and the web interface into one container, with the example programs
+inside:
+
+```bash
+git clone https://github.com/daormar/debasher.git
+cd debasher
+chmod 777 demo-data
+docker compose up --build -d
+docker compose exec debasher webui-url
+```
+
+The last command prints the address of the web interface, which carries its
+token; open it in a browser. The image is for trying DeBasher out, not for
+real work: inside it, processes cannot have Conda environments or Docker
+containers of their own, and there is no Slurm. [DOCKER.md](DOCKER.md) has
+the details, and how to run Claude Code inside the container.
+
 ## Installation
+
+To install DeBasher itself:
 
 ```bash
 git clone https://github.com/daormar/debasher.git
@@ -58,7 +82,6 @@ for its requirements and for each system.
 - [Web page](https://daormar.github.io/debasher/)
 - [Technical documentation](https://debasher.readthedocs.io/en/latest/)
 - [Journal article](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-025-06108-1)
-- [Docker demo image](DOCKER.md)
 
 ## License and citation
 
