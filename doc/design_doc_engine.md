@@ -2082,22 +2082,23 @@ process that is neither finished nor running is prepared; a finished process
 that is not marked to rerun is left exactly as it is, with its outputs, logs
 and completion markers. For a process that is prepared:
 
-- A process that has never run gets its exec directory, `__exec__/<process>`.
-- A process that has run before, or had tasks cancelled, loses the ids and the
-  logs of its previous run, for an array process only those of the tasks that
-  have not finished, so that the finished tasks of an array are not run again.
-  Under the built-in scheduler it also loses all its cancellation markers, so
-  that its cancelled tasks wait to be launched again. A process marked to rerun
-  has already lost its completion markers (see "Reruns"), so none of its tasks
-  counts as finished.
+- A process that no run has prepared yet, which has no process script, gets its
+  exec directory, `__exec__/<process>`.
+- A process that an earlier run prepared, which has its process script, loses
+  the ids and the logs of its previous run, for an array process only those of
+  the tasks that have not finished, so that the finished tasks of an array are
+  not run again. Under the built-in scheduler it also loses all its cancellation
+  markers, so that its cancelled tasks wait to be launched again. A process
+  marked to rerun has already lost its ids and its completion markers (see
+  "Reruns"), so none of its tasks counts as finished.
 - The FIFOs that the process owns are created again, empty (see "Declaring
   and owning a FIFO").
 - Its process output directory is created if it does not exist; under the Slurm
-  scheduler, only when the process has never run. What it holds from an earlier
-  run is not removed here, except, for a subdivided process output directory of
-  a process without a `_reset_outfiles` method, every entry that is neither a
-  task subdirectory of the run, nor a path that an output option of the run
-  names, nor a directory on the way to one of them; each task resets the
+  scheduler, only when the process has no process script yet. What it holds from
+  an earlier run is not removed here, except, for a subdivided process output
+  directory of a process without a `_reset_outfiles` method, every entry that is
+  neither a task subdirectory of the run, nor a path that an output option of
+  the run names, nor a directory on the way to one of them; each task resets the
   directory when it starts (see "Executing a task"). The task subdirectories
   that do not exist are created (see "Task subdirectories"). Every process that
   the run launches is prepared before any of them is launched, and a failure
@@ -2297,14 +2298,14 @@ resource as a process with a single task, as the principle stated in the
 
 | Run resource | Owner | Created | Emptied | Removed | One task and many |
 |---|---|---|---|---|---|
-| process output directory | the process | when its process is prepared, if missing; under the Slurm scheduler, only when the process has never run, or when a task subdirectory below it is created (see "Preparing a run") | before each task that is not skipped, by the `_reset_outfiles` method of the process, or, without it, for a process with a single task (see "Executing a task"); and, for a subdivided process output directory without `_reset_outfiles`, of every entry that is neither a task subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them, when the process is prepared (see "Task subdirectories") | never | differ: the tasks of an array share it, and without `_reset_outfiles` it is not emptied before each of them |
+| process output directory | the process | when its process is prepared, if missing; under the Slurm scheduler, only when the process has no process script yet, or when a task subdirectory below it is created (see "Preparing a run") | before each task that is not skipped, by the `_reset_outfiles` method of the process, or, without it, for a process with a single task (see "Executing a task"); and, for a subdivided process output directory without `_reset_outfiles`, of every entry that is neither a task subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them, when the process is prepared (see "Task subdirectories") | never | differ: the tasks of an array share it, and without `_reset_outfiles` it is not emptied before each of them |
 | task subdirectory | the task that asks for it | when its process is prepared, if missing (see "Task subdirectories") | before the process function of its task, unless the task is skipped or the process has a `_reset_outfiles` method | when its process is prepared, when no option asks for it while another task of the process asks for a task subdirectory, unless the process has a `_reset_outfiles` method | alike |
 | value descriptor | the task | by the task, with `write_value_to_desc`, in the process output directory, named after the option and the task (see "Output options") | does not apply | with the contents of the process output directory, by the default reset of a process with a single task, or, when the process output directory is subdivided and the process has no `_reset_outfiles` method, when no output option of the run names it | alike: each task has its own |
 | step marker | the process | by a task, with `mark_step_done`, in a directory of its choice (see "Sequential processes") | does not apply | with the contents of the directory that holds it: by the default reset of a process with a single task, when it is in the process output directory; by the emptying of its task subdirectory before each task, when it is in one; when the process of a subdivided process output directory without `_reset_outfiles` is prepared, when it is in that directory outside a task subdirectory; or with a shared subdirectory that no option asks for while its shared directory is subdivided | alike in a task subdirectory; differ in the process output directory of an array, which keeps it unless the directory is subdivided |
 | FIFO, with its shim FIFO and mirror log | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO") | created again, empty, each time the process of its owner is prepared | never | alike: each task declares a FIFO of its own |
 | shared directory | the module that declares it | before any process is launched, if missing (see "Output options") | never, except a subdivided shared directory, from which every entry that is neither a shared subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them is removed before any process is launched (see "Shared subdirectories") | never | alike |
 | shared subdirectory | the tasks that ask for it | before any process is launched, if missing (see "Shared subdirectories") | never | before any process is launched, when no option asks for it while another asks for a shared subdirectory of the same shared directory (see "Shared subdirectories") | alike |
-| exec directory | the engine | when a process that has never run is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker, or, when cancelled, its own cancellation marker |
+| exec directory | the engine | when a process with no process script is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its ids and then its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker, or, when cancelled, its own cancellation marker |
 
 **Where one task and many still differ.** The process output directory itself is
 the one run resource that one task and many do not get alike: the tasks of an
@@ -2327,7 +2328,7 @@ directory and from the scheduler, and is kept nowhere:
 
 | Status | When |
 |---|---|
-| `TO-DO` | none of the tasks of the process has been launched or cancelled: it has no process script, or it has one and no id, no cancellation marker and no completion marker |
+| `TO-DO` | none of the tasks of the process has been launched or cancelled: it has no process script, or it has one, no id and no cancellation marker, and not every task has its completion marker |
 | `IN-PROGRESS` | an id of the process, other than that of a task with its completion marker, still runs, as the scheduler says |
 | `FINISHED` | every task of the process has its completion marker |
 | `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched or cancelled, none running, and some neither launched nor cancelled |
@@ -2359,12 +2360,12 @@ tasks of an array are submitted together, and the state does not arise.
 A process script alone does not make a process launched. The scheduler writes
 the process script before it launches the process and records its id, and a run
 takes away the ids of a process that it runs again before launching it anew, so
-that a process with its process script and with no id, no cancellation marker
-and no completion marker is one prepared and not launched yet, and is `TO-DO`:
-it waits for its dependencies or for its launch, and has not failed. Whether the
-process was launched is asked before anything else, so that an id written while
-the status is read counts as launched for every question that follows, and the
-process is never taken for one that was launched and no longer runs.
+that a process with its process script, no id and no cancellation marker, and
+not finished, is one prepared and not launched yet, and is `TO-DO`: it waits for
+its dependencies or for its launch, and has not failed. Whether the process was
+launched is asked before anything else, so that an id written while the status
+is read counts as launched for every question that follows, and the process is
+never taken for one that was launched and no longer runs.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
@@ -2422,9 +2423,15 @@ reasons:
   again those that have finished too.
 
 The marks then spread until nothing changes: from a process to every process
-that depends on it, and from one end of a FIFO to the other. A process marked
-to rerun loses its completion markers before the run is launched, so it is
-prepared and run as any unfinished process, every task of it.
+that depends on it, and from one end of a FIFO to the other. A process marked to
+rerun loses its ids and then its completion markers before the run is launched.
+In that order, a finished process goes from `FINISHED` to `TO-DO` with no
+reading of its status in between that would take it for a process launched and
+failed. In a resident program, where every marked node that is not running is
+reset, a node with cancellation markers stays `UNFINISHED` until it is prepared.
+Since the process keeps its process script, it is then prepared as any process
+that an earlier run prepared, with the logs of that earlier run cleaned, and
+every task of it runs again.
 
 `program.opts_old` is written at the end of a run, once every process has been
 launched or, with the built-in scheduler, has ended. A run that is stopped or

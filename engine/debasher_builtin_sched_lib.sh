@@ -2213,8 +2213,10 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_process()
         # Obtain array size
         local array_size=$(debasher::_get_numtasks_for_process "${processname}")
 
-        # Prepare files and directories for process
-        if [ "${status}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
+        # Prepare files and directories for process: those of a process
+        # that an earlier run prepared, which has its process script even
+        # when it is TO-DO again, are cleaned instead
+        if [ ! -f "${script_filename}" ]; then
             debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
         else
             debasher_builtin_sched::_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }

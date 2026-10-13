@@ -695,6 +695,21 @@ launch_arr_task() {
     [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
 }
 
+@test "resetting the completion of a finished process to run it again leaves it TO-DO, with no id left" {
+    setup_array_status
+    local idx
+    for idx in 0 1 2; do
+        launch_arr_task "${idx}"
+        mark_task_finished arr "${idx}"
+    done
+
+    debasher::_reset_process_completion_signal "${OUTDIR}" arr
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]
+    ! compgen -G "${ARR_EXECDIR}/arr_*.${DEBASHER_ARRAY_TASKID_FEXT}"
+}
+
 @test "the id of a finished task is not asked about, even when it names a running process" {
     setup_array_status
     # Every id runs, as a process id that the system gave again to another

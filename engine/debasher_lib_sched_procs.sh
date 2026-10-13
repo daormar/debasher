@@ -272,10 +272,18 @@ debasher::_get_task_array_list()
 }
 
 ########
+# Prepares a process to run again: takes away its ids, of the process and of
+# its tasks, and then its completion markers. In that order, a reading of its
+# status in between finds it FINISHED or TO-DO, and never launched and
+# unfinished, with the ids of the run before and no completion marker
 debasher::_reset_process_completion_signal()
 {
     local dirname=$1
     local processname=$2
+
+    local execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    "${RM}" -f "$(debasher::_get_processid_filename "${dirname}" "${processname}")" \
+          "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT}
 
     local finished_filename_pref=$(debasher::_get_process_finished_filename_prefix "${dirname}" ${processname})
     "${RM}" -f "${finished_filename_pref}"*.${DEBASHER_FINISHED_PROCESS_FEXT}
