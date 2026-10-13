@@ -38,31 +38,28 @@
 <a id="introduction" class="anchor" href="#introduction" aria-hidden="true"><span class="octicon octicon-link"></span></a>Introduction</h2>
 
 <p><a href="https://link.springer.com/article/10.1186/s12859-025-06108-1">DeBasher</a>
-is a software package implementing a flow-based programming extension
-for Bash, and a polyglot one: Bash holds a program together, but each
-of its processes can be written in Bash, Python, R, Perl or Groovy, and
-a single program can mix them. With the web interface, a program can be
-built without writing any Bash at all.</p>
+is a workflow system whose processes are Unix programs. Each process is
+written in the language its author prefers (Bash, Python, R, Perl or
+Groovy), takes its inputs and gives its outputs through named options,
+and the way options connect across processes defines the dependency
+graph that DeBasher schedules and runs, on one machine or on a Slurm
+cluster. Programs are built in a visual editor, with the help of an AI
+assistant, or written by hand as Bash modules.</p>
 
-<p>In the flow-based programming paradigm, networks of black box
-processes with well defined data exchange connections are
-executed. DeBasher is characterized by a strong orientation towards the
-definition of software components or modules.</p>
+<p>DeBasher runs two kinds of program. A <em>general program</em>
+processes a batch of inputs and ends. A <em>resident program</em>
+processes a stream: long-lived, stateful processes exchange messages
+through FIFOs, in cycles when needed, survive crashes, and can launch a
+general program for each request they receive. Both kinds define their
+processes the same way.</p>
 
-<p>DeBasher can be used to execute general programs. However, DeBasher
-is particularly appropriate for the execution of pipelines, also called
-workflows. Workflow execution is important in different fields. One
-particular example would be the field of Bioinformatics.</p>
-
-<p>DeBasher runs two types of programs. A <em>general program</em>
-processes a batch of inputs: each of its processes runs once, as soon
-as its inputs are ready, and ends. A <em>resident program</em>
-processes a stream: its processes are long-lived Python classes with a
-state of their own, which exchange messages through FIFOs, react to
-what is written into the program from outside, and survive the crash
-of any of them. Programs of both types can be written by hand, as Bash
-modules, or built, run and observed from a browser with the DeBasher
-web interface.</p>
+<p>DeBasher follows flow-based programming, where a program is a
+network of black box processes with well defined connections, and
+keeps what the shell does best: a process is a black box with a
+command-line interface, so any program that takes its inputs and
+leaves its outputs through options, files or FIFOs can be one.
+Workflows, or pipelines, are its typical use, in bioinformatics among
+other fields.</p>
 
 <p>The DeBasher software package was created and is currently maintained
 by <a href="https://daormar.github.io/">Daniel Ortiz-Martínez</a>.
@@ -82,8 +79,7 @@ an MSc degree in Bioinformatics.</p>
 <li>A built-in scheduler for a single machine, and integration with workload schedulers such as Slurm.</li>
 <li>Support for Conda environments and Docker containers.</li>
 <li>Reproducible workflows.</li>
-<li>Generation of graphical representations of programs.</li>
-<li>A web interface to build, run and observe programs from a browser.</li>
+<li>A visual editor to build, run and observe programs from a browser, with AI assistance.</li>
 </ul>
 
 <h2>
