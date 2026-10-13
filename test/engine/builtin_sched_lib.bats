@@ -976,6 +976,7 @@ fail_task() {
 @test "_filter_errwarns_in_script_log_files_pref lists the errors and warnings of the logs of a built-in run" {
     GREP="$(command -v grep)"
     AWK="$(command -v awk)"
+    SORT="$(command -v sort)"
     DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
     DEBASHER_PROGRAM_OUTDIR="${OUTDIR}"
     printf '%s\n' "Process started" "Error: something failed" "Warning: something odd" > "${EXECDIR}/proc.sched_out"
@@ -985,6 +986,45 @@ fail_task() {
     [[ "${output}" == *"[${EXECDIR}/proc.sched_out](file://${EXECDIR}/proc.sched_out)"* ]]
     [[ "${output}" == *"E> Error: something failed"* ]]
     [[ "${output}" == *"W> Warning: something odd"* ]]
+}
+
+@test "_filter_errwarns_in_script_log_files_pref given a task index covers only that task and the processes that are not arrays" {
+    GREP="$(command -v grep)"
+    AWK="$(command -v awk)"
+    SORT="$(command -v sort)"
+    DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    DEBASHER_PROGRAM_OUTDIR="${OUTDIR}"
+    local arrdir="${OUTDIR}/__exec__/arr"
+    mkdir -p "${arrdir}"
+    echo "Error: in task 1" > "${arrdir}/arr_1.sched_out"
+    echo "Error: in task 10" > "${arrdir}/arr_10.sched_out"
+    echo "Error: in task 2" > "${arrdir}/arr_2.sched_out"
+    echo "Error: in single" > "${EXECDIR}/proc.sched_out"
+
+    run debasher::_filter_errwarns_in_script_log_files_pref "E> " "W> " "md" 1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"E> Error: in task 1"* ]]
+    [[ "${output}" == *"E> Error: in single"* ]]
+    [[ "${output}" != *"in task 10"* ]]
+    [[ "${output}" != *"in task 2"* ]]
+
+    run debasher::_filter_errwarns_in_script_log_files_pref "E> " "W> " "md"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"in task 1"* ]]
+    [[ "${output}" == *"in task 10"* ]]
+    [[ "${output}" == *"in task 2"* ]]
+    [[ "${output}" == *"in single"* ]]
+}
+
+@test "_get_script_log_filenames prints the logs sorted" {
+    SORT="$(command -v sort)"
+    DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    DEBASHER_PROGRAM_OUTDIR="${OUTDIR}"
+    touch "${EXECDIR}/proc_2.sched_out" "${EXECDIR}/proc_0.sched_out" "${EXECDIR}/proc_1.sched_out"
+
+    run debasher::_get_script_log_filenames
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "$(printf '%s\n' "${EXECDIR}/proc_0.sched_out" "${EXECDIR}/proc_1.sched_out" "${EXECDIR}/proc_2.sched_out")" ]
 }
 
 # debasher_builtin_sched::check_program_comp_res checks, as debasher_exec

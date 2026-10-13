@@ -276,8 +276,16 @@ debasher::_log_warning_rerun()
 }
 
 ########
+# Prints the log files of the scheduler of the run, one per line and
+# sorted. Given a task index, prints those of the tasks with that index in
+# the array processes (<process>_<idx>.<log ext>) and those of the
+# processes that are not arrays (<process>.<log ext>), leaving out the
+# tasks with another index; without one, prints them all.
+#
+# $1 - Task index (optional).
 debasher::_get_script_log_filenames()
 {
+    local task_idx=$1
     local exec_dirname=$(debasher::_get_prg_exec_dir)
 
     local sched=$(debasher::_get_scheduler)
@@ -288,7 +296,33 @@ debasher::_get_script_log_filenames()
         ${DEBASHER_BUILTIN_SCHEDULER})
             debasher_builtin_sched::_get_script_log_filenames "${exec_dirname}"
             ;;
-    esac
+    esac | debasher::_filter_script_log_filenames_by_task "${task_idx}" | "${SORT}"
+}
+
+########
+# Filters a list of log files, one per line, keeping those of the given
+# task index and those of the processes that are not arrays; with an
+# empty index, keeps them all.
+#
+# $1 - Task index, or empty.
+debasher::_filter_script_log_filenames_by_task()
+{
+    local task_idx=$1
+
+    if [ -z "${task_idx}" ]; then
+        "${CAT}"
+    else
+        "${AWK}" -v ext="${DEBASHER_SCHED_LOG_FEXT}" -v idx="${task_idx}" '
+            {
+                n = split($0, parts, "/")
+                base = parts[n]
+                if (base ~ ("_[0-9]+\\." ext "$")) {
+                    if (base ~ ("_" idx "\\." ext "$")) print
+                } else {
+                    print
+                }
+            }'
+    fi
 }
 
 ########
@@ -336,11 +370,23 @@ debasher::_create_script_log_file_errwarn_entry()
 }
 
 ########
+# Prints the errors and warnings found in the log files of the scheduler
+# of the run, one entry per log file, each with the given prefixes for
+# errors and warnings and in the given format ("md" or plain). Given a
+# task index, covers only the logs of the tasks with that index and those
+# of the processes that are not arrays, as
+# debasher::_get_script_log_filenames does.
+#
+# $1 - Prefix of each error.
+# $2 - Prefix of each warning.
+# $3 - Format ("md" or any other string for plain text).
+# $4 - Task index (optional).
 debasher::_filter_errwarns_in_script_log_files_pref()
 {
     local errpref=$1
     local warnpref=$2
     local format=$3
+    local task_idx=$4
     local i=0
 
     while read filename; do
@@ -351,7 +397,7 @@ debasher::_filter_errwarns_in_script_log_files_pref()
         debasher::_create_script_log_file_errwarn_entry "${errpref}" "${warnpref}" "${format}" "${filename}"
 
         i=$((i+1))
-    done < <(debasher::_get_script_log_filenames)
+    done < <(debasher::_get_script_log_filenames "${task_idx}")
 }
 
 ########
