@@ -131,6 +131,17 @@ const LEGEND_PANEL_STYLE = {
   flexDirection: "column" as const,
 };
 
+// The program files card in the top left corner keeps its own height
+// (see ProgramFilesPanel) while the canvas has room for it, and shrinks to
+// the canvas less the margins of its panel (15px above and below) when the
+// canvas is shorter, as when the Claude Code terminal takes the bottom of
+// the window.
+const FILES_PANEL_STYLE = {
+  maxHeight: "calc(100% - 30px)",
+  display: "flex",
+  flexDirection: "column" as const,
+};
+
 // The number of options "<base>0", "<base>1", ... in `resolvedValues`,
 // counted up to the first missing index.
 function countIndexedOptions(base: string, resolvedValues: Record<string, string>): number {
@@ -985,7 +996,7 @@ export default function ProgramCanvas() {
           <Controls />
           <MiniMap />
 
-          <Panel position="top-left">
+          <Panel position="top-left" style={FILES_PANEL_STYLE}>
             <ProgramFilesPanel openRequest={filesPanelRequest} />
           </Panel>
 
