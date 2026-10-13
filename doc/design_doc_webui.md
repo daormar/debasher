@@ -450,11 +450,17 @@ The backend groups its endpoints in routers, by what they act on:
 - `claude`: open a session of Claude Code in the page and carry its terminal.
 
 One server process serves both the API and the built frontend, which is a single
-self-contained `index.html`. `debasher_webui` starts it, listening only on
-`127.0.0.1` unless told otherwise. It runs every tool as the user who launched
-it, so it obeys only the requests that carry its token (see "Access to the
-backend: the token"). During development the dev server of Vite serves the
-frontend and forwards `/api` to a backend started by hand.
+self-contained `index.html`. It serves the files of the built frontend with
+`Cache-Control: no-cache`, so that a browser keeps its copy of the page but asks
+the backend whether it is still current each time the page is opened. Otherwise
+a browser may take the page from its cache without asking, and show the web UI
+of a version that an installation has replaced, even when the address carries a
+new token after `#`, since the part after `#` is not sent with the request.
+`debasher_webui` starts the server, listening only on `127.0.0.1` unless told
+otherwise. It runs every tool as the user who launched it, so it obeys only the
+requests that carry its token (see "Access to the backend: the token"). During
+development the dev server of Vite serves the frontend and forwards `/api` to a
+backend started by hand.
 
 ## The backend keeps no state
 

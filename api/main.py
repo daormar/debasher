@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from . import token_auth
+from .page_files import PageFiles
 from .routers import claude, execution, fs_browse, processes, program_files, programs, webui
 
 # The pages that FastAPI adds to describe the API are turned off: whatever the
@@ -33,7 +33,7 @@ frontend_dist = (
     else Path(__file__).resolve().parent.parent / "frontend" / "dist"
 )
 if frontend_dist.is_dir():
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="static")
+    app.mount("/", PageFiles(directory=frontend_dist, html=True), name="static")
 
 # Every request but those for the page has to carry the token of the backend,
 # which refuses to start without one.
