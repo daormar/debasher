@@ -30,13 +30,13 @@ between processes, allows cycles, keeps processes with a state of
 their own, takes input from outside while a program runs, and launches
 programs from within programs.
 
-The documentation has three parts. The first is for using DeBasher:
+The documentation has two parts. The first is for using DeBasher:
 installing it, the concepts a program is made of, building and running
 programs in the web interface or from the command line, the shapes
-that programs take, and resident programs. The second is for writing
-modules by hand, which the web interface does for you and which the
-first part never requires. The third is the reference of the tools
-and of the API.
+that programs take, resident programs, and, last, writing modules by
+hand, which the web interface does for you and which the chapters
+before it never require. The second is the reference of the tools and
+of the API.
 
 Contents
 --------
@@ -58,10 +58,6 @@ Contents
    design_patterns
 
    resident
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Writing Modules by Hand
 
    implem
 

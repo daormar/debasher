@@ -1,14 +1,17 @@
 .. _implem:
 
-Implementing DeBasher Programs
-==============================
+Writing Modules by Hand
+=======================
 
-This section is devoted to explain the procedure of implementing new
-DeBasher programs. There are four main aspects involved. First, creating
-and configuring a new module to store the program and the different
-processes it executes. Second, implementing the processes
-themselves. Third, handling command-line and process options for the
-processes. And finally, incorporating the processes into the program.
+This section explains how to write the module of a program by hand,
+which the web interface does for you from a drawing (see the
+:ref:`webui` Section): read it to write a module without the editor,
+or to read the one that the editor wrote. There are four main aspects
+involved. First, creating and configuring a new module to store the
+program and the different processes it executes. Second, implementing
+the processes themselves. Third, handling command-line and process
+options for the processes. And finally, incorporating the processes
+into the program.
 
 More specifically, the implementation of a DeBasher program can be
 carried out in a process-wise manner. For each process, we will define a
