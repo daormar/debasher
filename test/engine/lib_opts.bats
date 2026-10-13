@@ -452,18 +452,174 @@ record_definition() {
     [ ! -e "${BATS_TEST_TMPDIR}/size_called" ]
 }
 
-@test "debasher::get_process_num_tasks refuses the number of tasks of a process without an option generator while those are defined, even when its options are" {
-    init_num_tasks_program "definedarrproc"
-    definedarrproc_define_opts()
+# An array process of three tasks, and a process without an option
+# generator that asks for its number of tasks and writes it, with whether
+# the array is defined in this shell at that moment, to the "asked" file
+define_asking_array_program() {
+    init_num_tasks_program "askedarrproc" "askingarrproc"
+    askedarrproc_define_opts()
     {
-        record_definition "definedarrproc" 0
+        local task_idx
+        for task_idx in 0 1 2; do
+            record_definition "askedarrproc" "${task_idx}" || return 1
+        done
     }
-    DEBASHER_PROCESS_OPT_LIST_LEN["definedarrproc"]=2
-    local DEBASHER_DEFINING_NON_GENERATOR_OPTS=1
+    askingarrproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "askedarrproc") || return 1
+        echo "${n} ${DEBASHER_PROCESS_OPT_LIST_LEN["askedarrproc"]+defined}" > "${BATS_TEST_TMPDIR}/asked"
+        record_definition "askingarrproc" 0
+    }
+}
 
-    run debasher::get_process_num_tasks "definedarrproc"
+@test "debasher::get_process_num_tasks gives a process without an option generator the number of tasks of an array defined before it" {
+    define_asking_array_program
+
+    set +e
+    debasher::_define_opts_for_processes "" "askedarrproc" "askingarrproc"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/asked")" = "3 defined" ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["askedarrproc"]}" -eq 3 ]
+    [ "$(grep -c askedarrproc "${BATS_TEST_TMPDIR}/order")" -eq 3 ]
+}
+
+@test "debasher::get_process_num_tasks gives a process without an option generator the number of tasks of an array defined after it, running its _define_opts in a subshell" {
+    define_asking_array_program
+
+    set +e
+    debasher::_define_opts_for_processes "" "askingarrproc" "askedarrproc"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    # The same answer, while the array is not defined in this shell yet
+    [ "$(cat "${BATS_TEST_TMPDIR}/asked")" = "3 " ]
+    # The array is defined for real, once, in its turn: its _define_opts
+    # ran twice, but registered its three tasks only in this shell
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["askedarrproc"]}" -eq 3 ]
+    [ "$(grep -c askedarrproc "${BATS_TEST_TMPDIR}/order")" -eq 6 ]
+}
+
+@test "debasher::get_process_num_tasks gives zero for a process without an option generator whose _define_opts registers no task" {
+    init_num_tasks_program "emptyarrproc" "askingemptyproc"
+    emptyarrproc_define_opts()
+    {
+        echo "emptyarrproc" >> "${BATS_TEST_TMPDIR}/order"
+    }
+    askingemptyproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "emptyarrproc") || return 1
+        echo "${n}" >> "${BATS_TEST_TMPDIR}/asked"
+        record_definition "askingemptyproc" 0
+    }
+
+    set +e
+    debasher::_define_opts_for_processes "" "askingemptyproc" "emptyarrproc"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/asked")" = "0" ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["emptyarrproc"]}" -eq 0 ]
+    run debasher::get_process_num_tasks "emptyarrproc"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "0" ]
+}
+
+@test "debasher::get_process_num_tasks stops a number of tasks that depends on itself between processes without an option generator" {
+    init_num_tasks_program "cyclearra" "cyclearrb"
+    cyclearra_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "cyclearrb") || return 1
+        record_definition "cyclearra" 0
+    }
+    cyclearrb_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "cyclearra") || return 1
+        record_definition "cyclearrb" 0
+    }
+
+    run debasher::_define_opts_for_processes "" "cyclearra" "cyclearrb"
     [ "${status}" -eq 1 ]
-    [[ "${output}" == *"process definedarrproc has no option generator"* ]]
+    [[ "${output}" == *"depends on itself (cyclearra -> cyclearrb -> cyclearra)"* ]]
+}
+
+@test "debasher::get_process_num_tasks stops a number of tasks that depends on itself through an option generator, even after a task was registered" {
+    init_num_tasks_program "cyclemixarr" "cyclemixgen"
+    cyclemixarr_define_opts()
+    {
+        record_definition "cyclemixarr" 0 || return 1
+        local n
+        n=$(get_process_num_tasks "cyclemixgen") || return 1
+        record_definition "cyclemixarr" 1
+    }
+    cyclemixgen_generate_opts_size()
+    {
+        get_process_num_tasks "cyclemixarr"
+    }
+    cyclemixgen_generate_opts()
+    {
+        record_definition "cyclemixgen" "$5"
+    }
+
+    run debasher::_define_opts_for_program_processes ""
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"depends on itself (cyclemixarr -> cyclemixgen -> cyclemixarr)"* ]]
+}
+
+@test "debasher::get_process_num_tasks gives the number of tasks of an option generator while its tasks are defined without computing it again" {
+    init_num_tasks_program "sizedoncegen" "askingbackproc"
+    sizedoncegen_generate_opts_size()
+    {
+        echo "sized" >> "${BATS_TEST_TMPDIR}/sized"
+        echo 2
+    }
+    sizedoncegen_generate_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "askingbackproc") || return 1
+        record_definition "sizedoncegen" "$5"
+    }
+    askingbackproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "sizedoncegen") || return 1
+        record_definition "askingbackproc" 0
+    }
+
+    set +e
+    debasher::_define_opts_for_processes "" "sizedoncegen" "askingbackproc"
+    local status=$?
+    set -e
+    [ "${status}" -eq 0 ]
+    [ "$(grep -c sized "${BATS_TEST_TMPDIR}/sized")" -eq 1 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["sizedoncegen"]}" -eq 2 ]
+    [ "${DEBASHER_PROCESS_OPT_LIST_LEN["askingbackproc"]}" -eq 1 ]
+}
+
+@test "debasher::get_process_num_tasks reports the process whose options could not be defined when it asks for the number of tasks of a failing one" {
+    init_num_tasks_program "failingarrproc" "askingfailproc"
+    failingarrproc_define_opts()
+    {
+        echo "Error: failingarrproc cannot define its options" >&2
+        return 1
+    }
+    askingfailproc_define_opts()
+    {
+        local n
+        n=$(get_process_num_tasks "failingarrproc") || return 1
+        record_definition "askingfailproc" 0
+    }
+
+    run debasher::_define_opts_for_processes "" "askingfailproc" "failingarrproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"failingarrproc cannot define its options"* ]]
+    [[ "${output}" == *"the options of process failingarrproc could not be defined"* ]]
+    [[ "${output}" == *"option not found for process askingfailproc"* ]]
 }
 
 @test "debasher::get_process_num_tasks reads the number of tasks of any process once the options of the program are defined" {
@@ -488,16 +644,25 @@ record_definition() {
     [ "${output}" = "5" ]
 }
 
-@test "debasher::get_process_num_tasks fails for an option generator not defined yet once the run is no longer prepared" {
-    init_num_tasks_program "latergenproc"
+@test "debasher::get_process_num_tasks fails for a process not defined yet once the run is no longer prepared" {
+    init_num_tasks_program "latergenproc" "laterarrproc"
     latergenproc_generate_opts_size()
     {
         echo 3
+    }
+    laterarrproc_define_opts()
+    {
+        record_definition "laterarrproc" 0
     }
 
     run debasher::get_process_num_tasks "latergenproc"
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"the number of tasks of process latergenproc is not known yet"* ]]
+
+    run debasher::get_process_num_tasks "laterarrproc"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"the number of tasks of process laterarrproc is not known yet"* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/order" ]
 }
 
 @test "debasher::get_process_num_tasks fails for a process that is not a process of the program" {

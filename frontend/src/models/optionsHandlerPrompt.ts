@@ -81,7 +81,7 @@ function rulesSection(program: Program, process: ProgramProcess, mode: PromptedH
   const own = mode === "array"
     ? [
         `- The code is Bash, written into the function \`${process.name}_define_opts\`, which defines the options of every task of the process. It has to build a Bash array named \`array\`, with one element for each task. After it, a loop \`for task_idx in "\${!array[@]}"\` defines the options of each task, whose values can use \`\${array[$task_idx]}\`, the element of the task, \`\${task_idx}\`, its index, and any variable that the code sets.`,
-        "- `debasher_exec` runs the code once each time it prepares a run, so a later run builds the array again, from what it reads then.",
+        "- `debasher_exec` runs the code each time it prepares a run, so a later run builds the array again, from what it reads then. Within a run it may run it more than once: when another process asks for the number of tasks of this one with `get_process_num_tasks` before this code has run in its turn, the engine runs it again, in a subshell, and keeps nothing of that run. The code has to build an array of the same size every time: a file or a directory that it reads, such as one given on the command line, has to stay unchanged while the run lasts.",
       ]
     : [
         `- The code is Bash, written into the function \`${process.name}_generate_opts_size\`. It has to print the number of tasks of the process on its standard output, and nothing else. Another function defines the options of the task of index \`task_idx\`, from 0, whose values can use \`\${task_idx}\`; it does not see the variables of this code.`,
@@ -106,15 +106,18 @@ function rulesSection(program: Program, process: ProgramProcess, mode: PromptedH
 // How the code takes its number of tasks from another process of the
 // program, with get_process_num_tasks, instead of computing it again with
 // the rule of that process, which two copies could apply differently. The
-// processes that this one reads task by task, and that it can ask, are the
-// usual candidates: any of them for an option generator, and only those in
-// generator mode for an array.
+// processes that this one reads task by task are the usual candidates. Any
+// process can be asked, once per code; a process in generator mode is
+// cheap to ask, and one in array mode costs its whole option definition
+// when it is not defined yet.
+const COST_OF_ASKING =
+  "Any process of the program can be asked, but ask once, keeping the number in a variable: a process in `generator` mode answers at the cost of its size code, while a process in `array` or `manual` mode that is not defined yet answers by running its whole option definition again, which is costly, so prefer asking a process in `generator` mode. A chain of such questions that comes back to this process stops the preparation of the run.";
+
 function numTasksRules(program: Program, process: ProgramProcess, mode: PromptedHandlerMode): string[] {
   const rule = mode === "array"
-    ? "- If the array has as many elements as another process of the program has tasks, read that number with `n=$(get_process_num_tasks \"<process>\") || return 1` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. Only a process in `generator` mode can be asked: the engine refuses a process in another mode, so that the answer never depends on the order in which the processes are defined."
-    : "- If the process has as many tasks as another process of the program, as when each task reads the task with the same index of that process, print that number with `get_process_num_tasks \"<process>\"` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. Any process of the program can be asked. Make it the last command of the code, or read it with `n=$(get_process_num_tasks \"<process>\") || return 1`, so that a failure stops the preparation of the run.";
-  const sources = taskByTaskSources(program, process)
-    .filter(source => mode === "generator" || source.optionsHandler.mode === "generator");
+    ? `- If the array has as many elements as another process of the program has tasks, read that number with \`n=$(get_process_num_tasks "<process>") || return 1\` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. ${COST_OF_ASKING}`
+    : `- If the process has as many tasks as another process of the program, as when each task reads the task with the same index of that process, print that number with \`get_process_num_tasks "<process>"\` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. ${COST_OF_ASKING} Make it the last command of the code, or read it with \`n=$(get_process_num_tasks "<process>") || return 1\`, so that a failure stops the preparation of the run.`;
+  const sources = taskByTaskSources(program, process);
   if (sources.length === 0) {
     return [rule];
   }

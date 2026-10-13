@@ -398,11 +398,19 @@ def test_task_shaping_options_survive_the_round_trip(tmp_path):
     _assert_model_round_trip(program, tmp_path)
 
 
-def _fanout_counted_by_tasks() -> Program:
-    """dispatch scatters to the tasks of worker, a generator, and collect
-    gathers from them: neither family has a count source option, so both
-    count the tasks of worker."""
+def _fanout_counted_by_tasks(worker_mode="generator") -> Program:
+    """dispatch scatters to the tasks of worker, a generator or an array
+    with `worker_mode`, and collect gathers from them: neither family has a
+    count source option, so both count the tasks of worker."""
     dispatch = _process("dispatch", [_option("-outf-ith", value="${process_outdir}/part_${i}")])
+    worker_handler = (
+        OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"')
+        if worker_mode == "generator"
+        else OptionsHandler(
+            mode="array",
+            arrayCode='local n=$(get_cmdline_opt "${cmdline}" "-n")\nlocal -a array=()\nfor ((j=0; j<n; j++)); do array+=("$j"); done',
+        )
+    )
     worker = _process(
         "worker",
         [
@@ -410,7 +418,7 @@ def _fanout_counted_by_tasks() -> Program:
             _option("-inf", value="[dispatch;-outf-ith]"),
             _option("-outf", value="${process_outdir}/out_${task_idx}"),
         ],
-        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode='get_cmdline_opt "${cmdline}" "-n"'),
+        optionsHandler=worker_handler,
     )
     other = _process(
         "other",
@@ -428,8 +436,9 @@ def _fanout_counted_by_tasks() -> Program:
     )
 
 
-def test_fanout_families_counted_by_the_tasks_of_a_generator_survive_the_round_trip(tmp_path):
-    program = _fanout_counted_by_tasks()
+@pytest.mark.parametrize("worker_mode", ["generator", "array"])
+def test_fanout_families_counted_by_the_tasks_of_a_process_survive_the_round_trip(tmp_path, worker_mode):
+    program = _fanout_counted_by_tasks(worker_mode)
 
     script = script_generation.generate_script(program)
     assert "n_outf=$(debasher::get_process_num_tasks \"worker\") || return 1" in script

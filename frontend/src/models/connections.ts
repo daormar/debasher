@@ -17,8 +17,8 @@ export type EdgeEndpoints = Omit<ProgramEdge, "id">;
 // The processes at the other end of the connections of a fanout family of
 // `process`: the one that an input family reads, the ones that read an
 // output family. A family without a count source option counts the tasks
-// of that process, which has to be the only one and in "generator" mode
-// (see _fanout_count_process in api/script_generation.py).
+// of that process, which has to be the only one and in "array" or
+// "generator" mode (see _fanout_count_process in api/script_generation.py).
 export function fanoutCountProcesses(
   program: Program,
   process: ProgramProcess,
@@ -47,7 +47,7 @@ export function fanoutCountText(program: Program, process: ProgramProcess, optio
   const ends = fanoutCountProcesses(program, process, option);
   return ends.length === 1
     ? `the tasks of \`${ends[0].name}\``
-    : "the tasks of the process at the other end of its connections, a generator";
+    : "the tasks of the process at the other end of its connections, an array or a generator";
 }
 
 /**

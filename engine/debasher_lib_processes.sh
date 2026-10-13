@@ -412,9 +412,18 @@ debasher::_define_opts_for_process()
         local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
         local process_outdir=$(debasher::_get_process_outdir "${processname}")
 
+        # The number of tasks of the process is the number of option lists
+        # that its _define_opts method registers, so it is being computed
+        # while the method runs (see debasher::_check_num_tasks_chain)
+        local DEBASHER_COMPUTING_NUM_TASKS="${DEBASHER_COMPUTING_NUM_TASKS:-} ${processname}"
+
         # Obtain define_opts function name and call it
         local define_opts_funcname=$(debasher::_get_define_opts_funcname "${processname}")
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
+
+        # A method that registered no task leaves zero tasks, so that a
+        # process whose options are defined always has its number of tasks
+        DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}
     }
 
     debasher::_define_opts_generator()
@@ -430,6 +439,11 @@ debasher::_define_opts_for_process()
         local array_size
         array_size=$(debasher::_compute_generator_num_tasks "${cmdline}" "${process_spec}" "${processname}") || return 1
 
+        # Known from here on: a process that asks, through the generator,
+        # for the number of tasks of this one finds it without computing
+        # it again
+        DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
+
         # Iterate over array tasks. This is done even when all process
         # dependencies were given, as save_opt_list does for a process
         # without a generator: a fifo the generator defines with
@@ -444,9 +458,6 @@ debasher::_define_opts_for_process()
             # Update output options information
             debasher::_get_output_opts_info "${processname}" "${task_idx}" "${DEBASHER_DESERIALIZED_ARGS[@]}"
         done
-
-        # Set option list length
-        DEBASHER_PROCESS_OPT_LIST_LEN[$processname]=${array_size}
     }
 
     # Initialize variables
@@ -467,14 +478,35 @@ debasher::_define_opts_for_process()
 }
 
 ########
+# Defines the options of the given processes, in the given order. Keeps
+# the command line while it runs, for get_process_num_tasks, which needs
+# it to compute the number of tasks of a process not defined yet.
+#
+# $1 - Command line.
+# $2... - Process names.
+#
+# Returns 1 if the options of some process cannot be defined.
+debasher::_define_opts_for_processes()
+{
+    local cmdline=$1
+    shift
+    local DEBASHER_DEFINING_OPTS_CMDLINE=${cmdline}
+
+    local processname
+    for processname in "$@"; do
+        local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
+        debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
+    done
+}
+
+########
 # Defines the options of every process of the program: first those of the
 # processes without an option generator, then those of the processes with
-# one. An option generator can thus ask for the number of tasks of any
-# process (see debasher::get_process_num_tasks), and a process without one
-# only for that of an option generator, which its _generate_opts_size
-# method gives at any time. Keeps the command line, and whether the
-# processes without an option generator are being defined, while it runs,
-# for get_process_num_tasks.
+# one. Any process can ask for the number of tasks of any other while its
+# options are defined (see debasher::get_process_num_tasks), whatever the
+# order; the order only spares computing again the number of tasks of the
+# processes without an option generator, which the option generators
+# usually ask for and which cost a whole _define_opts method each time.
 #
 # $1 - Command line.
 #
@@ -482,31 +514,84 @@ debasher::_define_opts_for_process()
 debasher::_define_opts_for_program_processes()
 {
     local cmdline=$1
-    local DEBASHER_DEFINING_OPTS_CMDLINE=${cmdline}
-    local DEBASHER_DEFINING_NON_GENERATOR_OPTS
 
-    local with_generator processname
-    for with_generator in 0 1; do
-        DEBASHER_DEFINING_NON_GENERATOR_OPTS=$((1 - with_generator))
-        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            if debasher::_uses_option_generator "${processname}"; then
-                [ "${with_generator}" -eq 1 ] || continue
-            else
-                [ "${with_generator}" -eq 0 ] || continue
-            fi
-            local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
-            debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || { echo "Error: option not found for process ${processname}" >&2 ; return 1; }
-        done
+    local -a without_generator=() with_generator=()
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if debasher::_uses_option_generator "${processname}"; then
+            with_generator+=("${processname}")
+        else
+            without_generator+=("${processname}")
+        fi
     done
+    debasher::_define_opts_for_processes "${cmdline}" "${without_generator[@]}" || return 1
+    debasher::_define_opts_for_processes "${cmdline}" "${with_generator[@]}"
+}
+
+########
+# Fails if the number of tasks of process $1 is already being computed in
+# the current call stack: DEBASHER_COMPUTING_NUM_TASKS holds the processes
+# whose _define_opts or _generate_opts_size method is running, each added
+# while its method runs. Asking for one of them again would recurse for
+# ever, or, for a process whose method has registered some task already,
+# give the number of tasks registered so far, so get_process_num_tasks
+# checks it before anything else and stops the preparation instead.
+#
+# $1 - Process name.
+#
+# Returns 1 if the number of tasks of the process depends on itself.
+debasher::_check_num_tasks_chain()
+{
+    local processname=$1
+
+    case " ${DEBASHER_COMPUTING_NUM_TASKS:-} " in
+        *" ${processname} "*)
+            local chain="${DEBASHER_COMPUTING_NUM_TASKS# } ${processname}"
+            echo "Error: the number of tasks of process ${processname} depends on itself (${chain// / -> })" >&2
+            return 1
+            ;;
+    esac
+}
+
+########
+# Prints the number of tasks of a process whose options are not defined
+# yet, while the run is prepared: what the _generate_opts_size method of
+# an option generator gives, or the number of option lists that the
+# _define_opts method of a process without one registers. That method
+# runs in a subshell, so that nothing it registers survives, and the
+# process is defined once, for real, in its turn; the method thus runs
+# again for every process that asks before that turn, and has to give the
+# same number of tasks every time.
+#
+# $1 - Command line.
+# $2 - Process name.
+#
+# Returns 1, printing nothing, if the number of tasks cannot be computed.
+debasher::_compute_num_tasks()
+{
+    local cmdline=$1
+    local processname=$2
+    local process_spec=${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}
+
+    if debasher::_uses_option_generator "${processname}"; then
+        debasher::_check_task_shaping_opts_given "${cmdline}" "${processname}" || return 1
+        debasher::_compute_generator_num_tasks "${cmdline}" "${process_spec}" "${processname}"
+    else
+        (
+            debasher::_define_opts_for_process "${cmdline}" "${process_spec}" || exit 1
+            echo "${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}"
+        ) || {
+            echo "Error: get_process_num_tasks: the options of process ${processname} could not be defined" >&2
+            return 1
+        }
+    fi
 }
 
 ########
 # Prints the number of tasks that the _generate_opts_size method of the
 # option generator $3 gives, after checking that it succeeded and printed
-# a number. Keeps the processes whose number of tasks is being computed,
-# so that one whose number of tasks depends on itself, through
-# get_process_num_tasks, stops the preparation instead of recursing for
-# ever.
+# a number. The number of tasks of the process is being computed while
+# the method runs (see debasher::_check_num_tasks_chain).
 #
 # $1 - Command line.
 # $2 - Process specification of the process.
@@ -519,13 +604,6 @@ debasher::_compute_generator_num_tasks()
     local process_spec=$2
     local processname=$3
 
-    case " ${DEBASHER_COMPUTING_NUM_TASKS:-} " in
-        *" ${processname} "*)
-            local chain="${DEBASHER_COMPUTING_NUM_TASKS# } ${processname}"
-            echo "Error: the number of tasks of process ${processname} depends on itself (${chain// / -> })" >&2
-            return 1
-            ;;
-    esac
     local DEBASHER_COMPUTING_NUM_TASKS="${DEBASHER_COMPUTING_NUM_TASKS:-} ${processname}"
 
     local size_funcname

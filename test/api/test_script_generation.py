@@ -525,18 +525,28 @@ def _family_program(family_direction, partner_modes, count_source=False):
     return _seq_program([], processes, edges=edges)
 
 
+@pytest.mark.parametrize("partner_mode", ["generator", "array"])
 @pytest.mark.parametrize("family_direction, var", [("input", "n_ind"), ("output", "n_outf")])
-def test_a_family_without_count_source_counts_the_tasks_of_the_generator_at_its_other_end(family_direction, var):
-    script = generate_script(_family_program(family_direction, ["generator"]), skip_redundant_check=True)
+def test_a_family_without_count_source_counts_the_tasks_of_the_process_at_its_other_end(
+    family_direction, var, partner_mode
+):
+    script = generate_script(_family_program(family_direction, [partner_mode]), skip_redundant_check=True)
 
     assert f"    local {var}\n    {var}=$(debasher::get_process_num_tasks \"partner0\") || return 1\n" in script
     assert f"    for ((i=0; i<{var}; i++)); do\n" in script
 
 
-@pytest.mark.parametrize("family_direction", ["input", "output"])
-def test_a_family_without_count_source_connected_to_an_array_is_refused(family_direction):
-    with pytest.raises(ValueError, match=r'"partner0", which is in "array" mode'):
-        generate_script(_family_program(family_direction, ["array"]), skip_redundant_check=True)
+@pytest.mark.parametrize(
+    "family_direction, reason",
+    [
+        # An input family refuses the connection itself first
+        ("input", r'connected to "partner0", which is not "array"- or "generator"-mode'),
+        ("output", r'"partner0", which is in "manual" mode and has no tasks to count'),
+    ],
+)
+def test_a_family_without_count_source_connected_to_a_manual_process_is_refused(family_direction, reason):
+    with pytest.raises(ValueError, match=reason):
+        generate_script(_family_program(family_direction, ["manual"]), skip_redundant_check=True)
 
 
 @pytest.mark.parametrize("family_direction", ["input", "output"])

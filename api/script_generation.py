@@ -483,17 +483,18 @@ def _fanout_count_process(process, option, process_modes, connections: Connectio
     The process whose number of tasks counts a fanout family without a
     count source option: the one at the other end of its connections, the
     process that it reads for an input family and the one that reads it
-    for an output family. The engine lets a process without an option
-    generator ask only for the number of tasks of a process with one, so
-    that process has to be in "generator" mode.
+    for an output family. It has to be in "array" or "generator" mode, the
+    modes whose tasks a family connects to one by one; the engine answers
+    about either, at the cost, for an "array" process not defined yet, of
+    running its whole option definition again.
     """
     ends = {name for name, _, _ in connections} if option.direction == "input" else {name for name, _ in readers}
     if not ends:
         raise ValueError(
             f'Fanout output "{option.label}" on "{process.name}" has no count source option '
             "and no connection: choose a command line option of the same process as its count "
-            'source, or connect it to a "generator"-mode process, whose number of tasks then '
-            "counts it."
+            'source, or connect it to an "array"- or "generator"-mode process, whose number of '
+            "tasks then counts it."
         )
     if len(ends) > 1:
         raise ValueError(
@@ -503,13 +504,12 @@ def _fanout_count_process(process, option, process_modes, connections: Connectio
             "count source, or connect it to one process."
         )
     end = next(iter(ends))
-    if process_modes.get(end) != "generator":
+    if process_modes.get(end) not in _FANOUT_PARTNER_MODES:
         raise ValueError(
             f'Fanout option "{option.label}" on "{process.name}" has no count source option, '
             f'so it would count the tasks of "{end}", which is in "{process_modes.get(end)}" '
-            "mode: a process without an option generator can ask only for the number of tasks "
-            f'of a process with one. Put "{end}" in "generator" mode, or choose a command line '
-            "option of the same process as the count source of the family."
+            f'mode and has no tasks to count. Put "{end}" in "array" or "generator" mode, or '
+            "choose a command line option of the same process as the count source of the family."
         )
     return end
 

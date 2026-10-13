@@ -93,12 +93,20 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   tasks as another one (each task reads the task with the same index), its
   options handler asks for that number with `get_process_num_tasks
   "<process>"` instead of computing it again with the rule of the other
-  process, which two copies could apply differently. A `generator` may ask any
-  process; an `array` only a process in `generator` mode.
+  process, which two copies could apply differently. Any process may ask any
+  other, once per handler, keeping the number in a variable. Asking a
+  `generator` is cheap (its size code runs); asking an `array` or a `manual`
+  process that is not defined yet runs its whole option definition again, in a
+  subshell, so when other processes need the number of tasks of a process,
+  make that process a `generator` if it can be one. A chain of such questions
+  that comes back to the asking process stops the preparation of the run.
 - **The options handler runs more than once.** The engine calls the code of
   a generator again whenever it needs the options of a task, inside the task
-  too, so a file or directory that it reads (such as one given on the command
-  line to count the tasks) has to stay unchanged while the run lasts.
+  too, and the code of an array again, in a subshell whose result it throws
+  away, when another process asks for its number of tasks before the array is
+  defined. A file or directory that either reads (such as one given on the
+  command line to count the tasks) has to stay unchanged while the run lasts,
+  so that the number of tasks is the same every time.
 - **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`);
   `additionalSpecs` (general programs only): `force` to rerun in every run,
   `processdeps` to replace the dependencies inferred from the connections
@@ -162,11 +170,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `countSource`, or, without one (`countSource: ""` takes it away), the
   number of tasks of the process at the other end of its connections (the
   one that an input family reads, the only one that reads an output family),
-  which has to be a generator: prefer it to gather or feed the tasks of a
-  generator, since no option then has to match that number by hand. A family
-  connected to an array needs `countSource`. Without one, the task does not
-  receive the count, and its code counts the options of the family among its
-  arguments.
+  an array or a generator: prefer it to gather or feed the tasks of a
+  generator, since no option then has to match that number by hand. It works
+  for an array too, at the cost of running its option definition again when it
+  is not defined yet. Without `countSource`, the task does not receive the
+  count, and its code counts the options of the family among its arguments.
 
 ## Connections
 

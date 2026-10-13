@@ -81,13 +81,11 @@ def _count_source(program: Program, node: ProgramProcess) -> ProgramOption | Non
     """
     The command line option that counts the tasks of an array or generator
     node: the one that counts the fanout family that the node is connected
-    to, directly or through the tasks of another array. None for a
-    generator node that reaches no such family: the families of the
-    Supervisor that face it then have no count source option, and count
-    the number of tasks of the node, which the engine lets the Supervisor
-    ask for (see _fanout_count_process in script_generation.py). Raises
-    ValueError for an array node that reaches no such family, since the
-    Supervisor could not count its heartbeat channels.
+    to, directly or through the tasks of another array. None for a node
+    that reaches no such family: the families of the Supervisor that face
+    it then have no count source option, and count the number of tasks of
+    the node, which the Supervisor asks the engine for (see
+    _fanout_count_process in script_generation.py).
     """
     processes_by_id = {process.id: process for process in program.processes}
     seen = {node.id}
@@ -115,16 +113,7 @@ def _count_source(program: Program, node: ProgramProcess) -> ProgramOption | Non
             count = next((o for o in other.options if o.id == other_option.countSourceOptionId), None)
             if count is not None and count.commandLine:
                 return count
-    if node.optionsHandler.mode == "generator":
-        return None
-    raise ValueError(
-        f'Process "{node.name}" is an {node.optionsHandler.mode} node of a resident program '
-        "with a Supervisor, but it reaches no fanout family counted by a command line "
-        "option, directly or through the tasks of another array: the Supervisor could "
-        "not tell how many heartbeat channels to read, and it can ask for the number of "
-        "tasks only of a node in generator mode. Connect it to a fanout family whose count "
-        "source is a command line option, or put it in generator mode."
-    )
+    return None
 
 
 class SupervisorWiring:

@@ -7,6 +7,7 @@ import type {
   OptionChannel,
 } from "../models/option";
 import type { ProgramType } from "../models/program";
+import type { ProgramProcess } from "../models/process";
 import { optionLabelProblem } from "../models/process";
 import { channelDataType, ownDataType } from "../models/dataTypes";
 import { fanoutCountProcesses } from "../models/connections";
@@ -162,13 +163,19 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     ownerProcess?.options.filter(o => o.commandLine && !o.taskShaping && o.id !== option.id) ?? [];
 
   // Without a count source option, the family counts the tasks of the
-  // process at the other end of its connections, which has to be a
-  // generator (see fanoutCountProcesses)
+  // process at the other end of its connections, an array or a generator
+  // (see fanoutCountProcesses). The engine answers about an array not
+  // defined yet by running its whole option definition again, so a
+  // generator is cheaper to count
   const countProcesses = ownerProcess ? fanoutCountProcesses(program, ownerProcess, option) : [];
+  const countProcessNote = (process: ProgramProcess): string =>
+    process.optionsHandler.mode === "generator" ? ""
+      : process.optionsHandler.mode === "array" ? " (an array: a generator is cheaper to count)"
+        : " (not an array nor a generator: choose an option)";
   const tasksCountText = countProcesses.length === 1
-    ? `Number of tasks of ${countProcesses[0].name}${countProcesses[0].optionsHandler.mode === "generator" ? "" : " (not a generator: choose an option)"}`
+    ? `Number of tasks of ${countProcesses[0].name}${countProcessNote(countProcesses[0])}`
     : countProcesses.length === 0
-      ? "Number of tasks of the connected generator (not connected yet)"
+      ? "Number of tasks of the connected array or generator (not connected yet)"
       : "Number of tasks of the connected process (connected to several: choose an option)";
 
   const [countSourceOptionId, setCountSourceOptionId] =
@@ -370,14 +377,14 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
         )}
 
         {/* Without a count source option, the family counts the tasks of
-            this process, which only a generator can give */}
-        {isScatterConsumer && !scatterCountSource && ownerProcess?.optionsHandler.mode !== "generator" && (
-          <p style={{ margin: 0, color: "#c0392b", fontSize: 13 }}>
-            ⚠ This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
+            this process; an array is costlier to count than a generator */}
+        {isScatterConsumer && !scatterCountSource && ownerProcess?.optionsHandler.mode === "array" && (
+          <p style={{ margin: 0, color: "#8a6d3b", fontSize: 13 }}>
+            This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
             fanout family "{connectedSourceOption.sourceOption.label}", which has no count source option{" "}
-            and so counts the tasks of this process, but only a generator can give its number of tasks{" "}
-            to a standard process: put this process in generator mode, or choose a count source option{" "}
-            for the family.
+            and so counts the tasks of this process. The engine counts an array not defined yet by running its whole{" "}
+            option definition again, so a generator is cheaper: put this process in generator mode if{" "}
+            it can be, or choose a count source option for the family.
           </p>
         )}
 

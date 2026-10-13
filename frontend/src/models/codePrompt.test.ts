@@ -208,6 +208,12 @@ describe("buildCodePrompt", () => {
     expect(prompt).toContain("The task does not receive that number: count the options of the family among the arguments.");
   });
 
+  it("names an array or a generator as what counts a fanout family without a count source nor connection", () => {
+    const collect = process("collect", [createOption("ind", "-ind-ith", { dataType: "dir" })]);
+    const prompt = buildCodePrompt({ ...program, processes: [collect], edges: [] } as Program, collect, "", "");
+    expect(prompt).toContain("as many as the tasks of the process at the other end of its connections, an array or a generator.");
+  });
+
   it("gives the language rules of the language of the process", () => {
     const bash = buildCodePrompt(program, count, "", "");
     expect(bash).toContain("- The process is a Bash function named `count`");

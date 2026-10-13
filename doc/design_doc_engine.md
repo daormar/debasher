@@ -1409,34 +1409,45 @@ process, needs the number of tasks of that process. Computing it again would
 repeat the rule by which the other process computes it, such as counting the
 entries of a file given on the command line, and two copies of a rule can drift
 apart. `get_process_num_tasks` prints it instead, from the `_define_opts`,
-`_generate_opts_size` or `_generate_opts` method that calls it. The processes
-without an option generator define their options first, and those with one
-afterwards, each group in no particular order, so that the answer depends on
-which of the two processes have an option generator, and never on the order in
-which they happen to be defined:
+`_generate_opts_size` or `_generate_opts` method that calls it, and any process
+can ask for that of any other. The answer never depends on the order in which
+the processes happen to define their options:
 
-- The number of tasks of a process with an option generator is known at any
-  time. Once its options are defined, the engine has recorded it; before that,
-  its `_generate_opts_size` method gives it, once the engine has checked that
-  the task shaping options of that process are given.
-- The number of tasks of a process without an option generator is known only
-  once its `_define_opts` method has run. A process with an option generator can
-  ask for it, and a process without one cannot, even when the process it asks
-  about happens to be defined already. The rule holds along the whole chain:
-  while a process without an option generator defines its options, nothing that
-  it asks, the `_generate_opts_size` method of a process with an option
-  generator included, can ask for the number of tasks of a process without one.
-- Inside a task, the number of tasks of every process is in the execution
-  context, and asking for it reads it from there.
+- Once the options of the asked process are defined, the engine has recorded
+  its number of tasks, and the answer is read from that record. Inside a task,
+  the number of tasks of every process is in the execution context, and asking
+  for it reads it from there.
+- Before that, while the run is prepared, the number of tasks is computed every
+  time it is asked for. For a process with an option generator, its
+  `_generate_opts_size` method gives it, once the engine has checked that the
+  task shaping options of that process are given. For a process without one,
+  the engine runs its `_define_opts` method in a subshell and counts the option
+  lists that it registers: nothing that the method registers survives, and the
+  process is defined once, for real, in its turn. A `_define_opts` method may
+  thus run more than once while the run is prepared, and has to register the
+  same number of tasks every time, as `_generate_opts_size` has to print the
+  same number.
 
-A process that takes its number of tasks from another and has no data of its own
-to build its option lists from is thus written with an option generator. A
-number of tasks that depends on itself, through `get_process_num_tasks` and the
-`_generate_opts_size` methods of one or more processes, stops the preparation of
-the run. `get_process_num_tasks` prints the number on its standard output, so it
-is read in a command substitution, and a failure, which prints nothing, has to
-stop the method that reads it, as in
-`n=$(get_process_num_tasks worker) || return 1`.
+The engine defines the processes without an option generator first, and those
+with one afterwards, each group in no particular order, so that an option
+generator usually finds the number of tasks it asks for recorded already. The
+order is a matter of cost, not of correctness: the number of tasks of a process
+with an option generator costs its `_generate_opts_size` method at most, while
+that of a process without one that is not defined yet costs its whole
+`_define_opts` method, however much it reads, and again for every process that
+asks. A process whose number of tasks other processes need is therefore written
+with an option generator whenever it can be, and a method asks once, keeping the
+answer in a variable. A task may ask too, at no cost, but its options are fixed
+by then, so the number is asked for from the methods that define the options.
+
+A number of tasks that depends on itself, through `get_process_num_tasks` and
+the `_define_opts` or `_generate_opts_size` methods of one or more processes,
+stops the preparation of the run, naming the chain of processes that leads back
+to the first. The engine checks it before answering, since a `_define_opts`
+method that has registered some tasks already would otherwise answer with those.
+`get_process_num_tasks` prints the number on its standard output, so it is read
+in a command substitution, and a failure, which prints nothing, has to stop the
+method that reads it, as in `n=$(get_process_num_tasks worker) || return 1`.
 
 **Checking the options against their declaration.** The options of the first
 task of every process are checked against the declared ones while the run is
@@ -2725,12 +2736,11 @@ leaves, by design, to the program or to whoever runs it.
     the run names, nor a directory on the way to one of them; never the process
     output directory itself or anything outside it. The tasks of an array never
     share a value descriptor (see "Task subdirectories" and "Output options").
-19. While the run is prepared, `get_process_num_tasks` gives for a process the
-    number of tasks that the process has in the run, or stops the preparation:
-    whether a process can ask for it depends on which of the two processes have
-    an option generator, never on the order in which they define their options,
-    and a number of tasks that depends on itself is refused (see "Arrays and
-    option generators").
+19. While the run is prepared, `get_process_num_tasks` gives any process the
+    number of tasks that any other process has in the run, or stops the
+    preparation: the answer never depends on the order in which the processes
+    define their options, and a number of tasks that depends on itself is
+    refused (see "Arrays and option generators").
 20. The FIFOs that the tasks of a process declare through the same output option
     are read inside the program for every task or for none, and a program in
     which only some of them are is refused (see "Declaring and owning a FIFO").
@@ -2801,10 +2811,11 @@ leaves, by design, to the program or to whoever runs it.
   was prepared. Keeping such files unchanged is left to whoever runs the
   program: the engine checks that the program is consistent with itself, not
   that what is outside it stays unchanged (see "Arrays and option generators").
-- **The number of tasks of another process.** A process without an option
-  generator cannot ask, while it defines its options, for the number of tasks of
-  another process without one (see "Arrays and option generators", and "Future
-  work").
+- **The number of tasks of another process.** The engine does not keep the
+  number of tasks of a process that is not defined yet: every process that asks
+  for it before that process defines its options has it computed again, a whole
+  `_define_opts` method for a process without an option generator (see "Arrays
+  and option generators").
 - **Steps.** The engine keeps no record of a step: it has no status, no log
   of its own and no completion marker, and a new run does not know which steps
   of an earlier one succeeded unless the process records them with step
@@ -2851,16 +2862,6 @@ What is known to be missing from the design, or left open by it:
   `processdeps=none` would still allow. Explicit dependencies that add to the
   inferred ones, instead of replacing them, would serve too, at the cost of
   declaring them by hand.
-- **The number of tasks of a process without an option generator.** The
-  engine could define a process without an option generator when another first
-  asks for its number of tasks, once, and stop the preparation of the run when a
-  number of tasks depends on itself, as it does between option generators (see
-  "Arrays and option generators"). The answer would still not depend on the
-  order in which the processes happen to be defined. A process could then read
-  every task of an array process through a fanout family with as many options
-  as the array process has tasks, and an array process could match its tasks,
-  one by one, to those of another, without a command line option that repeats
-  their number.
 - **Processes that left the program.** `debasher_exec` could refuse to start
   in every run, and not only in a run with a subdivided shared directory,
   while a process that an earlier run had, and that the program no longer has,

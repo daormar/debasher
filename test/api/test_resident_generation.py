@@ -179,10 +179,11 @@ def _fanout(with_supervisor=True, array_initiator=False):
     return _program("fan", processes, edges)
 
 
-def _generator_fanout(with_supervisor=True, generator_initiator=False):
-    """As _fanout, with worker a generator: neither family has a count
-    source option, so both count the tasks of worker, and so do the
-    families of the Supervisor that face it."""
+def _generator_fanout(with_supervisor=True, generator_initiator=False, worker_mode="generator"):
+    """As _fanout, with worker a generator, or an array whose code reads
+    -w, with `worker_mode`: neither family has a count source option, so
+    both count the tasks of worker, and so do the families of the
+    Supervisor that face it."""
     start = _process(
         "start",
         "FBPProcess",
@@ -201,7 +202,9 @@ def _generator_fanout(with_supervisor=True, generator_initiator=False):
             _option("w-outf", "-outf", "output", channel="fifo", value="worker_out_${task_idx}"),
         ],
         optionsHandler=OptionsHandler(
-            mode="generator", generatorSizeCode='debasher::read_opt_value_from_line "${cmdline}" "-w"'
+            mode=worker_mode,
+            generatorSizeCode='debasher::read_opt_value_from_line "${cmdline}" "-w"' if worker_mode == "generator" else None,
+            arrayCode=_ARRAY_CODE if worker_mode == "array" else None,
         ),
         initiator=generator_initiator,
     )
@@ -400,8 +403,9 @@ def test_a_supervisor_with_options_of_its_own_is_refused():
     _refused(program, "takes no options of its own")
 
 
-def test_the_supervisor_counts_the_tasks_of_a_generator_that_reaches_no_counted_family():
-    script = generate_script(_generator_fanout(generator_initiator=True))
+@pytest.mark.parametrize("worker_mode", ["generator", "array"])
+def test_the_supervisor_counts_the_tasks_of_a_node_that_reaches_no_counted_family(worker_mode):
+    script = generate_script(_generator_fanout(generator_initiator=True, worker_mode=worker_mode))
 
     sup = _function(script, "sup_define_opts")
     assert 'n_worker_hb=$(debasher::get_process_num_tasks "worker") || return 1' in sup
@@ -412,12 +416,14 @@ def test_the_supervisor_counts_the_tasks_of_a_generator_that_reaches_no_counted_
     assert _function(script, "sup_identify_cmdline_opts") == 'debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"'
 
 
-def test_an_array_that_reaches_no_counted_fanout_family_is_refused_with_a_supervisor():
+def test_the_supervisor_counts_the_tasks_of_an_array_whose_families_lost_their_count_source():
     program = _fanout()
     start = program.processes[0]
     start.options[2].countSourceOptionId = None
     program.processes[2].options[1].countSourceOptionId = None
-    _refused(program, "reaches no fanout family")
+
+    sup = _function(generate_script(program), "sup_define_opts")
+    assert 'n_worker_hb=$(debasher::get_process_num_tasks "worker") || return 1' in sup
 
 
 # --- what the engine says of the generated modules ----------------------------
@@ -436,6 +442,7 @@ _DEBASHER_EXEC = paths.find_bin_tool("debasher_exec")
         (_fanout(array_initiator=True), ["-w", "3"]),
         (_generator_fanout(generator_initiator=True), ["-w", "3"]),
         (_generator_fanout(with_supervisor=False), ["-w", "3"]),
+        (_generator_fanout(generator_initiator=True, worker_mode="array"), ["-w", "3"]),
     ],
     ids=[
         "relay",
@@ -445,6 +452,7 @@ _DEBASHER_EXEC = paths.find_bin_tool("debasher_exec")
         "fanout-array-initiator",
         "generator-fanout-initiator",
         "generator-fanout-no-supervisor",
+        "array-fanout-counted-by-tasks",
     ],
 )
 def test_the_engine_accepts_the_generated_module(tmp_path, program, program_opts):

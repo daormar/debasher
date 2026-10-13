@@ -49,7 +49,10 @@ or change it before you edit anything:
   and its mode when it is not a single task (array or generator, for one task
   per element), with where its number of tasks comes from: a command-line
   option (a task shaping option when no task reads it), or another process,
-  asked with `get_process_num_tasks` rather than counted again;
+  asked with `get_process_num_tasks` rather than counted again; a process
+  whose number of tasks others ask for is a generator when it can be, since
+  an array not defined yet is counted by running its whole option definition
+  again;
 - how a step gathers the results of every task of another process: a
   fanout family on a `standard` process, one option per task, or the whole
   shared directory in which each task wrote a subdirectory of its own, with

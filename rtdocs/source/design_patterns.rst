@@ -76,14 +76,16 @@ options are computed:
   again whenever it needs the options of a task, inside the task too.
   It suits a large number of tasks, whose option lists are never held
   together, and a process whose number of tasks other processes need,
-  since ``generate_opts_size`` gives it at any time. It has to give the
-  same option list every time for the same command line and task
-  index, so the files that it reads must not change while the run
+  since ``generate_opts_size`` gives it cheaply at any time. It has to
+  give the same option list every time for the same command line and
+  task index, so the files that it reads must not change while the run
   lasts.
 
 A rule of thumb follows from the second point: when other processes
 depend on the number of tasks of a process, write that process with an
-option generator.
+option generator. The engine answers for an array too, but while the
+array is not defined yet it runs its whole ``define_opts`` again, in a
+subshell, and throws the result away, every time it is asked.
 
 One task per entry, and a chain of steps for each entry
 -------------------------------------------------------
@@ -157,11 +159,14 @@ the tasks of two option generators by index in this way, and the
 ``debasher_fifo_generator_example`` example also asks for the number of
 tasks of the first one.
 
-``get_process_num_tasks`` answers for a process with an option
-generator at any time. A process without one (an array, or a process
-with a single task) can only ask for the number of tasks of a process
-with one, while the run is prepared: this is a second reason to write
-the first step with an option generator.
+``get_process_num_tasks`` answers for any process, from the methods
+that define the options and inside a task. While the run is prepared,
+the answer for a process not defined yet is computed each time it is
+asked for: the ``generate_opts_size`` of an option generator, or the
+whole ``define_opts`` of an array, run again in a subshell. Ask once
+per method, keeping the number in a variable, and ask an option
+generator when you can: this is a second reason to write the first
+step with one.
 
 Fan-out to a pool of workers, and fan-in
 ----------------------------------------
@@ -212,8 +217,8 @@ of tasks comes from the data, such as a report over all the samples of
 a sample sheet, has two ways to find them.
 
 The first is a fanout family whose size it asks for with
-``get_process_num_tasks``, which requires the process that it gathers
-to have an option generator:
+``get_process_num_tasks``, cheap here because ``sort``, the process
+that it gathers, has an option generator:
 
 .. code-block:: bash
 
@@ -234,8 +239,8 @@ to have an option generator:
 The process function finds its options ``-ind<i>`` among its
 arguments, and the engine makes ``merge`` wait for every task of
 ``sort``, as in the previous pattern. In the web UI, a fanout family
-connected to a generator and without a count source option is written
-this way. The ``debasher_shared_subdir_example``
+connected to a generator or an array, and without a count source
+option, is written this way. The ``debasher_shared_subdir_example``
 example gathers the tasks of an option generator through a fanout
 family too, each of whose tasks writes into a subdirectory of its own
 of a shared directory; it reads their number from the same command line

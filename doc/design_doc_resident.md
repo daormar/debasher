@@ -3563,10 +3563,10 @@ Design ideas from Future work move here once they are actually built.
     the same generated script, so it gets the same `-w`; a run with another
     `-w` has to start afresh (see "`debasher_reset_resident`: a clean
     start").
-  - The family may instead take its size from the number of tasks of an
-    option generator, which a process without one asks for with
-    `get_process_num_tasks` (see "Arrays and option generators" in
-    `doc/design_doc_engine.md`): the nodes then read no `-w` of their own.
+  - The family may instead take its size from the number of tasks of another
+    process, asked for with `get_process_num_tasks` (see "Arrays and option
+    generators" in `doc/design_doc_engine.md`): the nodes then read no `-w` of
+    their own.
     A relaunched node asks again inside its task, where the number comes from
     the execution context, so it gets the ports it had.
 

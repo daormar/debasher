@@ -75,15 +75,23 @@ describe("buildOptionsHandlerPrompt", () => {
     const generator = { ...count, optionsHandler: { mode: "generator" } } as ProgramProcess;
     const prompt = buildOptionsHandlerPrompt(program, generator, "generator", "", "");
     expect(prompt).toContain("print that number with `get_process_num_tasks \"<process>\"` instead of computing it again");
-    expect(prompt).toContain("Any process of the program can be asked.");
+    expect(prompt).toContain("Any process of the program can be asked, but ask once, keeping the number in a variable");
     expect(prompt).toContain("`n=$(get_process_num_tasks \"<process>\") || return 1`, so that a failure stops the preparation of the run.");
     expect(prompt).not.toContain("reads, task by task");
   });
 
-  it("lets an array take its number of elements only from an option generator", () => {
+  it("lets an array take its number of elements from any process, and says what asking costs", () => {
     const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
     expect(prompt).toContain("read that number with `n=$(get_process_num_tasks \"<process>\") || return 1` instead of computing it again");
-    expect(prompt).toContain("Only a process in `generator` mode can be asked");
+    expect(prompt).toContain("Any process of the program can be asked, but ask once, keeping the number in a variable");
+    expect(prompt).toContain("so prefer asking a process in `generator` mode.");
+    expect(prompt).not.toContain("Only a process in `generator` mode can be asked");
+  });
+
+  it("tells the code of an array that the engine may run it again when another process asks for its number of tasks", () => {
+    const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
+    expect(prompt).toContain("Within a run it may run it more than once: when another process asks for the number of tasks of this one with `get_process_num_tasks` before this code has run in its turn");
+    expect(prompt).toContain("The code has to build an array of the same size every time");
   });
 
   it("names the processes that the process reads task by task", () => {
@@ -101,7 +109,7 @@ describe("buildOptionsHandlerPrompt", () => {
     expect(prompt).toContain("- This process reads, task by task, the tasks of: `producer` (`generator` mode).");
   });
 
-  it("names for an array only the processes in generator mode that it reads task by task", () => {
+  it("names for an array every process that it reads task by task, with its mode", () => {
     const generated = { ...count, id: "generated", name: "generated", optionsHandler: { mode: "generator" } } as ProgramProcess;
     const arrayed = { ...count, id: "arrayed", name: "arrayed", optionsHandler: { mode: "array" } } as ProgramProcess;
     const reader = { ...count, id: "reader", name: "reader", optionsHandler: { mode: "array" } } as ProgramProcess;
@@ -113,8 +121,7 @@ describe("buildOptionsHandlerPrompt", () => {
       edges: [edge("e1", "generated"), edge("e2", "arrayed")],
     } as unknown as Program;
     const prompt = buildOptionsHandlerPrompt(connected, reader, "array", "", "");
-    expect(prompt).toContain("- This process reads, task by task, the tasks of: `generated` (`generator` mode).");
-    expect(prompt).not.toContain("`arrayed`");
+    expect(prompt).toContain("- This process reads, task by task, the tasks of: `generated` (`generator` mode), `arrayed` (`array` mode).");
   });
 
   it("does not take a connection between shared directories for one that pairs tasks", () => {

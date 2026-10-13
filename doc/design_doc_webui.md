@@ -174,9 +174,8 @@ refer to it.
 - **count source**: what gives the number of options of a fanout family: the
   command line option of the same process that `countSourceOptionId` names, or,
   when it names none, the number of tasks of the process at the other end of
-  the connections of the family, which has to be in `generator` mode (see
-  "Option definitions"). A count source option is a count source of the first
-  kind.
+  the connections of the family, in `array` or `generator` mode (see "Option
+  definitions"). A count source option is a count source of the first kind.
 - **preamble**: Bash code that the generated module carries verbatim before its
   own functions, typically the `load_debasher_module` lines of the modules it
   builds on.
@@ -907,13 +906,15 @@ reading side.
 
 The count is that of the count source of the family. A count source option is
 read from the command line. Without one, the loop asks the engine, with
-`get_process_num_tasks`, for the number of tasks of the process at the other
-end of the connections of the family: the process that an input family reads,
-or the one process that reads an output family. The engine answers a process
-without an option generator only about a process with one, so that process has
-to be in `generator` mode. A number that the engine cannot give has to stop the
-function, so the count is assigned apart from the `local` that declares it,
-with `|| return 1`:
+`get_process_num_tasks`, for the number of tasks of the process at the other end
+of the connections of the family: the process that an input family reads, or the
+one process that reads an output family, in `array` or `generator` mode, the
+modes whose tasks a family connects to one by one. The engine answers about
+either, but counting an `array` process that is not defined yet runs its whole
+option definition function again, so a `generator` is the cheaper process to
+count (see "Arrays and option generators" in `doc/design_doc_engine.md`). A
+number that the engine cannot give has to stop the function, so the count is
+assigned apart from the `local` that declares it, with `|| return 1`:
 
 ```bash
 local n_ind
@@ -924,10 +925,10 @@ done
 ```
 
 A task does not receive that number as an option, so the template of its code
-counts the options of the family among its arguments. Whether the option
-generator gives the same number of tasks every time, which depends on the files
-and directories that it reads, is left to whoever runs the program, as the
-design of the engine says of every option generator.
+counts the options of the family among its arguments. Whether the counted
+process gives the same number of tasks every time, which depends on the files
+and directories that its options handler reads, is left to whoever runs the
+program, as the design of the engine says.
 
 A task shaping option gets no definition, since no task receives it: the
 options handler reads it from the command line, in the code that builds
@@ -1000,16 +1001,16 @@ command line input with a value, or that is a fanout family; a fanout family
 that is a flag, a command line option or taken from the process specifications,
 whose `countSourceOptionId` names no option of the process, or one that is not a
 command line option or is a task shaping option, that has no count source option
-and is not connected to exactly one process, in `generator` mode, at the other
-end of its connections, whose output is the target of a connection, mirrored or
-uses an option channel other than `none` or `fifo`, or whose input is not
-connected to a process in `array` or `generator` mode; a connection to a fanout
-family from a process in another mode; and a sequential process in a resident
-program, or with the name of a process or of another sequential process (see
-"Generating and importing a sequential process"). The save generates the script
-before it writes anything, so a program that script generation refuses leaves
-the home directory as it was. The save answers with the reason of the refusal,
-which the frontend shows.
+and is not connected to exactly one process, in `array` or `generator` mode, at
+the other end of its connections, whose output is the target of a connection,
+mirrored or uses an option channel other than `none` or `fifo`, or whose input
+is not connected to a process in `array` or `generator` mode; a connection to a
+fanout family from a process in another mode; and a sequential process in a
+resident program, or with the name of a process or of another sequential process
+(see "Generating and importing a sequential process"). The save generates the
+script before it writes anything, so a program that script generation refuses
+leaves the home directory as it was. The save answers with the reason of the
+refusal, which the frontend shows.
 
 ## Environment variables of a program
 
@@ -1111,8 +1112,8 @@ With the processes read, import assembles the program:
   source does not run in `array` or `generator` mode cannot be written again as
   it was, so its target falls back to `manual` mode. Neither can a fanout family
   whose loop asks for the number of tasks of a process that is not the one at
-  the other end of its connections, or that is not in `generator` mode, so its
-  process falls back to `manual` mode too.
+  the other end of its connections, or that is not in `array` or `generator`
+  mode, so its process falls back to `manual` mode too.
 - **Shared directories.** An option whose value names a shared directory,
   literally or through a variable that the engine resolves, becomes a
   `shared_dir` option when that directory is one the program can reach, and
@@ -2247,16 +2248,15 @@ node as a fanout family, as a `standard` process reads the tasks of an array
 (see "Option definitions"), and sends to the tasks of an initiator of that kind
 the same way. The family is counted by the command line option that counts the
 fanout family the node is connected to, directly or through the tasks of another
-array. A `generator` node that reaches no such family gives the count itself:
-the families of the `Supervisor` that face it have no count source option, and
-count its tasks, which the engine lets the `Supervisor`, a process without an
-option generator, ask for. A resident program with a `Supervisor` and an
-`array` node that reaches no such family has no count for it, and script
-generation refuses it. A node counted by an option has to build exactly as many
-tasks as the option says. A task too few makes the engine refuse the program,
-since the `Supervisor` would connect to a task that does not exist, and so does
-a task too many, which would otherwise run unsupervised: in a program with a
-`Supervisor`, the engine refuses a node with no heartbeat channel.
+array. A node that reaches no such family gives the count itself: the families
+of the `Supervisor` that face it have no count source option, and count its
+tasks, which the `Supervisor` asks the engine for; for an `array` node not
+defined yet, the engine answers by running its option definition function again
+(see "Option definitions"). A node counted by an option has to build exactly as
+many tasks as the option says. A task too few makes the engine refuse the
+program, since the `Supervisor` would connect to a task that does not exist, and
+so does a task too many, which would otherwise run unsupervised: in a program
+with a `Supervisor`, the engine refuses a node with no heartbeat channel.
 
 **Initiators.** `ProgramProcess.initiator` marks a node as an initiator, where
 a round starts. A program made of independent subgraphs needs one initiator in
@@ -2494,11 +2494,9 @@ refuses"), script generation refuses a resident program with more than one
 `Supervisor`; a process with no node kind; a node in `manual` mode; an option of
 the user that takes a label of the Supervisor wiring, uses the option channel
 `value_desc`, `shared_dir` or `process_outdir`, is mirrored or has the fifo tag
-`control`; a `Supervisor` with options of its own, or in `array` or `generator`
-mode; and, in a program with a `Supervisor`, an `array` node that reaches no
-fanout family counted by a command line option. The editor offers none of them,
-and script generation refuses them in program metadata written by hand or by
-another tool.
+`control`; and a `Supervisor` with options of its own, or in `array` or
+`generator` mode. The editor offers none of them, and script generation refuses
+them in program metadata written by hand or by another tool.
 
 **A node of a module, reused.** In a general program the dialog that names a
 new process suggests the processes that the modules of the preamble define,
@@ -3875,12 +3873,12 @@ uses its options. After a title and a sentence on what a task is, it says:
    line; the number of tasks typically comes from a command line option. And
    that a process with as many tasks as another one takes that number with
    `get_process_num_tasks` instead of computing it again, which would repeat the
-   rule by which the other process counts its tasks (for `array`, only from a
-   process in `generator` mode, see "Arrays and option generators" in
-   `doc/design_doc_engine.md`). The prompt then names, with their modes, the
-   processes that this process reads task by task and can ask, the usual
-   candidates; a connection between `shared_dir` options pairs no tasks and is
-   left out.
+   rule by which the other process counts its tasks (any process can be asked,
+   once per code; one in `generator` mode is the cheaper to ask, see "Arrays and
+   option generators" in `doc/design_doc_engine.md`). The prompt then names,
+   with their modes, the processes that this process reads task by task, the
+   usual candidates; a connection between `shared_dir` options pairs no tasks
+   and is left out.
 2. **The program** and **the process**, with its options handler mode.
 3. **The options**, as in the code prompt of a process: their values show
    what a task needs, such as an input option whose value is
@@ -5045,14 +5043,6 @@ address of the WebSocket and the answers of the request in
   node state, since a routing that a replay may change would make the sequence
   numbers of a channel label other messages (see "Fan-out and fan-in sized from
   the command line" in `doc/design_doc_resident.md`).
-- **A fanout family counted by the tasks of an array.** Letting a fanout family
-  without a count source option count the tasks of a process in `array` mode,
-  as it counts those of a process in `generator` mode. The engine answers a
-  process without an option generator only about a process with one, since it
-  defines the options of the processes without one in no particular order;
-  once it answers about any process (see "The number of tasks of a process
-  without an option generator" in "Future work" of `doc/design_doc_engine.md`),
-  script generation would accept the family.
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.

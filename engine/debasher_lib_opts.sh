@@ -1187,14 +1187,19 @@ define_opt_from_proc_task_out() { debasher::define_opt_from_proc_task_out "$@"; 
 #
 # A process whose number of tasks is that of another process, or whose
 # task reads every task of another process, asks for it instead of
-# computing it again. The options of the processes without an option
-# generator are defined before those of the processes with one, so an
-# option generator can ask for the number of tasks of any process, and a
-# process without one only for that of an option generator. When the
-# answer is not known yet, the _generate_opts_size method of the process
-# gives it, so its task shaping options have to be given. The number of
-# tasks is usually read in a command substitution, whose failure has to
-# stop the method that reads it.
+# computing it again. Any process can ask for that of any other, from the
+# methods that define its options, and a task can ask too. Once the
+# options of the asked process are defined, and inside a task, the answer
+# is at hand. Before that, while the run is prepared, it is computed
+# every time it is asked for: for an option generator, its
+# _generate_opts_size method gives it, so its task shaping options have
+# to be given; for a process without one, its whole _define_opts method
+# runs again, in a subshell, which is costly, so a process whose number
+# of tasks other processes need is written with an option generator when
+# it can be, and a method asks once, keeping the answer in a variable. A
+# number of tasks that depends on itself stops the preparation of the
+# run. The number of tasks is usually read in a command substitution,
+# whose failure has to stop the method that reads it.
 #
 # Examples
 #
@@ -1214,32 +1219,27 @@ debasher::get_process_num_tasks()
         return 1
     fi
 
-    if ! debasher::_uses_option_generator "${processname}"; then
-        # Decided by whether the process has an option generator, not by
-        # whether its options happen to be defined already, which depends on
-        # the order in which the processes are defined
-        if [ "${DEBASHER_DEFINING_NON_GENERATOR_OPTS:-0}" -eq 1 ]; then
-            echo "Error: get_process_num_tasks: process ${processname} has no option generator, so its number of tasks is only known once its options are defined, and only a process with an option generator can ask for it" >&2
-            return 1
-        fi
-        echo "${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]:-0}"
-        return 0
-    fi
+    # A process whose number of tasks is being computed, in the call stack
+    # that led here, depends on itself; checked first, as the tasks that
+    # its method registered so far would otherwise answer
+    debasher::_check_num_tasks_chain "${processname}" || return 1
 
+    # Options defined already, or inside a task, whose execution context
+    # carries the number of tasks of every process
     if [[ -v DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"] ]]; then
         echo "${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}"
         return 0
     fi
 
-    # An option generator whose options are not defined yet, which only
-    # happens while the run is prepared
+    # Not defined yet. Computing the number of tasks needs the command
+    # line, which is only at hand while the run is prepared; once it is,
+    # every process has its number of tasks, so this is a call from
+    # outside a run
     if [ -z "${DEBASHER_DEFINING_OPTS_CMDLINE+x}" ]; then
         echo "Error: get_process_num_tasks: the number of tasks of process ${processname} is not known yet" >&2
         return 1
     fi
-    local cmdline=${DEBASHER_DEFINING_OPTS_CMDLINE}
-    debasher::_check_task_shaping_opts_given "${cmdline}" "${processname}" || return 1
-    debasher::_compute_generator_num_tasks "${cmdline}" "${DEBASHER_INITIAL_PROCESS_SPEC["${processname}"]}" "${processname}"
+    debasher::_compute_num_tasks "${DEBASHER_DEFINING_OPTS_CMDLINE}" "${processname}"
 }
 
 ########
@@ -1249,14 +1249,19 @@ debasher::get_process_num_tasks()
 #
 # A process whose number of tasks is that of another process, or whose
 # task reads every task of another process, asks for it instead of
-# computing it again. The options of the processes without an option
-# generator are defined before those of the processes with one, so an
-# option generator can ask for the number of tasks of any process, and a
-# process without one only for that of an option generator. When the
-# answer is not known yet, the _generate_opts_size method of the process
-# gives it, so its task shaping options have to be given. The number of
-# tasks is usually read in a command substitution, whose failure has to
-# stop the method that reads it.
+# computing it again. Any process can ask for that of any other, from the
+# methods that define its options, and a task can ask too. Once the
+# options of the asked process are defined, and inside a task, the answer
+# is at hand. Before that, while the run is prepared, it is computed
+# every time it is asked for: for an option generator, its
+# _generate_opts_size method gives it, so its task shaping options have
+# to be given; for a process without one, its whole _define_opts method
+# runs again, in a subshell, which is costly, so a process whose number
+# of tasks other processes need is written with an option generator when
+# it can be, and a method asks once, keeping the answer in a variable. A
+# number of tasks that depends on itself stops the preparation of the
+# run. The number of tasks is usually read in a command substitution,
+# whose failure has to stop the method that reads it.
 #
 # Examples
 #

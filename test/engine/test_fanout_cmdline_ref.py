@@ -8,8 +8,10 @@ number of ports and of nodes follows -w, including the nodes the Supervisor
 watches, and that it relaunches one task of the array, or the node that fans
 in, like any other node. Every test runs too on debasher_fanout_tasks_ref.sh,
 the same program with worker as an option generator whose number of tasks -w
-gives, and the other processes asking the engine for it: a relaunched node
-asks again and finds as many ports as before.
+gives, and the other processes asking the engine for it, and on
+debasher_fanout_array_ref.sh, where worker is an array without an option
+generator, asked for in the same way: a relaunched node asks again and finds
+as many ports as before.
 """
 
 import json
@@ -34,7 +36,9 @@ pytestmark = real_run
 _REFS_DIR = Path(__file__).resolve().parent
 
 
-@pytest.fixture(params=["debasher_fanout_cmdline_ref.sh", "debasher_fanout_tasks_ref.sh"])
+@pytest.fixture(
+    params=["debasher_fanout_cmdline_ref.sh", "debasher_fanout_tasks_ref.sh", "debasher_fanout_array_ref.sh"]
+)
 def pfile(request):
     return _REFS_DIR / request.param
 

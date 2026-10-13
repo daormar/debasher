@@ -297,7 +297,7 @@ def _downgrade_unverifiable_fanout_counts(
     """
     A fanout family without a count source option is counted by the number
     of tasks of the process at the other end of its connections, which has
-    to be in "generator" mode (see _fanout_count_process in
+    to be in "array" or "generator" mode (see _fanout_count_process in
     script_generation.py): that is all that the model can say. A family
     whose block asks for the number of tasks of any other process, as
     `pending_count_processes` (process, family label, process asked) tells,
@@ -327,7 +327,7 @@ def _downgrade_unverifiable_fanout_counts(
                 if connection.source_process == process_name and connection.source_option == fanout_label
             }
         asked = processes_by_name.get(count_process)
-        if ends == {count_process} and asked is not None and asked.optionsHandler.mode == "generator":
+        if ends == {count_process} and asked is not None and asked.optionsHandler.mode in ("array", "generator"):
             continue
         raw = option_handler_code_by_process.get(process_name, {})
         process.optionsHandler = OptionsHandler(

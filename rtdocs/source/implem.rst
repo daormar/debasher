@@ -616,13 +616,20 @@ instead.
 
 A process whose tasks match those of another process, one by one, or
 whose task reads every task of another process, does not compute that
-number of tasks again: ``get_process_num_tasks`` gives it. The engine
-defines the options of the processes without a generator before those
-of the processes with one, so a generator can ask for the number of
-tasks of any process, and a process without a generator only for that
-of a process with one. In the following example the consumer has as
-many tasks as the producer, which counts the lines of a file given
-with ``-f``:
+number of tasks again: ``get_process_num_tasks`` gives it. Any process
+can ask for the number of tasks of any other, from the methods that
+define its options and inside a task. Once the options of the asked
+process are defined, the answer is at hand; before that, while the run
+is prepared, the engine computes it each time it is asked for: the
+``generate_opts_size`` of a generator, or the whole ``define_opts`` of
+a process without one, run again in a subshell, and the result is
+thrown away. Ask once per method, keeping the number in a variable,
+and write a process whose number of tasks other processes need with a
+generator when you can (see :ref:`design_patterns`). A number of tasks
+that depends on itself, through processes asking for each other's,
+stops the preparation of the run. In the following example the
+consumer has as many tasks as the producer, which counts the lines of
+a file given with ``-f``:
 
 .. code-block:: bash
 
