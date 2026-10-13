@@ -7,6 +7,13 @@ interface Props {
   onClose: () => void;
 }
 
+const schedulerFieldsStyle: React.CSSProperties = {
+  gridArea: "1 / 1",
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+};
+
 export default function ExecutionOptionsEditor({ onClose }: Props) {
 
   const {
@@ -97,6 +104,36 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
     };
 
   }, [isResident]);
+
+  // The limits of the built-in scheduler, shown on a resident program and
+  // on another one when it runs under that scheduler.
+  const builtinFields = (
+    <>
+      <label style={{ fontSize: 14 }}>
+        Built-in scheduler CPUs (blank = unlimited)
+      </label>
+
+      <input
+        type="text"
+        value={builtinSchedCpus}
+        placeholder="e.g. 4"
+        onChange={(event) => setBuiltinSchedCpus(event.target.value)}
+        style={{ width: "100%" }}
+      />
+
+      <label style={{ fontSize: 14 }}>
+        Built-in scheduler memory (blank = unlimited)
+      </label>
+
+      <input
+        type="text"
+        value={builtinSchedMem}
+        placeholder="e.g. 4096 or 4G"
+        onChange={(event) => setBuiltinSchedMem(event.target.value)}
+        style={{ width: "100%" }}
+      />
+    </>
+  );
 
   function handleSave() {
     setExecutionOptions({
@@ -201,34 +238,33 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
 
         )}
 
-        {(isResident || scheduler === "BUILTIN") && (
-          <>
+        {isResident && builtinFields}
 
-            <label style={{ fontSize: 14 }}>
-              Built-in scheduler CPUs (blank = unlimited)
-            </label>
+        {/* The fields of each scheduler share one place, sized by the
+            tallest, and those of the scheduler not chosen are hidden: the
+            dialog keeps its size when the scheduler changes. */}
+        {!isResident && (
+          <div style={{ display: "grid" }}>
 
-            <input
-              type="text"
-              value={builtinSchedCpus}
-              placeholder="e.g. 4"
-              onChange={(event) => setBuiltinSchedCpus(event.target.value)}
-              style={{ width: "100%" }}
-            />
+            <div style={{ ...schedulerFieldsStyle, visibility: scheduler === "BUILTIN" ? "visible" : "hidden" }}>
+              {builtinFields}
+            </div>
 
-            <label style={{ fontSize: 14 }}>
-              Built-in scheduler memory (blank = unlimited)
-            </label>
+            <div style={{ ...schedulerFieldsStyle, visibility: scheduler === "SLURM" ? "visible" : "hidden" }}>
+              <label style={{ fontSize: 14 }}>
+                Default nodes (blank = scheduler default)
+              </label>
 
-            <input
-              type="text"
-              value={builtinSchedMem}
-              placeholder="e.g. 4096 or 4G"
-              onChange={(event) => setBuiltinSchedMem(event.target.value)}
-              style={{ width: "100%" }}
-            />
+              <input
+                type="text"
+                value={dfltNodes}
+                placeholder="e.g. node01,node02 or node[01-04]"
+                onChange={(event) => setDfltNodes(event.target.value)}
+                style={{ width: "100%" }}
+              />
+            </div>
 
-          </>
+          </div>
         )}
 
         {isResident && (
@@ -264,23 +300,6 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
           </>
         )}
 
-        {!isResident && scheduler === "SLURM" && (
-          <>
-
-            <label style={{ fontSize: 14 }}>
-              Default nodes (blank = scheduler default)
-            </label>
-
-            <input
-              type="text"
-              value={dfltNodes}
-              placeholder="e.g. node01,node02 or node[01-04]"
-              onChange={(event) => setDfltNodes(event.target.value)}
-              style={{ width: "100%" }}
-            />
-
-          </>
-        )}
 
         {!isResident && (
           <>
