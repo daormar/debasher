@@ -67,32 +67,24 @@ Daniel is an experienced machine learning researcher and also holds
 an MSc degree in Bioinformatics.</p>
 
 <h2>
-<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>General Features</h2>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Features</h2>
 
-<p>The package incorporates the following features:</p>
+<p>What DeBasher shares with similar tools:</p>
 
 <ul>
-<li>Definition of complex programs composed of several processes.</li>
 <li>Processes written in Bash, Python, R, Perl or Groovy, mixed freely in a single program.</li>
-<li>Concurrent execution of processes depending on detailed process dependencies.</li>
-<li>Reexecution of only those processes that are pending or whose execution failed.</li>
-<li>A built-in scheduler for a single machine, and integration with workload schedulers such as Slurm.</li>
-<li>Support for Conda environments and Docker containers.</li>
-<li>Reproducible workflows.</li>
+<li>Processes run concurrently as their data dependencies allow, and a new run repeats only those that failed or are pending.</li>
+<li>A built-in scheduler for a single machine, and Slurm for clusters; static scheduling keeps programs of thousands of processes efficient.</li>
+<li>Conda environments and Docker containers, for reproducible results.</li>
 <li>A visual editor to build, run and observe programs from a browser, with AI assistance.</li>
 </ul>
 
-<h2>
-<a id="advanced-features" class="anchor" href="#advanced-features" aria-hidden="true"><span class="octicon octicon-link"></span></a>Advanced Features</h2>
-
-<p>DeBasher also incorporates features that are not usual in other similar tools:</p>
+<p>What most of them do not have:</p>
 
 <ul>
-<li>Implementation of interactive workflows.</li>
-<li>Support for complex workflows that include cycles.</li>
-<li>Ability to implement stateful processes.</li>
-<li>Possibility to combine workflows at runtime.</li>
-<li>Efficient execution of workflows composed of thousands of processes by resorting to static scheduling.</li>
+<li>Data streamed between processes through FIFOs, and cycles between processes.</li>
+<li>Interactive workflows, which take input written into them while they run.</li>
+<li>Programs built out of other programs, loaded as modules or launched as batch runs on request.</li>
 <li>Resident programs, whose processes keep their state and are fault tolerant:
 <ul>
 <li>a process that crashes is relaunched and returns to the state it would have had without the crash, while the others keep running;</li>
@@ -122,10 +114,7 @@ it can also import a module written by hand.</p>
 <p>DeBasher has been coded using Bash shell-scripting and Python; its
 web interface is written in TypeScript, with React, and served by a
 Python server built on FastAPI. DeBasher is developed on Linux, and is
-tested on Linux, on macOS and on Windows through WSL2.
-See the "Documentation and Support"
-section of these instructions if you experience problems during
-compilation.</p>
+tested on Linux, on macOS and on Windows through WSL2.</p>
 
 <p>It is released under the <a href="https://www.gnu.org/licenses/lgpl-3.0.html">GNU Lesser General Public License (LGPL), version 3</a>.</p>
 
@@ -185,8 +174,9 @@ directory there), not in the drives of Windows that WSL2 mounts
 under <code>/mnt/c</code>: DeBasher creates FIFOs and locks files, which
 those drives may not support, and reaching them from Linux is much
 slower. The web interface, started inside WSL2, is reached from a
-browser of Windows at <code>http://localhost:8000/</code>, since WSL2
-forwards the ports of <code>localhost</code> to Windows.</p>
+browser of Windows at the address that <code>debasher_webui</code>
+prints, since WSL2 forwards the ports of <code>localhost</code> to
+Windows.</p>
 
 <h4>
 <a id="macos" class="anchor" href="#macos" aria-hidden="true"><span class="octicon octicon-link"></span></a>macOS</h4>
@@ -308,16 +298,18 @@ install. They are installed once, in a virtual environment:</p>
 </code></pre>
 
 <p>Then, with that environment activated, <code>debasher_webui</code>
-starts the server, and the web interface is
-at <code>http://127.0.0.1:8000/</code>:</p>
+starts the server and prints the address of the web interface:</p>
 
 <pre><code> $ source ~/debasher-venv/bin/activate
  $ debasher_webui
 </code></pre>
 
-<p>The server has no authentication and runs every program as the user
-who started it, so by default it listens only on the local machine; to
-reach it from another machine, forward its port over SSH.</p>
+<p>The address carries a token that the server draws when it starts,
+and every request has to present it, so only whoever has the address
+can use the server; open it once and the browser keeps the token. The
+server runs every program as the user who started it and, by default,
+listens only on the local machine; to reach it from another machine,
+forward its port over SSH.</p>
 
 <h4>
 <a id="third-party-software" class="anchor" href="#third-party-software"
@@ -326,32 +318,18 @@ Party Software</h4>
 
 <h5>Slurm</h5>
 
-<p>DeBasher can be configured to
-use <a href="https://slurm.schedmd.com/">Slurm</a> as a workload
-scheduler. Slurm is particularly indicated to execute large pipelines or
-to execute pipelines in high performance computing environments.</p>
+<p>DeBasher runs programs under <a href="https://slurm.schedmd.com/">Slurm</a>,
+the workload scheduler of most high performance clusters.</p>
 
 <h5>Conda</h5>
 
-<p>DeBasher provides support for automated installation
-of <a href="https://conda.io/">Conda</a> packages. Such packages are
-organized in environments and (optionally) used within DeBasher software
-modules.</p>
+<p>A process can declare a <a href="https://conda.io/">Conda</a>
+environment, which DeBasher creates and activates for it.</p>
 
 <h5>Docker</h5>
 
-<p>DeBasher also provides support for <a href="https://www.docker.com/">Docker</a>
-containers, favoring reproducibility of results.</p>
-
-<h2>
-<a id="current-status" class="anchor" href="#current-status" aria-hidden="true"><span class="octicon octicon-link"></span></a>Current Status</h2>
-
-<p> The DeBasher package is under development. Below there is a list of
-  features that will be incorporated in a near future:</p>
-
-<ul>
-<li>Support for additional workload schedulers.</li>
-</ul>
+<p>A process can run in a <a href="https://www.docker.com/">Docker</a>
+container, for reproducible results.</p>
 
 <h2>
 <a id="sample-projects" class="anchor" href="#sample-projects" aria-hidden="true"><span class="octicon octicon-link"></span></a>Sample Projects Using DeBasher</h2>
