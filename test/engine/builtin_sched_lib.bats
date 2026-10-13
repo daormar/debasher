@@ -684,6 +684,17 @@ launch_arr_task() {
     [ "${output}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
 }
 
+@test "a process with its process script and no task launched or cancelled is TO-DO, as one prepared and not launched yet" {
+    setup_array_status
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]
+
+    echo "Cancelled task idx: 1 ; Total: 3 ; Cause: test" > "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 1)"
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+}
+
 @test "the id of a finished task is not asked about, even when it names a running process" {
     setup_array_status
     # Every id runs, as a process id that the system gave again to another

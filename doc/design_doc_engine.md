@@ -359,10 +359,10 @@ relative to the output directory of the run.
   writes in the exec directory for a cancelled task, with the dependency that
   can no longer hold, or the cancelled task at the other end of its FIFO.
 - **process status**: the state of a process that the engine derives from its
-  exec directory: `TO-DO`, no process script yet; `IN-PROGRESS`, the scheduler
-  still holds one of its ids; `FINISHED`, every task has a completion marker;
-  `UNFINISHED_BUT_RUNNABLE`, for the built-in scheduler only, an array process
-  with some tasks launched or cancelled, some neither, and none running;
+  exec directory: `TO-DO`, no task launched or cancelled yet; `IN-PROGRESS`, the
+  scheduler still holds one of its ids; `FINISHED`, every task has a completion
+  marker; `UNFINISHED_BUT_RUNNABLE`, for the built-in scheduler only, an array
+  process with some tasks launched or cancelled, some neither, and none running;
   `UNFINISHED`, any other case.
 - **rerun mark**: the decision to run a process again although it has run
   before, for a reason (forced, changed input, outdated code, the other end of
@@ -529,20 +529,23 @@ launched yet wait for a new `debasher_exec` on the same output directory. That
 one refuses to start while any process is still in progress, and afterwards
 reads from the directory what is done and launches the rest.
 
-The tools that follow or stop a run, such as `debasher_status`,
-`debasher_stop` and `debasher_stats`, therefore read it from the output
-directory alone. They take the processes of the run from `program.procspec`
-and its scheduler from the command line file, and the state, ids and times of
-each process from its exec directory. They neither load a module nor need the
-program file, so a module edited or removed after the run does not change what
-they report (see "Tools that read a run"). Running the processes of a run is
-different: the option lists, the process scripts and the execution context
-hold absolute paths into the output directory where the run was prepared. A
-moved output directory can be read anywhere, but `debasher_exec` and
-`debasher_launch_process` refuse to run processes in it. They compare the
-directory with the one that the command line file records by device and
-inode, so that a path through a symbolic link or `..` is not taken for a
-move.
+The tools that follow or stop a run, such as `debasher_status`, `debasher_stop`
+and `debasher_stats`, therefore read it from the output directory alone. They
+take the processes of the run from `program.procspec` and its scheduler from the
+command line file, and the state, ids and times of each process from its exec
+directory. `debasher_exec` writes those two files whole to a temporary file that
+it then renames, so that a tool that reads them while a run or a validation
+starts finds either the old file or the new one, never one half written (a final
+process specification half written would give a run with no processes). The
+tools neither load a module nor need the program file, so a module edited or
+removed after the run does not change what they report (see "Tools that read a
+run"). Running the processes of a run is different: the option lists, the
+process scripts and the execution context hold absolute paths into the output
+directory where the run was prepared. A moved output directory can be read
+anywhere, but `debasher_exec` and `debasher_launch_process` refuse to run
+processes in it. They compare the directory with the one that the command line
+file records by device and inode, so that a path through a symbolic link or `..`
+is not taken for a move.
 
 # Modules and programs
 
@@ -2324,7 +2327,7 @@ directory and from the scheduler, and is kept nowhere:
 
 | Status | When |
 |---|---|
-| `TO-DO` | the process has no process script: none of its tasks has been launched or cancelled |
+| `TO-DO` | none of the tasks of the process has been launched or cancelled: it has no process script, or it has one and no id, no cancellation marker and no completion marker |
 | `IN-PROGRESS` | an id of the process, other than that of a task with its completion marker, still runs, as the scheduler says |
 | `FINISHED` | every task of the process has its completion marker |
 | `UNFINISHED_BUT_RUNNABLE` | built-in scheduler only: an array process with some tasks launched or cancelled, none running, and some neither launched nor cancelled |
@@ -2352,6 +2355,16 @@ the next run launches the tasks that are left. During a run, it is also the
 state of an array whose remaining tasks still wait for their dependencies, such
 as counterparts that still run under `aftercorr`. Under the Slurm scheduler the
 tasks of an array are submitted together, and the state does not arise.
+
+A process script alone does not make a process launched. The scheduler writes
+the process script before it launches the process and records its id, and a run
+takes away the ids of a process that it runs again before launching it anew, so
+that a process with its process script and with no id, no cancellation marker
+and no completion marker is one prepared and not launched yet, and is `TO-DO`:
+it waits for its dependencies or for its launch, and has not failed. Whether the
+process was launched is asked before anything else, so that an id written while
+the status is read counts as launched for every question that follows, and the
+process is never taken for one that was launched and no longer runs.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,

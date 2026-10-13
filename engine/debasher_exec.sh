@@ -982,9 +982,16 @@ print_command_line()
     local outd=$1
     local command_line=$2
 
-    printf 'cd %q\n' "${PWD}" > "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
-    debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
-    echo "" >> "${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    local file="${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    # Written whole and then renamed, as the process specification, since
+    # debasher_status reads the scheduler from it
+    {
+        printf 'cd %q\n' "${PWD}"
+        debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}"
+        echo ""
+    } > "${file}.tmp" || return 1
+    "${MV}" -f "${file}.tmp" "${file}"
 }
 
 ########
@@ -1407,7 +1414,10 @@ ensure_scheduler_supports_fifos || exit 1
 ensure_srun_for_slurm_seq_processes || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
-gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
+# Written whole and then renamed, so that debasher_status, which reads the
+# processes of the program from it, never finds it half written
+gen_final_procspec "${command_line}" > "${procspec_file}.tmp" || exit 1
+"${MV}" -f "${procspec_file}.tmp" "${procspec_file}" || exit 1
 
 topologically_sort_processes || exit 1
 

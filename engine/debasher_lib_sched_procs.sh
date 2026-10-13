@@ -554,6 +554,29 @@ debasher::_process_is_unfinished_but_runnable()
 }
 
 ########
+# Whether some task of a process has been launched or cancelled: it has an
+# id, of the process or of a task, or a cancellation marker. A process
+# script with neither is that of a process prepared to be launched and not
+# launched yet
+debasher::_process_was_launched_or_cancelled()
+{
+    local dirname=$1
+    local processname=$2
+
+    [ -f "$(debasher::_get_processid_filename "${dirname}" "${processname}")" ] && return 0
+
+    local execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
+    local file
+    for file in "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT} \
+                "${prefix}.${DEBASHER_CANCELLED_TASK_FEXT}" "${prefix}"_*.${DEBASHER_CANCELLED_TASK_FEXT}; do
+        [ -f "${file}" ] && return 0
+    done
+
+    return 1
+}
+
+########
 debasher::_get_process_status()
 {
     local dirname=$1
@@ -561,6 +584,17 @@ debasher::_get_process_status()
     local script_filename=$(debasher::_get_script_filename "${dirname}" ${processname})
 
     if [ -f "${script_filename}" ]; then
+        # Prepared and not launched yet: the scheduler writes the process
+        # script before it launches the process, and a new run takes the
+        # ids away from a process that it runs again before relaunching it.
+        # Asked first, so that an id written while the status is read
+        # makes the process launched for every question that follows
+        if ! debasher::_process_was_launched_or_cancelled "$dirname" "$processname" \
+                && ! debasher::_process_is_finished "$dirname" "$processname"; then
+            echo "${DEBASHER_TODO_PROCESS_STATUS}"
+            return ${DEBASHER_TODO_PROCESS_EXIT_CODE}
+        fi
+
         if debasher::_process_is_in_progress "$dirname" "$processname"; then
             echo "${DEBASHER_INPROGRESS_PROCESS_STATUS}"
             return ${DEBASHER_INPROGRESS_PROCESS_EXIT_CODE}
