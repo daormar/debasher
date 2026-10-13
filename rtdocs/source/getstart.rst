@@ -206,21 +206,143 @@ containers, favoring reproducibility of results.
 Quickstart
 ----------
 
-The quickest way to a first program is the web interface. Once its
-Python dependencies are installed (see the :ref:`webui` Section), it
-is started with:
+The quickest way to a first program is the web interface: this section
+builds a program that prints "Hello World!", runs it and looks at what
+it printed, without writing any Bash. The same program is shipped with
+DeBasher as ``webui_hello_world``, among the examples that "Load
+program" opens, and its hand-written version opens the :ref:`implem`
+Section.
+
+Once the Python dependencies of the web interface are installed (see
+the :ref:`webui` Section), it is started with:
 
 ::
 
     $ debasher_webui
 
-and opened in a browser at the address that it prints, such as
-``http://127.0.0.1:8000/#token=...``, which holds its token. There,
-"Create new program" starts an empty program; "Add process" adds a
-process, whose code is edited in the Inspector, on the right of the
-canvas; "Save" writes the program and its generated module into a
-directory; and the "Run" menu runs it, coloring each process by its
-status as the run goes on. The :ref:`concepts` Section says what a
-program is made of, and the :ref:`webui` Section describes every part
-of the editor. The same first program, written by hand, opens the
-:ref:`implem` Section.
+which prints the address to open in a browser, such as
+``http://127.0.0.1:8000/#token=...``. The address holds the token of
+the server, so open it as it is printed. The home screen offers three
+ways to open a program; choose "Create new program".
+
+.. image:: images/quickstart_01_home.png
+   :width: 100%
+   :alt: The home screen of the web interface, with its three buttons
+
+Give the program a name, ``webui_hello_world``, keep its type, a
+general program, and press "Create".
+
+.. image:: images/quickstart_02_new_program.png
+   :width: 100%
+   :alt: The New program dialog, with the name filled in
+
+The editor opens on an empty canvas, with a toolbar above it and, on
+the right, the Inspector, which shows the selected process. "Add
+process" asks for the name of the new process, ``hello_world``.
+
+.. image:: images/quickstart_03_add_process.png
+   :width: 100%
+   :alt: The Add process dialog, with the name filled in
+
+The process appears on the canvas as a box, selected, and the
+Inspector shows it: its name, a description to fill in ("Prints a
+greeting."), its options, none yet, its code and its specifications.
+
+.. image:: images/quickstart_04_process_added.png
+   :width: 100%
+   :alt: The canvas with the new process and the Inspector showing it
+
+The process takes the string to print through an option. Under
+"Options", type its label, ``-s``, in "Option label" and press "Add":
+the option editor opens. Set its data type to string, describe it
+("string to print ('Hello World!' by default)"), tick "Command line",
+since the string is given when the program is run, and leave
+"Mandatory" unticked, so that the program runs without it; then press
+"Save".
+
+.. image:: images/quickstart_05_option_editor.png
+   :width: 100%
+   :alt: The option editor of -s, a command line option of type string
+
+The box of the process now shows ``-s`` with a hollow handle tagged
+``cmdline``: an option that comes from the command line takes no
+connection from another process. "Edit code", under "Code", opens the
+code editor with a template that reads every option; replace it with
+the code of the process:
+
+.. code-block:: bash
+
+    hello_world()
+    {
+        local s=$(read_opt_value_from_func_args "-s" "$@")
+        if [ "${s}" = "${DEBASHER_OPT_NOT_FOUND}" ]; then
+            s="Hello World!"
+        fi
+
+        echo "${s}"
+    }
+
+A process written in Bash is a function with the name of the process,
+which the engine calls with the options of the process as its
+arguments. ``read_opt_value_from_func_args`` reads the value of an
+option among them, and gives ``${DEBASHER_OPT_NOT_FOUND}`` when the
+option was not given, which is when the default applies. Press "Save"
+in the code editor.
+
+.. image:: images/quickstart_06_code_editor.png
+   :width: 100%
+   :alt: The code editor with the code of the process
+
+"Save" in the toolbar asks for the home directory of the program, a
+directory of your own, new or empty, and writes the program there: the
+module that the editor generates, ``webui_hello_world.sh``, and the
+program as the editor keeps it, in a hidden ``.debasher``
+subdirectory.
+
+The "Run" menu of the toolbar runs the program. First "Set output
+directory", the directory where the run leaves what its processes
+write, which is not the home directory of the program; "Set program
+options" would give ``-s`` another string, and is not needed here;
+then "Run program".
+
+.. image:: images/quickstart_08_run_menu.png
+   :width: 100%
+   :alt: The Run menu of the toolbar
+
+The process turns yellow while it runs and green when it has finished,
+as the legend of the canvas says, and an indicator in the corner
+follows the run.
+
+.. image:: images/quickstart_09_finished.png
+   :width: 100%
+   :alt: The process in green, and the indicator of the finished run
+
+What the process printed is in the output directory. The right-button
+menu of the process shows what it left there: "Show stdout" opens it.
+
+.. image:: images/quickstart_10_context_menu.png
+   :width: 100%
+   :alt: The right-button menu of the process
+
+.. image:: images/quickstart_11_stdout.png
+   :width: 100%
+   :alt: The standard output of the process: Hello World!
+
+The module that the editor wrote into the home directory is a Bash
+file that DeBasher runs as it runs any module, from the command line
+too (see the :ref:`exec` Section):
+
+::
+
+    $ debasher_exec --pfile webui_hello_world.sh --outdir out -s "Hello from the shell"
+
+Its content is what the :ref:`implem` Section explains how to write by
+hand; the editor wrote it from the drawing:
+
+.. literalinclude:: ../../data/webui_programs/webui_hello_world/webui_hello_world.sh
+   :language: bash
+
+From here, the :ref:`concepts` Section says what a program is made of,
+and the :ref:`webui` Section describes every part of the editor,
+including how processes are connected, which is what a program with
+more than one process adds to this one.
