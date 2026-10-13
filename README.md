@@ -9,18 +9,24 @@
 
 # DeBasher
 
-DeBasher is a flow-based programming extension for Bash, and a polyglot one:
-Bash holds a program together, but each of its processes can be written in
-Bash, Python, R, Perl or Groovy, and a single program can mix them. With the
-web interface, a program can be built without writing any Bash at all.
+DeBasher is a workflow system whose processes are Unix programs. Each
+process is written in the language its author prefers (Bash, Python, R,
+Perl or Groovy), takes its inputs and gives its outputs through named
+options, and the way options connect across processes defines the
+dependency graph that DeBasher schedules and runs, on one machine or on a
+Slurm cluster. Programs are built in a visual editor, with the help of an
+AI assistant, or written by hand as Bash modules.
 
-A DeBasher program is made of processes whose input and output options
-connect them; those connections define the dependency graph that DeBasher
-schedules and runs, in parallel where the data allows it. A general program
-processes a batch of inputs and ends; a resident program is made of
-long-lived, stateful processes that exchange messages through FIFOs and
-recover from crashes. Programs can be written by hand or built, run and
-observed from a browser with the DeBasher web interface.
+DeBasher runs two kinds of program. A general program processes a batch of
+inputs and ends. A resident program processes a stream: long-lived,
+stateful processes exchange messages through FIFOs, in cycles when needed,
+survive crashes, and can launch a general program for each request they
+receive. Both kinds define their processes the same way.
+
+DeBasher follows flow-based programming and keeps what the shell does
+best: a process is a black box with a command-line interface, so any
+program that takes its inputs and leaves its outputs through options,
+files or FIFOs can be one.
 
 Among its features:
 
@@ -29,8 +35,8 @@ Among its features:
   resume;
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
-- a web interface to build and run programs without explicitly writing their
-  topology.
+- a visual editor to build, run and observe programs from a browser, with
+  AI assistance.
 
 ## Installation
 

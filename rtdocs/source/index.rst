@@ -1,32 +1,36 @@
 DeBasher
 ========
 
-**DeBasher** is a flow-based programming extension for Bash, and a
-polyglot one: Bash holds a program together, but each of its processes
-can be written in Bash, Python, R, Perl or Groovy, and a single program
-can mix them. With the web interface, a program can be built without
-writing any Bash at all.
+**DeBasher** is a workflow system whose processes are Unix programs.
+Each process is written in the language its author prefers (Bash,
+Python, R, Perl or Groovy), takes its inputs and gives its outputs
+through named options, and the way options connect across processes
+defines the dependency graph that DeBasher schedules and runs, on one
+machine or on a Slurm cluster. Programs are built in a visual editor,
+with the help of an AI assistant, or written by hand as Bash modules.
 
-`Flow-based programming
-<https://en.wikipedia.org/wiki/Flow-based_programming>`_ combines data
-flow programming with component-based software engineering to enable
-the implementation of highly modular programs that exploit the
-parallelism implicitly determined by data dependencies between
-components.
+DeBasher runs two kinds of program. A general program processes a
+batch of inputs and ends. A resident program processes a stream:
+long-lived, stateful processes exchange messages through FIFOs, in
+cycles when needed, survive crashes, and can launch a general program
+for each request they receive. Both kinds define their processes the
+same way.
 
-DeBasher implements many features considered useful in similar tools,
-such as parallel process execution with data dependency handling;
-automatic error handling; result reproducibility through containers or
-package managers; generation of dependency graphs; and compatibility
-with high performance clusters or cloud infrastructure.
+DeBasher follows `flow-based programming
+<https://en.wikipedia.org/wiki/Flow-based_programming>`_ and keeps what
+the shell does best: a process is a black box with a command-line
+interface, so any program that takes its inputs and leaves its outputs
+through options, files or FIFOs can be one.
 
-However, DeBasher also implements advanced features that are not usual
-or cannot be found at all in other solutions, including workflow
-interactivity; support for complex workflows that include cycles;
-implementation of stateful processes; and ability to combine multiple
-workflows at runtime.
+Like similar tools, DeBasher runs processes in parallel as their data
+dependencies allow, reruns only what failed or is pending, reproduces
+results through Conda environments and Docker containers, and runs on
+high performance clusters. Unlike most of them, it streams data
+between processes, allows cycles, keeps processes with a state of
+their own, takes input from outside while a program runs, and launches
+programs from within programs.
 
-Check out the table of contents below for further information.
+The table of contents below leads to the rest.
 
 Contents
 --------

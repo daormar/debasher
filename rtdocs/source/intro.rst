@@ -1,57 +1,49 @@
 Introduction
 ============
 
-Bash, born out of the Unix shell tradition, is a valuable asset as the
-glue that orchestrates the execution of a set of computer programs. As a
-versatile command-line interpreter, Bash excels in automating repetitive
-tasks, stringing together disparate programs, and facilitating the flow
-of data between them. These abilities make Bash a particularly
-interesting option to implement computer pipelines or workflows, which
-typically combine programs written in different programming languages.
+DeBasher is a workflow system whose processes are Unix programs. Each
+process is written in the language its author prefers (Bash, Python,
+R, Perl or Groovy), takes its inputs and gives its outputs through
+named options, and the way options connect across processes defines
+the dependency graph that DeBasher schedules and runs, on one machine
+or on a Slurm cluster. Programs are built in a visual editor, with the
+help of an AI assistant, or written by hand as Bash modules.
 
-When implementing pipelines, it is necessary to consider not only
-standard software engineering principles such as modularity or code
-reusability, but also specific challenges inherent to pipeline
-design. One example of these challenges is the optimal use of hardware
-resources. A pipeline involves the execution of a series of steps where
-parallelism can be exploited depending on the data dependencies between
-such steps. This observation has motivated a growing interest in the
-application of data flow programming paradigms as opposed to the
-traditional control flow approach.
+DeBasher follows `flow-based programming
+<https://en.wikipedia.org/wiki/Flow-based_programming>`_, which
+combines `data flow programming
+<https://en.wikipedia.org/wiki/Dataflow_programming>`_ with
+`component-based software engineering
+<https://en.wikipedia.org/wiki/Component-based_software_engineering>`_:
+a program is a network of black box processes, each showing the rest
+only its inputs and outputs, so that the program exploits the
+parallelism that its data dependencies allow and its processes can be
+reused elsewhere. A pipeline, a series of steps where each one waits
+for the data of the previous ones, is the typical case, but not the
+only one: a DeBasher program may have cycles, and processes that never
+end.
 
-In spite of the fact that Bash incorporates features useful to enable
-parallel process execution, it is still focused on the sequence of
-operations to be executed and the flow of control between the differents
-parts of a program. This makes the application of Bash difficult in
-scenarios where data flow programming is more appropriate.
+Flow-based programming is language agnostic by nature, and so is
+DeBasher: a process is a black box with a command-line interface, so
+any program that takes its inputs and leaves its outputs through
+options, files or FIFOs can be one, whatever it is written in, and a
+single program can mix languages (see the :ref:`implem` Section).
 
-DeBasher is a flow-based programming extension for Bash that allows to
-implement general programs escaping the traditional control flow
-paradigm. `Flow-based programming
-<https://en.wikipedia.org/wiki/Flow-based_programming>`_ combines `data
-flow programming <https://en.wikipedia.org/wiki/Dataflow_programming>`_
-with `component-based software engineering
-<https://en.wikipedia.org/wiki/Component-based_software_engineering>`_,
-resulting in programs that naturally exploit process parallelism and at
-the same time optimize modularity and code reuse.
-
-DeBasher is also a polyglot tool. Flow-based programming is by nature
-language agnostic: a process is a black box that only shows its inputs
-and outputs to the rest of the program. Bash holds a DeBasher program
-together, declaring its processes and the options that connect them,
-but each process can be written in Bash, Python, R, Perl or Groovy, and
-a single program can mix them (see the :ref:`implem` Section). With the
-web interface, a program can be built without writing any Bash at all.
+What holds a program together is a Bash module, which declares its
+processes and the options that connect them. Bash is the native glue
+of Unix: it strings programs together, passes the environment on,
+activates a Conda environment or starts a container, and is on every
+machine, which is why a module is written in it. Writing a module by
+hand means writing a few Bash functions for each process; the web
+interface writes them from a drawing, so a program can be built
+without writing any Bash at all (see the :ref:`webui` Section).
 
 DeBasher runs two types of program. A general program processes a
 batch of inputs: each of its processes runs once, as soon as its
-inputs are ready, and ends. A resident program processes a stream:
-its processes are long-lived Python classes with a state of their own,
-which exchange messages through FIFOs, possibly in cycles, react to
-what is written into the program from outside, and survive the crash
-of any of them, returning to the state they had (see the
-:ref:`resident` Section).
-
-Programs of both types can be written by hand, as Bash modules, or
-built, run and observed from a browser with the DeBasher web interface
-(see the :ref:`webui` Section).
+inputs are ready, and ends. A resident program processes a stream: its
+processes are long-lived and keep a state of their own, exchange
+messages through FIFOs, possibly in cycles, react to what is written
+into the program from outside, survive the crash of any of them,
+returning to the state they had, and can launch a general program for
+each request they receive (see the :ref:`resident` Section). Both
+types define their processes the same way.
