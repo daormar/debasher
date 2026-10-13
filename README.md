@@ -7,16 +7,6 @@
   </picture>
 </p>
 
-<p align="center">
-  <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"
-       alt="The DeBasher web interface running a program: six processes on a canvas, two finished, three in progress and one to do, with the worker process open in the inspector"
-       width="880">
-</p>
-
-<p align="center"><em>A program running in the web interface: a file is
-cut into fragments that a dispatcher streams through FIFOs to a pool of
-workers.</em></p>
-
 # DeBasher
 
 DeBasher is a workflow system whose processes are Unix programs. Each
@@ -26,6 +16,16 @@ options, and the way options connect across processes defines the
 dependency graph that DeBasher schedules and runs, on one machine or on a
 Slurm cluster. Programs are built in a visual editor, with the help of an
 AI assistant, or written by hand as Bash modules.
+
+<p align="center">
+  <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"
+       alt="The DeBasher web interface running a program: six processes on a canvas, two finished, three in progress and one to do, with the worker process open in the inspector"
+       width="880">
+</p>
+
+<p align="center"><em>A program running in the web interface: a file is
+cut into fragments that a dispatcher streams through FIFOs to a pool of
+workers.</em></p>
 
 DeBasher runs two kinds of program. A general program processes a batch of
 inputs and ends. A resident program processes a stream: long-lived,
