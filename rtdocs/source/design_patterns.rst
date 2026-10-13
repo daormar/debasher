@@ -10,10 +10,11 @@ output of another process. This section shows how those pieces combine
 for the shapes that most programs take: one task per entry of an input,
 a chain of steps for each entry, a pool of workers, a step that gathers
 the results of every task, and tasks that stream data to each other.
-Each pattern says when it applies, how it is written, and which example
-of the ``data/programs`` folder shows it whole. A choice comes before
-all of them: whether the entries of an input go into a single run, or
-each into a run of its own.
+Each pattern says when it applies, how it is written, which example
+of the ``data/programs`` folder shows it whole, and how it is drawn in
+the web interface. A choice comes before all of them: whether the
+entries of an input go into a single run, or each into a run of its
+own.
 
 One run for all the entries, or one run for each
 ------------------------------------------------
@@ -56,6 +57,11 @@ With one run for each entry, a step that combines the results of every
 entry is not part of any of them: it runs separately, as a program of
 its own, once every run of the batch has ended.
 
+In the web interface, one run for all the entries is the program as it
+is drawn; one run for each entry is the same program run once per
+entry, with another output directory each time in the "Run" menu, or
+a launcher node of a resident program (see :doc:`webui_batch_launcher`).
+
 Choosing between an array and an option generator
 -------------------------------------------------
 
@@ -86,6 +92,10 @@ depend on the number of tasks of a process, write that process with an
 option generator. The engine answers for an array too, but while the
 array is not defined yet it runs its whole ``define_opts`` again, in a
 subshell, and throws the result away, every time it is asked.
+
+In the web interface, the options handler of the process is set to
+"array" or "generator", and "Configure" takes the code that builds the
+array or prints the number of tasks (see the :ref:`webui` Section).
 
 One task per entry, and a chain of steps for each entry
 -------------------------------------------------------
@@ -168,6 +178,15 @@ per method, keeping the number in a variable, and ask an option
 generator when you can: this is a second reason to write the first
 step with one.
 
+In the web interface, the first step is a generator whose "Configure"
+code counts the entries, with the sample sheet as a command line
+option marked task shaping; the next steps are generators whose code
+asks ``get_process_num_tasks`` for the step before, and a connection
+from an output of one step to an input of the next joins each task to
+the task of the same index. The directory of a task is the
+"Subdirectory" field of an output on the output directory of the
+process, ``${task_idx}``.
+
 Fan-out to a pool of workers, and fan-in
 ----------------------------------------
 
@@ -208,6 +227,13 @@ Each option ``-ind<i>`` holds the path of an output of a task of
 finish. The ``debasher_dynamic_fanout_fifos`` and
 ``debasher_dynamic_fanout_fifos_gen`` examples stream the parts and the
 results through FIFOs instead of files.
+
+In the web interface, ``-outf-ith`` and ``-ind-ith`` are options whose
+label ends in ``-ith``, fanout families, with ``-w`` as their count
+source, and the connection from a family to the tasks of the array
+widens into a wedge on the canvas. The ``webui_dynamic_fanout_fifos``
+program of the ``data/webui_programs`` folder is the FIFO version of
+this pattern built with the web interface.
 
 Gathering every task of a process
 ---------------------------------
@@ -255,6 +281,12 @@ the gathering process has to declare it in the ``program`` method:
 
     add_debasher_process "merge" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:sort"
 
+In the web interface, the first way is a fanout family connected to
+the generator or the array, with no count source option; the second
+is a shared directory, declared with "Shared dirs" in the toolbar,
+with the dependency written in the process dependencies of the
+additional specifications of the gathering process.
+
 Streaming between tasks
 -----------------------
 
@@ -271,3 +303,6 @@ are read inside the program for every task or for none. A consumer with
 fewer tasks than the producer would leave some producer tasks waiting
 for ever for a reader, so the engine refuses it when the run is
 prepared. A program with FIFOs runs under the built-in scheduler.
+
+In the web interface, the output of the producer is given the FIFO
+channel, and its connection to the consumer is drawn dashed.

@@ -3,10 +3,13 @@
 Executing DeBasher Programs
 ===========================
 
-This section explains how DeBasher programs are executed. Additionally,
-other important aspects related to program execution are also described,
-such as the structure of the output directory or how to visualize the
-program execution status.
+This section explains how DeBasher programs are executed from the
+command line, with ``debasher_exec``, and what every run leaves
+behind: the structure of the output directory, the status of each
+process, and how a program is run again, stopped or measured. In the
+web interface the "Run" menu does all of this (see the :ref:`webui`
+Section), with the same tools and the same output directory, so this
+section is also what happens underneath when a program runs there.
 
 .. _prg_exec:
 
