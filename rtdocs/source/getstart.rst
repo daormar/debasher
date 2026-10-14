@@ -342,6 +342,45 @@ hand; the editor wrote it from the drawing:
 .. literalinclude:: ../../data/webui_programs/webui_hello_world/webui_hello_world.sh
    :language: bash
 
+The same process in Python
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A process is a Unix program, so its language is a choice of its
+author, made in the Inspector: set "Language", under "Code", to
+Python, and "Edit code" opens the code editor on a template that is
+now a whole Python program, which reads ``-s`` with ``argparse``. The
+engine runs such a process with ``python3`` and the options of the
+process as its command line arguments, so the code of the process is:
+
+.. code-block:: python
+
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-s", default="Hello World!")
+    args = parser.parse_args()
+    print(args.s)
+
+.. image:: images/quickstart_12_python_code.png
+   :width: 100%
+   :alt: The code editor with the Python code of the process
+
+Nothing else changes: the option, the saving, the run and the output
+are the same, and so is the module that the editor writes, except that
+it now carries the Python program inside a function of the module,
+which the engine hands to the interpreter:
+
+.. literalinclude:: ../../data/webui_programs/webui_hello_world_py/webui_hello_world_py.sh
+   :language: bash
+   :start-at: hello_world_heredoc_py()
+   :end-at: }
+
+The module stays a Bash file whatever the processes are written in:
+Bash is the glue that holds a program together and that any Unix
+machine runs, and the processes are the programs of their authors.
+This version is shipped as ``webui_hello_world_py``, and its
+hand-written counterpart is :doc:`hello_world_py`.
+
 From here, the :ref:`concepts` Section says what a program is made of,
 and the :ref:`webui` Section describes every part of the editor,
 including how processes are connected, which is what a program with
