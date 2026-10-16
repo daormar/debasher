@@ -238,38 +238,64 @@ class Program:
             taskShaping=option.task_shaping,
         )
 
-    def _read_code(self, process: Process) -> str:
-        path = process.code_path or process.script_path
+    @staticmethod
+    def _read(process: Process, path: Path | None, what: str) -> str | None:
+        """The text of a file of `process`, `what` saying which for the
+        error; None for no file."""
         if path is None:
-            return ""
+            return None
         try:
             return path.read_text()
         except OSError as error:
-            raise DefinitionError(f'Process "{process.name}": cannot read its code file {path}: {error.strerror}.')
+            raise DefinitionError(f'Process "{process.name}": cannot read its {what} {path}: {error.strerror}.')
 
-    def _script_relative(self, process: Process, home: Path) -> Path | None:
-        """The path of the external alias of `process` relative to the home
-        directory: its path relative to the base directory of the process
-        when it is below it, else its name alone."""
-        if process.script_path is None:
-            return None
-        try:
-            return process.script_path.resolve().relative_to(process.base_dir.resolve())
-        except ValueError:
-            return Path(process.script_path.name)
+    def _read_code(self, process: Process) -> str:
+        if process.script_path is not None:
+            # The copy of a script is for the editor to show, kept as import
+            # keeps that of an external alias, without its final newline
+            return (self._read(process, process.script_path, "script") or "").rstrip("\n")
+        return self._read(process, process.code_path, "code file") or ""
 
-    def _process_model(self, member: _Member, positions, home: Path):
-        from api.models import (
-            AdditionalSpecs,
-            AliasOptMapping,
-            ComputationalSpecs,
-            OptionsHandler,
-            Position,
-            ProgramProcess,
+    def _options_handler(self, process: Process):
+        from api.models import OptionsHandler
+
+        tasks = self._read(process, process.tasks_path, "tasks file")
+        if process.mode == "array":
+            return OptionsHandler(mode="array", arrayCode=tasks)
+        if process.mode == "generator":
+            return OptionsHandler(mode="generator", generatorSizeCode=tasks)
+        return OptionsHandler(mode=process.mode)
+
+    def _additional_methods(self, process: Process):
+        from api.models import AdditionalMethods
+
+        return AdditionalMethods(
+            **{field: self._read(process, path, "method file") for field, path in process.method_paths.items()}
         )
 
+    @staticmethod
+    def _script_relative(process: Process) -> str | None:
+        """
+        How the module refers to the script of `process`: the path as it
+        was given when it is relative and stays below the directory of the
+        description (it is copied under that same path beside the module),
+        the name of the script alone when the path climbs out of it, and
+        an absolute path as it is (which the engine takes with a warning
+        about portability, and which is not copied).
+        """
+        given = process.script_given
+        if given is None:
+            return None
+        if Path(given).is_absolute():
+            return given
+        if ".." in Path(given).parts:
+            return Path(given).name
+        return given
+
+    def _process_model(self, member: _Member, positions):
+        from api.models import AdditionalSpecs, AliasOptMapping, ComputationalSpecs, Position, ProgramProcess
+
         process = member.process
-        script_relative = self._script_relative(process, home)
         x, y = positions[process.name]
         return ProgramProcess(
             id=_id(self.name, process.name),
@@ -277,7 +303,7 @@ class Program:
             description=process.description,
             position=Position(x=x, y=y),
             options=[self._option_model(member, option) for option in process.options],
-            optionsHandler=OptionsHandler(mode=process.mode),
+            optionsHandler=self._options_handler(process),
             language=process.language,
             code=self._read_code(process),
             computationalSpecs=ComputationalSpecs(cpus=member.cpus, mem=member.mem, time=member.time),
@@ -286,22 +312,22 @@ class Program:
                 processdeps=member.processdeps,
                 alias=process.alias,
                 aliasOptMap=[AliasOptMapping(fromLabel=a, toLabel=b) for a, b in process.alias_opt_map.items()],
-                externalAlias=str(script_relative) if script_relative else None,
+                externalAlias=self._script_relative(process),
             ),
+            additionalMethods=self._additional_methods(process),
         )
 
-    def to_model(self, home_dir: str | Path = "."):
+    def to_model(self):
         """
         The program as the program model of the web UI (`api.models.Program`),
-        as it would be saved into `home_dir` (which decides the path of an
-        external alias). Raises DefinitionError for what the SDK refuses;
-        what script generation refuses is found when the program is written.
+        as `write()` saves it. Raises DefinitionError for what the SDK
+        refuses; what script generation refuses is found when the program
+        is written.
         """
         from api.models import ExecutionOptions, Program as ProgramModel, ProgramEdge
 
-        home = Path(home_dir)
         positions = self._positions()
-        processes = [self._process_model(member, positions, home) for member in self._members]
+        processes = [self._process_model(member, positions) for member in self._members]
         edges = [
             ProgramEdge(
                 id=_id(self.name, "edge", edge.source.process.name, edge.source.label, edge.target.process.name, edge.target.label),
@@ -327,12 +353,14 @@ class Program:
             edges=edges,
         )
 
-    def _script_copies(self, home: Path) -> list[_ScriptCopy]:
+    def _script_copies(self) -> list[_ScriptCopy]:
+        """The scripts to copy beside the module: those the module refers
+        to by a relative path."""
         copies = []
         for member in self._members:
-            relative = self._script_relative(member.process, home)
-            if relative is not None:
-                copies.append(_ScriptCopy(member.process.script_path, relative))
+            relative = self._script_relative(member.process)
+            if relative is not None and not Path(relative).is_absolute():
+                copies.append(_ScriptCopy(member.process.script_path, Path(relative)))
         return copies
 
     def write(self, home_dir: str | Path) -> Path:
@@ -347,8 +375,8 @@ class Program:
         from api import persistence
 
         home = Path(home_dir)
-        model = self.to_model(home)
-        copies = self._script_copies(home)
+        model = self.to_model()
+        copies = self._script_copies()
         for copy in copies:
             if not copy.source.is_file():
                 raise DefinitionError(f"Script {copy.source} does not exist.")

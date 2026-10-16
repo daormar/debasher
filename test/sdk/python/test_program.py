@@ -211,9 +211,9 @@ def test_a_process_without_code_takes_it_from_a_loaded_module():
 
 def test_a_script_is_an_external_alias_copied_beside_the_module(tmp_path):
     source = tmp_path / "src"
-    source.mkdir()
-    script = _code(source, "tool.py", "print('hi')\n")
-    tool = Process("tool", script=script, base_dir=source)
+    (source / "tools").mkdir(parents=True)
+    _code(source / "tools", "tool.py", "print('hi')\n")
+    tool = Process("tool", script="./tools/tool.py", base_dir=source)
     prg = Program("prg")
     prg.add(tool)
     home = tmp_path / "home"
@@ -221,16 +221,16 @@ def test_a_script_is_an_external_alias_copied_beside_the_module(tmp_path):
     prg.write(home)
 
     process = persistence.load_program(str(home)).processes[0]
-    assert process.additionalSpecs.externalAlias == "tool.py"
+    assert process.additionalSpecs.externalAlias == "./tools/tool.py"
     assert process.language == "python"
-    assert process.code == "print('hi')\n"
-    assert (home / "tool.py").read_text() == "print('hi')\n"
-    assert "ext_alias=tool.py" in (home / "prg.sh").read_text()
+    assert process.code == "print('hi')"
+    assert (home / "tools" / "tool.py").read_text() == "print('hi')\n"
+    assert "ext_alias=./tools/tool.py" in (home / "prg.sh").read_text()
 
 
 def test_a_script_in_the_home_directory_is_not_copied_onto_itself(tmp_path):
-    script = _code(tmp_path, "tool.sh", "echo hi\n")
-    tool = Process("tool", script=script, base_dir=tmp_path)
+    _code(tmp_path, "tool.sh", "echo hi\n")
+    tool = Process("tool", script="tool.sh", base_dir=tmp_path)
     prg = Program("prg")
     prg.add(tool)
 
@@ -242,10 +242,10 @@ def test_a_script_in_the_home_directory_is_not_copied_onto_itself(tmp_path):
 def test_a_script_outside_the_base_directory_is_copied_by_its_name(tmp_path):
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    script = _code(elsewhere, "tool.sh", "echo hi\n")
+    _code(elsewhere, "tool.sh", "echo hi\n")
     base = tmp_path / "base"
     base.mkdir()
-    tool = Process("tool", script=script, base_dir=base)
+    tool = Process("tool", script="../elsewhere/tool.sh", base_dir=base)
     prg = Program("prg")
     prg.add(tool)
     home = tmp_path / "home"
@@ -254,6 +254,19 @@ def test_a_script_outside_the_base_directory_is_copied_by_its_name(tmp_path):
 
     assert persistence.load_program(str(home)).processes[0].additionalSpecs.externalAlias == "tool.sh"
     assert (home / "tool.sh").is_file()
+
+
+def test_an_absolute_script_is_referred_to_as_it_is_and_not_copied(tmp_path):
+    script = _code(tmp_path, "tool.sh", "echo hi\n")
+    tool = Process("tool", script=script)
+    prg = Program("prg")
+    prg.add(tool)
+    home = tmp_path / "home"
+
+    prg.write(home)
+
+    assert persistence.load_program(str(home)).processes[0].additionalSpecs.externalAlias == str(script)
+    assert not (home / "tool.sh").exists()
 
 
 # --- writing -----------------------------------------------------------------

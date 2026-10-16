@@ -5,6 +5,10 @@ is defined on its own, outside any program, as a process of a module is:
 a program adds it (see program.py), and the same process can be added to
 several programs.
 
+A process defines one task from its declared options; an Array or a
+Generator defines several, with the code of the options handler that the
+editor accepts, kept in a file (`tasks=`).
+
 Every option is declared by a method of the process that gives it its
 value source (the command line, a connection, a literal value) and its
 option channel, with the vocabulary of the program model of the web UI
@@ -179,6 +183,13 @@ class Process:
     - none of them: the code of a process of that name that a module
       loaded by the preamble of the program provides.
 
+    The additional methods of the process, which the editor takes as Bash
+    bodies, are given as files too: `skip` (whether the process is
+    skipped), `post` (run after the process), `reset_outfiles` (what to
+    remove before a rerun), `outdir_basename` (the name of the process
+    output directory), `conda_envs` and `docker_imgs` (the environments
+    the process declares).
+
     A relative path is taken from the directory of the Python file that
     creates the process (`base_dir` names another directory).
     """
@@ -195,6 +206,12 @@ class Process:
         language: str | None = None,
         alias_opt_map: dict[str, str] | None = None,
         base_dir: str | Path | None = None,
+        skip: str | Path | None = None,
+        post: str | Path | None = None,
+        reset_outfiles: str | Path | None = None,
+        outdir_basename: str | Path | None = None,
+        conda_envs: str | Path | None = None,
+        docker_imgs: str | Path | None = None,
     ):
         check_process_name(name)
         given = [kind for kind, value in (("code", code), ("script", script), ("alias", alias)) if value]
@@ -214,10 +231,27 @@ class Process:
         self.description = description
         self.base_dir = Path(base_dir) if base_dir is not None else _caller_dir()
         self.code_path = self._resolve(code)
+        # The script as given: when relative, it is also how the module
+        # refers to it (see Program.write)
+        self.script_given = str(script) if script is not None else None
         self.script_path = self._resolve(script)
         self.alias = alias
         self.alias_opt_map = dict(alias_opt_map or {})
         self.language = language or self._language_of(self.code_path or self.script_path) or "bash"
+        # The files of the additional methods, by the field of the program
+        # model that holds each body
+        self.method_paths: dict[str, Path] = {}
+        for field, path in (
+            ("skipCode", skip),
+            ("postCode", post),
+            ("resetOutfilesCode", reset_outfiles),
+            ("outdirBasenameCode", outdir_basename),
+            ("condaEnvsCode", conda_envs),
+            ("dockerImgsCode", docker_imgs),
+        ):
+            if path is not None:
+                self.method_paths[field] = self._resolve(path)
+        self.tasks_path: Path | None = None
         self.options: list[Option] = []
 
     def __repr__(self) -> str:
@@ -318,20 +352,127 @@ class Process:
     ) -> Option:
         """An output, with the value that names what the process produces
         (see in_outdir), or a family of outputs counted by `count_source`."""
-        if option_direction(label) != "output":
-            raise DefinitionError(
-                f'Option "{label}" of process "{self.name}": the engine takes an output from its '
-                'label, which starts with "-out" or "--out".'
-            )
+        self._check_direction(label, "output")
         return self.opt(label, data_type, description, value=value, count_source=count_source)
 
-    def _input(self, label: str, data_type: str, description: str, **fields) -> Option:
-        if option_direction(label) != "input":
+    def fifo_output(
+        self,
+        label: str,
+        data_type: str,
+        description: str,
+        name: str,
+        mirror: bool = False,
+        count_source: Option | str | None = None,
+    ) -> Option:
+        """An output written to a FIFO named `name`, mirrored into a log file
+        for the canvas to watch if asked; or a family of FIFOs, one per
+        value of the index (`"dispatch_fifo_${i}"`), counted by
+        `count_source`."""
+        self._check_direction(label, "output")
+        return self.opt(
+            label, data_type, description, value=name, channel="fifo", mirror=mirror, count_source=count_source
+        )
+
+    def fifo_input(self, label: str, data_type: str, description: str, name: str, external: bool = False) -> Option:
+        """An input read from a FIFO named `name`, which the process opens
+        itself rather than receives through a connection; in a resident
+        program, an external input (`external`), written from outside the
+        program."""
+        return self._input(
+            label, data_type, description, value=name, channel="fifo", fifo_tag="external" if external else None
+        )
+
+    def outdir_opt(self, label: str, description: str, subpath: str = "") -> Option:
+        """An output that names the process output directory of the process,
+        or a task subdirectory of it (`subpath`, a Bash word such as
+        `"${task_idx}"`), for another process to read through a connection."""
+        self._check_direction(label, "output")
+        return self.opt(label, "dir", description, channel="process_outdir", subpath=subpath)
+
+    def shared_dir_opt(
+        self,
+        label: str,
+        data_type: str,
+        description: str,
+        shared_dir: str,
+        subpath: str = "",
+        source: Source | list[Source] | None = None,
+    ) -> Option:
+        """An option whose value is a shared directory of the program, named
+        by `shared_dir` (one of the shared directories of the Program), or a
+        shared subdirectory of it (`subpath`). A `source` only draws the
+        sharing on the canvas: the engine orders the processes by the
+        directory itself."""
+        return self.opt(
+            label, data_type, description, value=shared_dir, channel="shared_dir", subpath=subpath, source=source
+        )
+
+    def procspec_opt(self, label: str, data_type: str, description: str, attribute: str) -> Option:
+        """An input whose value is an attribute of the specifications of the
+        process in the program, such as `"cpus"`."""
+        return self._input(label, data_type, description, value=attribute, from_process_spec=True)
+
+    def value_desc_output(self, label: str, data_type: str, description: str) -> Option:
+        """An output delivered as a value descriptor, which the engine
+        synthesizes for the process."""
+        self._check_direction(label, "output")
+        return self.opt(label, data_type, description, channel="value_desc")
+
+    def _check_direction(self, label: str, direction: str) -> None:
+        if option_direction(label) != direction:
+            if direction == "output":
+                raise DefinitionError(
+                    f'Option "{label}" of process "{self.name}": the engine takes an output from its '
+                    'label, which starts with "-out" or "--out".'
+                )
             raise DefinitionError(
                 f'Option "{label}" of process "{self.name}": a label that starts with "-out" or '
                 '"--out" is an output for the engine.'
             )
+
+    def _input(self, label: str, data_type: str, description: str, **fields) -> Option:
+        self._check_direction(label, "input")
         return self.opt(label, data_type, description, **fields)
+
+
+class _TaskedProcess(Process):
+    """A process with several tasks, shaped by the code of its options
+    handler, which `tasks` names: a Bash file, as the editor accepts it."""
+
+    def __init__(self, name: str, *args, tasks: str | Path | None = None, **kwargs):
+        super().__init__(name, *args, **kwargs)
+        if tasks is None:
+            raise DefinitionError(
+                f'Process "{name}" is {self._article} {self.mode} and gives no tasks= file, the code of '
+                "its options handler."
+            )
+        self.tasks_path = self._resolve(tasks)
+
+
+class Array(_TaskedProcess):
+    """
+    An array process: `tasks` is a Bash file that builds the array of its
+    tasks, under the name `array`, from the command line and the files of
+    the run (`local w=$(debasher::read_opt_value_from_line "${cmdline}"
+    "-w")`, then `array+=(...)`); every option is defined once per element,
+    with `${task_idx}` and `${array[$task_idx]}` at hand in its value. It is
+    the array mode of the options handler of the editor.
+    """
+
+    mode = "array"
+    _article = "an"
+
+
+class Generator(_TaskedProcess):
+    """
+    An option generator: `tasks` is a Bash file that prints the number of
+    tasks, from the command line and the files of the run; the options of
+    each task are defined from its index, `${task_idx}`, in their values. It
+    is the generator mode of the options handler of the editor.
+    """
+
+    mode = "generator"
+    _article = "a"
 
 
 def _caller_dir() -> Path:

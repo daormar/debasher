@@ -15,7 +15,7 @@ from ._paths import locate_api as _locate_api
 _locate_api()
 
 from .errors import DefinitionError  # noqa: E402
-from .process import Option, Process, in_outdir  # noqa: E402
+from .process import Array, Generator, Option, Process, in_outdir  # noqa: E402
 from .program import Program  # noqa: E402
 
-__all__ = ["DefinitionError", "Option", "Process", "Program", "in_outdir"]
+__all__ = ["Array", "DefinitionError", "Generator", "Option", "Process", "Program", "in_outdir"]

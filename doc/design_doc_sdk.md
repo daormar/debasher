@@ -98,8 +98,18 @@ entries below that refer to them.
   added to two programs can have different ones.
 - **options handler**: how a process of the program model defines the
   options of its tasks, in one of the options handler modes of the design
-  of the web UI. In this version of the SDK every process uses the
-  standard mode, one task from its declared options.
+  of the web UI: the standard mode, one task from the declared options
+  (`Process`); the array mode (`Array`) and the generator mode
+  (`Generator`), several tasks shaped by code; the manual mode, a whole
+  `_define_opts` by hand, which the SDK does not offer.
+- **tasks file**: the Bash file that shapes the tasks of an `Array` or a
+  `Generator` (`tasks=`): the code that the editor accepts in the options
+  handler of that mode, which builds the array of the tasks or prints
+  their number, and which the engine runs when it prepares a run.
+- **method file**: a Bash file with the body of one of the additional
+  methods of a process (`skip`, `post`, `reset_outfiles`,
+  `outdir_basename`, `conda_envs`, `docker_imgs`), as the editor takes
+  it in its additional methods.
 - **launcher**: `debasher_build`, a Bash script built by `make` that
   chooses the Python to run the tool with and runs
   `python -m debasher.build`.
@@ -163,10 +173,11 @@ ways, which the process may not combine:
   function that the engine runs with the interpreter of the language.
 - `script=`, a script: a path to a file that the module runs as it is,
   the external alias of the engine, with the interpreter that the engine
-  chooses by its extension. The program metadata keeps a copy of its text
-  for the editor to show, as import does for an imported external alias,
-  and the module refers to the file by a path relative to the home
-  directory (see "Writing the program").
+  chooses by its extension. The program metadata keeps a copy of its
+  text, without its final newline, for the editor to show, as import
+  keeps it for an imported external alias, and the module refers to the
+  file by the path as it was given, or by its name alone when the path
+  contains `..` (see "Writing the program").
 - `alias=`, the name of another process whose code this one runs under
   its own name and options. `alias_opt_map=` renames its option labels
   into those of the aliased process, label to label, and does the same
@@ -174,6 +185,28 @@ ways, which the process may not combine:
 - none of them: the code of a process of that name that a module loaded
   by the preamble of the program provides, as for a process of a module
   that adds a process of another.
+
+A `Process` defines one task from its declared options. An `Array` and a
+`Generator` define several, shaped by a tasks file that they require
+(`tasks=`): for an array, the Bash that builds the array of the tasks
+under the name `array`, from the command line of the run and the files
+present then, after which every option of the process is defined once
+per element, with `${task_idx}` and `${array[$task_idx]}` at hand in its
+value; for a generator, the Bash that prints the number of tasks, each
+task's options being defined from `${task_idx}`. They are the array and
+generator modes of the options handler, and the tasks file is the code
+of the options handler as the editor keeps it, in a file instead of a
+box. A task shaping option of such a process
+(`cmdline_opt(..., shaping=True)`) is read by the tasks file only, as in
+the editor. The code of the tasks file runs when the engine prepares a
+run, not when the program is built: the tasks depend on the command line
+of each run, which a build does not know (see "Future work" for the same
+code in Python).
+
+The additional methods of a process are given as method files (`skip=`,
+`post=`, `reset_outfiles=`, `outdir_basename=`, `conda_envs=`,
+`docker_imgs=`), each a Bash body that the editor would take in its
+additional methods, and go into the program model as such.
 
 ## Options
 
@@ -201,12 +234,43 @@ declared. A label is declared once per process.
   names what the process produces. `in_outdir("name")` gives the value
   of an output kept in the process output directory,
   `${process_outdir}/name`, or the directory itself with no name.
+- `fifo_output(label, type, description, name, mirror=False, ...)` and
+  `fifo_input(label, type, description, name, external=False)`: an
+  option delivered through a FIFO of that name (the fifo option channel),
+  an output mirrored into a log file for the canvas to watch if asked, an
+  input that the process opens itself rather than receives through a
+  connection, external in a resident program when written from outside
+  it (the fifo tag `external`).
+- `outdir_opt(label, description, subpath="")`: an output that names the
+  process output directory of the process, or a task subdirectory of it
+  (the `process_outdir` channel, with the subpath a Bash word such as
+  `"${task_idx}"`), for another process to read through a connection.
+- `shared_dir_opt(label, type, description, shared_dir, subpath="", source=None)`:
+  an option whose value is one of the shared directories of the program,
+  or a shared subdirectory of it (the `shared_dir` channel); its source,
+  if any, only draws the sharing on the canvas, since the engine orders
+  the processes by the directory itself.
+- `procspec_opt(label, type, description, attribute)`: an input whose
+  value is an attribute of the specifications of the use of the process,
+  such as `cpus`.
+- `value_desc_output(label, type, description)`: an output delivered as a
+  value descriptor that the engine synthesizes.
 - `opt(label, type, description, **fields)`: an option with any field of
   the program model given by name (`value`, `channel`, `subpath`,
   `mirror`, `fifo_tag`, `command_line`, `mandatory`, `from_process_spec`,
   `task_shaping`, `count_source`, `source`, `display`). The other methods
-  are this one with the fields of one case set, and the methods for the
-  other option channels are future work.
+  are this one with the fields of one case set.
+
+A fanout family, an option whose label ends in `-ith` on a `Process`
+and stands for one option per task of the array or generator at the
+other end of its connection (`-outf-ith` for `-outf0`, `-outf1`, ...),
+is declared with `output`, `fifo_output` or `input` and counted by
+`count_source=`, an option of the same process given as the option or
+its label, or, without one, by the tasks of the process it is connected
+to. The SDK resolves the count source to its id and refuses one of
+another process; the rules of a family (what it may be connected to,
+which channels it takes) are those of script generation, which checks
+them when the program is written.
 
 The data types are those of the program model: `int`, `float`,
 `string`, `file`, `dir`, and `None` for a flag. The SDK does not check
@@ -265,8 +329,11 @@ with these rules:
   are the process's own, go with them. The script of a process goes into
   the external alias of the additional specifications, as the path that
   the module will refer to (see "Writing the program").
-- **Options handler.** Every process is in the standard mode: one task,
-  with the options declared.
+- **Options handler.** The mode of the process, with the text of the
+  tasks file as the array code or the generator size code of an `Array`
+  or a `Generator`; a `Process` is in the standard mode. The text of each
+  method file goes into the additional methods of the process. Both are
+  read at this moment, and a file that cannot be read is refused.
 - **Positions.** A process added with a position has it. The others are
   placed as the editor places the processes of an imported program, whose
   module says nothing about positions: in layers by the depth of their
@@ -302,13 +369,17 @@ and the scripts are checked before anything touches the directory, and
 follows the rule of a save: a program written again unchanged keeps its
 revision, and a changed one takes the next.
 
-A script is copied beside the module, replacing an older copy, under
-the path that the external alias of the process names: the path of
-the script relative to the base directory of the process when the script
-is below it, and the name of the script alone when it is not. A script in
-the home directory itself is never copied onto itself. The engine resolves
-an external alias against the directory of the module, so the program
-written is self-contained, as the home directory of the editor is.
+The external alias of a process names its script as the path was
+given, when it is relative and stays below the directory of the
+description (`./tools/dispatcher.py` is written as it is), or the name
+of the script alone when the path contains `..` (`../shared/tool.py`
+becomes `tool.py`); the engine resolves it against the directory of the
+module, so the script is copied beside the module under that same path,
+replacing an older copy, and the program written is self-contained, as
+the home directory of the editor is. A script in the home directory
+itself is never copied onto itself. An absolute path is written as it
+is and the script is not copied: the engine takes it with a warning
+about portability, which is the user's choice.
 
 Script generation needs `debasher_get_proc_info` of the engine for one
 thing only, to leave out the code of a process that a module loaded by
@@ -342,9 +413,8 @@ called: a description calls nothing, as a module calls nothing.
 Running the program is then the same as for any program:
 `debasher_exec --pfile <name>.sh --outdir <dir> ...`, `debasher_status`,
 or the Run of the editor once the home directory is opened in it. The
-description is
-never run with `python` nor given to `debasher_exec`, and a change to it
-is followed by another `debasher_build`.
+description is never run with `python` nor given to `debasher_exec`, and
+a change to it is followed by another `debasher_build`.
 
 # Installation, and finding the API and the engine
 
@@ -408,9 +478,10 @@ through it script generation) and `api.debasher_constants`.
   program metadata that the editor would save for the same program, apart
   from the ids, which the editor draws at random, and the revision and
   home directory of the save, and the module that script generation
-  writes from it, byte for byte: the hello world of the quickstart,
-  described with the SDK, is compared in the tests with
-  `data/webui_programs/webui_hello_world_py`.
+  writes from it, byte for byte: the hello world of the quickstart and
+  the dynamic fanout example, described with the SDK, are compared in
+  the tests with `data/webui_programs/webui_hello_world_py` and
+  `data/webui_programs/webui_dynamic_fanout_fifos`.
 - **Deterministic.** Two builds of the same description give the same
   program metadata: ids come from names, positions from the layout, and
   nothing from the clock or from randomness.
@@ -443,13 +514,6 @@ through it script generation) and `api.debasher_constants`.
 
 # Future work
 
-- **Arrays, generators and fanout families.** The modes of the options
-  handler other than the standard one, with their Bash code in a file
-  given to the process (`tasks=`), the fanout families (`-ith` labels)
-  with their count source, and the methods for the other option channels
-  (FIFOs, the process output directory and its task subdirectories,
-  shared directories, process specifications, value descriptors), with
-  the dynamic fanout example of the web UI reproduced in the tests.
 - **Resident programs.** A program of nodes, each given as a Python file
   with the class of the node, split into the parts of the program model
   with the same code as import (`decompose_heredoc`), and the Supervisor.
@@ -463,7 +527,18 @@ through it script generation) and `api.debasher_constants`.
   the Bash of the options handler does today, in Python, and nothing
   more. The code runs when `debasher_exec` prepares a run, as the Bash
   does, since the tasks depend on the command line of each run, which a
-  build does not know.
+  build does not know. The skip rule of a process (`skip`), evaluated at
+  the same moment, takes the same way.
+- **The additional methods as data.** The Conda environments and Docker
+  images of a process, the files it removes before a rerun and the name
+  of its process output directory are data (a name and a file, a list of
+  names) that the editor and the SDK carry as Bash bodies because the
+  program model has no field for them. When the process contract of the
+  engine gives them a form, the SDK takes them as arguments
+  (`conda_envs={"py27": "py27.yml"}`) and the method files go; until
+  then the SDK writes no Bash from data, however short the body would
+  be. The `post` method, which runs inside the task after the process,
+  belongs with the code of the process.
 - **Processes as a library, and namespaces.** A process defined in a
   Python module of the user and added to several programs, as a process
   of a loaded module is. The namespace of DeBasher is a naming convention
