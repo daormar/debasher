@@ -7,7 +7,8 @@ Python, R, Perl or Groovy), takes its inputs and gives its outputs
 through named options, and the way options connect across processes
 defines the dependency graph that DeBasher schedules and runs, on one
 machine or on a Slurm cluster. Programs are built in a visual editor,
-with the help of an AI assistant, or written by hand as Bash modules.
+with the help of an AI assistant, written by hand as Bash modules, or
+described in Python with the SDK.
 
 DeBasher runs two kinds of program. A general program processes a
 batch of inputs and ends. A resident program processes a stream:
@@ -33,10 +34,10 @@ programs from within programs.
 The documentation has two parts. The first is for using DeBasher:
 installing it, the concepts a program is made of, building and running
 programs in the web interface or from the command line, the shapes
-that programs take, resident programs, and, last, writing modules by
-hand, which the web interface does for you and which the chapters
-before it never require. The second is the reference of the tools and
-of the API.
+that programs take, resident programs, and, last, writing programs by
+hand, as a Bash module or in Python with the SDK, which the web
+interface does for you and which the chapters before it never require.
+The second is the reference of the tools and of the API.
 
 Contents
 --------

@@ -19,7 +19,8 @@ export interface ClaudeSettings {
 // tool, which edits the program or runs its code, is left to Claude Code,
 // which asks until the user allows it. Claude Code works in the home
 // directory of the program, and its tools that edit files are denied the
-// program metadata (.debasher), which only the MCP tools change, keeping
+// program metadata (.debasher), which only the MCP tools change here (the
+// editor and debasher_build write it too, by the same rules), keeping
 // their rules and the revision of the program. A command of Bash is not
 // covered, but Claude Code asks before running one.
 export function claudeSettings(tools: Tool[]): ClaudeSettings {

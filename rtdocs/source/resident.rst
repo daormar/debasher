@@ -38,7 +38,7 @@ Concepts
 
 A resident program is a DeBasher module like any other, whose
 ``program_type`` method declares it resident (see the
-:ref:`implem` Section). What changes is what its processes are and how
+:ref:`implem_bash` Section). What changes is what its processes are and how
 they run:
 
 * **Nodes.** Every process of a resident program but its

@@ -25,6 +25,13 @@ it in this session.
   preamble, its processes and connections. Look at `search_library` too: a
   process that a module of the preamble already defines is better reused than
   written again.
+- Look at `list_program_files` too: a `<name>.py` beside `<name>.sh` is a
+  description of the Python SDK, from which `debasher_build` writes the saved
+  program (see "Programs described in Python" in the reference). Then the
+  design lives in that file: change it with `write_program_file`, following
+  https://debasher.readthedocs.io/en/latest/implem_python.html, and have the
+  program built again, rather than editing the saved program with the tools,
+  which the next build overwrites.
 - Ask what the program has to do, if the user has not said: what comes in, what
   comes out, the steps in between, how much data, whether it runs once or keeps
   running (a resident program), where it runs (the built-in scheduler or Slurm;
@@ -82,7 +89,8 @@ connections of the data over ordering by hand.
   what earlier ones added, so that the program never stays half built; call it
   with `dry_run` first when the change is large, and show the user the
   proposal. The single tools (`add_process`, `add_option`, `connect`, ...)
-  are fine for small changes.
+  are fine for small changes. For a program described in Python, build it in
+  its description instead, and have it built again with `debasher_build`.
 - Lay the processes out with `move_process` and `layout`, unless the user
   placed them by hand and wants them kept. Draw as a label edge
   (`set_connection_display`) a connection whose line would cross others.

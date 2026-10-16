@@ -210,7 +210,7 @@ The quickest way to a first program is the web interface: this section
 builds a program that prints "Hello World!", runs it and looks at what
 it printed, without writing any Bash. The same program is shipped with
 DeBasher as ``webui_hello_world``, among the examples that "Load
-program" opens, and its hand-written version opens the :ref:`implem`
+program" opens, and its hand-written version opens the :ref:`implem_bash`
 Section.
 
 Once the Python dependencies of the web interface are installed (see
@@ -336,7 +336,7 @@ too (see the :ref:`exec` Section):
 
     $ debasher_exec --pfile webui_hello_world.sh --outdir out -s "Hello from the shell"
 
-Its content is what the :ref:`implem` Section explains how to write by
+Its content is what the :ref:`implem_bash` Section explains how to write by
 hand; the editor wrote it from the drawing:
 
 .. literalinclude:: ../../data/webui_programs/webui_hello_world/webui_hello_world.sh
@@ -379,7 +379,9 @@ The module stays a Bash file whatever the processes are written in:
 Bash is the glue that holds a program together and that any Unix
 machine runs, and the processes are the programs of their authors.
 This version is shipped as ``webui_hello_world_py``, and its
-hand-written counterpart is :doc:`hello_world_py`.
+hand-written counterpart is :doc:`hello_world_py`. The same program
+described in Python with the SDK opens the :ref:`implem_python`
+Section.
 
 From here, the :ref:`concepts` Section says what a program is made of,
 and the :ref:`webui` Section describes every part of the editor,

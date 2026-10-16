@@ -25,14 +25,23 @@ Work on one process at a time, in the order of the data, and tell the user
 which one you start with.
 
 1. **Read what it is.** `get_process` gives the process with its options,
-   description and current code.
+   description and current code, and `list_program_files` tells whether the
+   code lives in files beside a Python description.
 2. **Ask for the code prompt.** `get_code_prompt` composes, from the program
    as saved, what the code has to follow: the rules of the engine for that
    language, the options and where their values come from, the connections,
    and the form of the answer. Follow it; it is more precise than anything
    here. Use its `part` for the code of an options handler or of an
    additional method when that is what is missing.
-3. **Write the code** with `update_process`. Keep it small and readable, and
+3. **Write the code** with `update_process`. In a program described in
+   Python (a `<name>.py` beside `<name>.sh`, see "Programs described in
+   Python" in the reference), write it instead into the process file that
+   the description names, with `write_program_file`, the same code the
+   prompt asks for, and have the program built again with
+   `debasher_build <name>.py` in the home directory (a command, which asks
+   the user; or ask them to run it) before the tests: `update_process` would
+   change only the saved program, which the next build overwrites. Keep it
+   small and readable, and
    make it fail loudly (a non-zero exit) on bad input rather than produce a
    wrong output. Comment it as the code prompt asks under "How to comment the
    code": what each function, and each hook a node redefines, does and why, the

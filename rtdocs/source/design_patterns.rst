@@ -68,7 +68,7 @@ Choosing between an array and an option generator
 A process with several tasks builds their option lists either in its
 ``define_opts`` method, as an array, or with an option generator, its
 ``generate_opts_size`` and ``generate_opts`` methods (see
-:ref:`implem`). Both give the same tasks; they differ in when the
+:ref:`implem_bash`). Both give the same tasks; they differ in when the
 options are computed:
 
 * ``define_opts`` runs once, when the run is prepared, and the engine
@@ -164,7 +164,7 @@ of a rule can drift apart, as when one skips a header that the other
 counts. Each task of ``sort`` reads the directory of the task of
 ``align`` with the same index, so the engine makes it wait for that
 task only, and gives each task a directory of its own (see
-:ref:`implem`). The ``debasher_generator_example`` example connects
+:ref:`implem_bash`). The ``debasher_generator_example`` example connects
 the tasks of two option generators by index in this way, and the
 ``debasher_fifo_generator_example`` example also asks for the number of
 tasks of the first one.

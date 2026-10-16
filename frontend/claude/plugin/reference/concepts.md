@@ -21,14 +21,36 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   stream: long-lived, stateful Python nodes joined by FIFOs, possibly in
   cycles, always on one machine.
 - **Home directory and output directory**, which must differ. The home
-  directory holds the program metadata (`.debasher/program.json`, which only
-  the tools change), the generated script `<name>.sh`, and the user files,
-  such as `test/`. A run writes into the output directory (`outputDir`).
-  `create_program` starts an empty program in a new home directory, and
-  `import_module` makes one from an existing DeBasher module (a `.sh` file).
+  directory holds the program metadata (`.debasher/program.json`, never
+  edited by hand: the tools, the editor and `debasher_build` write it), the
+  generated script `<name>.sh`, and the user files, such as `test/` or, for
+  a program described in Python, its description and the files of its
+  processes (see "Programs described in Python"). A run writes into the
+  output directory (`outputDir`). `create_program` starts an empty program
+  in a new home directory, `import_module` makes one from an existing
+  DeBasher module (a `.sh` file), and `debasher_build`, outside the tools,
+  writes one from a Python description.
 - **The generated script is never edited by hand.** Every save writes it
   again from the program metadata, so a change made to it is lost: change
   the code of a process with `update_process` instead.
+- **Programs described in Python.** A home directory that holds `<name>.py`
+  beside `<name>.sh` was written by `debasher_build` from that file, a
+  description of the Python SDK: the processes, their options and their
+  connections are defined there, and the code of each process is in a file
+  of its own beside it (a Bash function named as the process, or the whole
+  script of another language, exactly what the code box of the editor
+  holds), as are the tasks files, the method files and the node files. They
+  are user files: `list_program_files` shows them and `write_program_file`
+  changes them. The way is one-directional: a save, from the tools or the
+  editor, changes the program metadata and the generated script only and
+  leaves the description and the process files as they were, and the next
+  `debasher_build <name>.py` writes the program again from them, so an edit
+  made with the tools is lost then. Change such a program in its description
+  and its process files, and have it built again with
+  `debasher_build <name>.py` in the home directory (no tool runs it; the
+  file is never run with `python` nor given to `debasher_exec`), then read it
+  again. How a description is written:
+  https://debasher.readthedocs.io/en/latest/implem_python.html.
 - **Preamble.** Bash code at the top of the generated script, mostly
   `load_debasher_module "<module>"` lines, which bring in the processes that
   other modules define: the library (`search_library`, `get_library_process`;

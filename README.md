@@ -15,7 +15,8 @@ Perl or Groovy), takes its inputs and gives its outputs through named
 options, and the way options connect across processes defines the
 dependency graph that DeBasher schedules and runs, on one machine or on a
 Slurm cluster. Programs are built in a visual editor, with the help of an
-AI assistant, or written by hand as Bash modules.
+AI assistant, written by hand as Bash modules, or described in Python
+with the SDK.
 
 <p align="center">
   <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"

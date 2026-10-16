@@ -136,7 +136,7 @@ check_pars()
     # The tools of the MCP server work on a program saved in its home
     # directory, as the web UI saves it.
     if [ ! -f "${home_dir}/.debasher/program.json" ]; then
-        echo "Error: no program is saved in ${home_dir}: save it from the web UI first" >&2
+        echo "Error: no program is saved in ${home_dir}: save it from the web UI, or write it with debasher_build, first" >&2
         exit 1
     fi
 
@@ -203,7 +203,7 @@ if [ -n "${theme}" ]; then
     settings="{\"theme\":$(json_string "${theme}")${separator}${rest}"
 fi
 
-system_prompt="You work on the DeBasher program whose home directory is ${home_dir}, the current directory: give it as home_dir to the tools of the debasher MCP server, which talk to the backend of the web UI at ${url}. The user may have the program open in the editor of the web UI, and you may be running in the terminal panel at the bottom of that editor. Your tools see the program only as saved: when the user names something that you do not find, ask them to save it. The editor loads what your tools save on its own, unless its tab holds unsaved changes: then it offers to load your save or to save its own changes over it. Reloading or closing that tab, Close in the toolbar of the editor, or stopping debasher_webui ends a session that runs in the editor (the conversation is kept, and starting a session from Claude Code... in the Help menu with Continue the last conversation takes it up): say so before suggesting any of them."
+system_prompt="You work on the DeBasher program whose home directory is ${home_dir}, the current directory: give it as home_dir to the tools of the debasher MCP server, which talk to the backend of the web UI at ${url}. The user may have the program open in the editor of the web UI, and you may be running in the terminal panel at the bottom of that editor. Your tools see the program only as saved: when the user names something that you do not find, ask them to save it, or, for a program described in Python, to build it again with debasher_build. The editor loads what your tools save on its own, unless its tab holds unsaved changes: then it offers to load your save or to save its own changes over it. Reloading or closing that tab, Close in the toolbar of the editor, or stopping debasher_webui ends a session that runs in the editor (the conversation is kept, and starting a session from Claude Code... in the Help menu with Continue the last conversation takes it up): say so before suggesting any of them."
 
 # Without symbolic links, as Claude Code compares the paths it reads with the
 # rule below.

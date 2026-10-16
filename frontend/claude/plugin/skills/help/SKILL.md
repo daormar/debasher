@@ -65,7 +65,9 @@ the web UI shows them.
   When the reference does not settle a detail, say so and point to the
   documentation, https://debasher.readthedocs.io/en/latest/, rather than
   guessing; the page on the web UI is
-  https://debasher.readthedocs.io/en/latest/webui.html.
+  https://debasher.readthedocs.io/en/latest/webui.html, and the one on
+  describing a program in Python with the SDK (`debasher_build`) is
+  https://debasher.readthedocs.io/en/latest/implem_python.html.
 - `validate_program` checks the program as the Run menu does, but it saves
   the program and runs part of its code: offer it rather than run it unasked.
 - Keep the answer short, with a small example when it helps.

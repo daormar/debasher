@@ -7,7 +7,8 @@ R, Perl or Groovy), takes its inputs and gives its outputs through
 named options, and the way options connect across processes defines
 the dependency graph that DeBasher schedules and runs, on one machine
 or on a Slurm cluster. Programs are built in a visual editor, with the
-help of an AI assistant, or written by hand as Bash modules.
+help of an AI assistant, written by hand as Bash modules, or described
+in Python with the SDK.
 
 DeBasher follows `flow-based programming
 <https://en.wikipedia.org/wiki/Flow-based_programming>`_, which
@@ -27,7 +28,7 @@ Flow-based programming is language agnostic by nature, and so is
 DeBasher: a process is a black box with a command-line interface, so
 any program that takes its inputs and leaves its outputs through
 options, files or FIFOs can be one, whatever it is written in, and a
-single program can mix languages (see the :ref:`implem` Section).
+single program can mix languages (see the :ref:`implem_bash` Section).
 
 What holds a program together is a Bash module, which declares its
 processes and the options that connect them. Bash is the native glue

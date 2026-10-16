@@ -205,7 +205,7 @@ an input, as the engine requires. Its editor sets:
 The **code** of a process is written in Bash, Python, Perl, R or
 Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
 ``docker_imgs``, and the rest of the process methods described in the
-:ref:`implem` Section) are edited with "Configure additional methods",
+:ref:`implem_bash` Section) are edited with "Configure additional methods",
 whose editor of each method has the same "AI prompt" button as the
 code editor, with the rules of that method.
 The **specifications** are the computational ones (CPUs, memory and
@@ -261,7 +261,7 @@ A command line option that only decides the tasks of a process, such
 as the number of workers that the code of an array reads to build it,
 is marked as **task shaping**: the code of the options handler reads
 it, and no task receives it, so the process code cannot read it either
-(see the task shaping options in the :ref:`implem` Section). A task
+(see the task shaping options in the :ref:`implem_bash` Section). A task
 shaping option is always mandatory, and its hollow handle is tagged
 ``shaping``.
 

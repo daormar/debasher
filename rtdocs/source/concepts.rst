@@ -6,7 +6,7 @@ Programs, Processes and Options
 This section names the pieces of a DeBasher program and says what each
 one is, in words that hold whether the program is drawn in the web
 interface or written as a module. The :ref:`webui` Section shows where
-each piece is set in the editor, the :ref:`implem` Section how each is
+each piece is set in the editor, the :ref:`implem_bash` Section how each is
 written by hand, and the :ref:`exec` Section how a program is run from
 the command line. Nothing here requires reading any code.
 

@@ -12,6 +12,28 @@ introduced, in context, in the :ref:`quickstart_example` and
 Every tool accepts a ``--help`` option that prints a summary of its
 usage.
 
+Program Building
+----------------
+
+debasher_build
+^^^^^^^^^^^^^^
+
+::
+
+    $ debasher_build <description>.py [-o <dir>]
+
+``debasher_build`` writes a program described in Python with the SDK
+(see the :ref:`implem_python` Section): it loads the Python file, which
+defines processes and one program and is named after it, and writes the
+program metadata (``.debasher/program.json``) and the module
+(``<name>.sh``) that the web interface saves, into the directory of the
+file, or into the directory given with ``-o``. The program is then run
+with ``debasher_exec`` and opened in the web interface like any other.
+The tool runs with the Python that ``DEBASHER_WEBUI_PYTHON`` names, else
+with ``python3`` on the ``PATH``, which has to have the dependencies of
+the web interface installed (see the :ref:`webui` Section); when it
+does not, the tool says what to install.
+
 Program Execution
 ------------------
 
@@ -342,7 +364,7 @@ the program's output directory and the process whose standard output
 should be shown. An additional ``-t <int>`` option can be used to
 select an individual task when the process is part of a task array
 (see the description of the ``generate_opts`` method in the
-:ref:`implem` Section). Passing ``--watch`` follows the file as it
+:ref:`implem_bash` Section). Passing ``--watch`` follows the file as it
 grows (like ``tail -f``) instead of printing its current contents and
 exiting, which is useful for monitoring a process that is still
 running.
@@ -367,7 +389,7 @@ debasher_get_fifo_mirror
 FIFO, i.e. a copy of everything the owning process wrote into it,
 provided the FIFO was declared with the mirroring option of
 ``define_fifo_opt`` on an output option
-(see the :ref:`implem` Section for more information about FIFOs) and
+(see the :ref:`implem_bash` Section for more information about FIFOs) and
 the owning process has already run.
 
 Its options are:
@@ -390,7 +412,7 @@ debasher_doc_mod
 ``debasher_doc_mod`` generates Markdown documentation for a module and
 its processes directly from their code, without having to read
 through the module's own source file. It is introduced in the
-:ref:`implem` Section:
+:ref:`implem_bash` Section:
 
 ::
 

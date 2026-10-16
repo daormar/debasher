@@ -1011,7 +1011,7 @@ const userFileTools = [
 
   tool(
     "list_program_files",
-    "Lists the user files of the home directory of the program, such as its tests and the data they read, with the generated script; files that DeBasher manages are not shown.",
+    "Lists the user files of the home directory of the program, such as its tests and the data they read, or the Python description and the process files that debasher_build built the program from, with the generated script; files that DeBasher manages are not shown.",
     { home_dir: schemas.homeDir },
     READS,
     async (backend, { home_dir }) => {
