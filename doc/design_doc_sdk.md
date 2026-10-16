@@ -13,8 +13,8 @@ program that the web UI saves, and the guarantees it gives. It is organized
 as follows: a glossary; what the user writes (the processes, their
 options, the program, a resident program); how the description becomes
 the program model; how the program is written; the tool that writes it
-and how the library is installed and found; the guarantees and what the
-SDK deliberately is not; and the future work.
+and the examples; how the library is installed and found; the
+guarantees and what the SDK deliberately is not; and the future work.
 
 # Introduction
 
@@ -137,6 +137,11 @@ entries below that refer to them.
   library finds the API of the web UI and the tools of the engine once
   installed. It is not a source: `make` writes it, git ignores it, and
   the library works without it in a source tree.
+- **twin**: of an example of the SDK, the program that the web UI saved
+  under `data/webui_programs/` which the example reproduces, differing
+  from it in its name, its description text and the positions on the
+  canvas only; the tests write the example as its twin and compare the
+  two.
 - **topology file**: the planned saved form of the program model, a file
   with the processes, their options, their connections and their
   specifications, beside one file per process (see "Future work").
@@ -186,10 +191,12 @@ ways, which the process may not combine:
   (`.sh` Bash, `.py` Python, `.pl` Perl, `.r` or `.R` R, `.groovy`
   Groovy; `language=` says it when the extension does not). The file is
   read when the program is written and its text goes into the program
-  metadata and into the module, as the text of the code box of the editor
-  does: a Bash function named as the process, with its helper functions,
-  written as it is; the script of another language, as the heredoc
-  function that the engine runs with the interpreter of the language.
+  metadata and into the module, as the text of the code box of the
+  editor does, without the newlines that end it (see "From the
+  description to the program model"): a Bash function named as the
+  process, with its helper functions, written as it is; the script of
+  another language, as the heredoc function that the engine runs with
+  the interpreter of the language.
 - `script=`, a script: a path to a file that the module runs as it is,
   the external alias of the engine, with the interpreter that the engine
   chooses by its extension. The program metadata keeps a copy of its
@@ -371,7 +378,12 @@ with these rules:
 - **Code.** The process file or script of a process is read at this
   moment, and a file that cannot be read is refused. A process with
   neither has an empty code, which script generation leaves out, for a
-  loaded module to provide.
+  loaded module to provide. Every text taken from a file (the code, the
+  copy of a script, a tasks file, a method file) goes into the program
+  model without the newlines that end it, which is how import keeps the
+  code it reads from a module: the file ends with a newline, the code
+  does not, and a program written with the SDK and the same program
+  imported from a module hold the same text.
 - **Specifications.** Those of the use go into the computational and
   additional specifications of the process; the alias and its map, which
   are the process's own, go with them. The script of a process goes into
@@ -478,6 +490,25 @@ or the Run of the editor once the home directory is opened in it. The
 description is never run with `python` nor given to `debasher_exec`, and
 a change to it is followed by another `debasher_build`.
 
+## The examples
+
+Three descriptions ship under `data/sdk_programs/python/`, installed
+under `sdk_programs/python` of `$(pkgdatadir)`, one
+directory per program with the description named after it and the
+files of its processes beside it: `sdk_hello_world_py`, the hello world
+of the quickstart with its process in Python; `sdk_dynamic_fanout_fifos`,
+a generated file cut into fragments that a dispatcher, run as a script,
+streams through FIFOs to an array of workers whose tasks a tasks file
+shapes; and `sdk_running_sum`, a resident program with a node given as
+a file and a Supervisor. Each is the twin of a program saved under
+`data/webui_programs/`, which the tests check by writing the example as
+its twin and comparing the program metadata and the module (see
+"Guarantees"). `make installcheck` builds
+each example from its installed directory with `debasher_build` into a
+directory of its own and runs the program built as it runs the others,
+or skips the three when the Python of `debasher_build` lacks the
+dependencies of the SDK, as it skips the checks of conda without conda.
+
 # Installation, and finding the API and the engine
 
 ## Installation
@@ -491,8 +522,11 @@ already put on `sys.path`. When the prefix of the installation is that
 of the Python itself (a virtual environment, a conda environment with its
 Python), `$(pythondir)` is its `site-packages` and `import debasher`
 works with nothing more; otherwise the user puts `$(pythondir)` in
-`PYTHONPATH`. The library needs the dependencies of the API of the web UI
-(pydantic 2, `api/requirements.txt`), as the web UI does.
+`PYTHONPATH`. The conda package, whose Python directory is one of its
+own under the prefix of the environment, puts it in `PYTHONPATH` when
+the environment is activated, through a script in its `activate.d`
+(`conda/build.sh`). The library needs the dependencies of the API of
+the web UI (pydantic 2, `api/requirements.txt`), as the web UI does.
 
 The tool is the launcher `debasher_build`, built from
 `sdk/python/debasher_build.sh` with the directories of the installation
@@ -540,12 +574,11 @@ through it script generation) and `api.debasher_constants`.
   program metadata that the editor would save for the same program, apart
   from the ids, which the editor draws at random, and the revision and
   home directory of the save, and the module that script generation
-  writes from it, byte for byte: the hello world of the quickstart, the
-  dynamic fanout example and the running sum of a resident program,
-  described with the SDK, are compared in the tests with
-  `data/webui_programs/webui_hello_world_py`,
+  writes from it, byte for byte: the three examples of
+  `data/sdk_programs/python/`, written as their twins, are compared in
+  the tests with `data/webui_programs/webui_hello_world_py`,
   `data/webui_programs/webui_dynamic_fanout_fifos` and
-  `data/webui_programs/webui_running_sum`.
+  `data/webui_programs/webui_running_sum` (see "The examples").
 - **Deterministic.** Two builds of the same description give the same
   program metadata: ids come from names, positions from the layout, and
   nothing from the clock or from randomness.
@@ -578,9 +611,6 @@ through it script generation) and `api.debasher_constants`.
 
 # Future work
 
-- **Examples and the installation check.** Descriptions shipped under
-  `data/sdk_programs/python/`, one directory per program, built and run
-  by `make installcheck`.
 - **Dynamic options as Python functions.** The code of the options handler
   of an array or a generator as a Python function in a file, which a
   helper that the generated module calls with the task index runs,

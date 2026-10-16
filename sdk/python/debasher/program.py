@@ -287,20 +287,20 @@ class Program:
 
     @staticmethod
     def _read(process: Process, path: Path | None, what: str) -> str | None:
-        """The text of a file of `process`, `what` saying which for the
-        error; None for no file."""
+        """The text of a file of `process` as the program model keeps it,
+        without the newlines that end it, as import keeps the code it
+        reads from a module; `what` says which file for the error. None
+        for no file."""
         if path is None:
             return None
         try:
-            return path.read_text()
+            return path.read_text().rstrip("\n")
         except OSError as error:
             raise DefinitionError(f'Process "{process.name}": cannot read its {what} {path}: {error.strerror}.')
 
     def _read_code(self, process: Process) -> str:
         if process.script_path is not None:
-            # The copy of a script is for the editor to show, kept as import
-            # keeps that of an external alias, without its final newline
-            return (self._read(process, process.script_path, "script") or "").rstrip("\n")
+            return self._read(process, process.script_path, "script") or ""
         return self._read(process, process.code_path, "code file") or ""
 
     def _options_handler(self, process: Process):

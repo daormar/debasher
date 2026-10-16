@@ -12,7 +12,9 @@ pytest.importorskip("pydantic")
 
 from debasher import DefinitionError, Node, Process, Program, Supervisor  # noqa: E402
 
-_ACCUMULATE = Path(__file__).parent / "data" / "running_sum" / "accumulate.py"
+from examples import SDK_PROGRAMS_DIR  # noqa: E402
+
+_ACCUMULATE = SDK_PROGRAMS_DIR / "sdk_running_sum" / "accumulate.py"
 
 
 def _node_file(tmp_path: Path, name: str, text: str) -> Path:

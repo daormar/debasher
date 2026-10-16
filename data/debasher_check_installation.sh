@@ -263,6 +263,32 @@ check_business_tests_refused()
 }
 
 ########
+# Builds the program described with the Python SDK as `progname`, from its
+# installed directory, into ${tmpdir}/${progname}_build, with
+# debasher_build; prints the failure when it fails.
+build_sdk_program()
+{
+    local tmpdir=$1
+    local progname=$2
+    local srcdir="${debasher_datadir}/sdk_programs/python/${progname}"
+    local builddir="${tmpdir}/${progname}_build"
+
+    echo -n "## Building ${progname}.py ... "
+    if "${debasher_bindir}/debasher_build" "${srcdir}/${progname}.py" -o "${builddir}" \
+           > "${tmpdir}/${progname}_build.out" 2>&1; then
+        echo "OK"
+        echo ""
+        return 0
+    else
+        echo "FAILED"
+        echo ""
+        "${CAT}" "${tmpdir}/${progname}_build.out"
+        echo ""
+        return 1
+    fi
+}
+
+########
 # Waits up to `seconds` for debasher_status to report every process of the
 # run in `outdir` with the status counted by `field` in its summary
 # ("inprogress" or "finished"), keeping its last output in `status_out`.
@@ -1287,6 +1313,84 @@ if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
     ((checks_passed++))
 else
     ((checks_failed++))
+fi
+
+# Checks of the programs described with the Python SDK: each example is
+# built from its installed directory into a directory of its own with
+# debasher_build, and the program built is run as the others are. The
+# SDK needs the dependencies of the web UI in the Python that
+# debasher_build runs with (pydantic 2); without them the checks are
+# skipped, as those of conda are without conda.
+echo "# Checks of the programs described with the Python SDK"
+echo ""
+
+if ! "${debasher_bindir}/debasher_build" --help > /dev/null 2>&1; then
+    for progname in sdk_hello_world_py sdk_dynamic_fanout_fifos sdk_running_sum; do
+        print_skipped_check "${progname}" "debasher_build cannot run: the Python packages of the SDK are not installed"
+        ((checks_skipped++))
+    done
+else
+    # The hello world of the quickstart, with its process in Python
+    progname="sdk_hello_world_py"
+    if build_sdk_program "${tmpdir}" "${progname}"; then
+        check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
+                           "${progname}_builtin" "BUILTIN" 1 256 ""
+        case $? in
+            0)
+                ((checks_passed++))
+                ;;
+            1)
+                ((checks_failed++))
+                ;;
+            124)
+                ((checks_timedout++))
+                ;;
+        esac
+    else
+        ((checks_failed++))
+    fi
+
+    # The dynamic fanout: an array of workers fed through FIFOs by a
+    # dispatcher run as a script
+    progname="sdk_dynamic_fanout_fifos"
+    if build_sdk_program "${tmpdir}" "${progname}"; then
+        check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
+                           "${progname}_builtin" "BUILTIN" 7 1024 "-l 200 -c 20 -b 20 -w 4"
+        case $? in
+            0)
+                ((checks_passed++))
+                ;;
+            1)
+                ((checks_failed++))
+                ;;
+            124)
+                ((checks_timedout++))
+                ;;
+        esac
+    else
+        ((checks_failed++))
+    fi
+
+    # The running sum, a resident program: the running sum of 1, 2 and 3
+    # is 6
+    progname="sdk_running_sum"
+    if build_sdk_program "${tmpdir}" "${progname}"; then
+        check_resident_program "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
+                               "${progname}" "numbers" "1 2 3" "sum" "6"
+        case $? in
+            0)
+                ((checks_passed++))
+                ;;
+            1)
+                ((checks_failed++))
+                ;;
+            124)
+                ((checks_timedout++))
+                ;;
+        esac
+    else
+        ((checks_failed++))
+    fi
 fi
 
 # Check execution using SLURM if available: SBATCH is the name of the tool,

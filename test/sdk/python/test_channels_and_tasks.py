@@ -165,7 +165,7 @@ def test_an_array_carries_the_tasks_file_as_its_array_code(tmp_path):
 
     process = prg.to_model().processes[0]
     assert process.optionsHandler.mode == "array"
-    assert process.optionsHandler.arrayCode == "local array=(a b c)\n"
+    assert process.optionsHandler.arrayCode == "local array=(a b c)"
     assert process.optionsHandler.generatorSizeCode is None
 
 
@@ -177,7 +177,7 @@ def test_a_generator_carries_the_tasks_file_as_its_size_code(tmp_path):
 
     process = prg.to_model().processes[0]
     assert process.optionsHandler.mode == "generator"
-    assert process.optionsHandler.generatorSizeCode == "echo 3\n"
+    assert process.optionsHandler.generatorSizeCode == "echo 3"
     assert process.optionsHandler.arrayCode is None
 
 
@@ -231,12 +231,12 @@ def test_the_additional_methods_come_from_their_files(tmp_path):
     prg.add(work)
 
     methods = prg.to_model().processes[0].additionalMethods
-    assert methods.skipCode == "return 1\n"
-    assert methods.postCode == "echo done\n"
-    assert methods.resetOutfilesCode == 'rm -f "${outf}"\n'
-    assert methods.outdirBasenameCode == "echo work_out\n"
-    assert methods.condaEnvsCode == "define_conda_env py27 py27.yml\n"
-    assert methods.dockerImgsCode == "define_docker_img ubuntu\n"
+    assert methods.skipCode == "return 1"
+    assert methods.postCode == "echo done"
+    assert methods.resetOutfilesCode == 'rm -f "${outf}"'
+    assert methods.outdirBasenameCode == "echo work_out"
+    assert methods.condaEnvsCode == "define_conda_env py27 py27.yml"
+    assert methods.dockerImgsCode == "define_docker_img ubuntu"
     module = prg.write(tmp_path / "home").read_text()
     assert "work_conda_envs()\n{\n    define_conda_env py27 py27.yml\n}" in module
 

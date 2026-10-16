@@ -294,5 +294,5 @@ dnl BUILD_FRONTEND: npm is available, so frontend/dist/ should be
 dnl (re)built from source rather than installed as-is.
 AM_CONDITIONAL([BUILD_FRONTEND], [test -n "$NPM"])
 
-AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile sdk/Makefile sdk/python/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/webui_programs/Makefile data/conda_envs/Makefile test/Makefile test/engine/Makefile test/api/Makefile test/sdk/Makefile test/sdk/python/Makefile])
+AC_CONFIG_FILES([Makefile m4/Makefile engine/Makefile api/Makefile sdk/Makefile sdk/python/Makefile frontend/Makefile doc/Makefile data/Makefile data/programs/Makefile data/webui_programs/Makefile data/sdk_programs/Makefile data/sdk_programs/python/Makefile data/conda_envs/Makefile test/Makefile test/engine/Makefile test/api/Makefile test/sdk/Makefile test/sdk/python/Makefile])
 AC_OUTPUT

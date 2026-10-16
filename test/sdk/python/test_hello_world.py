@@ -1,23 +1,20 @@
 """
-The hello world of the quickstart, written with the SDK, is the program
-that the web UI saved as data/webui_programs/webui_hello_world_py: the
-same program metadata, apart from the ids, which the editor draws at
-random and the SDK derives from the names, and the same generated module,
-byte for byte.
+The hello world of the quickstart, described with the SDK
+(data/sdk_programs/python/sdk_hello_world_py), is the program that the
+web UI saved as data/webui_programs/webui_hello_world_py: the same program
+metadata, apart from the ids, which the editor draws at random and the
+SDK derives from the names, and the same generated module, byte for byte.
 """
-
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("pydantic")
 
 from api import persistence  # noqa: E402
-from debasher.build import load_program  # noqa: E402
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_WEBUI_HOME = _REPO_ROOT / "data" / "webui_programs" / "webui_hello_world_py"
-_SDK_FILE = Path(__file__).parent / "data" / "hello_world" / "webui_hello_world_py.py"
+from examples import as_webui_twin, webui_home  # noqa: E402
+
+_EXAMPLE = "sdk_hello_world_py"
 
 
 def comparable(program) -> dict:
@@ -48,16 +45,14 @@ def comparable(program) -> dict:
 
 
 def test_the_sdk_writes_the_program_metadata_of_the_editor(tmp_path):
-    program = load_program(_SDK_FILE)
-    program.write(tmp_path)
+    as_webui_twin(_EXAMPLE).write(tmp_path)
 
     written = persistence.load_program(str(tmp_path))
-    shipped = persistence.load_program(str(_WEBUI_HOME))
+    shipped = persistence.load_program(str(webui_home(_EXAMPLE)))
     assert comparable(written) == comparable(shipped)
 
 
 def test_the_sdk_writes_the_module_of_the_editor(tmp_path):
-    program = load_program(_SDK_FILE)
-    script = program.write(tmp_path)
+    script = as_webui_twin(_EXAMPLE).write(tmp_path)
 
-    assert script.read_text() == (_WEBUI_HOME / "webui_hello_world_py.sh").read_text()
+    assert script.read_text() == (webui_home(_EXAMPLE) / "webui_hello_world_py.sh").read_text()

@@ -58,7 +58,7 @@
         "manualCode": null
       },
       "language": "python",
-      "code": "import argparse\n\nparser = argparse.ArgumentParser()\nparser.add_argument(\"-s\", default=\"Hello World!\")\nargs = parser.parse_args()\nprint(args.s)\n",
+      "code": "import argparse\n\nparser = argparse.ArgumentParser()\nparser.add_argument(\"-s\", default=\"Hello World!\")\nargs = parser.parse_args()\nprint(args.s)",
       "computationalSpecs": {
         "cpus": 1.0,
         "mem": 256.0,

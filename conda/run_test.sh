@@ -39,6 +39,20 @@ run_program "${datadir}/programs/debasher_fifo_example.sh"
 run_program "${datadir}/webui_programs/webui_batch_greet/webui_batch_greet.sh" \
             -text world -secs 0
 
+# A program described with the Python SDK: built from its installed
+# description with debasher_build, which runs with the Python of the
+# environment, then run as any other.
+echo "## Building sdk_hello_world_py.py"
+debasher_build "${datadir}/sdk_programs/python/sdk_hello_world_py/sdk_hello_world_py.py" \
+               -o "${tmpdir}/sdk_hello_world_py_build"
+run_program "${tmpdir}/sdk_hello_world_py_build/sdk_hello_world_py.sh"
+
+# The SDK is importable once the environment is activated (the activate.d
+# script of the package puts it in PYTHONPATH); here, where the tests run
+# with the environment's Python but without activation, through the same
+# directory.
+PYTHONPATH="${PREFIX}/lib/debasher/python" python -c "import debasher; print(debasher.Program)"
+
 # The web UI's server starts, and serves the frontend and the API.
 echo "## Web UI"
 port=18765

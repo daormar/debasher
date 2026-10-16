@@ -49,3 +49,21 @@ make install
 # again on first import), and a noarch package must not carry bytecode
 # of the Python it was built with.
 find "${PREFIX}" -name '__pycache__' -type d -exec rm -rf {} +
+
+# The Python SDK (the package debasher) is installed in the Python
+# directory above, which is not on the path of the environment's Python.
+# Activating the environment puts it in PYTHONPATH, so that a program
+# of a user imports debasher as debasher_build does for a description.
+mkdir -p "${PREFIX}/etc/conda/activate.d" "${PREFIX}/etc/conda/deactivate.d"
+cat > "${PREFIX}/etc/conda/activate.d/debasher.sh" <<'EOF'
+export DEBASHER_PYTHONPATH_BEFORE="${PYTHONPATH:-}"
+export PYTHONPATH="${CONDA_PREFIX}/lib/debasher/python${PYTHONPATH:+:${PYTHONPATH}}"
+EOF
+cat > "${PREFIX}/etc/conda/deactivate.d/debasher.sh" <<'EOF'
+if [ -n "${DEBASHER_PYTHONPATH_BEFORE:-}" ]; then
+    export PYTHONPATH="${DEBASHER_PYTHONPATH_BEFORE}"
+else
+    unset PYTHONPATH
+fi
+unset DEBASHER_PYTHONPATH_BEFORE
+EOF

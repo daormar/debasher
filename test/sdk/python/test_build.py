@@ -14,7 +14,7 @@ from api import persistence  # noqa: E402
 from debasher import DefinitionError  # noqa: E402
 from debasher.build import load_program, main  # noqa: E402
 
-_HELLO = Path(__file__).parent / "data" / "hello_world"
+from examples import example_file  # noqa: E402
 
 
 def _program_file(tmp_path: Path, name: str, body: str) -> Path:
@@ -78,10 +78,10 @@ def test_the_tool_writes_the_program_into_the_directory_of_the_file(tmp_path, ca
 def test_the_tool_writes_into_the_directory_given(tmp_path, capsys):
     home = tmp_path / "home"
 
-    assert main([str(_HELLO / "webui_hello_world_py.py"), "-o", str(home)]) == 0
+    assert main([str(example_file("sdk_hello_world_py")), "-o", str(home)]) == 0
 
-    assert capsys.readouterr().out.strip() == str(home / "webui_hello_world_py.sh")
-    assert persistence.load_program(str(home)).name == "webui_hello_world_py"
+    assert capsys.readouterr().out.strip() == str(home / "sdk_hello_world_py.sh")
+    assert persistence.load_program(str(home)).name == "sdk_hello_world_py"
 
 
 def test_the_tool_reports_a_refused_program_and_fails(tmp_path, capsys):

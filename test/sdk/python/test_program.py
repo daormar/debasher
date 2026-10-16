@@ -15,7 +15,9 @@ pytest.importorskip("pydantic")
 from api import persistence  # noqa: E402
 from debasher import DefinitionError, Process, Program, in_outdir  # noqa: E402
 
-_DATA = Path(__file__).parent / "data"
+from examples import SDK_PROGRAMS_DIR  # noqa: E402
+
+_HELLO_WORLD = SDK_PROGRAMS_DIR / "sdk_hello_world_py" / "hello_world.py"
 
 
 def _code(tmp_path: Path, name: str, text: str) -> Path:
@@ -32,13 +34,13 @@ def _bash_process(tmp_path: Path, name: str, description: str = "") -> Process:
 
 
 def test_a_process_carries_its_code_and_the_language_of_its_file(tmp_path):
-    hello = Process("hello", code=_DATA / "hello_world" / "hello_world.py")
+    hello = Process("hello", code=_HELLO_WORLD)
     prg = Program("prg")
     prg.add(hello)
 
     process = prg.to_model().processes[0]
     assert process.language == "python"
-    assert process.code == (_DATA / "hello_world" / "hello_world.py").read_text()
+    assert process.code == _HELLO_WORLD.read_text().rstrip("\n")
     assert process.computationalSpecs.cpus is None
     assert process.additionalSpecs.externalAlias is None
 

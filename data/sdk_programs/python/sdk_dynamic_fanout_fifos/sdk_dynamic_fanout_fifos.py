@@ -1,3 +1,11 @@
+# The dynamic fanout example of the web UI, described with the Python
+# SDK: a generated file is counted and cut into fragments, which a
+# dispatcher streams through FIFOs to a pool of workers, an array process
+# with one task per worker, and a last process merges their counts. Each
+# process has its code in a file beside this one; the worker is an array,
+# whose tasks a Bash file shapes (worker_tasks.sh), and the dispatcher is
+# a script that the module runs as it is.
+
 from debasher import Array, Process, Program, in_outdir
 
 SPECS = dict(cpus=1, mem=32, time="00:01:00")
@@ -46,15 +54,15 @@ worker.input("-inf", "file", "input fifo", source=dispatch["-outf-ith"])
 worker.cmdline_opt("-w", "int", "Number of workers.", shaping=True)
 
 prg = Program(
-    "webui_dynamic_fanout_fifos",
-    description="Example built with the web UI: a generated file is counted and cut into "
+    "sdk_dynamic_fanout_fifos",
+    description="Example described with the SDK: a generated file is counted and cut into "
     "fragments, which a dispatcher streams through FIFOs to a pool of workers, and a last "
     "process merges their counts.",
     program_options={"-l": "200", "-c": "20", "-b": "20", "-w": "4"},
 )
-prg.add(count, **SPECS, position=(60, 220))
-prg.add(generate, **SPECS, position=(260, 40))
-prg.add(fragment, **SPECS, processdeps="afterok:count", position=(360, 220))
-prg.add(aggregate, **SPECS, position=(360, 760))
-prg.add(dispatch, **SPECS, position=(360, 400))
-prg.add(worker, **SPECS, position=(360, 580))
+prg.add(count, **SPECS)
+prg.add(generate, **SPECS)
+prg.add(fragment, **SPECS, processdeps="afterok:count")
+prg.add(aggregate, **SPECS)
+prg.add(dispatch, **SPECS)
+prg.add(worker, **SPECS)
