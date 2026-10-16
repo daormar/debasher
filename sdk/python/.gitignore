@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+debasher_build
+debasher/_install.py

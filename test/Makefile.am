@@ -1,4 +1,4 @@
-SUBDIRS = engine api
+SUBDIRS = engine api sdk
 
 EXTRA_DIST = utils/README.md utils/crap_report.py utils/bash_complexity.py \
 utils/hotspots.py utils/coupling.py
