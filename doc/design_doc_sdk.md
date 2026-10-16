@@ -11,10 +11,10 @@ This document describes the design of the Python SDK of DeBasher, the
 library with which a program is described in Python and written as the
 program that the web UI saves, and the guarantees it gives. It is organized
 as follows: a glossary; what the user writes (the processes, their
-options, the program); how the description becomes the program model;
-how the program is written; the tool that writes it and how the library
-is installed and found; the guarantees and what the SDK deliberately is
-not; and the future work.
+options, the program, a resident program); how the description becomes
+the program model; how the program is written; the tool that writes it
+and how the library is installed and found; the guarantees and what the
+SDK deliberately is not; and the future work.
 
 # Introduction
 
@@ -110,6 +110,25 @@ entries below that refer to them.
   methods of a process (`skip`, `post`, `reset_outfiles`,
   `outdir_basename`, `conda_envs`, `docker_imgs`), as the editor takes
   it in its additional methods.
+- **node**: as in the design of resident programs: a process of a
+  resident program, whose code is a Python class derived from a class of
+  the runtime library (its node kind). In the SDK, a `Node`, whose code
+  is a node file, or the `Supervisor`, which has none.
+- **node file**: the Python file of a node (`code=` of a `Node`): the
+  import of its node kind, the node preamble, the class of the node with
+  its hooks (the methods of the runtime library that a node redefines:
+  `process_data`, `capture_node_state`, `restore_node_state`,
+  `initialize_runtime`, `observe`), and the line that runs it, as the
+  generated module writes them in the heredoc of the node. The SDK
+  splits it into the node kind and the parts of its code in the program
+  model (the node preamble, the class body and the hooks of the design
+  of the web UI) with the same code as import.
+- **specifications of a node**: the computational specifications that
+  only a node of a resident program reads: the limits of a node of the
+  design of resident programs (`input_log_max_mb`, `out_backlog_max_mb`,
+  `out_backlog_fail_mb`, `gil_switch_interval_ms`) and
+  `startup_timeout_s`, `max_concurrent_runs`, `batch_sched` and
+  `heartbeat_timeout_s`, given with the specifications of its use.
 - **launcher**: `debasher_build`, a Bash script built by `make` that
   chooses the Python to run the tool with and runs
   `python -m debasher.build`.
@@ -308,6 +327,35 @@ process does not have, or an input, is refused with the names of both
 ends. The same process object, with its sources, goes into any program
 that adds what it reads.
 
+## Resident programs
+
+A resident program is a `Program` with `resident=True`, which may ask for
+periodic snapshots of its runs (`snapshot_every_secs`, the period that
+the editor starts once the program is launched), and adds nodes instead
+of processes: a `Node`, or the `Supervisor`. It refuses a `Process`, and
+a general program refuses a node, when they are added, so that a
+description that mixes them is reported at that line rather than by
+script generation later.
+
+A `Node(name, code=<node file>, initiator=False, description="")` is a
+process whose code is a node file; its node kind is the base class of
+the one class of the file that derives from a class of the runtime
+library (`FBPProcess`, `ProgramLauncher`, `DirectoryWatcher`), and it is
+an initiator, where a round starts, when said. Its ports are its
+options, declared as those of any process: an external port is
+`fifo_input(..., external=True)`, an input written from outside the
+program, and an output to another node or to the outside is
+`fifo_output`. The
+Supervisor wiring (heartbeat channels, trigger ports) is never
+declared: script generation derives it, as for a program of the editor.
+A `Supervisor(name, description="")` has no code and no options of its
+own; script generation writes its whole class.
+
+The specifications of the use of a node are those of any process plus
+the specifications of a node, given to `add` under the names of the
+engine; an unknown name, or one of them on a process of a general
+program, is refused.
+
 # From the description to the program model
 
 `Program.to_model()` builds the `Program` of `api/models.py` that
@@ -334,6 +382,20 @@ with these rules:
   or a `Generator`; a `Process` is in the standard mode. The text of each
   method file goes into the additional methods of the process. Both are
   read at this moment, and a file that cannot be read is refused.
+- **Nodes.** The node file of a `Node` is read and split with
+  `decompose_heredoc` of the API, the code that import uses on the
+  heredoc of a node, into the node kind and the parts of its code
+  (`nodeKind`, `nodeCode`); the code of the process itself is empty, as
+  the editor keeps it, since script generation writes the heredoc from
+  the parts. A node file that the web UI could not hold (for example
+  several node classes, a decorator or a second base on the class, code
+  after the class other than the line that runs it) is refused with the
+  problems that import would report, each with its line, when it has
+  one, and the change that would make it fit; a file that defines a
+  Supervisor, with or without code of its own, is refused too, since the
+  Supervisor is added without a file. The Supervisor gets the node kind
+  `Supervisor` and no parts. The specifications of a node go with its
+  computational specifications.
 - **Positions.** A process added with a position has it. The others are
   placed as the editor places the processes of an imported program, whose
   module says nothing about positions: in layers by the depth of their
@@ -478,10 +540,12 @@ through it script generation) and `api.debasher_constants`.
   program metadata that the editor would save for the same program, apart
   from the ids, which the editor draws at random, and the revision and
   home directory of the save, and the module that script generation
-  writes from it, byte for byte: the hello world of the quickstart and
-  the dynamic fanout example, described with the SDK, are compared in
-  the tests with `data/webui_programs/webui_hello_world_py` and
-  `data/webui_programs/webui_dynamic_fanout_fifos`.
+  writes from it, byte for byte: the hello world of the quickstart, the
+  dynamic fanout example and the running sum of a resident program,
+  described with the SDK, are compared in the tests with
+  `data/webui_programs/webui_hello_world_py`,
+  `data/webui_programs/webui_dynamic_fanout_fifos` and
+  `data/webui_programs/webui_running_sum`.
 - **Deterministic.** Two builds of the same description give the same
   program metadata: ids come from names, positions from the layout, and
   nothing from the clock or from randomness.
@@ -514,9 +578,6 @@ through it script generation) and `api.debasher_constants`.
 
 # Future work
 
-- **Resident programs.** A program of nodes, each given as a Python file
-  with the class of the node, split into the parts of the program model
-  with the same code as import (`decompose_heredoc`), and the Supervisor.
 - **Examples and the installation check.** Descriptions shipped under
   `data/sdk_programs/python/`, one directory per program, built and run
   by `make installcheck`.

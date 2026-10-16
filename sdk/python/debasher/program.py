@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .errors import DefinitionError
 from .layout import layout
-from .process import Option, Process, Source, check_program_name
+from .process import Node, Option, Process, Source, Supervisor, check_program_name
 
 # Every id of the program model is derived from the names, so that writing
 # the same program twice gives the same metadata.
@@ -25,6 +25,21 @@ _ID_NAMESPACE = uuid.UUID("6f1c2b7e-3a9d-4d0e-9c1f-2b5a8e4d7c10")
 
 def _id(*names: str) -> str:
     return str(uuid.uuid5(_ID_NAMESPACE, "/".join(names)))
+
+
+# The computational specifications that only a node of a resident program
+# reads, under the names of the engine: its limits (see "Limits of a node"
+# in doc/design_doc_resident.md) and the other specifications of a node.
+NODE_SPECS = (
+    "input_log_max_mb",
+    "out_backlog_max_mb",
+    "out_backlog_fail_mb",
+    "gil_switch_interval_ms",
+    "startup_timeout_s",
+    "max_concurrent_runs",
+    "batch_sched",
+    "heartbeat_timeout_s",
+)
 
 
 @dataclass
@@ -38,6 +53,7 @@ class _Member:
     processdeps: str | None = None
     force: bool = False
     position: tuple[float, float] | None = None
+    node_specs: dict[str, float | int | str] | None = None
 
 
 @dataclass
@@ -67,7 +83,9 @@ class Program:
     the runs and the shared directories. The execution options of the
     editor are given by name: scheduler, builtin_sched_cpus,
     builtin_sched_mem, dflt_nodes, dflt_throttle, rerun_outdated_procs,
-    conda_support, docker_support.
+    conda_support, docker_support. A resident program (`resident=True`)
+    adds nodes and a Supervisor instead of processes, and may ask for
+    periodic snapshots of its runs (`snapshot_every_secs`).
     """
 
     def __init__(
@@ -86,9 +104,12 @@ class Program:
         rerun_outdated_procs: bool = False,
         conda_support: bool = False,
         docker_support: bool = False,
+        resident: bool = False,
+        snapshot_every_secs: str = "",
     ):
         check_program_name(name)
         self.name = name
+        self.resident = resident
         self.description = description
         self.program_options = dict(program_options or {})
         self.preamble = preamble
@@ -103,6 +124,7 @@ class Program:
             "rerunOutdatedProcs": rerun_outdated_procs,
             "condaSupport": conda_support,
             "dockerSupport": docker_support,
+            "snapshotEverySecs": snapshot_every_secs,
         }
         self._members: list[_Member] = []
 
@@ -122,6 +144,7 @@ class Program:
         processdeps: str | None = None,
         force: bool = False,
         position: tuple[float, float] | None = None,
+        **node_specs,
     ) -> Process:
         """
         Adds `process` to the program with the computational specifications
@@ -129,8 +152,32 @@ class Program:
         `hh:mm:ss`), its explicit dependencies (`processdeps`, as the
         engine writes them, `afterok:count`), whether it is rerun on every
         run (`force`), and where it goes on the canvas (`position`, else
-        the layout of the editor). Returns the process.
+        the layout of the editor). A node of a resident program takes the
+        specifications of a node too, under the names of the engine
+        (`input_log_max_mb`, `heartbeat_timeout_s`, ...). Returns the
+        process.
         """
+        is_node = isinstance(process, (Node, Supervisor))
+        if self.resident and not is_node:
+            raise DefinitionError(
+                f'Process "{process.name}" is not a node: a resident program adds nodes (Node) and a '
+                "Supervisor only."
+            )
+        if is_node and not self.resident:
+            raise DefinitionError(
+                f'"{process.name}" is a node, which only a resident program adds (Program(..., resident=True)).'
+            )
+        unknown = sorted(set(node_specs) - set(NODE_SPECS))
+        if unknown:
+            raise DefinitionError(
+                f'Process "{process.name}": unknown specification(s) {", ".join(unknown)} (the '
+                "specifications of a node are " + ", ".join(NODE_SPECS) + ")."
+            )
+        if node_specs and not is_node:
+            raise DefinitionError(
+                f'Process "{process.name}" is given specifications of a node '
+                f'({", ".join(sorted(node_specs))}), which only a node of a resident program reads.'
+            )
         for member in self._members:
             if member.process is process:
                 raise DefinitionError(f'Process "{process.name}" is added twice to program "{self.name}".')
@@ -138,7 +185,7 @@ class Program:
                 raise DefinitionError(
                     f'Program "{self.name}" already has a process named "{process.name}".'
                 )
-        self._members.append(_Member(process, cpus, mem, time, processdeps, force, position))
+        self._members.append(_Member(process, cpus, mem, time, processdeps, force, position, node_specs or None))
         return process
 
     # --- the model -----------------------------------------------------------
@@ -292,11 +339,40 @@ class Program:
             return Path(given).name
         return given
 
+    def _node_parts(self, process: Process):
+        """The node kind and the parts of the code of a node, from its file;
+        None for a Supervisor and for a process of a general program."""
+        from api.resident_node_code import decompose_heredoc
+
+        if isinstance(process, Supervisor):
+            return "Supervisor", None
+        if not isinstance(process, Node):
+            return None, None
+        source = self._read(process, process.code_path, "node file")
+        decomposed = decompose_heredoc(source)
+        if decomposed.misfits:
+            problems = "\n".join(
+                f"  line {misfit.line}: {misfit.problem}; {misfit.fix}" if misfit.line is not None
+                else f"  {misfit.problem}; {misfit.fix}"
+                for misfit in decomposed.misfits
+            )
+            raise DefinitionError(
+                f'Node "{process.name}": its file {process.code_path} does not fit the parts of a node '
+                f"of the web UI:\n{problems}"
+            )
+        if decomposed.kind == "Supervisor":
+            raise DefinitionError(
+                f'Node "{process.name}": its file defines a Supervisor; a Supervisor is added with '
+                "Supervisor(name), without a file."
+            )
+        return decomposed.kind, decomposed.code
+
     def _process_model(self, member: _Member, positions):
         from api.models import AdditionalSpecs, AliasOptMapping, ComputationalSpecs, Position, ProgramProcess
 
         process = member.process
         x, y = positions[process.name]
+        kind, node_code = self._node_parts(process)
         return ProgramProcess(
             id=_id(self.name, process.name),
             name=process.name,
@@ -305,8 +381,12 @@ class Program:
             options=[self._option_model(member, option) for option in process.options],
             optionsHandler=self._options_handler(process),
             language=process.language,
-            code=self._read_code(process),
-            computationalSpecs=ComputationalSpecs(cpus=member.cpus, mem=member.mem, time=member.time),
+            # The code of a node is its parts; script generation writes the
+            # heredoc from them
+            code="" if kind else self._read_code(process),
+            computationalSpecs=ComputationalSpecs(
+                cpus=member.cpus, mem=member.mem, time=member.time, **(member.node_specs or {})
+            ),
             additionalSpecs=AdditionalSpecs(
                 force=member.force,
                 processdeps=member.processdeps,
@@ -315,6 +395,9 @@ class Program:
                 externalAlias=self._script_relative(process),
             ),
             additionalMethods=self._additional_methods(process),
+            nodeKind=kind,
+            initiator=getattr(process, "initiator", False),
+            nodeCode=node_code,
         )
 
     def to_model(self):
@@ -342,6 +425,7 @@ class Program:
         return ProgramModel(
             id=_id(self.name),
             name=self.name,
+            programType="resident" if self.resident else "general",
             description=self.description,
             preamble=self.preamble,
             envVars=self.env_vars,

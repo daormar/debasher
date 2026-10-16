@@ -488,3 +488,44 @@ def _caller_dir() -> Path:
         if package_dir not in path.parents:
             return path.parent
     return Path.cwd()
+
+
+class Node(Process):
+    """
+    A node of a resident program: a process whose code is a Python file
+    with the class of the node, derived from a class of the runtime
+    library (`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`), as
+    the generated module writes it: the import of the node kind, the
+    node preamble, the class with its hooks, and the line that runs it.
+    The SDK splits the file into the parts of the program model with the
+    same code as import, and refuses what the web UI could not hold. An
+    initiator is a node where a round starts.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        code: str | Path,
+        initiator: bool = False,
+        description: str = "",
+        base_dir: str | Path | None = None,
+    ):
+        super().__init__(name, code=code, description=description, language="python", base_dir=base_dir)
+        self.initiator = initiator
+
+    def __repr__(self) -> str:
+        return f'Node("{self.name}")'
+
+
+class Supervisor(Process):
+    """
+    The Supervisor of a resident program, which watches its nodes and
+    relaunches one that goes down. It has no code and no options of its
+    own: script generation writes its whole class and its wiring.
+    """
+
+    def __init__(self, name: str, description: str = "", base_dir: str | Path | None = None):
+        super().__init__(name, description=description, language="python", base_dir=base_dir)
+
+    def __repr__(self) -> str:
+        return f'Supervisor("{self.name}")'
