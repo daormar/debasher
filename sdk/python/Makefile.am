@@ -5,7 +5,7 @@
 # debasher_build, which writes a program described with it.
 pkgpython_PYTHON = debasher/__init__.py debasher/_paths.py	\
 debasher/errors.py debasher/process.py debasher/program.py	\
-debasher/layout.py debasher/build.py
+debasher/build.py
 
 # The directories of the installation, which the package needs to import
 # the API of the web UI ($(pkgdatadir)/api) and to find the tools of the

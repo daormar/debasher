@@ -415,8 +415,8 @@ with these rules:
   placed as the editor places the processes of an imported program, whose
   module says nothing about positions: in layers by the depth of their
   connections, a process that feeds another above it, the processes of a
-  layer side by side in their order in the program
-  (`sdk/python/debasher/layout.py`, the rule of
+  layer side by side in their order in the program (`api/layout.py`,
+  shared with the loading of a topology file: the rule of
   `frontend/src/models/programLayout.ts` ported as it is, passes capped
   at the number of processes so that a cycle through FIFOs ends with some
   layering).
@@ -567,7 +567,8 @@ installation module when they are not set and the directories exist, so
 that script generation finds `debasher_get_proc_info` in an installation
 as it does under the web UI. Nothing of the library imports the routers
 of the API or FastAPI: it uses `api.models`, `api.persistence` (and
-through it script generation) and `api.debasher_constants`.
+through it script generation), `api.debasher_constants`, `api.layout` for
+the positions and `api.topology` for the ids derived from names.
 
 # Guarantees and non-goals
 

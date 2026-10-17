@@ -190,6 +190,19 @@ class NodeCode(BaseModel):
     observe: str = ""
 
 
+class ProcessFiles(BaseModel):
+    # Where the code of a process is kept in the artifact of the program
+    # (see topology.py): the paths, relative to the topology file, of its
+    # process file, of its tasks file and of each of its method files, by
+    # the name of the method ("skip", "post", ...). Empty for a process not
+    # loaded from a topology file, for which saving chooses the default
+    # names. The code itself stays in `code`, the options handler and the
+    # additional methods: these are only where it goes on disk.
+    code: str = ""
+    tasks: str = ""
+    methods: dict[str, str] = {}
+
+
 class ProgramProcess(BaseModel):
     id: str
     name: str
@@ -210,6 +223,7 @@ class ProgramProcess(BaseModel):
     nodeKind: Optional[NodeKind] = None
     initiator: bool = False
     nodeCode: Optional[NodeCode] = None
+    files: ProcessFiles = ProcessFiles()
 
 
 class SeqComputationalSpecs(BaseModel):
@@ -251,6 +265,9 @@ class SeqProcess(BaseModel):
     computationalSpecs: SeqComputationalSpecs = SeqComputationalSpecs()
     additionalSpecs: SeqAdditionalSpecs = SeqAdditionalSpecs()
     groupSource: Optional[GroupSource] = None
+    # Only `code` is used: a sequential process has no tasks file and no
+    # method files.
+    files: ProcessFiles = ProcessFiles()
 
 
 class ProgramEdge(BaseModel):

@@ -10,21 +10,13 @@ metadata in `.debasher/program.json` and the generated module beside it.
 from __future__ import annotations
 
 import shutil
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import DefinitionError
-from .layout import layout
+from api.layout import layout
+from api.topology import element_id as _id
 from .process import Node, Option, Process, Source, Supervisor, check_program_name
-
-# Every id of the program model is derived from the names, so that writing
-# the same program twice gives the same metadata.
-_ID_NAMESPACE = uuid.UUID("6f1c2b7e-3a9d-4d0e-9c1f-2b5a8e4d7c10")
-
-
-def _id(*names: str) -> str:
-    return str(uuid.uuid5(_ID_NAMESPACE, "/".join(names)))
 
 
 # The computational specifications that only a node of a resident program

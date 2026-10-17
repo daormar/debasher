@@ -1,4 +1,4 @@
-import type { AliasOptMapping, GroupSource, ProcessLanguage } from "./process";
+import type { AliasOptMapping, GroupSource, ProcessFiles, ProcessLanguage } from "./process";
 
 // The computational specifications that a sequential process may have,
 // each optional: they become options of srun when a task runs it as a step
@@ -59,6 +59,9 @@ export interface SeqProcess {
   additionalSpecs: SeqAdditionalSpecs;
 
   groupSource?: GroupSource;
+
+  // Only `code` is used (see ProcessFiles).
+  files?: ProcessFiles;
 
 }
 

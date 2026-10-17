@@ -214,6 +214,9 @@ refer to it.
   process in its own language, named by `code` in the topology file: a Bash
   function, the whole script of another language, or the whole class file of
   a node.
+- **script file**: a file the user owns, named by `script` in the topology
+  file, that the module runs as it is (the external alias of the engine); the
+  editor shows it and never writes it.
 - **tasks file**: a file that holds the code of the options handler of an
   `array`, `generator` or `manual` process, a Bash body, named by `tasks`.
 - **method file**: a file that holds the body of one additional method of a
@@ -1419,9 +1422,11 @@ the backend refuses to save the change (see "The home directory").
 
 # The artifact: the topology file and the process files
 
-*Designed, not built. Until it is built, what the web UI saves is the program
-metadata of "The home directory", and that section describes the saved form of
-today.*
+*Designed; built so far: the model of the topology file, its reading and
+writing, and the conversion between it and the program model
+(`api/topology.py`). Until the rest is built, what the web UI saves is the
+program metadata of "The home directory", and that section describes the saved
+form of today.*
 
 The program metadata of today fuses two things into one JSON file: the
 topology of the program (its processes, their options, their connections and
@@ -1452,10 +1457,12 @@ edits it:
   of the model in snake case: `scheduler`, `rerun_outdated_procs`,
   `snapshot_every_secs`, ...) and `program_options` (label to value).
 - The processes, a map from name to process, in the order of the module: its
-  `description`; where its code is (`code`, a path, or `alias` with
-  `alias_opt_map`); its options handler, `mode` (`array`, `generator` or
-  `manual`; absent for the standard mode) and `tasks`, the path of its tasks
-  file; `methods`, a map from the name of an additional method (`skip`,
+  `description`; where its code is (`code`, the path of its process file;
+  `script`, the path of its script file; or `alias`, the name of another
+  process; `alias_opt_map` goes with the last two; see "The process files");
+  its options handler, `mode` (`array`, `generator` or `manual`; absent for
+  the standard mode) and `tasks`, the path of its tasks file; `methods`, a
+  map from the name of an additional method (`skip`,
   `post`, `reset_outfiles`, `outdir_basename`, `conda_envs`, `docker_imgs`)
   to the path of its method file; `specs`, one map with the names that the
   engine gives the computational and additional specifications (`cpus`,
@@ -1470,11 +1477,13 @@ edits it:
   `<process>.<label>`, or a list of them for a fan-in, as a module and the SDK
   name it: the connections belong to the inputs, and the file has no list of
   edges. An input whose connections the canvas draws as label edges says
-  `display: label`.
+  `display: label`; the display is the input's, so a fan-in whose connections
+  are drawn differently is drawn as label edges when saved and loaded again.
 - The sequential processes, `seq_processes`, a map from name to sequential
-  process with its `description`, `code` and `specs`.
+  process with its `description`, where its code is (the same keys as a
+  process) and `specs`.
 - Two things of the canvas, optional, that no executor reads: `position` of a
-  process, and `display` of a connection. A process without a position is
+  process, and `display` of an input. A process without a position is
   placed as an imported one is (see "Building the program"). They are kept
   in the topology file, as the Galaxy workflow format keeps them, so that the
   canvas of a shared program is the one its author saw.
@@ -1488,15 +1497,15 @@ What the program metadata holds today and the topology file does not, and why:
 
 - The ids of the program, the processes, the options and the edges: identity
   inside the model only. Loading assigns them from the names (`uuid5` of the
-  program name, the process name and the label, the rule of the SDK), so that
-  two loads of the same program give the same ids and nothing reads an id as a
-  name.
+  program name, the process name and the label, the rule of `api/topology.py`,
+  which the SDK shares), so that two loads of the same program give the same
+  ids and nothing reads an id as a name.
 - `direction`, which the label gives, and `language`, which the extension of
   the process file gives (`language` is written only when the extension does
   not say).
 - The code of a process, of its options handler, of its additional methods and
-  of a node, and the copy of the text of an external alias: in the process
-  files.
+  of a node: in the process files. The copy of the text of an external alias:
+  in the script file, which the editor shows and does not write.
 - `revision`, `homeDir` and `outputDir`: state of the editor and of the
   machine (see "Loading, saving and the local state"). `sourceDir`: import
   writes the artifact into a home directory and copies the files there, so no
@@ -1622,18 +1631,25 @@ file and `<process>_<method>.sh` for a method file; and, for a Bash process
 named as its program, whose file would otherwise be the generated script,
 `<process>_process.sh`.
 
-The artifact says where the code is, not how the module gets it: one key,
-`code`, where the model of today tells embedded code from an external alias.
-Script generation decides by the language. A Bash function is embedded in the
-module, since it relies on the library of the engine
-(`read_opt_value_from_func_args` and the rest), which a script run on its own
-would not have. A file of another language is referred to as an external alias
-and run as it is, which at run time is what the heredoc function of today does
-(the interpreter given the code and `"$@"`, against the interpreter given the
-file and `"$@"`), and lets the file import a module beside it. The module
-therefore embeds no code in another language. Running a Bash process as a
-script too, for uniformity, is a matter of the process contract (see "Future
-work").
+Two keys say where the code of a process is, by who owns the file. `code`
+names a process file that the editor owns: it writes the file from the code of
+the process on every save, and shows it in the code box. `script` names a
+script file, which the user owns and the module runs as it is, the external
+alias of the engine (`AdditionalSpecs.externalAlias`): the editor shows a copy
+and never writes it, as it does today for an imported external alias, and the
+file may be a Bash script, which a process file in Bash, a function, cannot
+be; its path follows the rule of a process file. How the
+module gets the code is not the artifact's to say: script generation decides
+by the language. A Bash function is embedded in the module, since it relies on
+the library of the engine (`read_opt_value_from_func_args` and the rest),
+which a script run on its own would not have. A process file of another
+language is referred to as an external alias and run as it is, which at run
+time is what the heredoc function of today does (the interpreter given the
+code and `"$@"`, against the interpreter given the file and `"$@"`), and lets
+the file import a module beside it; for such a file, `code` and `script`
+differ only in who writes it. The module therefore embeds no code in another
+language. Running a Bash process as a script too, for uniformity, is a matter
+of the process contract (see "Future work").
 
 The generated script, `<name>.sh`, is still written into the home directory
 under that name, which the engine derives the name of the program from, and

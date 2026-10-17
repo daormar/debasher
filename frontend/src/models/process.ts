@@ -144,6 +144,24 @@ export interface GroupSource {
 
 }
 
+/**
+ * Where the code of a process is kept in the artifact of the program (see
+ * api/topology.py): the paths, relative to the topology file, of its
+ * process file, of its tasks file and of each of its method files, by the
+ * name of the method. Absent for a process not loaded from a topology
+ * file, for which saving chooses the default names. The editor carries it
+ * as it is and never reads it.
+ */
+export interface ProcessFiles {
+
+  code: string;
+
+  tasks: string;
+
+  methods: Record<string, string>;
+
+}
+
 export interface ProgramProcess {
 
   id: string;
@@ -179,6 +197,8 @@ export interface ProgramProcess {
   initiator?: boolean;
 
   nodeCode?: NodeCode;
+
+  files?: ProcessFiles;
 
 }
 
