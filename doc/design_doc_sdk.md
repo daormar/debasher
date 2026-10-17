@@ -142,9 +142,12 @@ entries below that refer to them.
   from it in its name, its description text and the positions on the
   canvas only; the tests write the example as its twin and compare the
   two.
-- **topology file**: the planned saved form of the program model, a file
-  with the processes, their options, their connections and their
-  specifications, beside one file per process (see "Future work").
+- **topology file**: as in the design of the web UI: `program.yaml`, the
+  part of the artifact (the saved form designed to replace the program
+  metadata, not built) that holds the program, its processes, their
+  options with their connections and their specifications, and the paths
+  of the files of their code (see "The artifact: the topology file and the
+  process files" in `doc/design_doc_webui.md`, and "Future work" here).
 
 # What the user writes
 
@@ -645,7 +648,22 @@ through it script generation) and `api.debasher_constants`.
 - **Processes as decorated functions.** A Python function in the
   description itself, whose source the build extracts to a process file,
   for a process too small for a file of its own.
-- **The topology file.** When the program model is saved as a topology
-  file and one file per process, the SDK writes that form instead of
-  embedding the process files; its API does not change, and `code=` and
-  `script=` converge on the file beside the topology file.
+- **The topology file.** When the program is saved as the artifact that
+  the design of the web UI describes (see "The artifact: the topology file
+  and the process files" in `doc/design_doc_webui.md`), `write()` writes
+  `program.yaml` and names in it the process files, the node files, the
+  tasks files and the method files where they are, by their paths relative
+  to it, instead of embedding their text; it copies them only when the
+  program is written into another directory (`-o`), as it copies a script
+  today. The API does not change: `code=` and `script=` give the same thing
+  then, a file that the topology file names and that script generation
+  embeds or refers to by its language, so `script=` becomes another name
+  of `code=`. The topology file holds no ids and nothing of the machine, so
+  written twice from the same description it is the same file, and the
+  twins are compared by their topology files and their process files
+  instead of by their program metadata. `debasher_build`, the regeneration
+  tool of that design, given a topology file, a home directory, or nothing
+  in one, writes the module from the artifact; given a description it
+  writes the artifact and then the module, as it does today in one go. A
+  tasks file in Python, when dynamic options as Python functions exist, is
+  named by `tasks` as a Bash one is, its extension saying which.

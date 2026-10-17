@@ -41,7 +41,9 @@ lives. "The program model" describes the data that the frontend edits and the
 backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
-disk, and "Execution and observation" how it runs a program and follows it.
+disk, "The artifact: the topology file and the process files" the saved form
+that replaces the program metadata, designed and not built, and "Execution and
+observation" how it runs a program and follows it.
 "Frontend state and the canvas" describes the frontend's own state and the Help
 menu of the editor, and "Sequential processes in the web UI" describes how a
 program keeps the sequential processes of its module. "Guarantees and non-goals"
@@ -108,7 +110,8 @@ refer to it.
 - **data type**: the type of the data that an option carries, whatever option
   channel carries it: `int`, `float`, `string`, `file` for the path of a
   regular file, `dir` for the path of a directory, or `None` for a flag, an
-  option that takes no value (see "Data type and option channel").
+  option that takes no value (see "Data type and option channel"), which the
+  topology file spells `flag`.
 - **option channel**: how an option's data gets to its process, independent of
   its data type (`ProgramOption.channel`; a connected input gets its data
   through the option channel of the output it reads): `none` for a literal value
@@ -195,7 +198,34 @@ refer to it.
 - **output directory**: as defined in the design of the engine
   (`Program.outputDir`).
 - **program metadata**: the program model saved as JSON in
-  `.debasher/program.json` under the home directory.
+  `.debasher/program.json` under the home directory: the saved form of today,
+  which the artifact replaces (see "The artifact: the topology file and the
+  process files").
+- **artifact**: the saved form of the program that replaces the program
+  metadata: the topology file and the process files, what every door writes
+  and what the generated script is built from.
+- **door**: a client that writes the artifact: the editor, the MCP server,
+  the import of a hand-written module and the SDK.
+- **topology file**: `program.yaml` in the home directory, the part of the
+  artifact that holds the program, its processes, their options with their
+  connections, and their specifications, with the paths of the process files,
+  and nothing of the machine or of the editor.
+- **process file**: a file beside the topology file that holds the code of one
+  process in its own language, named by `code` in the topology file: a Bash
+  function, the whole script of another language, or the whole class file of
+  a node.
+- **tasks file**: a file that holds the code of the options handler of an
+  `array`, `generator` or `manual` process, a Bash body, named by `tasks`.
+- **method file**: a file that holds the body of one additional method of a
+  process, named under `methods`.
+- **schema version**: the integer `schema_version` of a topology file, the
+  version of the schema it is written in, which a reader reads up to its own.
+- **digest**: a hash of the content of a file of the artifact, which loading
+  returns for every file it read and a write names, so that a write over a
+  file that changed since it was loaded is refused (see "Loading, saving and
+  the local state").
+- **local state**: what the editor keeps on this machine for a program and the
+  artifact does not hold: the lock and the output directory, in `.debasher/`.
 - **revision**: a counter in the program metadata that a save which changes it
   increments; a write into the program's own home directory that would change
   the metadata is refused when the metadata there holds another revision than
@@ -1387,6 +1417,334 @@ there is one: the status, the stop and the inspection actions all name the
 output directory, so changing it would leave the run out of reach of the web UI;
 the backend refuses to save the change (see "The home directory").
 
+# The artifact: the topology file and the process files
+
+*Designed, not built. Until it is built, what the web UI saves is the program
+metadata of "The home directory", and that section describes the saved form of
+today.*
+
+The program metadata of today fuses two things into one JSON file: the
+topology of the program (its processes, their options, their connections and
+their specifications) and the code of every process, embedded as strings, with
+the editor's own state beside them (ids, a revision, the directories of the
+machine). A hand-written module fuses the same two things into one Bash file.
+The artifact stops fusing them: the program is saved as a **topology file**,
+`program.yaml` in the home directory, and one **process file** per process
+beside it, in its own language with its own extension. The topology file is
+small, readable and diffable; each process is a file that is tested, reviewed
+and edited with the tools of its language, by a person or by an agent, as any
+file; and the generated script becomes what a compiled form is, built from the
+artifact and never edited. The artifact is the canonical form of the program:
+what every door writes (the editor, the MCP server, the import of a hand-written
+module, the SDK), what git versions, and what the engine's module is built from.
+
+## The topology file
+
+The topology file is YAML, named `program.yaml`, one per home directory, so that
+a tool given a directory finds it without a search. It holds what the program
+is and how it runs, and nothing of the machine it is on or of the tab that
+edits it:
+
+- The program: `schema_version` (see "The schema and its versions"), `name`,
+  `type` (`resident`; absent for a general program), `description`, `preamble`
+  as a block of Bash, `env` (the environment variables, `DEBASHER_MOD_DIR`
+  among them), `shared_dirs`, `execution` (the execution options, by the names
+  of the model in snake case: `scheduler`, `rerun_outdated_procs`,
+  `snapshot_every_secs`, ...) and `program_options` (label to value).
+- The processes, a map from name to process, in the order of the module: its
+  `description`; where its code is (`code`, a path, or `alias` with
+  `alias_opt_map`); its options handler, `mode` (`array`, `generator` or
+  `manual`; absent for the standard mode) and `tasks`, the path of its tasks
+  file; `methods`, a map from the name of an additional method (`skip`,
+  `post`, `reset_outfiles`, `outdir_basename`, `conda_envs`, `docker_imgs`)
+  to the path of its method file; `specs`, one map with the names that the
+  engine gives the computational and additional specifications (`cpus`,
+  `mem`, `time`, `processdeps`, `force`, and the limits of a node); `group`,
+  for a process that "Add program" brought in; and, for a node of a resident
+  program, `kind` and `initiator`.
+- The options of a process, a map from label to option, in their order: `type`
+  (the data type, with `flag` for an option that takes no value), `description`,
+  `value`, `channel`, `subpath`, `mirror`, `fifo_tag`, `cmdline`,
+  `mandatory`, `shaping`, `from_spec` and `count_source` (the label of the
+  count source option). A connected input names what it reads with `from`,
+  `<process>.<label>`, or a list of them for a fan-in, as a module and the SDK
+  name it: the connections belong to the inputs, and the file has no list of
+  edges. An input whose connections the canvas draws as label edges says
+  `display: label`.
+- The sequential processes, `seq_processes`, a map from name to sequential
+  process with its `description`, `code` and `specs`.
+- Two things of the canvas, optional, that no executor reads: `position` of a
+  process, and `display` of a connection. A process without a position is
+  placed as an imported one is (see "Building the program"). They are kept
+  in the topology file, as the Galaxy workflow format keeps them, so that the
+  canvas of a shared program is the one its author saw.
+
+Every key but `name` is optional, with the default of the model, so that an
+option written as `-l: {type: int, description: Length, cmdline: true}` says
+all there is to say about it, and the file holds no default values. A command
+line option is mandatory unless it says `mandatory: false`.
+
+What the program metadata holds today and the topology file does not, and why:
+
+- The ids of the program, the processes, the options and the edges: identity
+  inside the model only. Loading assigns them from the names (`uuid5` of the
+  program name, the process name and the label, the rule of the SDK), so that
+  two loads of the same program give the same ids and nothing reads an id as a
+  name.
+- `direction`, which the label gives, and `language`, which the extension of
+  the process file gives (`language` is written only when the extension does
+  not say).
+- The code of a process, of its options handler, of its additional methods and
+  of a node, and the copy of the text of an external alias: in the process
+  files.
+- `revision`, `homeDir` and `outputDir`: state of the editor and of the
+  machine (see "Loading, saving and the local state"). `sourceDir`: import
+  writes the artifact into a home directory and copies the files there, so no
+  later save needs to know where the module came from.
+- `availableSharedDirs`: derived from the modules the preamble loads, and
+  computed again when the editor needs it.
+
+The topology file of the example `webui_dynamic_fanout_fifos` reads as
+follows, abridged to two of its six processes (the whole file is about a
+hundred and fifty lines where the program metadata is seven hundred):
+
+```yaml
+schema_version: 1
+name: webui_dynamic_fanout_fifos
+description: >-
+  Example built with the web UI: a generated file is counted and cut into
+  fragments, which a dispatcher streams through FIFOs to a pool of workers,
+  and a last process merges their counts.
+execution:
+  scheduler: BUILTIN
+program_options:
+  -l: "200"
+  -c: "20"
+  -b: "20"
+  -w: "4"
+
+processes:
+  dispatch:
+    description: Dispatches file blocks to workers.
+    code: dynamic_fanout_dispatcher.py
+    specs: {cpus: 1, mem: 32, time: "00:01:00"}
+    position: {x: 360, y: 400}
+    options:
+      -outf-ith:
+        type: file
+        description: i'th output fifo
+        channel: fifo
+        value: dispatch_fifo_${i}
+        count_source: -w
+      -w:
+        type: int
+        description: Number of workers.
+        cmdline: true
+      -inf:
+        type: file
+        description: input fifo
+        from: fragment.-outf
+      --log-level:
+        type: string
+        description: "Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO)."
+        cmdline: true
+        mandatory: false
+
+  worker:
+    description: >-
+      Executes an array of w tasks. Each task takes a list of text files
+      and generates another file for each one.
+    code: worker.sh
+    mode: array
+    tasks: worker_tasks.sh
+    specs: {cpus: 1, mem: 32, time: "00:01:00"}
+    position: {x: 360, y: 580}
+    options:
+      -outd:
+        type: dir
+        description: directory of the task, below the output directory of the process
+        channel: process_outdir
+        subpath: ${task_idx}
+      -inf:
+        type: file
+        description: input fifo
+        from: dispatch.-outf-ith
+      -w:
+        type: int
+        description: Number of workers.
+        cmdline: true
+        shaping: true
+```
+
+YAML rather than JSON, for the uses the artifact is for: it is read and
+reviewed by a person, with block scalars for the descriptions and the preamble
+and no quotes around every key; a change is a one-line diff; it takes
+comments; and it is what CWL, the Galaxy workflow format, nf-core and Kubeflow
+chose for the same thing. Its costs are known and bounded. YAML reads `200` as
+a number and `yes` as a boolean: the writer quotes every scalar that YAML would
+not read back as the string it is, and the reader turns the scalars of `value`,
+`program_options` and the other fields that hold Bash words into strings.
+PyYAML, which the backend already depends on, takes the last of two equal keys
+in silence: the reader refuses a duplicate name or label. And the editor writes
+the file whole on a save, so a comment written by hand does not survive a save
+from the editor (keeping comments needs a round-trip library, see "Future
+work"). JSON remains the form in which the program model travels between the
+frontend and the backend, which never see YAML, and the language of the schema.
+
+## The process files
+
+The code of a process is in a file named by `code`, a path relative to the
+topology file, normally inside the home directory; a path that leaves it is
+allowed, as an absolute external alias is today, and makes the program as
+portable as that path. The extension says the language, as the engine reads
+it for an external alias: `.sh` Bash, `.py` Python, `.pl` Perl, `.r` or `.R`
+R, `.groovy` Groovy. A Bash process file holds the function named as the
+process with its helper functions, as the code box of the editor holds it; a
+file of another language holds the whole script; the process file of a node of
+a resident program holds the whole class file, which the editor splits into
+the parts of a node when it loads the program and writes back from them when
+it saves, with the code of import and of script generation for the heredoc of
+a node. The process file of a node edited outside the editor into something
+the parts cannot hold is refused when the program is loaded, with the problems
+that import reports, each with its line.
+
+The tasks file (`tasks`) holds the code of the options handler as the editor
+keeps it, a Bash body: the code that builds the array of an `array` process,
+that prints the task count of a `generator` process, or the whole option
+definition function of a `manual` process. A method file holds the body of one
+additional method. Both are Bash bodies, not functions, as the program metadata
+keeps them today and as the SDK takes them.
+
+The paths are free: the SDK writes what the description gave, and a user may
+name a file as they like. What the editor and import choose when they create a
+file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks
+file and `<process>_<method>.sh` for a method file; and, for a Bash process
+named as its program, whose file would otherwise be the generated script,
+`<process>_process.sh`.
+
+The artifact says where the code is, not how the module gets it: one key,
+`code`, where the model of today tells embedded code from an external alias.
+Script generation decides by the language. A Bash function is embedded in the
+module, since it relies on the library of the engine
+(`read_opt_value_from_func_args` and the rest), which a script run on its own
+would not have. A file of another language is referred to as an external alias
+and run as it is, which at run time is what the heredoc function of today does
+(the interpreter given the code and `"$@"`, against the interpreter given the
+file and `"$@"`), and lets the file import a module beside it. The module
+therefore embeds no code in another language. Running a Bash process as a
+script too, for uniformity, is a matter of the process contract (see "Future
+work").
+
+The generated script, `<name>.sh`, is still written into the home directory
+under that name, which the engine derives the name of the program from, and
+`debasher_exec` runs it as it runs any module. It is a build product: a save
+of the editor writes it, and so does `debasher_build` given the home directory
+(see "The doors and the regeneration tool"). It need not be versioned, and a
+program can be deleted down to its artifact and built again identically.
+
+## Loading, saving and the local state
+
+Loading reads the topology file and every file it names, and gives the editor
+the program model of today, with ids from the names. Saving writes the
+topology file, the process files whose content changed (a file whose content
+is what the editor loaded is not touched, so that its modification time and
+what git sees stay as they were) and the generated script, in that order after
+script generation has accepted the program. Running saves first.
+
+The process files are user files: the program files panel shows and edits
+them, and so does an agent through the MCP server or any editor of the
+machine. A change to one of them is a change to the program. The topology file
+is shown read-only by the panel, since the canvas is its editor, and is
+changed through the MCP tools or by hand outside the web UI.
+
+The revision of the program metadata (see "Revisions of the program metadata")
+counts saves made through the backend, and a file that git, a person or an
+agent write is never counted. The artifact replaces it with the **digest** of
+the files: when the program is loaded, the backend returns the digest of the
+topology file and of every file it read, and the tab keeps them. A write of the
+program into its home directory names the digests of the files it loaded, and
+is refused with a conflict, the same conflict and the same banner as today,
+when a file on disk holds another digest, unless the write would leave every
+file as it is. The reading that the tab makes every few seconds reads the
+digests instead of the revision, so that a tab with no unsaved changes loads a
+program that changed on disk by any means, and a tab with unsaved changes
+shows the banner. The comparison and the writes happen under the lock of the
+home directory, as today. The rule of "Reserved names and user files", that
+the panel saves a file only over the version it read, stays as it is for the
+panel.
+
+`.debasher/` remains, for what belongs to the editor on this machine and not
+to the program: the lock, and `local.json`, which holds the output directory
+of the program. The output directory is a path of the machine, given to every
+run on its command line, which a program copied, moved or cloned cannot carry
+with it (the programs shipped with DeBasher leave it empty for that reason,
+and a moved program keeps pointing at the old one today): a program opened in
+a new place has no output directory until the user sets one, which `local.json`
+then keeps. The execution options and the environment variables stay in the
+topology file: they say how the program is run and the SDK and import set
+them, and a value of them that fits another machine badly is changed, not
+broken.
+
+## The schema and its versions
+
+The topology file has a model of its own, Pydantic as the program model is,
+with no ids and with the connections on the inputs, which refuses an unknown
+key, so that a misspelt key is an error and not a silently ignored one; the
+backend converts between it and the program model in both directions. Its JSON
+Schema, exported from it, is written by `make`, installed with the package,
+served by the backend and published with the documentation, and the first line
+of a topology file written by the backend names it for the editors that
+validate against a schema. The frontend defines nothing of it: the program
+model stays the one form it edits and receives.
+
+`schema_version` is an integer. A reader reads every version up to its own,
+migrating an older one in memory, and refuses a newer one with a message that
+says so. The version is raised when the meaning of a key changes or a key
+goes; a key added with a default does not raise it, since a file without it
+reads the same under the old version and the new one, and a reader older than
+the key refuses the file as it refuses any unknown key.
+
+The program metadata of today is version 0 of the artifact. Loading reads it
+when the home directory has no topology file, as it does today, and the next
+save writes the artifact: the code of every process, options handler, method
+and node into its file under the default names, the copy of an external alias
+dropped since the file is there, the program metadata removed, so that a home
+directory never holds both forms. A save that would overwrite a user file
+that already exists under a default name is refused and says which. The
+programs of `data/webui_programs/` are kept as artifacts, and
+`test/api/test_webui_programs.py` compares the generated script of each with
+the one built from its artifact.
+
+## The doors and the regeneration tool
+
+Every door writes the artifact, and nothing else reads the generated script
+but the engine:
+
+- The editor loads and saves as above.
+- The MCP server and the plugin operate on the program model through the
+  backend, as today, and nothing changes for them but what they say: an agent
+  edits a process file as a file, where today it goes through
+  `write_program_file` and the code box, and edits the topology through the
+  tools, which keep the canvas in step, or by hand, which the digest catches.
+- The SDK writes `program.yaml` and refers to the process files, the tasks
+  files and the method files where they are, instead of embedding their text,
+  copying them only when it writes the program into another directory (see
+  "Future work" in `doc/design_doc_sdk.md`).
+- Import reads a module as today and saves the artifact into a new home
+  directory: the verbatim code of each process into its file, the code of a
+  recognized options handler into the tasks file, each method into its file,
+  the file of an external alias copied. Nothing is lost that is not lost today
+  (see "What the round trip preserves"); a process of another language held
+  in a heredoc comes back as a file that the module refers to, with the same
+  behavior and another shape of the module, and import stays a fixed point.
+- `debasher_build`, the tool of the SDK, regenerates the script from the
+  artifact: given the Python file of the SDK that describes a program (a
+  description, in `doc/design_doc_sdk.md`) it writes the artifact and then
+  the script; given a topology file, a home directory, or nothing in a home
+  directory, it writes the script, which makes the artifact usable without the
+  editor, in a repository and in a pipeline. What script generation refuses it
+  refuses, with the same message.
+
 # Execution and observation
 
 The web UI runs a program, follows it and inspects it only through the
@@ -2112,7 +2470,8 @@ gathered in "Guarantees and non-goals of a resident program".
   round trip preserves").
 - **An output directory that follows a moved program.** A program loaded
   from a new place keeps the output directory it was saved with (see "The
-  home directory").
+  home directory"); the artifact makes it local state that a moved program
+  does not carry (see "Loading, saving and the local state").
 - **Checking the code that an AI tool writes.** The web UI treats it as code
   written by hand; validating the program and running its tests check it
   (see "The prompt panel").
@@ -4974,9 +5333,22 @@ address of the WebSocket and the answers of the request in
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").
-- **The output directory of a moved program.** Deciding what a program
-  loaded from a new place should do with an output directory that still
-  points to the old one.
+- **Building the artifact.** Building what "The artifact: the topology file
+  and the process files" designs: the topology file and its model, the
+  process files, the digest in place of the revision, the local state, the
+  migration of the program metadata, and `debasher_build` given a home
+  directory. It also answers what a program loaded from a new place does with
+  an output directory that still points to the old one: the output directory
+  is local state, and a moved program has none until the user sets it.
+- **Comments in the topology file.** Writing the topology file with a library
+  that keeps the comments and the order of what the editor did not change
+  (ruamel.yaml in its round-trip mode), so that a comment written by hand
+  survives a save from the editor.
+- **A Bash process as a script.** Running the file of a Bash process as the
+  module runs the file of another language, as an external alias, instead of
+  embedding it as a function: it needs the file to have the library of the
+  engine without being sourced into the module, which the process contract of
+  the engine would give it.
 - **A code prompt for the rest of the code.** The code prompt for the other code
   that the user writes: the preamble, and the option definition function of a
   `manual` process, which is written with the API of the engine for options and
