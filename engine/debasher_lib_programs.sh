@@ -477,9 +477,76 @@ debasher::_create_heredoc_func_body()
 }
 
 ########
+# The index in DEBASHER_HEREDOC_LANGUAGES of the language of the heredoc
+# code of a process; returns 1 when the process has none.
+debasher::_get_heredoc_language_index()
+{
+    local processname=$1
+
+    local i
+    for i in "${!DEBASHER_PROCESS_VARNAMES[@]}"; do
+        if [ -n "$(debasher::_search_heredoc_provider "${processname}" "${DEBASHER_PROCESS_FUNCNAMES[$i]}" "${DEBASHER_PROCESS_VARNAMES[$i]}")" ]; then
+            echo "${i}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+########
+# Whether `interpreter`, an interpreter that configure found, can be run:
+# it is empty when configure found none.
+debasher::_interpreter_is_usable()
+{
+    local interpreter=$1
+
+    [ -n "${interpreter}" ] && command -v "${interpreter}" > /dev/null
+}
+
+########
+# Defines the function of a process whose language, at index `idx` of
+# DEBASHER_HEREDOC_LANGUAGES, needs an interpreter that was not found, as
+# a function that fails with an error that says so, and records the
+# process in DEBASHER_PROCESS_MISSING_INTERPRETER, so that loading the
+# module does not need the interpreter and running the program is
+# refused before any task starts.
+debasher::_define_process_func_missing_interpreter()
+{
+    local processname=$1
+    local idx=$2
+
+    DEBASHER_PROCESS_MISSING_INTERPRETER["${processname}"]="${idx}"
+
+    local escaped_message
+    printf -v escaped_message '%q' "$(debasher::_missing_interpreter_message "${processname}" "${idx}")"
+    eval "$processname() { echo ${escaped_message} >&2; return 1; }"
+}
+
+########
+# The error for a process whose language, at index `idx` of
+# DEBASHER_HEREDOC_LANGUAGES, needs an interpreter that was not found.
+debasher::_missing_interpreter_message()
+{
+    local processname=$1
+    local idx=$2
+    local varname=${DEBASHER_HEREDOC_INTERPRETER_VARNAMES[$idx]}
+
+    echo "Error: process ${processname} needs the interpreter of ${DEBASHER_HEREDOC_LANGUAGE_NAMES[$idx]} (${varname}), which configure did not find or which can no longer be run: install it and configure DeBasher again, giving its path if needed (./configure ${varname}=<path>). Aborting execution..."
+}
+
+########
 debasher::_create_process_func_heredoc()
 {
     local processname=$1
+
+    local idx
+    idx=$(debasher::_get_heredoc_language_index "${processname}") || return 1
+    if ! debasher::_interpreter_is_usable "${DEBASHER_HEREDOC_INTERPRETERS[$idx]}"; then
+        debasher::_define_process_func_missing_interpreter "${processname}" "${idx}"
+        return 0
+    fi
+
     local funcbody
     funcbody=$(debasher::_create_heredoc_func_body "${processname}") || return 1
     eval "$processname() { ${funcbody}; }"
@@ -618,6 +685,11 @@ debasher::_add_debasher_alias_process()
     # Create process function
     debasher::_create_process_func_alias "${processname}" "${process_alias}" "${alias_opt_map}"
 
+    # An alias runs the code of its target, and so needs its interpreter
+    if [[ -v 'DEBASHER_PROCESS_MISSING_INTERPRETER["${process_alias}"]' ]]; then
+        DEBASHER_PROCESS_MISSING_INTERPRETER["${processname}"]="${DEBASHER_PROCESS_MISSING_INTERPRETER[${process_alias}]}"
+    fi
+
     # Store alias information
     DEBASHER_RESOLVED_PROCESS_TYPE="${DEBASHER_ALIAS_PROCESS_TYPE}"
     DEBASHER_PROCESS_ALIAS_TARGETS["${processname}"]="${process_alias}"
@@ -693,6 +765,18 @@ debasher::_create_process_func_ext_alias()
     local process_ext_alias=$2
     local alias_opt_map=$3
     local interpreter_for_file=$(debasher::_get_interpreter_for_file "${process_ext_alias}")
+
+    # A file of a language whose interpreter was not found still gives a
+    # process, which fails when it runs (an extension of no known language
+    # is refused below)
+    local bfname=$("${BASENAME}" "${process_ext_alias}")
+    local idx
+    if [ "${bfname##*.}" != "${DEBASHER_BASH_FEXT}" ] \
+           && idx=$(debasher::_get_heredoc_index_for_extension "${bfname##*.}") \
+           && ! debasher::_interpreter_is_usable "${interpreter_for_file}"; then
+        debasher::_define_process_func_missing_interpreter "${processname}" "${idx}"
+        return 0
+    fi
 
     if [ -n "${interpreter_for_file}" ]; then
         local escaped_interpreter
@@ -864,6 +948,25 @@ debasher::_resolve_process()
 
     # No heredoc nor aliases were given
     debasher::_add_debasher_regular_process "${processname}" || return 1
+}
+
+########
+# Fails, with an error for each, if a process or a sequential process of
+# the program needs an interpreter that was not found when DeBasher was
+# configured: loading the module defines such a process anyway, so that
+# the tools that only read the module work without the interpreter, and
+# this check refuses a run before any of its tasks starts.
+debasher::_check_process_interpreters()
+{
+    local processname
+    local failed=0
+    while IFS= read -r processname; do
+        [ -n "${processname}" ] || continue
+        debasher::_missing_interpreter_message "${processname}" "${DEBASHER_PROCESS_MISSING_INTERPRETER[${processname}]}" >&2
+        failed=1
+    done < <(printf '%s\n' "${!DEBASHER_PROCESS_MISSING_INTERPRETER[@]}" | "${SORT}")
+
+    [ "${failed}" -eq 0 ]
 }
 
 ########

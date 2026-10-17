@@ -1395,6 +1395,10 @@ if [ ${check_proc_opts_given} -eq 1 ]; then
     exit 0
 fi
 
+# A process whose interpreter was not found would fail when it runs: the
+# run is refused before anything is prepared
+debasher::_check_process_interpreters || exit 1
+
 # Check if there are running processes and abort execution if true
 ensure_program_not_being_executed
 

@@ -935,3 +935,53 @@ def test_a_skip_method_that_fails_fails_its_task_instead_of_running_it(tmp_path,
     assert not (execdir / "producer.finished").exists()
     log = "".join(p.read_text() for p in execdir.glob("producer.*") if p.suffix in (".log", ".sched_out"))
     assert "the skip method of process producer failed with exit code 2" in log
+
+
+# A module whose processes are in R, loaded as on a machine where configure
+# found no R: it empties the interpreter of R when it is loaded, before its
+# processes are added
+NO_R_MODULE = """\
+DEBASHER_HEREDOC_INTERPRETERS[1]=""
+
+rheredoc_explain_opts()
+{
+    :
+}
+
+rheredoc_heredoc_r()
+{
+    echo 'cat("hi\\\\n")'
+}
+
+rext_explain_opts()
+{
+    :
+}
+
+debasher_nor_program()
+{
+    add_debasher_process "rheredoc" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "rext" "cpus=1 mem=32 time=00:01:00" "ext_alias=hello.R"
+}
+"""
+
+
+def test_a_process_whose_interpreter_was_not_found_is_documented_but_not_run(tmp_path):
+    pfile = tmp_path / "debasher_nor.sh"
+    pfile.write_text(NO_R_MODULE)
+    (tmp_path / "hello.R").write_text('cat("hi\\n")\n')
+    outdir = tmp_path / "out"
+
+    # Reading the module needs no interpreter
+    doc = subprocess.run(
+        [str(REPO_ROOT / "bin" / "debasher_doc_mod"), "-m", str(pfile)], capture_output=True, text=True
+    )
+    assert doc.returncode == 0, doc.stderr
+
+    # Running it is refused before any task starts, naming each process
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 1
+    for process in ("rext", "rheredoc"):
+        assert f"process {process} needs the interpreter of R (RSCRIPT)" in result.stderr
+    assert not (outdir / "__exec__" / "rheredoc").exists()
+    assert not (outdir / "__exec__" / "rext").exists()

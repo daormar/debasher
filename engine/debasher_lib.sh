@@ -110,6 +110,11 @@ DEBASHER_HEREDOC_INTERPRETERS=(
     "${PERL}"
     "${GROOVY}"
 )
+# The configure variables of DEBASHER_HEREDOC_INTERPRETERS, and the names
+# of their languages, aligned with them by index, for the error that names
+# an interpreter that was not found
+DEBASHER_HEREDOC_INTERPRETER_VARNAMES=(PYTHON RSCRIPT PERL GROOVY)
+DEBASHER_HEREDOC_LANGUAGE_NAMES=(Python R Perl Groovy)
 DEBASHER_HEREDOC_INTERPRETER_OPTS=(
     "-c"
     "-e"
@@ -506,6 +511,14 @@ declare DEBASHER_RESOLVED_PROCESS_TYPE
 # engine/debasher_lib_programs.sh, which populate these).
 declare -A DEBASHER_PROCESS_ALIAS_TARGETS
 declare -A DEBASHER_PROCESS_EXT_ALIAS_FILES
+
+# Declare associative array recording, for a process whose language needs
+# an interpreter that was not found when DeBasher was configured, the index
+# of that language in DEBASHER_HEREDOC_LANGUAGES: loading the module still
+# defines the process, whose function fails when it runs, and debasher_exec
+# refuses to run the program (see debasher::_check_process_interpreters in
+# engine/debasher_lib_programs.sh)
+declare -A DEBASHER_PROCESS_MISSING_INTERPRETER
 
 # Declare associative array recording, for every process, the directory
 # of the .sh that added it (dirname of

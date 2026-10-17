@@ -433,7 +433,9 @@ fails, before any process is launched:
 3. It loads the program file, which loads the modules it builds on, and runs
    the `_program` method of the program file, which records the process
    specification of every process of the program (see "Modules and
-   programs").
+   programs"). It refuses a program with a process whose interpreter was not
+   found when DeBasher was configured (see "Processes in other languages, and
+   aliases").
 4. It refuses to go on while a process of the program is still in progress
    from a previous run on the same output directory.
 5. It builds the option list of every task, first through the `_define_opts`
@@ -690,22 +692,36 @@ carries, so a heredoc process runs the code of the module as it was when the run
 was prepared, like any Bash process. When a process has heredoc code, it is a
 heredoc process, whatever other attributes it has.
 
-**Aliases.** A process with the additional specification `alias=<process>` has
-a process function that calls the process function of the named process with
-the same arguments. The named process only has to have a valid name and a
-process function; it need not be part of the program. An alias borrows only the
-process function: its options, its dependencies and every other method are its
-own, so the same code can run under two names with two sets of options. A
-process with `ext_alias=<file>` runs an external script instead, with the
-interpreter that the extension of the file names (`.sh`, `.py`, `.R`, `.pl` or
-`.groovy`); a file with another extension is refused when the process is added.
-A relative path is resolved against the directory of the module whose
-`_program` method adds the process, so that a program and the scripts that ship
-with it can be moved together; an absolute path is accepted with a warning that
-the program is not portable. The file has to exist when the process is added,
-and the process function runs it from its path, so the script is read when the
-task runs: it is the one piece of the code of a run that editing a file after
-the run was prepared can still change.
+**Aliases.** A process with the additional specification `alias=<process>` has a
+process function that calls the process function of the named process with the
+same arguments. The named process only has to have a valid name and a process
+function; it need not be part of the program. An alias borrows only the process
+function: its options, its dependencies and every other method are its own, so
+the same code can run under two names with two sets of options. A process with
+`ext_alias=<file>` runs an external script instead, with the interpreter that
+the extension of the file names (`.sh`, `.py`, `.R`, `.pl` or `.groovy`); a file
+whose extension names no known language is refused when the process is added. A
+relative path is resolved against the directory of the module whose `_program`
+method adds the process, so that a program and the scripts that ship with it can
+be moved together; an absolute path is accepted with a warning that the program
+is not portable. The file has to exist when the process is added, and the
+process function runs it from its path, so the script is read when the task
+runs: it is the one piece of the code of a run that editing a file after the run
+was prepared can still change.
+
+**A missing interpreter.** The interpreter of a language is the one that
+`configure` found, in `PYTHON`, `RSCRIPT`, `PERL` and `GROOVY`, and a machine
+may lack some of them: `configure` found none, or the one it found can no
+longer be run. Loading a module never needs one: a heredoc process or an
+external alias in such a language is still added, with a process function that
+fails with an error naming the language and its configure variable; an alias of
+such a process is added in the same way. The tools that only read a module
+(`debasher_doc_mod`, the import of the web UI, `debasher_get_proc_info`, and
+`debasher_exec --show-cmdline-opts`, which exits before the check) therefore
+work on any machine. Running the program does need the interpreter:
+`debasher_exec` refuses the program once it is loaded, before it checks for
+processes still in progress or defines the options of any task, with that error
+for every process that lacks its interpreter, and a validation refuses it too.
 
 Both kinds of alias accept `alias_opt_map=<old>:<new>,...`, which renames
 option names in the arguments before they reach the borrowed code: an argument
@@ -2802,8 +2818,9 @@ leaves, by design, to the program or to whoever runs it.
 
 1. A run is prepared completely or not at all: an error while the modules are
    loaded, the options built, the dependencies inferred or the specifications
-   checked stops `debasher_exec` before any process is launched (see
-   "Architecture").
+   checked, or a process whose interpreter is missing (see "Processes in other
+   languages, and aliases"), stops `debasher_exec` before any process is
+   launched (see "Architecture").
 2. Only one `debasher_exec` prepares or runs a program in an output directory
    at a time, and it refuses to start while a process of the program is still
    running from an earlier run in that directory (see "Architecture").

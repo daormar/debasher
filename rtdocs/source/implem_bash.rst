@@ -324,6 +324,14 @@ the module runs as it is, through the ``ext_alias`` additional
 specification (see :doc:`hello_world_ext_alias`), which is the form the
 web interface and ``debasher_build`` write.
 
+Each of these languages runs with the interpreter that ``configure``
+found (``RSCRIPT``, ``PERL`` and ``GROOVY``; Python is required). A
+module with a process whose interpreter is not there, because
+``configure`` found none or it can no longer be run, still loads, so
+that ``debasher_doc_mod`` documents it and the web interface imports
+it, but ``debasher_exec`` refuses to run it, naming the process and the
+variable to give to ``configure``.
+
 A DeBasher process can have input and output options, that are provided
 to the process as if it was a standard UNIX command.
 

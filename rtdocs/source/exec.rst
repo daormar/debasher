@@ -89,7 +89,10 @@ are useful for that purpose:
   built-in scheduler, it also checks that the computational resources of
   each process fit the limits given with ``--builtinsched-cpus`` and
   ``--builtinsched-mem``. A program that passes the validation is not
-  refused for its options or for the resources of a single process.
+  refused for its options or for the resources of a single process. It
+  also refuses a program with a process whose interpreter is not there
+  (see the :ref:`implem_bash` Section), which ``--check-proc-opts`` and
+  ``--show-cmdline-opts`` still accept.
 
 Executing Programs Using the Built-In Scheduler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

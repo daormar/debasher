@@ -201,6 +201,16 @@ Docker
 DeBasher also provides support for `Docker <https://www.docker.com/>`__
 containers, favoring reproducibility of results.
 
+Other languages
+"""""""""""""""
+
+A process written in R, Perl or Groovy runs with the interpreter that
+``configure`` found on the ``PATH`` (``Rscript``, ``perl``,
+``groovy``), or with the one given as ``./configure RSCRIPT=<path>``
+(``PERL``, ``GROOVY``). A module with such a process loads without its
+interpreter, but ``debasher_exec`` refuses to run it (see the
+:ref:`implem_bash` Section).
+
 .. _quickstart:
 
 Quickstart

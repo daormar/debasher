@@ -259,7 +259,8 @@ write_command_line_file() {
 prepare_add_process() {
     declare -gA DEBASHER_SEQ_PROCESSES DEBASHER_SEQ_PROCESS_SPEC \
         DEBASHER_INITIAL_PROCESS_SPEC DEBASHER_PROCESS_PFILE_DIR \
-        DEBASHER_PROCESS_ALIAS_TARGETS DEBASHER_PROCESS_EXT_ALIAS_FILES
+        DEBASHER_PROCESS_ALIAS_TARGETS DEBASHER_PROCESS_EXT_ALIAS_FILES \
+        DEBASHER_PROCESS_MISSING_INTERPRETER
     declare -ga DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK=("${BATS_TEST_TMPDIR}/mod.sh")
     DIRNAME="$(command -v dirname)"
     REALPATH="$(command -v realpath)"
@@ -427,6 +428,71 @@ PYEOF
     add_debasher_process modern "cpus=1;mem=32;time=00:01:00"
     add_debasher_process legacy "cpus=1;mem=32;time=00:01:00"
     [ "$(debasher::_get_num_processes)" -eq 2 ]
+}
+
+# --- processes whose interpreter was not found ----------------------------
+#
+# RSCRIPT is not set here, as on a machine where configure found no R: a
+# process in R is still defined, its function fails when it runs, and
+# debasher::_check_process_interpreters refuses the run.
+
+@test "a heredoc process in R without its interpreter is defined, and fails when it runs" {
+    prepare_add_process
+    rproc_heredoc_r() { echo 'cat("hi\n")'; }
+    rproc_explain_opts() { :; }
+
+    add_debasher_process rproc "cpus=1;mem=32;time=00:01:00"
+
+    [ "${DEBASHER_PROGRAM_PROCESSES[rproc]}" = "${DEBASHER_HEREDOC_PROCESS_TYPE}" ]
+    run rproc
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process rproc needs the interpreter of R (RSCRIPT)"* ]]
+}
+
+@test "an external alias in R without its interpreter is defined, and fails when it runs" {
+    prepare_add_process
+    printf 'cat("hi\\n")\n' > "${BATS_TEST_TMPDIR}/hello.R"
+    rext_explain_opts() { :; }
+
+    add_debasher_process rext "cpus=1;mem=32;time=00:01:00" "ext_alias=hello.R"
+
+    [ "${DEBASHER_PROGRAM_PROCESSES[rext]}" = "${DEBASHER_EXT_ALIAS_PROCESS_TYPE}" ]
+    [ "${DEBASHER_PROCESS_EXT_ALIAS_FILES[rext]}" = "$(realpath "${BATS_TEST_TMPDIR}/hello.R")" ]
+    run rext
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process rext needs the interpreter of R (RSCRIPT)"* ]]
+}
+
+@test "an external alias of no known language is still refused when the module is loaded" {
+    prepare_add_process
+    : > "${BATS_TEST_TMPDIR}/tool.xyz"
+    xext_explain_opts() { :; }
+
+    run add_debasher_process xext "cpus=1;mem=32;time=00:01:00" "ext_alias=tool.xyz"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"no suitable interpreter was found"* ]]
+}
+
+@test "debasher::_check_process_interpreters refuses a process, or an alias of one, whose interpreter was not found" {
+    prepare_add_process
+    SORT="$(command -v sort)"
+    rproc_heredoc_r() { echo 'cat("hi\n")'; }
+    rproc_explain_opts() { :; }
+    ralias_explain_opts() { :; }
+    pyproc_heredoc_py() { echo 'print("hi")'; }
+    pyproc_explain_opts() { :; }
+
+    add_debasher_process pyproc "cpus=1;mem=32;time=00:01:00"
+    debasher::_check_process_interpreters
+
+    add_debasher_process rproc "cpus=1;mem=32;time=00:01:00"
+    add_debasher_process ralias "cpus=1;mem=32;time=00:01:00" "alias=rproc"
+    run debasher::_check_process_interpreters
+    [ "${status}" -eq 1 ]
+    [ "${#lines[@]}" -eq 2 ]
+    [[ "${lines[0]}" == *"process ralias needs the interpreter of R (RSCRIPT)"* ]]
+    [[ "${lines[1]}" == *"process rproc needs the interpreter of R (RSCRIPT)"* ]]
+    [[ "${lines[1]}" == *"./configure RSCRIPT=<path>"* ]]
 }
 
 @test "add_debasher_seq_process needs no method that declares options" {
