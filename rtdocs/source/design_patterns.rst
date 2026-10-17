@@ -93,6 +93,10 @@ option generator. The engine answers for an array too, but while the
 array is not defined yet it runs its whole ``define_opts`` again, in a
 subshell, and throws the result away, every time it is asked.
 
+Either way, the code that builds the array or gives the number of tasks
+can be a Python function in a file beside the module instead of Bash
+(see :ref:`tasks_in_python`).
+
 In the web interface, the options handler of the process is set to
 "array" or "generator", and "Configure" takes the code that builds the
 array or prints the number of tasks (see the :ref:`webui` Section).

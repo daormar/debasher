@@ -149,15 +149,20 @@ debasher::_print_script_body_slurm_sched()
 
     echo "debasher::_display_begin_process_message"
 
-    # A task that the skip method of its process skips counts as finished
-    # (see debasher_builtin_sched::_execute_funct_plus_postfunct)
+    # A task that the skip method of its process skips counts as finished,
+    # and one whose skip method fails fails (see
+    # debasher_builtin_sched::_execute_funct_plus_postfunct)
     local sign_process_completion_cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}")
     if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        echo "if ${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\"; then"
+        echo "skip_status=0"
+        echo "debasher::_call_skip_method ${processname} ${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" || skip_status=\$?"
+        echo "if [ \${skip_status} -eq 0 ]; then"
         echo "    echo \"Process ${processname} skipped by its skip method; counted as finished\" >&2"
         echo "    ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
         echo "    debasher::_display_end_process_message"
         echo "    exit 0"
+        echo "elif [ \${skip_status} -ne 1 ]; then"
+        echo "    exit 1"
         echo "fi"
     fi
 

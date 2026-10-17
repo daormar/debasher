@@ -1275,6 +1275,232 @@ debasher::get_process_num_tasks()
 get_process_num_tasks() { debasher::get_process_num_tasks "$@"; }
 
 ########
+# Gets the absolute path of the Python file of a process, given relative
+# to the module that adds the process or as an absolute path, as the file
+# of an external alias is.
+#
+# $1 - Path of the file.
+# $2 - Process name.
+# $3 - What the file is, for the messages.
+#
+# Prints the absolute path, or nothing, returning 1 with an error, if the
+# file does not exist.
+debasher::_resolve_py_func_file()
+{
+    local file=$1
+    local processname=$2
+    local description=$3
+
+    if ! debasher::_resolve_path_relative_to_pfile_dir "${file}" "${DEBASHER_PROCESS_PFILE_DIR[${processname}]:-.}" "${description} of process ${processname}"; then
+        echo "Error: the ${description} ${file} of process ${processname} does not exist" >&2
+        return 1
+    fi
+}
+
+########
+# Public: Builds the array of the tasks of an array process from a
+# Python file, which defines a function tasks(run) that returns the
+# elements of the array. The function receives the command line of the
+# run (run.value(label), run.given(label) and run.args, read as
+# read_opt_value_from_line reads them), the name of the process
+# (run.process) and its process output directory (run.outdir), and
+# returns a list, or any other iterable, of strings, numbers or paths,
+# each of which becomes an element. It replaces, in Python, the Bash
+# that builds the array in the _define_opts method of the process,
+# before the loop that defines the options of each task.
+#
+# $1 - Name of the array variable that receives the elements.
+# $2 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $3 - Serialized command line (the cmdline argument of _define_opts).
+# $4 - Process name.
+# $5 - Process output directory.
+#
+# Examples
+#
+#   local array
+#   debasher::tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
+#
+# Returns 1, with an error, if the file does not exist or its function
+# fails or returns something other than the elements of an array.
+debasher::tasks_from_file()
+{
+    local -n tasks_from_file_ref=$1
+    local file=$2
+    local cmdline=$3
+    local processname=$4
+    local process_outdir=$5
+
+    local path
+    path=$(debasher::_resolve_py_func_file "${file}" "${processname}" "tasks file") || return 1
+
+    # The elements are separated by NUL characters, which a command
+    # substitution would drop, so they are read from a file
+    local elems_file
+    elems_file=$("${MKTEMP}") || return 1
+    debasher::_deserialize_args "${cmdline}"
+    if ! "${debasher_libexecdir}/debasher_run_py_func" array "${path}" "${processname}" "${process_outdir}" \
+         -- "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${elems_file}"; then
+        "${RM}" -f "${elems_file}"
+        return 1
+    fi
+
+    tasks_from_file_ref=()
+    local elem
+    while IFS= read -r -d '' elem; do
+        tasks_from_file_ref+=("${elem}")
+    done < "${elems_file}"
+    "${RM}" -f "${elems_file}"
+}
+
+########
+# Public: Builds the array of the tasks of an array process from a
+# Python file, which defines a function tasks(run) that returns the
+# elements of the array. The function receives the command line of the
+# run (run.value(label), run.given(label) and run.args, read as
+# read_opt_value_from_line reads them), the name of the process
+# (run.process) and its process output directory (run.outdir), and
+# returns a list, or any other iterable, of strings, numbers or paths,
+# each of which becomes an element. It replaces, in Python, the Bash
+# that builds the array in the _define_opts method of the process,
+# before the loop that defines the options of each task.
+#
+# $1 - Name of the array variable that receives the elements.
+# $2 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $3 - Serialized command line (the cmdline argument of _define_opts).
+# $4 - Process name.
+# $5 - Process output directory.
+#
+# Examples
+#
+#   local array
+#   tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
+#
+# Returns 1, with an error, if the file does not exist or its function
+# fails or returns something other than the elements of an array.
+tasks_from_file() { debasher::tasks_from_file "$@"; }
+
+########
+# Public: Prints the number of tasks of an option generator from a
+# Python file, which defines a function tasks(run) that returns it. The
+# function receives what it receives for an array process (see
+# tasks_from_file) and returns an integer, 0 or more. It replaces, in
+# Python, the body of the _generate_opts_size method of the process.
+#
+# $1 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $2 - Serialized command line (the cmdline argument of
+#      _generate_opts_size).
+# $3 - Process name.
+# $4 - Process output directory.
+#
+# Examples
+#
+#   debasher::num_tasks_from_file "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}"
+#
+# The function prints the number of tasks, or nothing, returning 1 with
+# an error, if the file does not exist or its function fails or returns
+# something other than a number of tasks.
+debasher::num_tasks_from_file()
+{
+    local file=$1
+    local cmdline=$2
+    local processname=$3
+    local process_outdir=$4
+
+    local path
+    path=$(debasher::_resolve_py_func_file "${file}" "${processname}" "tasks file") || return 1
+
+    debasher::_deserialize_args "${cmdline}"
+    "${debasher_libexecdir}/debasher_run_py_func" count "${path}" "${processname}" "${process_outdir}" \
+        -- "${DEBASHER_DESERIALIZED_ARGS[@]}" || return 1
+}
+
+########
+# Public: Prints the number of tasks of an option generator from a
+# Python file, which defines a function tasks(run) that returns it. The
+# function receives what it receives for an array process (see
+# tasks_from_file) and returns an integer, 0 or more. It replaces, in
+# Python, the body of the _generate_opts_size method of the process.
+#
+# $1 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $2 - Serialized command line (the cmdline argument of
+#      _generate_opts_size).
+# $3 - Process name.
+# $4 - Process output directory.
+#
+# Examples
+#
+#   num_tasks_from_file "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}"
+#
+# The function prints the number of tasks, or nothing, returning 1 with
+# an error, if the file does not exist or its function fails or returns
+# something other than a number of tasks.
+num_tasks_from_file() { debasher::num_tasks_from_file "$@"; }
+
+########
+# Public: Decides whether a task is skipped from a Python file, which
+# defines a function skip(task) that returns True to skip the task and
+# False to run it. The function receives the options of the task
+# (task.value(label), task.given(label) and task.args, read as
+# read_opt_value_from_func_args reads them) and the name of the process
+# (task.process). It is the skip method of a process in Python, called
+# by the task with its options, before its process output directory is
+# reset.
+#
+# $1 - Process name.
+# $2 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $3,$4,...,$n - Options of the task (the arguments of the skip method).
+#
+# Examples
+#
+#   worker_skip() { debasher::skip_from_file "worker" "worker_skip.py" "$@"; }
+#
+# Returns 0 if the task is skipped, 1 if it runs, and 2, with an error,
+# if the file does not exist or its function fails or returns something
+# other than True or False, which fails the task.
+debasher::skip_from_file()
+{
+    local processname=$1
+    local file=$2
+    shift 2
+
+    local path
+    path=$(debasher::_resolve_py_func_file "${file}" "${processname}" "skip file") || return 2
+
+    local skip_status=0
+    "${debasher_libexecdir}/debasher_run_py_func" skip "${path}" "${processname}" -- "$@" || skip_status=$?
+    return ${skip_status}
+}
+
+########
+# Public: Decides whether a task is skipped from a Python file, which
+# defines a function skip(task) that returns True to skip the task and
+# False to run it. The function receives the options of the task
+# (task.value(label), task.given(label) and task.args, read as
+# read_opt_value_from_func_args reads them) and the name of the process
+# (task.process). It is the skip method of a process in Python, called
+# by the task with its options, before its process output directory is
+# reset.
+#
+# $1 - Process name.
+# $2 - Path of the Python file, relative to the module that adds the
+#      process, or absolute.
+# $3,$4,...,$n - Options of the task (the arguments of the skip method).
+#
+# Examples
+#
+#   worker_skip() { skip_from_file "worker" "worker_skip.py" "$@"; }
+#
+# Returns 0 if the task is skipped, 1 if it runs, and 2, with an error,
+# if the file does not exist or its function fails or returns something
+# other than True or False, which fails the task.
+skip_from_file() { debasher::skip_from_file "$@"; }
+
+########
 debasher::_optname_is_correct()
 {
     local funcname=$1

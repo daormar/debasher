@@ -1832,12 +1832,19 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     # A task that the skip method of its process skips counts as finished:
     # it signals its completion without resetting its output directory or
     # running the process or its post method, so that the processes that
-    # depend on it run with the outputs it already has
-    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ] && ${skip_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"; then
-        echo "Process ${processname} skipped by its skip method; counted as finished" >&2
-        debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
-        debasher::_display_end_process_message
-        return 0
+    # depend on it run with the outputs it already has. A skip method that
+    # fails fails the task, which then runs nothing either
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        local skip_status=0
+        debasher::_call_skip_method "${processname}" "${skip_funct}" "${DEBASHER_DESERIALIZED_ARGS[@]}" || skip_status=$?
+        if [ ${skip_status} -eq 0 ]; then
+            echo "Process ${processname} skipped by its skip method; counted as finished" >&2
+            debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+            debasher::_display_end_process_message
+            return 0
+        elif [ ${skip_status} -ne 1 ]; then
+            return 1
+        fi
     fi
 
     debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}" || return 1

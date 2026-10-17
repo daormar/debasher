@@ -900,3 +900,19 @@ record_definition() {
     [ -d "${outd}" ]
     [ -z "$(ls -A "${outd}")" ]
 }
+
+# --- The skip method ---------------------------------------------------------
+
+@test "debasher::_call_skip_method skips on 0, runs on 1, and reports any other status as a failure" {
+    skip0_skip() { return 0; }
+    skip1_skip() { return 1; }
+    skip2_skip() { [ "" -gt 1 ]; }
+
+    run debasher::_call_skip_method skip0 skip0_skip
+    [ "${status}" -eq 0 ]
+    run debasher::_call_skip_method skip1 skip1_skip
+    [ "${status}" -eq 1 ]
+    run debasher::_call_skip_method skip2 skip2_skip
+    [ "${status}" -eq 2 ]
+    [[ "${output}" == *"Error: the skip method of process skip2 failed with exit code 2"* ]]
+}

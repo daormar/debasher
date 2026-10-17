@@ -166,6 +166,38 @@ debasher::_get_skip_funcname()
 }
 
 ########
+# Calls the skip method of a process with the options of a task, and
+# tells what the task does: a method that returns 0 skips the task, one
+# that returns 1 lets it run, and any other status is a failure of the
+# method, which fails the task rather than letting it run as if the
+# method had decided so.
+#
+# $1 - Process name.
+# $2 - Name of the skip method.
+# $3,$4,...,$n - Options of the task.
+#
+# Returns 0 if the task is skipped, 1 if it runs, and 2, with an error,
+# if the method failed.
+debasher::_call_skip_method()
+{
+    local processname=$1
+    local skip_funct=$2
+    shift 2
+
+    local skip_status=0
+    "${skip_funct}" "$@" || skip_status=$?
+    case ${skip_status} in
+        0|1)
+            return ${skip_status}
+            ;;
+        *)
+            echo "Error: the skip method of process ${processname} failed with exit code ${skip_status}" >&2
+            return 2
+            ;;
+    esac
+}
+
+########
 debasher::_get_conda_envs_funcname()
 {
     local processname=$1

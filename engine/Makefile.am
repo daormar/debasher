@@ -11,7 +11,7 @@ debasher_gen_knapsack_problem debasher_gen_telegram_data	\
 debasher_list_deblib_pub_funcs debasher_list_proc_names		\
 debasher_get_proc_info debasher_get_verbatim_func_source		\
 debasher_launch_process debasher_resolve_pfile debasher_inspect_node	\
-debasher_get_node_source
+debasher_get_node_source debasher_run_py_func
 
 python_PYTHON= debasher_runtime_lib.py debasher_runtime_envelope.py	\
 debasher_runtime_transport.py debasher_runtime_inputlog.py		\
@@ -60,7 +60,7 @@ debasher_reformat_status.py						\
 debasher_solve_knapsack_greedy.py					\
 debasher_gen_knapsack_problem.py debasher_compare_opts.py		\
 debasher_gen_telegram_data.py debasher_test.sh debasher_bats_helpers.sh \
-debasher_get_node_source.sh
+debasher_get_node_source.sh debasher_run_py_func.py
 
 # Build using suffix rules (portable)
 SUFFIXES= .sh .py .r .R

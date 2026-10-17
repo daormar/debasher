@@ -839,6 +839,86 @@ method that reads it:
     local n
     n=$(get_process_num_tasks "producer") || return 1
 
+.. _tasks_in_python:
+
+The Tasks in Python
+^^^^^^^^^^^^^^^^^^^
+
+The code that decides the tasks of a process can be a Python function
+instead of Bash, in a file of its own beside the module. The file
+defines ``tasks(run)``, and the method calls it in one line:
+``tasks_from_file`` fills the array that ``define_opts`` loops over
+with the elements that the function returns, and
+``num_tasks_from_file``, as the body of ``generate_opts_size``, prints
+the number of tasks that it returns. In the following example, an
+array process has one task per sample of a sample sheet given with
+``-samples``:
+
+.. code-block:: python
+
+    # worker_tasks.py
+    def tasks(run):
+        with open(run.value("-samples")) as sheet:
+            return [line.split()[0] for line in sheet if line.strip()]
+
+.. code-block:: bash
+
+    worker_define_opts()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+
+        local array
+        tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
+
+        local task_idx
+        for task_idx in "${!array[@]}"; do
+            local optlist=""
+            define_opt "-sample" "${array[$task_idx]}" optlist || return 1
+            save_opt_list optlist
+        done
+    }
+
+``run`` gives what the Bash of the method has: the command line of the
+run, read with ``run.value(label)`` (``None`` when the option is not
+given or has no value), ``run.given(label)`` for a flag and ``run.args`` for all of it,
+the name of the process, ``run.process``, and its output directory,
+``run.outdir``. For an array, the function returns a list (or any
+iterable) of strings, numbers or paths, which become the elements of
+``array``; for a generator, an integer, 0 or more. The options of each
+task are still defined by the method, in Bash, from
+``${array[$task_idx]}`` or ``${task_idx}``. The function runs when the
+Bash would run, while the run is prepared, so it sees the command line
+of each run and the files present then, and its relative paths are
+taken from the directory where ``debasher_exec`` runs. The file itself
+is found relative to the module, so that a program and its files move
+together, and it may import other files beside it. The function runs
+with the Python that DeBasher was installed with, not in the Conda
+environment or Docker image of the process, so the packages it imports
+have to be installed there (on the nodes, under Slurm, for a ``skip``
+function). What the function prints goes to the standard error (of
+``debasher_exec`` for ``tasks``, of the task for ``skip``), and an
+error in it, with its traceback, stops the preparation of the run.
+
+An option generator calls the same kind of file from its
+``generate_opts_size`` method, with no array name in front:
+
+.. code-block:: bash
+
+    worker_generate_opts_size()
+    {
+        # Initialize variables
+        local cmdline=$1
+        local process_spec=$2
+        local process_name=$3
+        local process_outdir=$4
+
+        num_tasks_from_file "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}"
+    }
+
 A Directory of Its Own for Each Task
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1167,7 +1247,12 @@ missing.
 
 * ``skip``: decides, from the process's own options, whether to skip
   running it entirely for a given execution. **Returning 0 means the
-  process is skipped; any other exit code lets it run normally.** A
+  process is skipped, and returning 1 lets it run normally; any other
+  exit code is an error of the method, which fails the task instead of
+  running it.** A command that fails inside the method, such as a
+  ``grep`` that cannot read its file (exit code 2), therefore fails the
+  task: write the decision as an explicit ``return 0`` or
+  ``return 1``, as below, when a failure should let it run. A
   skipped process counts as finished: its output directory is left as
   it is, neither the process nor its ``post`` method run, and the
   processes that depend on it run with the outputs it already has. It
@@ -1193,6 +1278,26 @@ missing.
       }
 
   (see the ``skip`` example for the full module.)
+
+  The decision can also be a Python function, ``skip(task)``, in a file
+  beside the module, which returns ``True`` to skip the task and
+  ``False`` to run it (anything else, like an error in the function,
+  fails the task); ``task`` reads the options of the task as ``run``
+  reads the command line (see :ref:`tasks_in_python`), and the value of
+  a value descriptor as ``read_opt_value_from_func_args`` does:
+
+  .. code-block:: python
+
+      # value_reader_skip.py
+      def skip(task):
+          return int(task.value("-val-desc")) % 2 == 1
+
+  .. code-block:: bash
+
+      value_reader_skip()
+      {
+          skip_from_file "value_reader" "value_reader_skip.py" "$@"
+      }
 
 * ``define_opt_deps``: changes the type of the dependency that DeBasher
   infers from one option on the process that produces its value. It

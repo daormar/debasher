@@ -133,6 +133,13 @@ relative to the output directory of the run.
 - **alias**: a process that runs, under its own name and options, the code of
   another process (the `alias` additional specification) or of an external
   script (`ext_alias`).
+- **Python function file**: a Python file of a process, given relative to
+  its module, that defines one function which a method of the process calls
+  through `tasks_from_file`, `num_tasks_from_file` or `skip_from_file`: a
+  **tasks file** defines `tasks(run)`, which gives the tasks of an array
+  process or of an option generator, and a **skip file** defines
+  `skip(task)`, which decides whether a task is skipped (see "Python function
+  files").
 - **process specification**: what `add_debasher_process` records about a
   process, or `add_debasher_seq_process` about a sequential process: its
   computational specifications and its additional specifications.
@@ -492,8 +499,9 @@ is written into the output directory before the first process is launched:
   script of each process starts with a copy of it, so a task runs the code of
   the modules as it was when the run was prepared, and editing a module
   afterwards changes nothing in the run. An external script, which an alias
-  runs from its file, is the one exception (see "Processes in other
-  languages, and aliases").
+  runs from its file, and the Python function files of a process, which are
+  loaded from their files whenever they are called, are the exceptions (see
+  "Processes in other languages, and aliases" and "Python function files").
 - The option list of each task of a process without an option generator is a
   line of `.sched_opts/sched_opts_<process>`, with its connections already
   resolved, which the task reads when it starts. A process with an option
@@ -642,7 +650,7 @@ when a process does not define it:
 | `_explain_cmdline_opts` | an older form of the two methods above, whose options are all command line options | the two methods above are used |
 | `_explain_task_shaping_opts` | together with `_explain_opts`, and before the options of the process are defined, to check that its task shaping options are given | the process has no task shaping options |
 | `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
-| `_skip` | by the task, before the process output directory is reset, with the options of the task | the task is never skipped |
+| `_skip` | by the task, before the process output directory is reset, with the options of the task; it returns 0 to skip the task, 1 to run it, and any other status fails the task | the task is never skipped |
 | `_reset_outfiles` | by the task, before the process function, with the options of the task | the default reset (see "Executing a task") |
 | `_post` | by the task, once the process function returns, whether it succeeded or failed | nothing runs after the process function |
 | `_outdir_basename` | whenever the process output directory is needed | the directory is named after the process |
@@ -1471,6 +1479,105 @@ whose number of options depends on the run, such as `-outf0`, `-outf1`, and so
 on, declares the whole fanout family once, as `-outf-ith`, and any option made
 of the prefix and a number matches it.
 
+## Python function files
+
+The code that shapes the tasks of a process and the code that decides whether
+a task is skipped can be written in Python instead of Bash, each as one
+function in a Python function file. The methods of the process stay Bash
+functions, as the engine calls them, and each calls the file through a public
+function of the engine in one line:
+
+```bash
+worker_define_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+
+    local array
+    tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
+
+    local task_idx
+    for task_idx in "${!array[@]}"; do
+        local optlist=""
+        define_opt "-sample" "${array[$task_idx]}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+worker_skip()
+{
+    skip_from_file "worker" "worker_skip.py" "$@"
+}
+```
+
+```python
+# worker_tasks.py
+def tasks(run):
+    with open(run.value("-samples")) as sheet:
+        return [line.split()[0] for line in sheet if line.strip()]
+
+# worker_skip.py
+import os
+
+def skip(task):
+    return os.path.exists(task.value("-outf"))
+```
+
+- `tasks_from_file` builds the array of the tasks of an array process: the
+  function `tasks(run)` returns the elements, a list or any other iterable of
+  strings, numbers or paths, and the array that `_define_opts` loops over
+  receives the text of each.
+- `num_tasks_from_file` is the body of `_generate_opts_size`: `tasks(run)`
+  returns the number of tasks of the option generator, an integer, 0 or more.
+- `skip_from_file` is the body of `_skip`: `skip(task)` returns `True` to skip
+  the task and `False` to run it.
+
+`run` holds what the methods that define the options receive: the command line
+of the run, read with `run.value(label)` (`None` when the option is not given
+or has no value), `run.given(label)` and `run.args`, by the rules of
+`read_opt_value_from_line`; the name of the process, `run.process`; and its
+process output directory, `run.outdir`. `task` holds the options of the task,
+read in the same way but by the rules of `read_opt_value_from_func_args`, so
+that the value of an input option that is a value descriptor is the value it
+holds, and `task.process`. A Python function file is therefore exactly
+the Bash that it replaces, in Python: it sees what that Bash saw, at the same
+moment, `tasks` while the run is prepared and again whenever the engine
+defines the options of the process (see "Arrays and option generators"), and
+`skip` inside the task, with the options of the task. Relative paths that it
+opens are taken from the working directory of `debasher_exec`, as they are in
+Bash, and the per-task option values still come from the Bash words of the
+option definitions, such as `${array[$task_idx]}` or `${task_idx}`.
+
+The path of the file is resolved against the directory of the module that adds
+the process, as an external alias is, and an absolute path is accepted with a
+warning that the program is not portable. The functions run the file with the
+Python that DeBasher was configured with, the interpreter of a heredoc process
+in Python, through `debasher_run_py_func`, a tool of the engine, which loads
+the file with its own directory first on `sys.path`, so that it can import the
+files beside it, calls the function, checks what it returns and prints it: the
+elements separated by NUL characters, which the array is read from, or the
+number of tasks; for `skip` it prints nothing and gives the decision as its
+exit status. What the file prints while it runs goes
+to the standard error, never among what the engine reads. A file that cannot
+be found or loaded, a function that is missing or raises, and a value of the
+wrong kind (a string or a dictionary for the elements, a boolean or a negative
+number for the number of tasks, anything but a boolean for `skip`) are errors,
+reported with the traceback of the user's code when it raised: in a tasks
+file, the error stops the preparation of the run, as a failing `_define_opts`
+does, or fails the task when it happens while the task defines its own
+options; in a skip file, the status 2 that `skip_from_file` returns fails the
+task (see "Executing a task"). The file runs with the Python of DeBasher, not
+in the Conda environment or the Docker image of the process, so the packages
+that it imports have to be installed for that Python, on the nodes of the
+cluster for a skip file under Slurm.
+
+The tool prints data, never Bash: the option definitions of each task remain
+those of the method, so that the loop, the connections and the fanout families
+of a process are written once, in the module, whatever language shapes its
+tasks.
+
 ## How option values reach a task
 
 For a process without an option generator, the option list of each task, with
@@ -2139,8 +2246,9 @@ parts:
 Since the context is copied when the script is written, a task runs the code
 that the modules had when its run was prepared, and a later run, which writes
 a new context and new scripts, does not change the scripts of a run that is
-still going. The one piece of code read when the task runs is the external
-script of an alias (see "Processes in other languages, and aliases").
+still going. The code read when the task runs is the external script of an
+alias and the Python function files of the process (see "Processes in other
+languages, and aliases" and "Python function files").
 
 ## Executing a task
 
@@ -2150,11 +2258,15 @@ A task does the same, in this order, under both schedulers:
    generator of its process (see "How option values reach a task"), and
    writes it to its `.opts` file.
 2. It logs the time it started.
-3. If the process has a `_skip` method and the method, called with the options
-   of the task, returns success, the task writes its completion marker, logs
-   the time it ended and stops: its process output directory, its process
+3. If the process has a `_skip` method, the task calls it with its options.
+   When the method returns 0, the task writes its completion marker, logs the
+   time it ended and stops: its process output directory, its process
    function and its `_post` method are left untouched, and it counts as
-   finished.
+   finished. When it returns 1, the task goes on. Any other status is a
+   failure of the method, which the task reports and then fails, touching
+   nothing either: a method that could not decide, such as one whose `grep`
+   cannot read its file or whose Python function raises, never lets the task
+   run as if it had decided so.
 4. It resets the process output directory: through the `_reset_outfiles` method
    of the process, called with the options of the task, or, without that method,
    when the process has a single task, by removing everything in it. The tasks
@@ -2400,8 +2512,8 @@ reasons:
 - **Outdated code.** With `--rerun-outdated-procs`, a finished process whose
   process script is older than any loaded module. The comparison is by the
   modification time of the files, and against every module of the program, not
-  only the one that defines the process; an external script of an alias is not
-  compared.
+  only the one that defines the process; an external script of an alias or a
+  Python function file is not compared.
 - **FIFO ends out of step.** One end of a FIFO has finished and the other has
   not (see "Running both ends together"). The owner of a FIFO with an external
   end is always marked when it has finished, since the engine cannot tell
@@ -2696,8 +2808,9 @@ leaves, by design, to the program or to whoever runs it.
    at a time, and it refuses to start while a process of the program is still
    running from an earlier run in that directory (see "Architecture").
 3. A task runs the code of the modules as it was when its run was prepared;
-   only the external script of an alias is read when the task runs (see "The
-   process script: how code travels").
+   only the external script of an alias and the Python function files of its
+   process are read when the task runs (see "The process script: how code
+   travels" and "Python function files").
 4. The tools that read a run read it from its output directory alone: a module
    changed or removed after the run does not change what they report. A moved
    output directory can be read, and is refused by the tools that run its
@@ -2773,6 +2886,10 @@ leaves, by design, to the program or to whoever runs it.
     built-in scheduler, a process ends in the run once none of its tasks runs or
     can still be launched, as failed if not all of them finished (see "Tasks
     that will not be launched").
+22. A task whose `_skip` method returns neither 0 nor 1 fails without touching
+    its process output directory or running its process function: a skip
+    method that could not decide never lets its task run (see "Executing a
+    task").
 
 **Limits and non-goals.**
 
@@ -2873,7 +2990,7 @@ What is known to be missing from the design, or left open by it:
   macOS, and Windows under WSL2, which is a Linux system).
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
-  process and the external scripts of aliases.
+  process, the external scripts of aliases and the Python function files.
 - **Dependencies by containment.** An input whose value is a directory gets no
   dependency on the processes whose output options hold paths inside it, such
   as a process that reads a whole shared directory and the tasks that write its

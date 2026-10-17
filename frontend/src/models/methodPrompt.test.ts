@@ -66,7 +66,8 @@ describe("buildMethodPrompt", () => {
 
   it("says that skip skips on success, and that no end of a FIFO may be skipped", () => {
     const prompt = buildMethodPrompt(program, align, "skipCode", "", "");
-    expect(prompt).toContain("Returning 0 skips the task; any other status lets it run.");
+    expect(prompt).toContain("Returning 0 skips the task and returning 1 lets it run; any other status is an error, which fails the task.");
+    expect(prompt).toContain("End each path of the body with `return 0` or `return 1`");
     expect(prompt).toContain("A process at either end of a FIFO must not be skipped");
   });
 

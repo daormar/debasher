@@ -751,3 +751,187 @@ def test_debug_is_refused_and_launches_nothing(tmp_path):
     assert result.returncode != 0
     assert "--debug was renamed --validate" in result.stderr
     assert not (outdir / "__exec__").exists()
+
+
+# An array whose elements, and an option generator whose number of tasks,
+# come from Python files beside the module, and an array whose skip method
+# is a Python file too
+PY_FUNCS_MODULE = """\
+arr_explain_opts()
+{
+    explain_opt "-elem" "<string>" "Element of the task"
+}
+
+arr_explain_task_shaping_opts()
+{
+    explain_task_shaping_opt "-n" "<int>" "Number of tasks"
+}
+
+arr_define_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+
+    local array
+    tasks_from_file array "py/arr_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
+
+    local task_idx
+    for task_idx in "${!array[@]}"; do
+        local optlist=""
+        define_opt "-elem" "${array[$task_idx]}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+arr_skip()
+{
+    skip_from_file "arr" "py/arr_skip.py" "$@"
+}
+
+arr()
+{
+    echo "ran $(read_opt_value_from_func_args "-elem" "$@")"
+}
+
+gen_explain_opts()
+{
+    explain_opt "-idx" "<int>" "Index of the task"
+}
+
+gen_explain_task_shaping_opts()
+{
+    explain_task_shaping_opt "-n" "<int>" "Number of tasks"
+}
+
+gen_generate_opts_size()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+
+    num_tasks_from_file "py/gen_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}"
+}
+
+gen_generate_opts()
+{
+    local cmdline=$1
+    local process_spec=$2
+    local process_name=$3
+    local process_outdir=$4
+    local task_idx=$5
+    local optlist=""
+
+    define_opt "-idx" "${task_idx}" optlist || return 1
+    save_opt_list optlist
+}
+
+gen()
+{
+    echo "gen $(read_opt_value_from_func_args "-idx" "$@")"
+}
+
+debasher_pyfuncs_program()
+{
+    add_debasher_process "arr" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "gen" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_the_tasks_and_the_skip_method_of_a_process_come_from_python_files(tmp_path, sched):
+    moddir = tmp_path / "prg"
+    (moddir / "py").mkdir(parents=True)
+    pfile = moddir / "debasher_pyfuncs.sh"
+    pfile.write_text(PY_FUNCS_MODULE)
+    (moddir / "py" / "arr_tasks.py").write_text(
+        "def tasks(run):\n    return [f'sample {i}' for i in range(int(run.value('-n')))]\n"
+    )
+    (moddir / "py" / "arr_skip.py").write_text("def skip(task):\n    return task.value('-elem') == 'sample 1'\n")
+    (moddir / "py" / "gen_tasks.py").write_text("def tasks(run):\n    return int(run.value('-n')) - 1\n")
+    outdir = tmp_path / "out"
+
+    # Run from another directory, so that the files are found relative to
+    # the module only
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(
+        sched, "--pfile", str(pfile), "--outdir", str(outdir), "-n", "3", *extra, cwd=tmp_path
+    )
+    assert result.returncode == 0, result.stderr
+
+    arr_dir = outdir / "__exec__" / "arr"
+    for idx in range(3):
+        assert (arr_dir / f"arr_{idx}.finished").exists()
+    assert (arr_dir / "arr_0.stdout").read_text() == "ran sample 0\n"
+    assert not (arr_dir / "arr_1.stdout").exists()
+    assert (arr_dir / "arr_2.stdout").read_text() == "ran sample 2\n"
+
+    gen_dir = outdir / "__exec__" / "gen"
+    assert sorted(p.name for p in gen_dir.glob("gen_*.finished")) == ["gen_0.finished", "gen_1.finished"]
+
+
+def test_a_python_tasks_file_that_fails_stops_the_preparation_of_the_run(tmp_path):
+    moddir = tmp_path / "prg"
+    (moddir / "py").mkdir(parents=True)
+    pfile = moddir / "debasher_pyfuncs.sh"
+    pfile.write_text(PY_FUNCS_MODULE)
+    (moddir / "py" / "arr_tasks.py").write_text("def tasks(run):\n    raise RuntimeError('no samples')\n")
+    (moddir / "py" / "arr_skip.py").write_text("def skip(task):\n    return False\n")
+    (moddir / "py" / "gen_tasks.py").write_text("def tasks(run):\n    return 1\n")
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-n", "3")
+
+    assert result.returncode != 0
+    assert "RuntimeError: no samples" in result.stderr
+    assert not list(outdir.glob("__exec__/*/*.id"))
+
+
+# A process whose skip method fails, rather than deciding: grep cannot read
+# the file that it is given
+FAILING_SKIP_MODULE = SKIP_CHAIN_MODULE.replace(
+    "producer_skip()\n{\n    return 0\n}",
+    'producer_skip()\n{\n    grep -q "DONE" "__PRODUCED_FILE__.missing"\n}',
+)
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_skip_method_that_fails_fails_its_task_instead_of_running_it(tmp_path, sched):
+    assert FAILING_SKIP_MODULE != SKIP_CHAIN_MODULE
+    produced = tmp_path / "produced.txt"
+    produced.write_text("there from before\n")
+    pfile = tmp_path / "debasher_skipchain.sh"
+    pfile.write_text(FAILING_SKIP_MODULE.replace("__PRODUCED_FILE__", str(produced)))
+    outdir = tmp_path / "out"
+
+    extra = ["--wait"] if sched == "SLURM" else []
+    run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), *extra)
+
+    # The process did not run over the file it would produce, and did not
+    # finish
+    assert produced.read_text() == "there from before\n"
+    execdir = outdir / "__exec__" / "producer"
+    assert not (execdir / "producer.finished").exists()
+    log = "".join(p.read_text() for p in execdir.glob("producer.*") if p.suffix in (".log", ".sched_out"))
+    assert "the skip method of process producer failed with exit code 2" in log

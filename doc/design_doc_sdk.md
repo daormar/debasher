@@ -643,14 +643,18 @@ the positions and `api.topology` for the ids derived from names.
 # Future work
 
 - **Dynamic options as Python functions.** The code of the options handler
-  of an array or a generator as a Python function in a file, which a
-  helper that the generated module calls with the task index runs,
-  printing the option definitions that the handler consumes: exactly what
-  the Bash of the options handler does today, in Python, and nothing
-  more. The code runs when `debasher_exec` prepares a run, as the Bash
-  does, since the tasks depend on the command line of each run, which a
-  build does not know. The skip rule of a process (`skip`), evaluated at
-  the same moment, takes the same way.
+  of an array or a generator as a Python function in a tasks file, and
+  the skip rule of a process (`skip`) as one in a skip file, the Python
+  function files of the engine (see "Python function files" in
+  `doc/design_doc_engine.md`): the generated module calls them through
+  `tasks_from_file`, `num_tasks_from_file` and `skip_from_file`, which
+  give the elements of the array, the number of tasks or the decision as
+  data, and the option definitions of each task stay those that script
+  generation writes. It is exactly what the Bash does today, in Python,
+  and nothing more: the tasks code runs when `debasher_exec` prepares a
+  run, since the tasks depend on the command line of each run, which a
+  build does not know, and the skip rule inside each task, with its
+  options.
 - **The additional methods as data.** The Conda environments and Docker
   images of a process, the files it removes before a rerun and the name
   of its process output directory are data (a name and a file, a list of

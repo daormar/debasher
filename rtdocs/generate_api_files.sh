@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Generate process options API file
-proc_opts_symbols=("define_opt()" "define_infile_opt()" "define_indir_opt()" "define_flag()" "define_cmdline_opt()" "define_cmdline_opt_if_given()" "define_cmdline_infile_opt()" "define_cmdline_infile_opt_if_given()" "define_cmdline_indir_opt()" "define_cmdline_indir_opt_if_given()" "define_cmdline_flag_if_given()" "define_procspec_opt()" "define_fifo_opt()" "define_fifo_opt_generator()" "define_opt_from_proc_out()" "define_opt_from_proc_task_out()" "get_process_num_tasks()" "define_value_desc_opt()" "get_absolute_shdirname()" "define_opt_from_shared_dir()" "save_opt_list()")
+proc_opts_symbols=("define_opt()" "define_infile_opt()" "define_indir_opt()" "define_flag()" "define_cmdline_opt()" "define_cmdline_opt_if_given()" "define_cmdline_infile_opt()" "define_cmdline_infile_opt_if_given()" "define_cmdline_indir_opt()" "define_cmdline_indir_opt_if_given()" "define_cmdline_flag_if_given()" "define_procspec_opt()" "define_fifo_opt()" "define_fifo_opt_generator()" "define_opt_from_proc_out()" "define_opt_from_proc_task_out()" "get_process_num_tasks()" "tasks_from_file()" "num_tasks_from_file()" "define_value_desc_opt()" "get_absolute_shdirname()" "define_opt_from_shared_dir()" "save_opt_list()")
 rm -f rtdocs/source/api_proc_opts_doc.md
 for name in "${proc_opts_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_opts.sh engine/debasher_lib_dirs.sh >> rtdocs/source/api_proc_opts_doc.md
 done
 
 # Generate process implementation API file
-proc_impl_symbols=("read_opt_value_from_func_args()" "read_flag_from_func_args()" "write_value_to_desc()")
+proc_impl_symbols=("read_opt_value_from_func_args()" "read_flag_from_func_args()" "write_value_to_desc()" "skip_from_file()")
 rm -f rtdocs/source/api_proc_impl_doc.md
 for name in "${proc_impl_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_args.sh engine/debasher_lib_opts.sh >> rtdocs/source/api_proc_impl_doc.md

@@ -23,7 +23,7 @@ test_observe.py test_watcher.py test_watch_ref.py			\
 debasher_watch_ref.sh debasher_watch_batch.sh			\
 test_channel_kinds.py test_hold_fifos.py test_compare_opts.py test_prg_lib.py \
 test_exec_run.py test_node_info.py test_inspect_node.py test_inspect_resident.py \
-test_runtime_testing.py
+test_runtime_testing.py test_run_py_func.py
 
 check-local:
 if HAVE_BATS

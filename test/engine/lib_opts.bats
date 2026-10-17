@@ -748,3 +748,90 @@ define_asking_array_program() {
     debasher::define_opt_from_proc_out "-from_fanin" "fanin" "-outloop" optlist
     [ -n "${optlist}" ]
 }
+
+# --- Python files of a process: tasks and skip -------------------------------
+
+# Writes the Python files of a process "proc" into a directory "mod" below
+# the temporary directory of the test, which plays the directory of its
+# module, and goes to another directory, so that the files can only be
+# found relative to the module
+init_py_files() {
+    REALPATH="$(command -v realpath)"
+    MKTEMP="$(command -v mktemp)"; RM="$(command -v rm)"
+    debasher_libexecdir="${ENGINE_BUILDDIR}"
+    declare -gA DEBASHER_PROCESS_PFILE_DIR
+    mkdir -p "${BATS_TEST_TMPDIR}/mod" "${BATS_TEST_TMPDIR}/elsewhere"
+    DEBASHER_PROCESS_PFILE_DIR["proc"]="${BATS_TEST_TMPDIR}/mod"
+    cat > "${BATS_TEST_TMPDIR}/mod/proc_tasks.py" <<'PY'
+def tasks(run):
+    print("printed by the user's code")
+    return [f"sample {i}" for i in range(int(run.value("-w")))] + [run.process, run.outdir]
+PY
+    cat > "${BATS_TEST_TMPDIR}/mod/proc_count.py" <<'PY'
+def tasks(run):
+    return int(run.value("-w")) * 2
+PY
+    cat > "${BATS_TEST_TMPDIR}/mod/proc_skip.py" <<'PY'
+def skip(task):
+    if task.given("-fail"):
+        raise ValueError("asked to fail")
+    return int(task.value("-idx")) % 2 == 1
+PY
+    cd "${BATS_TEST_TMPDIR}/elsewhere"
+}
+
+@test "tasks_from_file builds the array from the elements that tasks(run) returns, spaces and all" {
+    init_py_files
+    local array
+
+    tasks_from_file array "proc_tasks.py" "$(cmdline_of -w 2)" proc /outd/proc
+
+    [ "${#array[@]}" -eq 4 ]
+    [ "${array[0]}" = "sample 0" ]
+    [ "${array[1]}" = "sample 1" ]
+    [ "${array[2]}" = "proc" ]
+    [ "${array[3]}" = "/outd/proc" ]
+}
+
+@test "tasks_from_file fails, leaving no file behind, when the function fails, and when the file is missing" {
+    init_py_files
+    local array
+    TMPDIR="${BATS_TEST_TMPDIR}/tmp"; mkdir -p "${TMPDIR}"; export TMPDIR
+
+    run debasher::tasks_from_file array "proc_tasks.py" "$(cmdline_of -x 1)" proc /outd/proc
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"TypeError"* ]]
+    [[ "${output}" == *"the Python function of"*"proc_tasks.py failed (process proc)"* ]]
+    [ -z "$(ls -A "${TMPDIR}")" ]
+
+    run debasher::tasks_from_file array "missing.py" "$(cmdline_of -w 1)" proc /outd/proc
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"the tasks file missing.py of process proc does not exist"* ]]
+}
+
+@test "num_tasks_from_file prints the number of tasks that tasks(run) returns, and refuses a list" {
+    init_py_files
+
+    run num_tasks_from_file "proc_count.py" "$(cmdline_of -w 3)" proc /outd/proc
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "6" ]
+
+    run debasher::num_tasks_from_file "proc_tasks.py" "$(cmdline_of -w 3)" proc /outd/proc
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"not a number of tasks"* ]]
+}
+
+@test "skip_from_file returns 0 to skip the task, 1 to run it, and 2 when the function fails" {
+    init_py_files
+
+    run skip_from_file proc "proc_skip.py" -idx 1
+    [ "${status}" -eq 0 ]
+    run skip_from_file proc "proc_skip.py" -idx 2
+    [ "${status}" -eq 1 ]
+    run skip_from_file proc "proc_skip.py" -idx 2 -fail
+    [ "${status}" -eq 2 ]
+    [[ "${output}" == *"ValueError: asked to fail"* ]]
+    run skip_from_file proc "missing.py" -idx 1
+    [ "${status}" -eq 2 ]
+    [[ "${output}" == *"the skip file missing.py of process proc does not exist"* ]]
+}

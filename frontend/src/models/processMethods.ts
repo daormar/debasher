@@ -61,9 +61,10 @@ export const PROCESS_METHODS: ProcessMethod[] = [
     name: "skip",
     receivesOptions: true,
     summary:
-      "Decides whether a task is skipped: return `0` to skip it, anything else to run it. Receives the options of the task as its arguments, read as in the process function.",
+      "Decides whether a task is skipped: return `0` to skip it and `1` to run it; any other status fails the task. Receives the options of the task as its arguments, read as in the process function.",
     rules: [
-      "The task calls it once it has its options, before it resets the output directory of the process. Returning 0 skips the task; any other status lets it run.",
+      "The task calls it once it has its options, before it resets the output directory of the process. Returning 0 skips the task and returning 1 lets it run; any other status is an error, which fails the task.",
+      "End each path of the body with `return 0` or `return 1` rather than with the status of its last command, which can be another one (`grep -q` and `cmp -s` return 2 on an error) and would fail the task.",
       READ_OPTIONS,
       "A skipped task counts as finished: the output directory of the process is left as it is, neither the process function nor `post` runs, and the processes that depend on it run with the outputs it already has. It is decided task by task.",
       "A process at either end of a FIFO must not be skipped: the two ends run at the same time, and the process at the other end would wait forever for the skipped one to open the FIFO.",

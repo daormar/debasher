@@ -163,9 +163,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   processes of several tasks), and aliases (`alias`, `externalAlias`,
   `aliasOptMap`), which take the code of the process from another one.
 - **Additional methods** (general programs only), bodies of optional
-  functions: `skipCode` (return 0 to skip a task; never on a process at
-  either end of a FIFO), `condaEnvsCode`, `dockerImgsCode`, `postCode`,
-  `resetOutfilesCode`, `outdirBasenameCode`.
+  functions: `skipCode` (return 0 to skip a task, 1 to run it, any other
+  status fails it; never on a process at either end of a FIFO),
+  `condaEnvsCode`, `dockerImgsCode`, `postCode`, `resetOutfilesCode`,
+  `outdirBasenameCode`.
 
 ## Options
 
