@@ -319,7 +319,10 @@ legacy variable's, since it is reserved as a process method name).
 Only the function form can be named after a namespaced process, since
 a Bash variable name cannot contain a ``.`` (see :doc:`hello_world_py`
 versus its legacy, variable-based counterpart
-:doc:`hello_world_py_legacy`).
+:doc:`hello_world_py_legacy`). The third way is a file of its own that
+the module runs as it is, through the ``ext_alias`` additional
+specification (see :doc:`hello_world_ext_alias`), which is the form the
+web interface and ``debasher_build`` write.
 
 A DeBasher process can have input and output options, that are provided
 to the process as if it was a standard UNIX command.

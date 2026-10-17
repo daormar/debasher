@@ -95,7 +95,11 @@ its processes laid out as those of an imported module are.
 
 The Python file is never run with ``python`` and never given to
 ``debasher_exec``; after a change to it, ``debasher_build`` is run
-again.
+again. Given the directory of a saved program instead, or its
+``program.yaml``, or nothing inside it, ``debasher_build`` writes the
+module again from ``program.yaml`` and the files of the processes,
+whoever saved them (see the :ref:`tools` Section); ``-o`` goes with a
+Python file only.
 
 Processes, options and connections
 ----------------------------------
@@ -114,13 +118,15 @@ counts.
 The pieces, in the order a process is written:
 
 * **Where the code is.** ``code=`` names the file of the process, which
-  the topology file names in turn, where the description has it, and
-  the generated module embeds, as it embeds the code box of the editor.
-  ``script=`` names
-  a file that the module runs as it is, an executable with the
-  interpreter of its extension, which stays outside the module and is
-  copied beside it (the dispatcher): the external alias of the
-  :ref:`implem_bash` Section. ``alias=`` runs the code of another
+  the topology file names in turn, where the description has it: the
+  module embeds it when it is Bash, and runs it as it is, as an
+  external alias of the file, in any other language. ``script=`` names
+  a file that the module runs as it is too, an executable with the
+  interpreter of its extension, but that is not the code of the
+  process: the editor shows a ``code=`` file as the code of the process
+  and edits it, and leaves a ``script=`` file alone (the dispatcher);
+  the external alias of the :ref:`implem_bash` Section. ``alias=`` runs
+  the code of another
   process under this one's name and options
   (``alias_opt_map={"-x": "-y"}`` renames the options it passes on, as
   the alias option map of a module does), and a process with none

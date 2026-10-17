@@ -26,6 +26,7 @@ Nothing here touches the disk: persistence.py reads and writes the files.
 import re
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal, Mapping, Optional
 
 import yaml
@@ -63,7 +64,7 @@ TOPOLOGY_FILENAME = "program.yaml"
 # Where the JSON Schema of the file is published, named on the first line
 # of every topology file written here, for the editors that validate
 # against a schema.
-SCHEMA_URL = f"https://debasher.readthedocs.io/en/latest/schema/program-{SCHEMA_VERSION}.json"
+SCHEMA_URL = f"https://debasher.readthedocs.io/en/latest/_static/schema/program-{SCHEMA_VERSION}.json"
 
 # The language of a process file, by its extension: the extensions that
 # the engine reads for an external alias.
@@ -424,6 +425,34 @@ def _default_code_path(program_name: str, process_name: str, language: str) -> s
     if path == f"{program_name}.sh":
         path = f"{process_name}_process.sh"
     return path
+
+
+def code_file_path(program_name: str, process) -> str:
+    """The path of the process file of a process, or of a sequential
+    process, in the artifact: the one it was loaded with, or the default
+    name that saving chooses for it (see _default_code_path)."""
+    return process.files.code or _default_code_path(program_name, process.name, process.language)
+
+
+def _inside(path: str) -> bool:
+    """Whether a relative path stays below the directory it is relative to."""
+    return not Path(path).is_absolute() and ".." not in Path(path).parts
+
+
+def write_code_files(program: Program, directory: str | Path) -> None:
+    """
+    Writes the files of the artifact of `program` that the editor writes
+    (its process files, tasks files and method files, see split) into
+    `directory`, under the paths the topology names, for a generated
+    script written there to find the files it refers to. A path that
+    leaves the directory is skipped.
+    """
+    for path, text in split(program).files.items():
+        if not _inside(path):
+            continue
+        file_path = Path(directory) / path
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(text)
 
 
 def _alias_opt_map_dict(mappings: list[AliasOptMapping]) -> dict[str, str]:

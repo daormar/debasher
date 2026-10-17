@@ -46,20 +46,7 @@ hello_world_define_opts()
 }
 
 
-hello_world_heredoc_py()
-{
-    cat <<'EOF'
-import argparse
-
-parser = argparse.ArgumentParser()
-parser.add_argument("-s", default="Hello World!")
-args = parser.parse_args()
-print(args.s)
-EOF
-}
-
-
 webui_hello_world_py_program()
 {
-    add_debasher_process "hello_world" "cpus=1 mem=256 time=01:00:00" ""
+    add_debasher_process "hello_world" "cpus=1 mem=256 time=01:00:00" "ext_alias=hello_world.py"
 }

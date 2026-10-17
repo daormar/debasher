@@ -52,8 +52,9 @@ entries below that refer to them.
 - **program model**: as in the design of the web UI: the program as plain
   data, the tree of Pydantic models of `api/models.py` with the
   processes, their options, their connections and their specifications,
-  which script generation turns into a module. The SDK builds one and
-  never reads one.
+  which script generation turns into a module. The library builds one
+  and never reads one; the tool loads one only to save it back (see "The
+  tool: `debasher_build`").
 - **artifact**: as in the design of the web UI: the saved form of a program,
   the topology file `program.yaml` and the files it names, in its home
   directory (see "The artifact: the topology file and the process files"
@@ -82,9 +83,10 @@ entries below that refer to them.
   or the whole script of another language. It is given to the process as
   its code (`code=`), and the SDK then embeds its text in the program
   model when the program is written, or as a script.
-- **script**: a process file that stays outside the module and that the
-  module runs as it is, the external alias of the engine (`script=`),
-  copied beside the module when the program is written elsewhere.
+- **script**: a process file that the user owns (`script=`): the module
+  runs it as it is, the external alias of the engine, the editor shows it
+  and never writes it, and it is copied beside the module when the
+  program is written elsewhere.
 - **external alias**: the `ext_alias` additional specification of the
   engine (the `ext_alias` case of an alias in the design of the engine):
   a file that a process runs as it is, with the interpreter that the
@@ -147,11 +149,10 @@ entries below that refer to them.
   canvas only; the tests write the example as its twin and compare the
   two.
 - **topology file**: as in the design of the web UI: `program.yaml`, the
-  part of the artifact (the saved form designed to replace the program
-  metadata, not built) that holds the program, its processes, their
+  part of the artifact that holds the program, its processes, their
   options with their connections and their specifications, and the paths
   of the files of their code (see "The artifact: the topology file and the
-  process files" in `doc/design_doc_webui.md`, and "Future work" here).
+  process files" in `doc/design_doc_webui.md`).
 
 # What the user writes
 
@@ -478,10 +479,22 @@ engine").
 
 # The tool: `debasher_build`
 
-`debasher_build <description>.py [-o <dir>]` loads the description, finds
-the program it defines and writes it (`sdk/python/debasher/build.py`). It
+`debasher_build <description>.py [-o <dir>]`,
+`debasher_build [<home directory> | <home directory>/program.yaml]` or
+`debasher_build --schema` (`sdk/python/debasher/build.py`). Given a
+description, the tool loads it, finds the program it defines and writes
+it. It
 is the equivalent of Save in the editor, and it is where `write()` is
-called: a description calls nothing, as a module calls nothing.
+called: a description calls nothing, as a module calls nothing. The tool
+is also the regeneration tool of the artifact (see "The doors and the
+regeneration tool" in `doc/design_doc_webui.md`): given a home directory,
+its topology file, or nothing in a home directory, it loads the program
+saved there and saves it back as it is, which writes the module again and
+leaves the artifact as it was (a topology file not in the form the
+backend writes is written again in that form), so that a program kept in
+a repository as its artifact is built without the editor; `-o` goes with
+a description only. `--schema` prints the JSON Schema of the topology
+file.
 
 - The description is run as a Python module with its own directory first
   on `sys.path`, so that it can import files beside it. Among its global
@@ -614,9 +627,12 @@ the positions and `api.topology` for the ids derived from names.
   runner: `debasher_exec` runs the program, from the command line or
   from the editor, so that building never executes and the runner is the
   same whatever door the program came through.
-- **Reading a program.** The SDK builds a program model and never reads
-  one: the way from a module or from an artifact into the SDK does not
-  exist, and import stays what it is in the web UI.
+- **Reading a program.** The library builds a program model and never
+  reads one: the way from a module or from an artifact into a description
+  does not exist, and import stays what it is in the web UI. The tool,
+  when it rebuilds a program from its artifact, loads the program model
+  through the persistence of the API and gives it back to it unchanged,
+  with nothing of the SDK in between.
 - **A second engine.** No option is resolved, no dependency inferred and
   no task defined in Python: what the engine does with the module it
   does for a program of the SDK as for any other.
@@ -660,13 +676,12 @@ the positions and `api.topology` for the ids derived from names.
 - **Processes as decorated functions.** A Python function in the
   description itself, whose source the build extracts to a process file,
   for a process too small for a file of its own.
-- **The rest of the artifact.** Once script generation refers to a process
-  file of another language as an external alias (see "The process files"
-  in `doc/design_doc_webui.md`), `code=` and `script=` give the same thing
-  for such a file, and `script=` becomes another name of `code=`.
-  `debasher_build`, the regeneration tool of that design, given a topology
-  file, a home directory, or nothing in one, will write the module from the
-  artifact; given a description it writes the artifact and then the module,
-  as it does today in one go. A tasks file in Python, when dynamic options
-  as Python functions exist, is named by `tasks` as a Bash one is, its
-  extension saying which.
+- **`script=` as another name of `code=`.** For a file of another language
+  the two give the same module, since script generation refers to a
+  `code=` file as an external alias too (see "The process files" in
+  `doc/design_doc_webui.md`); the one difference left is who owns the
+  file (the editor writes a `code=` file and only shows a script). Whether
+  to keep `script=` for that difference or make it another name of `code=`
+  is to be decided. A tasks file in Python, when dynamic options as Python
+  functions exist, is named by `tasks` as a Bash one is, its extension
+  saying which.

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/_static/schema/program-1.json
 schema_version: 1
 name: webui_running_sum
 type: resident

@@ -472,20 +472,33 @@ export const LANGUAGE_NAMES: Record<ProcessLanguage, string> = {
   groovy: "Groovy",
 };
 
-// The interpreter that the engine runs the code of a language with, and
-// the option that hands it the code (DEBASHER_HEREDOC_INTERPRETERS and
-// DEBASHER_HEREDOC_INTERPRETER_OPTS in engine/debasher_lib.sh).
+// The interpreter that the engine runs the process file of a language
+// with (DEBASHER_HEREDOC_INTERPRETERS in engine/debasher_lib.sh), given the
+// file and the options of the task.
 const INTERPRETERS: Record<Exclude<ProcessLanguage, "bash">, string> = {
-  python: "python3 -c",
-  perl: "perl -e",
-  r: "Rscript -e",
-  groovy: "groovy -e",
+  python: "python3",
+  perl: "perl",
+  r: "Rscript",
+  groovy: "groovy",
+};
+
+// The extension of the process file that saving chooses for a language
+// (EXTENSION_BY_LANGUAGE in api/topology.py).
+const EXTENSIONS: Record<ProcessLanguage, string> = {
+  bash: "sh",
+  python: "py",
+  perl: "pl",
+  r: "R",
+  groovy: "groovy",
 };
 
 // The language rules of a code prompt: how the engine runs the code of a
 // process of the language, and how the templates above read its options,
-// so that a change to either is made here, beside them.
-export function languageRules(language: ProcessLanguage, processName: string): string[] {
+// so that a change to either is made here, beside them. `codeFile` is the
+// process file the program was loaded with, when it has one; otherwise
+// the file is the one saving chooses.
+export function languageRules(language: ProcessLanguage, processName: string, codeFile?: string): string[] {
+  const file = codeFile || `${processName}.${EXTENSIONS[language]}`;
   const own =
     language === "bash"
       ? [
@@ -494,8 +507,8 @@ export function languageRules(language: ProcessLanguage, processName: string): s
           "- Declare the variables of the function with `local`, and end it with `return 0` on success and another status on failure.",
         ]
       : [
-          `- The process is a whole ${LANGUAGE_NAMES[language]} program, which the engine runs with \`${INTERPRETERS[language]}\` and the option list of a task as its command line arguments: each option as its label followed by its value, and a flag as its label alone.`,
-          "- The generated module holds the code in a Bash here-document that ends with a line `EOF`, so no line of the code may be `EOF` alone.",
+          `- The process is a whole ${LANGUAGE_NAMES[language]} program, written in its process file (\`${file}\`, the one program.yaml names), which the engine runs as \`${INTERPRETERS[language]} ${file}\` with the option list of a task as its command line arguments: each option as its label followed by its value, and a flag as its label alone.`,
+          "- The code runs from its file, so it may import a module beside it in the home directory.",
           "- The program ends with exit status 0 on success and another status on failure.",
         ];
   return [

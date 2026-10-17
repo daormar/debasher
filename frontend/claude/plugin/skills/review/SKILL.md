@@ -39,8 +39,8 @@ its code. Offer to run the tests when what they do matters to a finding.
 - **Its options.** Does it read every input option and write every output
   option? Does it use the values as the code prompt says (Bash:
   `read_opt_value_from_func_args`, `local` variables, `return 0`; another
-  language: the arguments its template parses, and no line that is `EOF`
-  alone)? Is an optional option handled when it is left out? Does it treat
+  language: the arguments its template parses, exit 0 on success)? Is an
+  optional option handled when it is left out? Does it treat
   each option as what it receives, the data itself or the path of a FIFO, a
   value descriptor or a directory, and the data as of the type declared?
 - **Failure.** On bad or missing input, does it fail with a non-zero status,

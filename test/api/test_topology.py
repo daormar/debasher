@@ -10,6 +10,7 @@ program is the one that was loaded, apart from the value of a connected
 input, which the frontend derives from the connections.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -528,3 +529,10 @@ def test_a_file_with_an_explicit_language_is_read():
 
     assert (joined.processes[0].language, joined.processes[0].code) == ("perl", "print 1;")
     assert split(joined).topology.processes["b"].language == "perl"
+
+
+def test_the_published_schema_is_the_one_of_the_model():
+    published = _REPO_ROOT / "rtdocs" / "source" / "_static" / "schema" / f"program-{topology.SCHEMA_VERSION}.json"
+
+    assert json.loads(published.read_text()) == topology.json_schema()
+    assert topology.SCHEMA_URL.endswith(f"/_static/schema/program-{topology.SCHEMA_VERSION}.json")

@@ -1,0 +1,842 @@
+{
+  "$defs": {
+    "TopologyExecution": {
+      "additionalProperties": false,
+      "properties": {
+        "scheduler": {
+          "default": "BUILTIN",
+          "title": "Scheduler",
+          "type": "string"
+        },
+        "builtin_sched_cpus": {
+          "default": "",
+          "title": "Builtin Sched Cpus",
+          "type": "string"
+        },
+        "builtin_sched_mem": {
+          "default": "",
+          "title": "Builtin Sched Mem",
+          "type": "string"
+        },
+        "dflt_nodes": {
+          "default": "",
+          "title": "Dflt Nodes",
+          "type": "string"
+        },
+        "dflt_throttle": {
+          "default": "",
+          "title": "Dflt Throttle",
+          "type": "string"
+        },
+        "rerun_outdated_procs": {
+          "default": false,
+          "title": "Rerun Outdated Procs",
+          "type": "boolean"
+        },
+        "conda_support": {
+          "default": false,
+          "title": "Conda Support",
+          "type": "boolean"
+        },
+        "docker_support": {
+          "default": false,
+          "title": "Docker Support",
+          "type": "boolean"
+        },
+        "snapshot_every_secs": {
+          "default": "",
+          "title": "Snapshot Every Secs",
+          "type": "string"
+        }
+      },
+      "title": "TopologyExecution",
+      "type": "object"
+    },
+    "TopologyGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "program": {
+          "title": "Program",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "size": {
+          "title": "Size",
+          "type": "integer"
+        },
+        "dir": {
+          "title": "Dir",
+          "type": "string"
+        }
+      },
+      "required": [
+        "program",
+        "id",
+        "size",
+        "dir"
+      ],
+      "title": "TopologyGroup",
+      "type": "object"
+    },
+    "TopologyOption": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "string",
+            "file",
+            "dir",
+            "flag"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "value": {
+          "default": "",
+          "title": "Value",
+          "type": "string"
+        },
+        "channel": {
+          "default": "none",
+          "enum": [
+            "none",
+            "value_desc",
+            "fifo",
+            "shared_dir",
+            "process_outdir"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "subpath": {
+          "default": "",
+          "title": "Subpath",
+          "type": "string"
+        },
+        "mirror": {
+          "default": false,
+          "title": "Mirror",
+          "type": "boolean"
+        },
+        "fifo_tag": {
+          "anyOf": [
+            {
+              "const": "external",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fifo Tag"
+        },
+        "cmdline": {
+          "default": false,
+          "title": "Cmdline",
+          "type": "boolean"
+        },
+        "mandatory": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mandatory"
+        },
+        "shaping": {
+          "default": false,
+          "title": "Shaping",
+          "type": "boolean"
+        },
+        "from_spec": {
+          "default": false,
+          "title": "From Spec",
+          "type": "boolean"
+        },
+        "count_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Count Source"
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From"
+        },
+        "display": {
+          "anyOf": [
+            {
+              "enum": [
+                "line",
+                "label"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "TopologyOption",
+      "type": "object"
+    },
+    "TopologyPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "TopologyPosition",
+      "type": "object"
+    },
+    "TopologyProcess": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Script"
+        },
+        "alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alias"
+        },
+        "alias_opt_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Alias Opt Map",
+          "type": "object"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "enum": [
+                "bash",
+                "python",
+                "perl",
+                "r",
+                "groovy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "array",
+                "generator",
+                "manual"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mode"
+        },
+        "tasks": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tasks"
+        },
+        "methods": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "propertyNames": {
+            "enum": [
+              "reset_outfiles",
+              "post",
+              "outdir_basename",
+              "skip",
+              "conda_envs",
+              "docker_imgs"
+            ]
+          },
+          "title": "Methods",
+          "type": "object"
+        },
+        "specs": {
+          "$ref": "#/$defs/TopologySpecs",
+          "default": {
+            "cpus": null,
+            "mem": null,
+            "time": null,
+            "processdeps": null,
+            "force": false,
+            "input_log_max_mb": null,
+            "out_backlog_max_mb": null,
+            "out_backlog_fail_mb": null,
+            "gil_switch_interval_ms": null,
+            "startup_timeout_s": null,
+            "max_concurrent_runs": null,
+            "batch_sched": null,
+            "heartbeat_timeout_s": null
+          }
+        },
+        "group": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopologyGroup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "FBPProcess",
+                "ProgramLauncher",
+                "DirectoryWatcher",
+                "Supervisor"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "initiator": {
+          "default": false,
+          "title": "Initiator",
+          "type": "boolean"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopologyPosition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "options": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TopologyOption"
+          },
+          "default": {},
+          "title": "Options",
+          "type": "object"
+        }
+      },
+      "title": "TopologyProcess",
+      "type": "object"
+    },
+    "TopologySeqProcess": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Script"
+        },
+        "alias": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alias"
+        },
+        "alias_opt_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Alias Opt Map",
+          "type": "object"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "enum": [
+                "bash",
+                "python",
+                "perl",
+                "r",
+                "groovy"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "specs": {
+          "$ref": "#/$defs/TopologySeqSpecs",
+          "default": {
+            "cpus": null,
+            "mem": null,
+            "time": null,
+            "sched": null
+          }
+        },
+        "group": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TopologyGroup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "TopologySeqProcess",
+      "type": "object"
+    },
+    "TopologySeqSpecs": {
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpus"
+        },
+        "mem": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mem"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time"
+        },
+        "sched": {
+          "anyOf": [
+            {
+              "enum": [
+                "BUILTIN",
+                "SLURM"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sched"
+        }
+      },
+      "title": "TopologySeqSpecs",
+      "type": "object"
+    },
+    "TopologySpecs": {
+      "additionalProperties": false,
+      "properties": {
+        "cpus": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cpus"
+        },
+        "mem": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mem"
+        },
+        "time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time"
+        },
+        "processdeps": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Processdeps"
+        },
+        "force": {
+          "default": false,
+          "title": "Force",
+          "type": "boolean"
+        },
+        "input_log_max_mb": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Log Max Mb"
+        },
+        "out_backlog_max_mb": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Out Backlog Max Mb"
+        },
+        "out_backlog_fail_mb": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Out Backlog Fail Mb"
+        },
+        "gil_switch_interval_ms": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gil Switch Interval Ms"
+        },
+        "startup_timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startup Timeout S"
+        },
+        "max_concurrent_runs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Concurrent Runs"
+        },
+        "batch_sched": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Sched"
+        },
+        "heartbeat_timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heartbeat Timeout S"
+        }
+      },
+      "title": "TopologySpecs",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "type": {
+      "anyOf": [
+        {
+          "const": "resident",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Type"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "preamble": {
+      "default": "",
+      "title": "Preamble",
+      "type": "string"
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Env",
+      "type": "object"
+    },
+    "shared_dirs": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Shared Dirs",
+      "type": "array"
+    },
+    "execution": {
+      "$ref": "#/$defs/TopologyExecution",
+      "default": {
+        "scheduler": "BUILTIN",
+        "builtin_sched_cpus": "",
+        "builtin_sched_mem": "",
+        "dflt_nodes": "",
+        "dflt_throttle": "",
+        "rerun_outdated_procs": false,
+        "conda_support": false,
+        "docker_support": false,
+        "snapshot_every_secs": ""
+      }
+    },
+    "program_options": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Program Options",
+      "type": "object"
+    },
+    "processes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TopologyProcess"
+      },
+      "default": {},
+      "title": "Processes",
+      "type": "object"
+    },
+    "seq_processes": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TopologySeqProcess"
+      },
+      "default": {},
+      "title": "Seq Processes",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "name"
+  ],
+  "title": "DeBasher program",
+  "type": "object",
+  "description": "The topology file of a DeBasher program, schema version 1."
+}

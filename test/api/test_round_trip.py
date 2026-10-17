@@ -39,7 +39,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import paths, persistence, script_generation
+from api import paths, persistence, script_generation, topology
 from api.models import (
     AdditionalMethods,
     AdditionalSpecs,
@@ -79,13 +79,16 @@ def _canonical_program(program: Program) -> dict:
     programs can be compared by: processes keyed by name and options by
     label (import gives both new ids and follows the order of the
     module documentation), connections named by process and option.
-    What lives only in the program metadata is left out: ids, positions,
-    groups, environment variables, execution and program options, the
-    three directories, the shared directories reachable through loaded
-    modules, which only import fills, and the value of a connected input,
-    its connection sentinel, which the frontend derives from the edges
-    compared here.
+    What lives only in the artifact is left out: ids, positions, groups,
+    the paths of the files, environment variables, execution and program
+    options, the three directories, the shared directories reachable
+    through loaded modules, which only import fills, and the value of a
+    connected input, its connection sentinel, which the frontend derives
+    from the edges compared here. A process of another language with
+    code of its own is taken as the module writes it, an external alias
+    of its process file, which is how import gives it back.
     """
+    program = script_generation.with_code_files_referenced(program)
     processes_by_id = {process.id: process for process in program.processes}
     connected = {
         (edge.targetProcessId, edge.targetOptionId)
@@ -105,7 +108,7 @@ def _canonical_program(program: Program) -> dict:
             for option in process.options
         }
         processes[process.name] = process.model_dump(
-            exclude={"id", "position", "options", "groupSource"}
+            exclude={"id", "position", "options", "groupSource", "files"}
         ) | {"options": options}
 
     edges = sorted(
@@ -131,8 +134,10 @@ def _canonical_program(program: Program) -> dict:
 
 
 def _write_script(directory: str, program: Program) -> None:
-    """Write the generated script of `program` into `directory`, as a save does."""
+    """Write the generated script of `program` into `directory`, with the
+    process files it refers to, as a save does."""
     (Path(directory) / f"{program.name}.sh").write_text(script_generation.generate_script(program))
+    topology.write_code_files(program, directory)
 
 
 def _generate_and_import(program: Program, debasher_mod_dir: str) -> Program:

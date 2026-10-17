@@ -27,6 +27,7 @@ from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program, SeqAdditionalSpecs, SeqComputationalSpecs
 from .resident_generation import resident_program_for_generation
+from .topology import code_file_path, write_code_files
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
@@ -1310,13 +1311,15 @@ def get_all_envvars(program: Program) -> dict[str, str]:
     same-named function bash ends up keeping.
 
     Copies any relative AdditionalSpecs.externalAlias files into the
-    same throwaway directory (see persistence.copy_ext_alias_files), the engine resolves a relative ext_alias against the directory of
-    the .sh being loaded, which here is `tmp_dir`, not
-    program.sourceDir. Without this, any imported program with a
-    relative ext_alias process (e.g. a Python/Perl/R node) makes
-    debasher_doc_mod abort with "file not found", which is caught below
-    and swallowed into {}, silently hiding every inherited variable in
-    the program, not just that one process's.
+    same throwaway directory (see persistence.copy_ext_alias_files), and
+    writes there the process files that the script refers to (see
+    with_code_files_referenced): the engine resolves a relative ext_alias
+    against the directory of the .sh being loaded, which here is
+    `tmp_dir`, not the home directory. Without this, any program with a
+    relative ext_alias process makes debasher_doc_mod abort with "file
+    not found", which is caught below and swallowed into {}, silently
+    hiding every inherited variable in the program, not just that one
+    process's.
 
     A failure (tool missing, generation error, timeout) is a
     convenience miss, not a hard error, mirrors how
@@ -1334,6 +1337,8 @@ def get_all_envvars(program: Program) -> dict[str, str]:
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         copy_ext_alias_files(stubbed_program, tmp_dir)
+        # The process files that the script refers to, for the same reason
+        write_code_files(stubbed_program, tmp_dir)
         # debasher_doc_mod derives the expected "_program" function name
         # from the file's own basename (debasher::_get_program_funcname
         # in engine/debasher_lib_modules.sh), which must match what
@@ -1420,6 +1425,50 @@ def _find_module_provided_alias_targets(program: Program, alias_target_codes: di
     return frozenset(provided)
 
 
+def _refers_to_code_file(process) -> bool:
+    """Whether the module refers to the process file of `process` instead
+    of embedding its code: a process, or a sequential process, of a
+    language other than Bash that has code of its own and no alias."""
+    return (
+        process.language != "bash"
+        and bool(process.code)
+        and not process.additionalSpecs.alias
+        and not process.additionalSpecs.externalAlias
+        and getattr(process, "nodeKind", None) is None
+    )
+
+
+def with_code_files_referenced(program: Program) -> Program:
+    """
+    A copy of `program` in which every process, and every sequential
+    process, of a language other than Bash that has code of its own and no
+    alias is written as an external alias of its process file (see "The
+    process files" in doc/design_doc_webui.md): the module refers to the
+    file, which the artifact holds beside it, and runs it as it is, instead
+    of embedding the code in a heredoc function, which at run time is the
+    same thing. A Bash function stays embedded, since it relies on the
+    library of the engine. A node of a resident program keeps its heredoc,
+    since the launch record compares the generated script, which has to
+    hold its code. Returns `program` itself when there is nothing to
+    change.
+    """
+    if not any(_refers_to_code_file(process) for process in [*program.processes, *program.seqProcesses]):
+        return program
+
+    def referenced(process):
+        if not _refers_to_code_file(process):
+            return process
+        specs = process.additionalSpecs.model_copy(update={"externalAlias": code_file_path(program.name, process)})
+        return process.model_copy(update={"additionalSpecs": specs})
+
+    return program.model_copy(
+        update={
+            "processes": [referenced(process) for process in program.processes],
+            "seqProcesses": [referenced(process) for process in program.seqProcesses],
+        }
+    )
+
+
 def generate_script(program: Program, skip_redundant_check: bool = False) -> str:
     """
     Generate the contents of the <program.name>.sh file for `program`.
@@ -1443,6 +1492,7 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
         # from a module that the preamble loads, so there is nothing
         # redundant to leave out.
         return _build_script(resident_program_for_generation(program))
+    program = with_code_files_referenced(program)
     skip_exec_for = frozenset() if skip_redundant_check else _find_redundant_exec_funcs(program)
     alias_target_codes = _alias_target_codes(program)
     if not skip_redundant_check:

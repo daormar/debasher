@@ -5,6 +5,7 @@ from api.models import (
     ComputationalSpecs,
     OptionsHandler,
     Position,
+    ProcessFiles,
     ProgramOption,
     ProgramProcess,
 )
@@ -270,9 +271,11 @@ def test_a_sequential_process_is_written_after_the_processes_and_added_with_its_
 
     assert script.index("count_document()") < script.index("step_document()")
     assert 'debasher::document_process "Adds two."' in script
-    assert "step_heredoc_py()" in script
+    # A sequential process in Python is run from its process file, as a
+    # process is (see with_code_files_referenced)
+    assert "step_heredoc_py()" not in script
     assert script.index('add_debasher_process "count"') < script.index(
-        'add_debasher_seq_process "step" "cpus=1 mem=32 time=00:01:00" ""'
+        'add_debasher_seq_process "step" "cpus=1 mem=32 time=00:01:00" "ext_alias=step.py"'
     )
 
 
@@ -575,3 +578,58 @@ def test_a_family_whose_count_source_option_is_gone_is_refused_with_the_way_out(
 
     with pytest.raises(ValueError, match="an option that the process does not have"):
         generate_script(program, skip_redundant_check=True)
+
+
+# --- the process files that the module refers to ------------------------------
+
+
+def _python_process(name="hello", **fields):
+    defaults = dict(
+        id=f"id-{name}",
+        name=name,
+        description="",
+        position=Position(x=0, y=0),
+        options=[],
+        optionsHandler=OptionsHandler(mode="standard"),
+        language="python",
+        code="print('hi')",
+        computationalSpecs=ComputationalSpecs(),
+        additionalSpecs=AdditionalSpecs(force=False),
+    )
+    return ProgramProcess(**(defaults | fields))
+
+
+def test_a_process_of_another_language_is_run_from_its_process_file():
+    script = generate_script(_seq_program([], [_python_process()]), skip_redundant_check=True)
+
+    assert '"ext_alias=hello.py"' in script
+    assert "hello_heredoc_py()" not in script
+    assert "print('hi')" not in script
+
+
+def test_the_process_file_a_process_was_loaded_with_is_the_one_referred_to():
+    process = _python_process(files=ProcessFiles(code="src/hello_world.py"))
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert '"ext_alias=src/hello_world.py"' in script
+
+
+def test_a_bash_process_and_a_process_without_code_stay_as_they_are():
+    bash = _make_process([])
+    bash = bash.model_copy(update={"code": "count()\n{\n    :\n}"})
+    nothing = _python_process("later", code="")
+
+    script = generate_script(_seq_program([], [bash, nothing]), skip_redundant_check=True)
+
+    assert "ext_alias" not in script
+    assert "count()\n{\n    :\n}" in script
+
+
+def test_a_process_with_an_alias_of_its_own_keeps_it():
+    process = _python_process(additionalSpecs=AdditionalSpecs(force=False, externalAlias="./tools/hello.py"))
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert '"ext_alias=./tools/hello.py"' in script
+    assert "ext_alias=hello.py" not in script

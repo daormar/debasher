@@ -219,11 +219,14 @@ describe("buildCodePrompt", () => {
     expect(bash).toContain("- The process is a Bash function named `count`");
     expect(bash).toContain("`read_flag_from_func_args \"<label>\" \"$@\"`");
     expect(bash).not.toContain("here-document");
-    for (const [language, interpreter] of [["python", "python3 -c"], ["perl", "perl -e"], ["r", "Rscript -e"], ["groovy", "groovy -e"]] as const) {
+    for (const [language, command] of [["python", "python3 count.py"], ["perl", "perl count.pl"], ["r", "Rscript count.R"], ["groovy", "groovy count.groovy"]] as const) {
       const prompt = buildCodePrompt(program, withLanguage(count, language), "", "");
-      expect(prompt).toContain(`which the engine runs with \`${interpreter}\``);
-      expect(prompt).toContain("so no line of the code may be `EOF` alone");
+      expect(prompt).toContain(`which the engine runs as \`${command}\``);
+      expect(prompt).toContain("may import a module beside it");
+      expect(prompt).not.toContain("here-document");
     }
+    const loaded = { ...withLanguage(count, "python"), files: { code: "src/counter.py", tasks: "", methods: {} } };
+    expect(buildCodePrompt(program, loaded, "", "")).toContain("runs as `python3 src/counter.py`");
   });
 
   it("carries the template of the process when the draft is blank, and asks to fill it in", () => {

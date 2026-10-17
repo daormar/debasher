@@ -91,3 +91,61 @@ def test_the_tool_reports_a_refused_program_and_fails(tmp_path, capsys):
 
     assert "debasher_build: " in capsys.readouterr().err
     assert not (tmp_path / persistence.METADATA_DIRNAME).exists()
+
+
+# --- building again from the artifact -----------------------------------------
+
+
+def _saved_program(tmp_path: Path) -> Path:
+    home = tmp_path / "home"
+    main([str(example_file("sdk_hello_world_py")), "-o", str(home)])
+    return home
+
+
+def test_a_program_deleted_down_to_its_artifact_is_built_again_identically(tmp_path, capsys):
+    home = _saved_program(tmp_path)
+    module = home / "sdk_hello_world_py.sh"
+    before = module.read_text()
+    files_before = {path.name: path.read_text() for path in home.iterdir() if path.is_file()}
+    module.unlink()
+    capsys.readouterr()
+
+    assert main([str(home)]) == 0
+
+    assert capsys.readouterr().out.strip() == str(module)
+    assert module.read_text() == before
+    assert {path.name: path.read_text() for path in home.iterdir() if path.is_file()} == files_before
+
+
+def test_the_topology_file_or_the_current_directory_names_the_program_to_build_again(tmp_path, monkeypatch):
+    home = _saved_program(tmp_path)
+    module = home / "sdk_hello_world_py.sh"
+
+    module.unlink()
+    assert main([str(home / "program.yaml")]) == 0
+    assert module.is_file()
+
+    module.unlink()
+    monkeypatch.chdir(home)
+    assert main([]) == 0
+    assert module.is_file()
+
+
+def test_a_directory_with_no_program_and_an_outdir_with_a_directory_are_refused(tmp_path, capsys):
+    assert main([str(tmp_path)]) == 1
+    assert "No program found" in capsys.readouterr().err
+
+    home = _saved_program(tmp_path)
+    capsys.readouterr()
+    assert main([str(home), "-o", str(tmp_path / "elsewhere")]) == 1
+    assert "-o goes with a Python file" in capsys.readouterr().err
+
+
+def test_the_schema_of_the_topology_file_is_printed(capsys):
+    import json
+
+    from api.topology import json_schema
+
+    assert main(["--schema"]) == 0
+
+    assert json.loads(capsys.readouterr().out) == json_schema()

@@ -265,7 +265,7 @@ const readingTools = [
 
   tool(
     "import_module",
-    "Imports a DeBasher module (a .sh file) as a program, places its processes in layers by their connections, and saves it into a new home directory.",
+    "Imports a DeBasher module (a .sh file) as a program, places its processes in layers by their connections, and saves it into a new home directory. A process that the module runs from a file of another language comes as an external alias of that file, read with read_program_file.",
     {
       script_path: z.string().min(1).describe("The path of the module."),
       home_dir: schemas.homeDir.describe("A directory that holds no program yet."),

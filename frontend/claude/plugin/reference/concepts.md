@@ -23,8 +23,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Home directory and output directory**, which must differ. The home
   directory holds the saved program: the topology file `program.yaml`
   (the processes, their options, their connections and their
-  specifications; the tools, the editor and `debasher_build` write it, and
-  a change made to it by hand is seen by the editor), one file per process
+  specifications; the tools, the editor and `debasher_build` write it, a
+  change made to it by hand is seen by the editor, and its first line names
+  the JSON Schema of the file, which `debasher_build --schema` prints), one
+  file per process
   with its code, which the topology file names (`count.sh` for a Bash
   process `count`, a function named as the process; `dispatch.py` for one
   in Python, the whole script; `<process>_tasks.sh` for the code of the
@@ -41,7 +43,7 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `create_program` starts an empty program in a new home directory,
   `import_module` makes one from an existing DeBasher module (a `.sh`
   file), and `debasher_build`, outside the tools, writes one from a Python
-  description.
+  description, or writes the generated script of a saved program again.
 - **The code of a process is a file.** The file that the topology file
   names holds the code of the process, and nothing else does: change it
   with `update_process`, or as a file with `write_program_file` or any
@@ -51,7 +53,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   which keep the editor in step, or by hand in `program.yaml`.
 - **The generated script is never edited by hand.** Every save writes it
   again from the saved program, so a change made to it is lost: change the
-  code of a process instead.
+  code of a process instead. `debasher_build` given the home directory or
+  its `program.yaml`, or run in the home directory with no argument, writes
+  it again too: that is how a program kept in a repository as its
+  `program.yaml` and process files is built, and how the script follows a
+  change made to `program.yaml` by hand.
 - **Programs described in Python.** A home directory that holds `<name>.py`
   beside `<name>.sh` was written by `debasher_build` from that file, a
   description of the Python SDK: the processes, their options and their
@@ -113,9 +119,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   option list of its task: read a value with
   `local x=$(read_opt_value_from_func_args "-label" "$@")`, a flag with
   `read_flag_from_func_args "-label" "$@"`, use `local` variables and
-  `return 0` on success. In another language, a whole program run by its
-  interpreter, which gets the options as command-line arguments, exits 0 on
-  success and has no line that is `EOF` alone. Code still holding the marker
+  `return 0` on success. In another language, a whole program, the process
+  file that `program.yaml` names, which the engine runs with its interpreter
+  (`python3 <file>`) and the options as command-line arguments; it exits 0
+  on success and may import a module beside it in the home directory. Code
+  still holding the marker
   `# ADD YOUR CODE HERE` of a template counts as not written. An output option
   holds the path (file or FIFO) to write to; standard output goes to a task
   file that no other process reads. `get_code_prompt` gives the exact rules

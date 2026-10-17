@@ -32,7 +32,7 @@ export function buildCodePrompt(
       "",
       "DeBasher runs programs made of processes, each of which receives its options from the engine; the options of two processes are connected when one reads what the other writes. Write the code of the process described below.",
     ],
-    ["## How the engine runs the code", "", ...languageRules(process.language, process.name)],
+    ["## How the engine runs the code", "", ...languageRules(process.language, process.name, process.files?.code)],
     ["## The program", "", `- Name: \`${program.name}\``, ...describedAs(program.description)],
     processSection(process, language),
     optionsSection(program, process),

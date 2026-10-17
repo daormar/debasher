@@ -1199,8 +1199,11 @@ back with the same behavior, but written the way script generation writes it:
 the option definition functions of a recognized mode lose their comments and
 their layout, while the functions kept in `manual` mode, the code and the
 methods keep their verbatim source. Code in another language that the module
-held in a heredoc variable comes back in a heredoc function. Some things a
-module can say have no place in the model and are lost: the explicit dependency
+held in a heredoc comes back as a process file that the module runs as it is
+(see "The process files"), and import gives it back as a script file, an
+external alias of that file, which the round trip takes for the same process.
+Some things a module can say have no place in the model and are lost: the
+explicit dependency
 types of `_define_opt_deps`, which the module documentation shows and import
 does not keep; the program type of `_program_type`; any code of the module after
 its first function that belongs to no process or sequential process, unless it
@@ -1213,8 +1216,9 @@ option channel and kind of connection, generates and imports them, and
 compares the result with the program, leaving out what lives only in the
 program metadata. From a module to the model and back, it imports every
 module of `data/programs/`, generates it and imports it again, and requires
-the same model both times: import is a fixed point of the round trip, so
-nothing is lost, added or changed by going through it once more.
+the same model both times, a process of another language taken as the module
+writes it: import is a fixed point of the round trip, so nothing is lost,
+added or changed by going through it once more.
 
 # Persistence and the program's directories
 
@@ -1431,10 +1435,7 @@ the backend refuses to save the change (see "The home directory").
 
 # The artifact: the topology file and the process files
 
-*Built, but for three parts, which say so where they are described: script
-generation still embeds the process file of another language,
-`debasher_build` does not yet take a home directory, and the JSON Schema is
-not yet installed and published.*
+*Built.*
 
 The program metadata, the saved form of before the artifact, fuses two
 things into one JSON file: the
@@ -1646,20 +1647,23 @@ names a process file that the editor owns: it writes the file from the code of
 the process on every save, and shows it in the code box. `script` names a
 script file, which the user owns and the module runs as it is, the external
 alias of the engine (`AdditionalSpecs.externalAlias`): the editor shows a copy
-and never writes it, as it does today for an imported external alias, and the
+and never writes it, as it does for an imported external alias, and the
 file may be a Bash script, which a process file in Bash, a function, cannot
 be; its path follows the rule of a process file. How the
 module gets the code is not the artifact's to say: script generation decides
 by the language. A Bash function is embedded in the module, since it relies on
 the library of the engine (`read_opt_value_from_func_args` and the rest),
 which a script run on its own would not have. A process file of another
-language is referred to as an external alias and run as it is (not built yet:
-script generation still embeds it as a heredoc function), which at run
-time is what the heredoc function of today does (the interpreter given the
-code and `"$@"`, against the interpreter given the file and `"$@"`), and lets
-the file import a module beside it; for such a file, `code` and `script`
-differ only in who writes it. The module therefore embeds no code in another
-language. Running a Bash process as a script too, for uniformity, is a matter
+language is referred to as an external alias and run as it is
+(`with_code_files_referenced` in `script_generation.py`), which at run
+time is what a heredoc function does (the interpreter given the code and
+`"$@"`, against the interpreter given the file and `"$@"`), and lets the
+file import a module beside it; for such a file, `code` and `script` differ
+only in who writes it. The module therefore embeds no code in another
+language but that of a node of a resident program, which keeps its heredoc:
+the launch record compares the generated script, which has to hold the code
+of the node (see "The directories of a resident program"). Running a Bash
+process as a script too, for uniformity, is a matter
 of the process contract (see "Future work").
 
 The generated script, `<name>.sh`, is still written into the home directory
@@ -1711,11 +1715,13 @@ The topology file has a model of its own, Pydantic as the program model is,
 with no ids and with the connections on the inputs, which refuses an unknown
 key, so that a misspelt key is an error and not a silently ignored one; the
 backend converts between it and the program model in both directions. Its JSON
-Schema is exported from it (`topology.json_schema`), and the first line of a
-topology file written by the backend names where it is published, for the
-editors that validate against a schema (writing it with `make`, installing it
-and publishing it with the documentation: not built yet). The frontend defines
-nothing of it: the program model stays the one form it edits and receives.
+Schema is exported from it (`topology.json_schema`, printed by
+`debasher_build --schema`), published with the documentation
+(`rtdocs/source/_static/schema/program-<version>.json`, a copy that
+`test/api/test_topology.py` keeps equal to the model's), and named on the first
+line of every topology file written by the backend, for the editors that
+validate against a schema. The frontend defines nothing of it: the program
+model stays the one form it edits and receives.
 
 `schema_version` is an integer. A reader reads every version up to its own,
 migrating an older one in memory, and refuses a newer one with a message that
@@ -1760,9 +1766,13 @@ but the engine:
   artifact: given the Python file of the SDK that describes a program (a
   description, in `doc/design_doc_sdk.md`) it writes the artifact and then
   the script; given a topology file, a home directory, or nothing in a home
-  directory, it writes the script (not built yet), which makes the artifact
-  usable without the editor, in a repository and in a pipeline. What script
-  generation refuses it refuses, with the same message.
+  directory, it loads the program saved there and saves it back as it is,
+  which writes the script and leaves the artifact as it was (a topology file
+  not in the form the backend writes is written again in that form, see
+  "Comments in the topology file" in "Future work"), so that the
+  artifact is usable without the editor, in a repository and in a pipeline,
+  and a program deleted down to its artifact is built again identically.
+  What script generation refuses it refuses, with the same message.
 
 # Execution and observation
 
@@ -5352,11 +5362,6 @@ address of the WebSocket and the answers of the request in
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").
-- **The rest of the artifact.** The parts of "The artifact: the topology
-  file and the process files" that are not built: script generation referring
-  to a process file of another language as an external alias instead of
-  embedding it, `debasher_build` given a home directory, and the JSON Schema
-  written by `make`, installed and published.
 - **Comments in the topology file.** Writing the topology file with a library
   that keeps the comments and the order of what the editor did not change
   (ruamel.yaml in its round-trip mode), so that a comment written by hand

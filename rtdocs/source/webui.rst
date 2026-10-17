@@ -75,7 +75,10 @@ A program built with the web interface uses two directories:
 * Its **home directory**, where the web interface saves it: the
   topology file ``program.yaml``, with the processes, their options,
   their connections and their specifications, readable and reviewable
-  as it is; one file per process with its code, in its own language,
+  as it is (its first line names the JSON Schema of the file, published
+  with this documentation, which an editor with YAML support uses to
+  check and complete it; ``debasher_build --schema`` prints it); one
+  file per process with its code, in its own language,
   which the topology file names (``count.sh`` for a Bash process
   ``count``, ``dispatch.py`` for one in Python, ``worker_tasks.sh`` for
   the code that shapes the tasks of an array or a generator,
@@ -84,7 +87,10 @@ A program built with the web interface uses two directories:
   and edits as any user file (a change to one is a change to the
   program); the generated script, ``<name>.sh``, a DeBasher module like
   any other, which ``debasher_exec`` and the rest of the tools can use
-  without the web interface; the files that the program needs, which
+  without the web interface, and which, for a process in a language
+  other than Bash, runs the file of the process as it is, by a path
+  relative to its own, so that the module and the files of the
+  processes go together; the files that the program needs, which
   the "Program files" panel manages; and, in a hidden ``.debasher``
   subdirectory, what the editor keeps for this machine, such as the
   output directory, which is why a program copied or moved elsewhere,
@@ -111,7 +117,11 @@ few seconds: with nothing unsaved, it loads the program again on its
 own, positions on the canvas included; with unsaved changes, a banner
 under the toolbar offers to load it, losing them, or to save yours over
 it, losing what was written. Until you choose, saving is refused, so
-that nobody's work is overwritten without your knowing.
+that nobody's work is overwritten without your knowing. Outside the
+web interface, ``debasher_build`` given the home directory (or its
+``program.yaml``) writes the module again from what is saved there
+(see the :ref:`tools` Section), which is how a program kept in a
+repository as its ``program.yaml`` and process files is built.
 
 The Home Screen
 ---------------

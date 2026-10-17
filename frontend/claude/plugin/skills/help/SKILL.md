@@ -66,7 +66,9 @@ the web UI shows them.
   documentation, https://debasher.readthedocs.io/en/latest/, rather than
   guessing; the page on the web UI is
   https://debasher.readthedocs.io/en/latest/webui.html, and the one on
-  describing a program in Python with the SDK (`debasher_build`) is
+  describing a program in Python with the SDK (`debasher_build`, which,
+  given the home directory, also writes the generated script of any saved
+  program again) is
   https://debasher.readthedocs.io/en/latest/implem_python.html.
 - `validate_program` checks the program as the Run menu does, but it saves
   the program and runs part of its code: offer it rather than run it unasked.

@@ -366,21 +366,25 @@ process as its command line arguments, so the code of the process is:
    :alt: The code editor with the Python code of the process
 
 Nothing else changes: the option, the saving (which now writes the code
-in ``hello_world.py``), the run and the output
-are the same, and so is the module that the editor writes, except that
-it now carries the Python program inside a function of the module,
-which the engine hands to the interpreter:
+in ``hello_world.py``), the run and the output are the same, and so is
+the module that the editor writes, except that it no longer holds the
+code of the process: it runs ``hello_world.py`` as it is, through the
+external alias of the :ref:`implem_bash` Section, with a path relative
+to its own directory, so that the module and the files of the processes
+go together:
 
 .. literalinclude:: ../../data/webui_programs/webui_hello_world_py/webui_hello_world_py.sh
    :language: bash
-   :start-at: hello_world_heredoc_py()
+   :start-at: webui_hello_world_py_program()
    :end-at: }
 
 The module stays a Bash file whatever the processes are written in:
 Bash is the glue that holds a program together and that any Unix
 machine runs, and the processes are the programs of their authors.
 This version is shipped as ``webui_hello_world_py``, and its
-hand-written counterpart is :doc:`hello_world_py`. The same program
+hand-written counterpart is :doc:`hello_world_ext_alias`
+(:doc:`hello_world_py` writes the same process with its code inside the
+module, a form the engine also accepts). The same program
 described in Python with the SDK opens the :ref:`implem_python`
 Section.
 
