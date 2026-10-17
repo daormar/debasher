@@ -54,13 +54,17 @@ entries below that refer to them.
   processes, their options, their connections and their specifications,
   which script generation turns into a module. The SDK builds one and
   never reads one.
+- **artifact**: as in the design of the web UI: the saved form of a program,
+  the topology file `program.yaml` and the files it names, in its home
+  directory (see "The artifact: the topology file and the process files"
+  in `doc/design_doc_webui.md`).
 - **program metadata**: as in the design of the web UI: the program model
-  saved as JSON in `.debasher/program.json` under the home directory of
-  the program.
+  saved as JSON in `.debasher/program.json`, the saved form of before the
+  artifact.
 - **home directory**: as in the design of the web UI: the directory where
-  a program lives, with its program metadata, its generated module and
-  its user files. The SDK writes a program into one, by default the
-  directory of the description.
+  a program lives, with its artifact, its generated module and its user
+  files. The SDK writes a program into one, by default the directory of
+  the description.
 - **module**: as in the design of the engine: the Bash file with the
   processes as suffixed functions and the program as its `_program`
   method. The SDK never writes one itself: script generation writes it
@@ -194,7 +198,7 @@ ways, which the process may not combine:
   (`.sh` Bash, `.py` Python, `.pl` Perl, `.r` or `.R` R, `.groovy`
   Groovy; `language=` says it when the extension does not). The file is
   read when the program is written and its text goes into the program
-  metadata and into the module, as the text of the code box of the
+  model and into the module, as the text of the code box of the
   editor does, without the newlines that end it (see "From the
   description to the program model"): a Bash function named as the
   process, with its helper functions, written as it is; the script of
@@ -202,7 +206,7 @@ ways, which the process may not combine:
   the interpreter of the language.
 - `script=`, a script: a path to a file that the module runs as it is,
   the external alias of the engine, with the interpreter that the engine
-  chooses by its extension. The program metadata keeps a copy of its
+  chooses by its extension. The program model keeps a copy of its
   text, without its final newline, for the editor to show, as import
   keeps it for an imported external alias, and the module refers to the
   file by the path as it was given, or by its name alone when the path
@@ -326,7 +330,7 @@ a process with the specifications of its use, as `add_debasher_process`
 does in the `_program` method, and returns it. A process added twice, or a
 process with the name of one already added, is refused. The order of the
 processes is the order they are added in, which is the order of the
-functions in the module and of the processes in the program metadata.
+functions in the module and of the processes in the topology file.
 
 A program does not declare connections: they belong to the processes, as
 in a module, where the `_define_opts` method of a process names the
@@ -375,9 +379,11 @@ with these rules:
 - **Ids.** Every id (the program, each process, each option, each
   connection) is a UUID derived from the names (`uuid5` of the program
   name, the process name and the label), so that building the same
-  description twice gives the same program metadata, and a description
+  description twice gives the same artifact, and a description
   kept in a repository with its built program gives no spurious diff.
-  The editor draws its ids at random; nothing reads an id as a name.
+  The editor draws the id of a process it creates at random, and loading
+  assigns them from the names (see "The topology file" in
+  `doc/design_doc_webui.md`); nothing reads an id as a name.
 - **Code.** The process file or script of a process is read at this
   moment, and a file that cannot be read is refused. A process with
   neither has an empty code, which script generation leaves out, for a
@@ -436,15 +442,20 @@ and reported with its own message, the same as the editor shows.
 `Program.write(home_dir)` writes the program into a home directory as
 Save does in the editor: it builds the program model, calls
 `persistence.save` of the API, which generates the module and writes the
-program metadata and the module under the lock and with the revision that
-the design of the web UI describes (see "Revisions of the program
-metadata" there), copies the scripts, and returns the path of the module.
-It raises `DefinitionError`, the one error of the SDK, for what it or
-script generation refuses, and nothing is written then: the model is built
-and the scripts are checked before anything touches the directory, and
-`persistence.save` generates the module before it writes. The revision
-follows the rule of a save: a program written again unchanged keeps its
-revision, and a changed one takes the next.
+artifact and the module under the lock and with the digest that the
+design of the web UI describes (see "The digest of the artifact" there),
+copies the scripts, and returns the path of the module. It raises
+`DefinitionError`, the one error of the SDK, for what it or script
+generation refuses, and nothing is written then: the model is built and
+the scripts are checked before anything touches the directory, and
+`persistence.save` generates the module before it writes. The files of
+the artifact are written where the description had them, by the paths of
+the process files, the tasks files and the method files relative to the
+directory of the description (a path that climbs out of it, or an
+absolute one, gives the name of the file alone), each only when its
+content differs from the file there, so that a program written into the
+directory of the description leaves its files as they are, and a program
+written elsewhere gets a copy of each.
 
 The external alias of a process names its script as the path was
 given, when it is relative and stays below the directory of the
@@ -483,7 +494,7 @@ called: a description calls nothing, as a module calls nothing.
 - The program is written into the directory of the description unless
   `-o` names another: beside the description and the process files, which
   is the home directory as the editor keeps it, with the user files of
-  the program beside the program metadata.
+  the program beside the artifact.
 - The path of the module is printed, and an error of the SDK is printed
   with the prefix `debasher_build:` and exits with status 1.
 
@@ -505,10 +516,10 @@ streams through FIFOs to an array of workers whose tasks a tasks file
 shapes; and `sdk_running_sum`, a resident program with a node given as
 a file and a Supervisor. Each is the twin of a program saved under
 `data/webui_programs/`, which the tests check by writing the example as
-its twin and comparing the program metadata and the module (see
-"Guarantees"). `make installcheck` builds
-each example from its installed directory with `debasher_build` into a
-directory of its own and runs the program built as it runs the others,
+its twin and comparing the programs loaded from both and the module (see
+"Guarantees"). `make installcheck` builds each example from its installed
+directory with `debasher_build` into a directory of its own and runs the
+program built as it runs the others,
 or skips the three when the Python of `debasher_build` lacks the
 dependencies of the SDK, as it skips the checks of conda without conda.
 
@@ -575,17 +586,17 @@ the positions and `api.topology` for the ids derived from names.
 ## Guarantees
 
 - **What the editor saves.** A description written with the SDK gives the
-  program metadata that the editor would save for the same program, apart
-  from the ids, which the editor draws at random, and the revision and
-  home directory of the save, and the module that script generation
-  writes from it, byte for byte: the three examples of
+  program that the editor would save for the same program, apart from
+  the ids, the digest and home directory of the save and the names of the
+  files of the artifact, and the module that script generation writes
+  from it, byte for byte: the three examples of
   `data/sdk_programs/python/`, written as their twins, are compared in
   the tests with `data/webui_programs/webui_hello_world_py`,
   `data/webui_programs/webui_dynamic_fanout_fifos` and
   `data/webui_programs/webui_running_sum` (see "The examples").
 - **Deterministic.** Two builds of the same description give the same
-  program metadata: ids come from names, positions from the layout, and
-  nothing from the clock or from randomness.
+  artifact: ids come from names, positions from the layout, and nothing
+  from the clock or from randomness.
 - **Nothing runs.** Building a program runs no process and no engine
   tool but `debasher_get_proc_info`, which reads a module and runs
   nothing of it. The description is loaded as a Python module, so the
@@ -604,8 +615,8 @@ the positions and `api.topology` for the ids derived from names.
   from the editor, so that building never executes and the runner is the
   same whatever door the program came through.
 - **Reading a program.** The SDK builds a program model and never reads
-  one: the way from a module or from program metadata into the SDK does
-  not exist, and import stays what it is in the web UI.
+  one: the way from a module or from an artifact into the SDK does not
+  exist, and import stays what it is in the web UI.
 - **A second engine.** No option is resolved, no dependency inferred and
   no task defined in Python: what the engine does with the module it
   does for a program of the SDK as for any other.
@@ -649,22 +660,13 @@ the positions and `api.topology` for the ids derived from names.
 - **Processes as decorated functions.** A Python function in the
   description itself, whose source the build extracts to a process file,
   for a process too small for a file of its own.
-- **The topology file.** When the program is saved as the artifact that
-  the design of the web UI describes (see "The artifact: the topology file
-  and the process files" in `doc/design_doc_webui.md`), `write()` writes
-  `program.yaml` and names in it the process files, the node files, the
-  tasks files and the method files where they are, by their paths relative
-  to it, instead of embedding their text; it copies them only when the
-  program is written into another directory (`-o`), as it copies a script
-  today. The API does not change: `code=` and `script=` give the same thing
-  then, a file that the topology file names and that script generation
-  embeds or refers to by its language, so `script=` becomes another name
-  of `code=`. The topology file holds no ids and nothing of the machine, so
-  written twice from the same description it is the same file, and the
-  twins are compared by their topology files and their process files
-  instead of by their program metadata. `debasher_build`, the regeneration
-  tool of that design, given a topology file, a home directory, or nothing
-  in one, writes the module from the artifact; given a description it
-  writes the artifact and then the module, as it does today in one go. A
-  tasks file in Python, when dynamic options as Python functions exist, is
-  named by `tasks` as a Bash one is, its extension saying which.
+- **The rest of the artifact.** Once script generation refers to a process
+  file of another language as an external alias (see "The process files"
+  in `doc/design_doc_webui.md`), `code=` and `script=` give the same thing
+  for such a file, and `script=` becomes another name of `code=`.
+  `debasher_build`, the regeneration tool of that design, given a topology
+  file, a home directory, or nothing in one, will write the module from the
+  artifact; given a description it writes the artifact and then the module,
+  as it does today in one go. A tasks file in Python, when dynamic options
+  as Python functions exist, is named by `tasks` as a Bash one is, its
+  extension saying which.

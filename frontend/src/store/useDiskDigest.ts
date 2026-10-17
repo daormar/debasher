@@ -2,14 +2,14 @@ import { useState } from "react";
 import type { RefObject } from "react";
 
 import type { Program } from "../models/program";
-import { hasUnsavedChanges, onDiskRevision } from "../models/externalChanges";
-import { getProgramRevision } from "../storage/programStorage";
+import { hasUnsavedChanges, onDiskDigest } from "../models/externalChanges";
+import { getProgramDigest } from "../storage/programStorage";
 import { usePolling } from "../utils/usePolling";
 
-export const DISK_REVISION_POLL_INTERVAL_MS = 3000;
+export const DISK_DIGEST_POLL_INTERVAL_MS = 3000;
 
-// The requests of the tab that write the program metadata: how many are in
-// flight, and how many have been answered. A revision read while one was in
+// The requests of the tab that write the program: how many are in
+// flight, and how many have been answered. A digest read while one was in
 // flight, or before one was answered, may be the tab's own, not yet taken.
 export interface ProgramWrites {
   inFlight: number;
@@ -20,7 +20,7 @@ interface Options {
   homeDir: string;
   // The latest program, and the program as it was last loaded or saved,
   // both ahead of the render: whether the program holds unsaved changes is
-  // decided from them when a revision is read, never from a render before.
+  // decided from them when a digest is read, never from a render before.
   programRef: RefObject<Program>;
   savedProgramRef: RefObject<Program>;
   writesRef: RefObject<ProgramWrites>;
@@ -30,18 +30,18 @@ interface Options {
 }
 
 /**
- * Follows the revision of the program metadata in the home directory, which
+ * Follows the digest of the artifact in the home directory, which
  * another tab or an agent through the MCP server may save: polled while the
- * page is visible, every DISK_REVISION_POLL_INTERVAL_MS. A tab with nothing
+ * page is visible, every DISK_DIGEST_POLL_INTERVAL_MS. A tab with nothing
  * unsaved loads the program again on its own; a tab with unsaved changes gets
- * `externalRevision`, the revision on disk, for the user to choose between
+ * `externalDigest`, the digest on disk, for the user to choose between
  * loading it and saving the tab over it. `askAbout` raises the same question
- * when a write of the tab finds the revision first, refused for it.
+ * when a write of the tab finds the digest first, refused for it.
  */
-export function useDiskRevision({ homeDir, programRef, savedProgramRef, writesRef, reloadFromDisk }: Options) {
+export function useDiskDigest({ homeDir, programRef, savedProgramRef, writesRef, reloadFromDisk }: Options) {
 
-  const [externalRevision, setExternalRevision] =
-    useState<number | null>(null);
+  const [externalDigest, setExternalDigest] =
+    useState<string | null>(null);
 
   usePolling(async isCancelled => {
     const writes = writesRef.current;
@@ -49,25 +49,25 @@ export function useDiskRevision({ homeDir, programRef, savedProgramRef, writesRe
       return;
     }
     const answered = writes.answered;
-    const diskRevision = await getProgramRevision(homeDir);
+    const diskDigest = await getProgramDigest(homeDir);
     if (isCancelled() || writes.inFlight > 0 || writes.answered !== answered) {
       return;
     }
-    const action = onDiskRevision({
-      tabRevision: programRef.current.revision ?? 0,
-      diskRevision,
+    const action = onDiskDigest({
+      tabDigest: programRef.current.digest ?? "",
+      diskDigest,
       unsavedChanges: hasUnsavedChanges(programRef.current, savedProgramRef.current),
     });
     if (action === "clear") {
-      setExternalRevision(null);
+      setExternalDigest(null);
     } else if (action === "ask") {
-      setExternalRevision(diskRevision);
+      setExternalDigest(diskDigest);
     } else if (action === "reload") {
       await reloadFromDisk();
-      setExternalRevision(null);
+      setExternalDigest(null);
     }
-  }, { intervalMs: DISK_REVISION_POLL_INTERVAL_MS, enabled: Boolean(homeDir), resetKey: homeDir });
+  }, { intervalMs: DISK_DIGEST_POLL_INTERVAL_MS, enabled: Boolean(homeDir), resetKey: homeDir });
 
-  return { externalRevision, askAbout: setExternalRevision };
+  return { externalDigest, askAbout: setExternalDigest };
 
 }

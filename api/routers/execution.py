@@ -178,18 +178,18 @@ def _program_option_args(program: Program) -> list[str]:
     return args
 
 
-def _run_debasher_exec(program: Program, mode_flag: str) -> tuple[str, int]:
+def _run_debasher_exec(program: Program, mode_flag: str) -> tuple[str, str]:
     """
     Save the program and run debasher_exec with `mode_flag` on it, waiting
-    for its end. Returns what it printed and the revision of the program
-    metadata just written.
+    for its end. Returns what it printed and the digest of the artifact
+    just written.
     """
     tool, saved = _prepare_exec(program)
     command = _debasher_exec_command(program, tool, saved.script_path, mode_flag)
 
     result = subprocess.run(command, env=_debasher_env(program), capture_output=True, text=True)
 
-    return result.stdout + result.stderr, saved.revision
+    return result.stdout + result.stderr, saved.digest
 
 
 def _run_debasher_dir_tool(program: Program, tool_name: str, outdir: str | None = None) -> tuple[str, int]:
@@ -346,9 +346,9 @@ class RunProgramResponse(BaseModel):
     # printed, capped at MAX_INSPECT_LINES lines.
     exitCode: int | None = None
     output: str | None = None
-    # The revision of the program metadata that the launch wrote, when it
-    # got as far as saving the program (see persistence.save).
-    revision: int | None = None
+    # The digest of the artifact that the launch wrote, when it got as far
+    # as saving the program (see persistence.save).
+    digest: str | None = None
 
 
 _RUN_LOG_NAME = ".debasher_webui_run.log"
@@ -499,7 +499,7 @@ def run_program(program: Program, resumeChangedProgram: bool = False) -> RunProg
 
     tool, saved = _prepare_exec(program)
     response = _launch(program, tool, saved.script_path)
-    return response.model_copy(update={"revision": saved.revision})
+    return response.model_copy(update={"digest": saved.digest})
 
 
 def _launch(program: Program, tool: Path, script_path: Path) -> RunProgramResponse:
@@ -507,7 +507,7 @@ def _launch(program: Program, tool: Path, script_path: Path) -> RunProgramRespon
     Launch the program saved as `script_path` with `tool`: a resident
     program, or one run by Slurm, is waited for; a general program run by
     the built-in scheduler is validated first and then started detached.
-    The response has no revision yet: run_program adds it.
+    The response has no digest yet: run_program adds it.
     """
     # No --wait: with the built-in scheduler it changes nothing, and with
     # Slurm it would keep debasher_exec alive for the whole run, only to wait.
@@ -538,8 +538,8 @@ def _launch(program: Program, tool: Path, script_path: Path) -> RunProgramRespon
 
 class ValidateProgramResponse(BaseModel):
     output: str
-    # The revision of the program metadata written before validating.
-    revision: int
+    # The digest of the artifact written before validating.
+    digest: str
 
 
 @router.post("/validate", response_model=ValidateProgramResponse)
@@ -551,8 +551,8 @@ def validate_program(program: Program) -> ValidateProgramResponse:
     since it saves the program first.
     """
     run_guard.refuse_while_running(program, "validate the program", program.homeDir)
-    output, revision = _run_debasher_exec(program, "--validate")
-    return ValidateProgramResponse(output=output, revision=revision)
+    output, digest = _run_debasher_exec(program, "--validate")
+    return ValidateProgramResponse(output=output, digest=digest)
 
 
 # How long /run-tests waits for the test runner: business tests are meant
@@ -567,8 +567,8 @@ _TEST_OUTCOMES: dict[int, TestOutcome] = {0: "passed", 1: "failed", 77: "noTests
 class RunTestsResponse(BaseModel):
     outcome: TestOutcome
     output: str
-    # The revision of the program metadata written before running the tests.
-    revision: int
+    # The digest of the artifact written before running the tests.
+    digest: str
 
 
 @router.post("/run-tests", response_model=RunTestsResponse)
@@ -597,7 +597,7 @@ def run_tests(program: Program) -> RunTestsResponse:
         output = timed_out.output
         outcome = "timedOut"
 
-    return RunTestsResponse(outcome=outcome, output=_cap_tail_lines(output), revision=saved.revision)
+    return RunTestsResponse(outcome=outcome, output=_cap_tail_lines(output), digest=saved.digest)
 
 
 def _environment_flags(program: Program) -> list[str]:
@@ -1166,8 +1166,8 @@ def inspect_path(request: InspectPathRequest) -> InspectPathResponse:
 
 class CheckProgramOptionsResponse(BaseModel):
     output: str
-    # The revision of the program metadata written before checking.
-    revision: int
+    # The digest of the artifact written before checking.
+    digest: str
 
 
 @router.post("/check-program-options", response_model=CheckProgramOptionsResponse)
@@ -1178,8 +1178,8 @@ def check_program_options(program: Program) -> CheckProgramOptionsResponse:
     first.
     """
     run_guard.refuse_while_running(program, "check the program options", program.homeDir)
-    output, revision = _run_debasher_exec(program, "--check-proc-opts")
-    return CheckProgramOptionsResponse(output=output, revision=revision)
+    output, digest = _run_debasher_exec(program, "--check-proc-opts")
+    return CheckProgramOptionsResponse(output=output, digest=digest)
 
 
 class StopProgramResponse(BaseModel):

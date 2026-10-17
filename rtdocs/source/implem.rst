@@ -9,7 +9,7 @@ also be written without the editor, in two ways. As a Bash module, the
 file that the engine runs as it is: processes as Bash functions with
 their options, and a program function that adds them. Or described in
 Python with the SDK, as processes with their options and a program that
-adds them, which a tool turns into the same program metadata and the
+adds them, which a tool turns into the same saved program and the
 same module that the editor saves, so that the program opens in the
 editor and runs with the same tools. The first way needs no Python; the
 second keeps Bash to the code of the processes written in it and to the

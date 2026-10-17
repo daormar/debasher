@@ -176,7 +176,7 @@ def _hold_validation_lock(output_dir: str):
 
 def test_a_save_and_a_reset_are_refused_while_a_debasher_exec_validates_the_program(tmp_path, running_in):
     program = _program(tmp_path)
-    program = program.model_copy(update={"revision": _save(program).revision})
+    program = program.model_copy(update={"digest": _save(program).digest})
     script = Path(program.homeDir) / "guarded.sh"
     before = script.read_text()
 

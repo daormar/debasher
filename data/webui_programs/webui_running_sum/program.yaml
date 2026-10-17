@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_running_sum
+type: resident
+description: >-
+  Example built with the web UI: a resident program whose node keeps the running
+  sum of the numbers written into its external input, and writes each new sum out.
+processes:
+  Accumulate:
+    description: >-
+      Keeps the running sum of the numbers it receives, and sends each new sum out.
+    code: Accumulate.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    initiator: true
+    position: {x: 120, y: 260}
+    options:
+      -numbers:
+        type: string
+        description: numbers written from outside the program, one per message
+        value: numbers
+        channel: fifo
+        fifo_tag: external
+      -outsum:
+        type: string
+        description: the running sum after each number, read outside the program
+        value: sum
+        channel: fifo
+  Sup:
+    description: Watches Accumulate and relaunches it if it goes down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 120, y: 60}

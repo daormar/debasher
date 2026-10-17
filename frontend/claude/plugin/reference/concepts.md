@@ -21,35 +21,52 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   stream: long-lived, stateful Python nodes joined by FIFOs, possibly in
   cycles, always on one machine.
 - **Home directory and output directory**, which must differ. The home
-  directory holds the program metadata (`.debasher/program.json`, never
-  edited by hand: the tools, the editor and `debasher_build` write it), the
-  generated script `<name>.sh`, and the user files, such as `test/` or, for
-  a program described in Python, its description and the files of its
-  processes (see "Programs described in Python"). A run writes into the
-  output directory (`outputDir`). `create_program` starts an empty program
-  in a new home directory, `import_module` makes one from an existing
-  DeBasher module (a `.sh` file), and `debasher_build`, outside the tools,
-  writes one from a Python description.
+  directory holds the saved program: the topology file `program.yaml`
+  (the processes, their options, their connections and their
+  specifications; the tools, the editor and `debasher_build` write it, and
+  a change made to it by hand is seen by the editor), one file per process
+  with its code, which the topology file names (`count.sh` for a Bash
+  process `count`, a function named as the process; `dispatch.py` for one
+  in Python, the whole script; `<process>_tasks.sh` for the code of the
+  options handler of an array or a generator; `<process>_<method>.sh` for
+  an additional method; a whole class file for a node; those are the names
+  chosen when a file is first written, `program.yaml` is what says which
+  file holds the code of a process, a renamed process keeps its file, and a
+  Bash process named as its program gets `<process>_process.sh`, since
+  `<name>.sh` is the generated script), the generated
+  script `<name>.sh`, the user files, such as `test/`, and, in
+  `.debasher/`, what the editor keeps for this machine. A program saved by
+  an older version holds `.debasher/program.json` instead, which the next
+  save replaces. A run writes into the output directory (`outputDir`).
+  `create_program` starts an empty program in a new home directory,
+  `import_module` makes one from an existing DeBasher module (a `.sh`
+  file), and `debasher_build`, outside the tools, writes one from a Python
+  description.
+- **The code of a process is a file.** The file that the topology file
+  names holds the code of the process, and nothing else does: change it
+  with `update_process`, or as a file with `write_program_file` or any
+  editor; the editor of the web UI sees the change and loads it, or asks
+  the user when the tab holds unsaved changes. The topology itself (the
+  options, the connections, the specifications) is changed with the tools,
+  which keep the editor in step, or by hand in `program.yaml`.
 - **The generated script is never edited by hand.** Every save writes it
-  again from the program metadata, so a change made to it is lost: change
-  the code of a process with `update_process` instead.
+  again from the saved program, so a change made to it is lost: change the
+  code of a process instead.
 - **Programs described in Python.** A home directory that holds `<name>.py`
   beside `<name>.sh` was written by `debasher_build` from that file, a
   description of the Python SDK: the processes, their options and their
-  connections are defined there, and the code of each process is in a file
-  of its own beside it (a Bash function named as the process, or the whole
-  script of another language, exactly what the code box of the editor
-  holds), as are the tasks files, the method files and the node files. They
-  are user files: `list_program_files` shows them and `write_program_file`
-  changes them. The way is one-directional: a save, from the tools or the
-  editor, changes the program metadata and the generated script only and
-  leaves the description and the process files as they were, and the next
-  `debasher_build <name>.py` writes the program again from them, so an edit
-  made with the tools is lost then. Change such a program in its description
-  and its process files, and have it built again with
-  `debasher_build <name>.py` in the home directory (no tool runs it; the
-  file is never run with `python` nor given to `debasher_exec`), then read it
-  again. How a description is written:
+  connections are defined there, and the code of each process is in the
+  file the description names, the same file that the topology file names,
+  so a change to the code of a process, with `update_process` or as a
+  file, is a change to what both read. The topology is another matter: a
+  save, from the tools or the editor, changes `program.yaml` and leaves the
+  description as it was, and the next `debasher_build <name>.py` writes
+  `program.yaml` again from the description, so a change to the options,
+  the connections or the specifications made with the tools is lost then.
+  Change the topology of such a program in its description, and have it
+  built again with `debasher_build <name>.py` in the home directory (no
+  tool runs it; the file is never run with `python` nor given to
+  `debasher_exec`), then read it again. How a description is written:
   https://debasher.readthedocs.io/en/latest/implem_python.html.
 - **Preamble.** Bash code at the top of the generated script, mostly
   `load_debasher_module "<module>"` lines, which bring in the processes that
@@ -354,7 +371,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `optionsHandler`, ...) inside `changes`, as `updateProcess` does; only
   `name`, `nodeKind`, `options` and `position` go beside it. A save is
   refused when the program changed on disk since it was read (the user may
-  be editing it in the web UI): read it again and work from what is there.
+  be editing it in the web UI, or a file of the program was edited): read it
+  again and work from what is there.
 - **The user and the editor.** The tools see the program as saved, never the
   unsaved changes of a tab of the editor: when the user names something that is
   not there, ask them to save it (Save in the toolbar). A tab without unsaved

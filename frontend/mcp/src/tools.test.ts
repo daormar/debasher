@@ -41,7 +41,7 @@ function program(changes: Partial<Program> = {}): Program {
     preamble: "",
     envVars: {},
     homeDir: HOME,
-    revision: 1,
+    digest: "1",
     outputDir: "/out/p",
     sourceDir: "",
     executionOptions: { scheduler: "BUILTIN" },
@@ -141,12 +141,12 @@ describe("the code prompt", () => {
 
 describe("editing a program", () => {
 
-  it("connects two processes and saves the program with a new revision", async () => {
+  it("connects two processes and saves the program with a new digest", async () => {
     const backend = fakeBackend([program()]);
 
     const answer = await text(backend, "connect", { home_dir: HOME, ...A_TO_B });
 
-    expect(answer).toContain("Saved (revision 2)");
+    expect(answer).toContain("Saved.");
     expect(answer).toContain("+ Connection a -outf -> b -in");
     const saved = savedProgram(backend);
     expect(saved.edges).toHaveLength(1);
@@ -302,7 +302,7 @@ describe("editing a program", () => {
     // Someone saves the program between the load and the save of the call.
     backend.loadProgram = async homeDir => {
       const loaded = await load(homeDir);
-      backend.saved.set(HOME, { ...loaded, description: "changed elsewhere", revision: 2 });
+      backend.saved.set(HOME, { ...loaded, description: "changed elsewhere", digest: "2" });
       return loaded;
     };
 
@@ -414,12 +414,12 @@ describe("creating and importing a program", () => {
   });
 
   it("imports a module into a new home directory", async () => {
-    const backend = fakeBackend([], { importProgram: async () => program({ homeDir: "", revision: 0 }) });
+    const backend = fakeBackend([], { importProgram: async () => program({ homeDir: "", digest: "0" }) });
 
     const answer = await text(backend, "import_module", { home_dir: "/progs/new", script_path: "/m.sh" });
 
     expect(answer).toContain("Home directory: /progs/new");
-    expect(backend.saved.get("/progs/new")?.revision).toBe(1);
+    expect(backend.saved.get("/progs/new")?.digest).toBe("1");
   });
 
   it("creates an empty program", async () => {
@@ -452,7 +452,7 @@ describe("running a program", () => {
     const backend = fakeBackend([program()], {
       fetchProgramStatus: async () => ({ state: "finished", output: "" }),
       getProcessStatuses: async () => readings.shift()!,
-      runProgram: async () => ({ started: true, exitCode: null, output: null, revision: 1 }),
+      runProgram: async () => ({ started: true, exitCode: null, output: null, digest: "1" }),
     });
 
     const answer = await text(backend, "run_program", { home_dir: HOME });
@@ -471,7 +471,7 @@ describe("running a program", () => {
         const statuses = readings.shift()!;
         return { statuses, runInProgress: statuses.a === "IN-PROGRESS", hasProgramState: false, output: "", notices: [] };
       },
-      runProgram: async () => ({ started: true, exitCode: null, output: null, revision: 1 }),
+      runProgram: async () => ({ started: true, exitCode: null, output: null, digest: "1" }),
     });
 
     expect(await text(backend, "run_program", { home_dir: HOME })).toContain("a: IN-PROGRESS");
@@ -588,6 +588,7 @@ describe("business tests and user files", () => {
       },
       getFileTree: async () => [
         { name: "p.sh", path: "p.sh", type: "file" as const, readonly: true, children: null },
+        { name: "program.yaml", path: "program.yaml", type: "file" as const, readonly: true, children: null },
         {
           name: "test", path: "test", type: "dir" as const, readonly: false,
           children: [{ name: "a.bats", path: "test/a.bats", type: "file" as const, readonly: false, children: null }],
@@ -602,7 +603,7 @@ describe("business tests and user files", () => {
     const backend = fakeBackend([program()], {
       runTests: async (sent: Program) => {
         tested = sent;
-        return { outcome: "failed" as const, output: "not ok 1 a works\n", revision: 2 };
+        return { outcome: "failed" as const, output: "not ok 1 a works\n", digest: "2" };
       },
     });
 
@@ -657,7 +658,7 @@ describe("business tests and user files", () => {
     const { backend, files } = withFiles({ "test/a.bats": "@test x {}" });
 
     expect(await text(backend, "list_program_files", { home_dir: HOME }))
-      .toBe("p.sh (generated script, read-only)\ntest/\n  a.bats");
+      .toBe("p.sh (generated script, read-only)\nprogram.yaml (topology file, read-only)\ntest/\n  a.bats");
     expect(await text(backend, "read_program_file", { home_dir: HOME, path: "test/a.bats" })).toBe("@test x {}");
     await expect(call(backend, "read_program_file", { home_dir: HOME, path: "nope" })).rejects.toThrow("does not exist");
 
@@ -722,7 +723,7 @@ describe("the MCP server", () => {
 
     const result = await client.callTool({ name: "connect", arguments: { home_dir: HOME, ...A_TO_B } });
     expect(result.isError).toBeFalsy();
-    expect((result.content as { text: string }[])[0].text).toContain("Saved (revision 2)");
+    expect((result.content as { text: string }[])[0].text).toContain("Saved.");
   });
 
   it("answers a refusal as an error with its reason", async () => {

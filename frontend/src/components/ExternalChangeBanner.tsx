@@ -9,13 +9,13 @@ import ChangedElsewhereBanner from "./ChangedElsewhereBanner";
 // the tab over it, losing what was saved.
 export default function ExternalChangeBanner() {
 
-  const { externalRevision, loadExternal, saveOverExternal } = useProgram();
+  const { externalDigest, loadExternal, saveOverExternal } = useProgram();
 
   const [error, setError] = useState<string | null>(null);
 
   const [pending, setPending] = useState(false);
 
-  if (externalRevision === null) {
+  if (externalDigest === null) {
     return null;
   }
 
@@ -33,7 +33,7 @@ export default function ExternalChangeBanner() {
 
   return (
     <ChangedElsewhereBanner
-      message="The program was saved from elsewhere (another tab or an agent) since this tab loaded it."
+      message="The program was written from elsewhere (another tab, an agent, or an edit of its files) since this tab loaded it."
       error={error}
       actions={[
         { label: "Load it (lose my changes)", onClick: () => act(loadExternal), disabled: pending },

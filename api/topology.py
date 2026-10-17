@@ -628,7 +628,7 @@ def _read_file(files: Mapping[str, str], path: str, what: str) -> str:
     that end it. A file that `files` does not hold is an error that names
     it."""
     if path not in files:
-        raise TopologyError(f"{what} names the file {path}, which is missing")
+        raise TopologyError(f"{what} names the file {path}, which is missing: put the file back, or name another in the topology file")
     return files[path].rstrip("\n")
 
 

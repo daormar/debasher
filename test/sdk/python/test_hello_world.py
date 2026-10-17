@@ -19,14 +19,16 @@ _EXAMPLE = "sdk_hello_world_py"
 
 def comparable(program) -> dict:
     """The program metadata without what differs between two saves of the
-    same program: the ids, the revision and the home directory. A count
+    same program: the ids, the digest and the home directory. A count
     source is named by its label instead of its id, and a connection by
     the names and labels of its ends."""
-    data = program.model_dump(exclude={"id", "revision", "homeDir"})
+    data = program.model_dump(exclude={"id", "digest", "homeDir"})
     process_names = {process.id: process.name for process in program.processes}
     option_labels = {option.id: option.label for process in program.processes for option in process.options}
     for process in data["processes"]:
         del process["id"]
+        # The paths of the files of a process are the description's own
+        del process["files"]
         for option in process["options"]:
             del option["id"]
             if option["countSourceOptionId"] is not None:

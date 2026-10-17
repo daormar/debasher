@@ -43,12 +43,12 @@ const NO_PROCESS_STATUSES: ProcessStatusesResult = {
 const PROCESS_STATUS_POLL_INTERVAL_MS = 5000;
 
 // How the store sends a request of the run that saves the program first
-// (launching, validating, checking its options): it handles a revision
-// conflict, which it rethrows, and takes the revision the request wrote.
+// (launching, validating, checking its options): it handles a digest
+// conflict, which it rethrows, and takes the digest the request wrote.
 // Sends `request` with `written`, the program it writes into the program
 // metadata: the request is given the program, rather than taking one of its
 // own, so that what is written is always what the tab takes as saved.
-export type WriteProgram = <T extends { revision: number | null }>(
+export type WriteProgram = <T extends { digest: string | null }>(
   written: Program,
   request: (written: Program) => Promise<T>
 ) => Promise<T>;

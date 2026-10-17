@@ -282,32 +282,34 @@ def test_write_leaves_the_metadata_and_the_module_and_returns_the_module(tmp_pat
     script = prg.write(home)
 
     assert script == home / "prg.sh"
-    assert (home / persistence.METADATA_DIRNAME / persistence.PROGRAM_FILENAME).is_file()
+    assert (home / persistence.TOPOLOGY_FILENAME).is_file()
     assert 'debasher::document_process "Works."' in script.read_text()
-    assert persistence.load_program(str(home)).revision == 1
+    assert persistence.load_program(str(home)).digest
 
 
-def test_writing_the_same_program_again_keeps_its_revision(tmp_path):
+def test_writing_the_same_program_again_keeps_its_digest(tmp_path):
     prg = Program("prg")
     prg.add(_bash_process(tmp_path, "work"))
     home = tmp_path / "home"
 
     prg.write(home)
+    digest = persistence.load_program(str(home)).digest
     prg.write(home)
 
-    assert persistence.load_program(str(home)).revision == 1
+    assert persistence.load_program(str(home)).digest == digest
 
 
-def test_writing_a_changed_program_increments_its_revision(tmp_path):
+def test_writing_a_changed_program_changes_its_digest(tmp_path):
     prg = Program("prg")
     work = prg.add(_bash_process(tmp_path, "work"))
     home = tmp_path / "home"
     prg.write(home)
+    digest = persistence.load_program(str(home)).digest
 
     work.cmdline_opt("-n", "int", "how many")
     prg.write(home)
 
-    assert persistence.load_program(str(home)).revision == 2
+    assert persistence.load_program(str(home)).digest != digest
 
 
 def test_what_script_generation_refuses_is_refused_with_its_message(tmp_path):

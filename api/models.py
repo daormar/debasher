@@ -308,12 +308,12 @@ class Program(BaseModel):
     # metadata saved without it is a general program.
     programType: Literal["general", "resident"] = "general"
     description: str = ""
-    # The revision of the program metadata that the program was loaded
-    # with, or saved as: every save that changes the program metadata
-    # increments it, and such a save into the program's own home directory
-    # is refused when the metadata there holds another (see
-    # persistence.save). Program metadata saved without it is at revision 0.
-    revision: int = 0
+    # The digest of the artifact that the program was loaded from, or last
+    # saved as (see persistence.artifact_digest): every request that writes
+    # the program names it, and a write into the program's own home
+    # directory is refused when the artifact there holds another (see
+    # persistence.save). Empty for a program not loaded from disk.
+    digest: str = ""
     preamble: str
     envVars: dict[str, str]
     homeDir: str = ""

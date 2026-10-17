@@ -42,8 +42,8 @@ backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, "The artifact: the topology file and the process files" the saved form
-that replaces the program metadata, designed and not built, and "Execution and
-observation" how it runs a program and follows it.
+that replaces the program metadata, and "Execution and observation" how it
+runs a program and follows it.
 "Frontend state and the canvas" describes the frontend's own state and the Help
 menu of the editor, and "Sequential processes in the web UI" describes how a
 program keeps the sequential processes of its module. "Guarantees and non-goals"
@@ -194,13 +194,14 @@ refer to it.
 ## Files and directories
 
 - **home directory**: the directory where the program lives (`Program.homeDir`):
-  its program metadata, its generated script and the user files.
+  its artifact, its generated script and the user files.
 - **output directory**: as defined in the design of the engine
   (`Program.outputDir`).
 - **program metadata**: the program model saved as JSON in
-  `.debasher/program.json` under the home directory: the saved form of today,
-  which the artifact replaces (see "The artifact: the topology file and the
-  process files").
+  `.debasher/program.json` under the home directory, with a save counter
+  (`revision`): the saved form of before the artifact, which loading still
+  reads and the next save replaces (see "The artifact: the topology file and
+  the process files").
 - **artifact**: the saved form of the program that replaces the program
   metadata: the topology file and the process files, what every door writes
   and what the generated script is built from.
@@ -223,17 +224,12 @@ refer to it.
   process, named under `methods`.
 - **schema version**: the integer `schema_version` of a topology file, the
   version of the schema it is written in, which a reader reads up to its own.
-- **digest**: a hash of the content of a file of the artifact, which loading
-  returns for every file it read and a write names, so that a write over a
-  file that changed since it was loaded is refused (see "Loading, saving and
-  the local state").
+- **digest**: a hash of the content of the topology file and of every file it
+  names, by path, which loading returns with the program and a write names, so
+  that a write over an artifact that changed since it was loaded is refused
+  (see "The digest of the artifact").
 - **local state**: what the editor keeps on this machine for a program and the
   artifact does not hold: the lock and the output directory, in `.debasher/`.
-- **revision**: a counter in the program metadata that a save which changes it
-  increments; a write into the program's own home directory that would change
-  the metadata is refused when the metadata there holds another revision than
-  the one the write names: the one the program was loaded with, or the one on
-  disk when the user saves over it (see "Revisions of the program metadata").
 - **file version**: the modification time and the size of a user file, which a
   write that changes the file changes; the editor of the program files panel
   saves a file only over the version it read (see "Reserved names and user
@@ -288,7 +284,7 @@ refer to it.
 - **store**: the state of the frontend in a tab (`ProgramContext`): the program
   being edited and what the tab last read of its run.
 - **unsaved changes**: how the program of a tab differs from the program as it
-  was last loaded or saved, its revision and home directory apart (see
+  was last loaded or saved, its digest and home directory apart (see
   "Screens and the store").
 - **edit**: one change of a program as plain data (`EditOp` in
   `models/programEdits.ts`), such as adding a process or connecting two
@@ -1234,20 +1230,27 @@ delete the program.
 
 ## The home directory
 
-The home directory holds the program metadata (`.debasher/program.json`, the
-whole program model as JSON), the generated script (`<name>.sh`) and the user
-files.
+The home directory holds the artifact of the program (the topology file
+`program.yaml` and the files it names, see "The artifact: the topology file and
+the process files"), the generated script (`<name>.sh`), the user files, and,
+under `.debasher/`, the local state of the editor. A home directory saved
+before the artifact holds the program metadata instead,
+`.debasher/program.json`, which loading still reads and the next save
+replaces.
 
 **Saving.** The user saves into a directory of their choice, which becomes the
 program's home directory. The backend generates the script first, so that a
 program that script generation refuses leaves the home directory as it was, then
-writes the program metadata, then the generated script, and then copies the file
-of each `ext_alias` given as a relative path from the program's `sourceDir` into
-the home directory, at the same relative path: the engine resolves such a path
-against the directory of the module that declares it, so without the copy a
-program imported and saved elsewhere would lose its aliased scripts. When the
-program has been renamed since the last save, the backend deletes the script
-with the old name before it writes the metadata, from which it reads that name.
+writes the files of the artifact (each only when its content changed), the
+topology file, the local state when the output directory changed, and the
+generated script, and copies the file of each `ext_alias` given as a relative
+path from the program's `sourceDir` into the home directory, at the same
+relative path: the engine resolves such a path against the directory of the
+module that declares it, so without the copy a program imported and saved
+elsewhere would lose its aliased scripts. When the program has been renamed
+since the last save, the backend deletes the script with the old name before it
+writes the topology file, from which it reads that name; the process files keep
+their names, since the topology file names them by path.
 
 A save is refused while there is a run in progress on the output directory. The
 engine reads the generated script again each time it starts a process, so
@@ -1264,32 +1267,33 @@ with the built-in scheduler before it launches: it reads the script and writes
 into the output directory, but `debasher_status` does not count it as a run in
 progress (see "Following a run"), so the frontend lets the save go and the
 backend refuses it. A save is also refused while there is a run in progress in
-the output directory named by the program metadata already saved in the home
-directory: a save that changes the output directory still writes the script that
-a run in the old one reads.
+the output directory named by the local state already saved in the home
+directory (or by the program metadata, for a program still saved as one): a
+save that changes the output directory still writes the script that a run in
+the old one reads.
 
 Running also saves. "Run program", "Validate program" and "Check program
 options" all save the program into the home directory, as a save does and with
-its revision (see "Revisions of the program metadata"), before calling
+its digest (see "The digest of the artifact"), before calling
 `debasher_exec` (see "Launching a run"), so that the engine always runs the
 program as it is in the editor. All three are refused while there is a run in
 progress, by the frontend, which disables them, and by the backend, with the
 same check as a save.
 
-**Loading.** Loading reads the program metadata of a directory and opens the
-program as it was saved, except for `homeDir`, which becomes the absolute path
-of the directory it is loaded from, whatever the metadata recorded. A home
-directory that was copied or moved is therefore saved and run where it now
-is. `outputDir` is kept as it was saved: a program loaded from a new place
-still names the output directory it had, which is not always what its user
-wants (see "Future work").
+**Loading.** Loading reads the artifact of a directory and opens the program
+as it was saved, with `homeDir` the absolute path of the directory it is loaded
+from, and `outputDir` what the local state of that directory holds, nothing
+when it has none. A home directory that was copied or moved is therefore
+saved and run where it now is, and has no output directory until the user sets
+one. The ids of the program come from the names (see "The topology file"), so
+two loads of the same program agree.
 
 **Programs shipped with DeBasher.** `data/webui_programs/` holds programs
 built with the web UI, installed under the package's data directory, one home
-directory each, with its program metadata and its generated script. They are
-loaded, never imported, and so keep everything the program model holds. None
-of them records an output directory or a source directory, since a path of
-the machine they were built on means nothing on another. An installed one is
+directory each, with its artifact and its generated script. They are loaded,
+never imported, and so keep everything the program model holds. None of them
+has a local state or records a source directory, since a path of the machine
+they were built on means nothing on another. An installed one is
 usually not writable, so the user saves it into a home directory of their
 own before changing it. A shipped program may run another one: the launcher node
 of `webui_batch_launcher` names `webui_batch_greet` by a path relative to its
@@ -1298,55 +1302,60 @@ resolves both where the two are installed, side by side, and for a user who
 saves them side by side too; a user who saves them apart edits that path.
 `test/api/test_webui_programs.py` checks that each of them loads from where it
 is and that its generated script is the one that script generation writes from
-its metadata today, and `make installcheck` runs the generated script of each: a
+its artifact today, and `make installcheck` runs the generated script of each: a
 general program to its end, and a resident one, which does not end on its own,
 launched, fed through its external input until its output read outside the
 program carries the expected message, and stopped in an orderly way, after which
 every node has to be finished.
 
-## Revisions of the program metadata
+## The digest of the artifact
 
-Two tabs, or a tab and another client of the backend, may edit the same
-program, and without a guard the last save would overwrite what another saved
-since its tab loaded the program. The program metadata therefore holds a
-**revision**, a counter that a save increments. Loading returns it, the store
-keeps it, and every request that writes the program metadata (saving, and the
-requests that save before they run, such as "Run program") carries it and,
-when it succeeds, answers with the revision it wrote.
+Two tabs, a tab and another client of the backend, or a tab and someone who
+edits the files of the artifact by hand or through git, may change the same
+program, and without a guard the last write would overwrite what another
+wrote since the tab loaded the program. The guard is the **digest** of the
+artifact: a hash of the content of the topology file and of every file it
+names, by path (`persistence.artifact_digest`), which loading computes over the
+files it read and returns with the program. The store keeps it, and every
+request that writes the program (saving, and the requests that save before they
+run, such as "Run program") carries it and, when it succeeds, answers with the
+digest it wrote. A program still saved as program metadata has the digest of
+that file.
 
-The backend refuses the write, with a conflict whose detail names the revision
-it holds, when the program goes into its own home directory, the metadata there
-holds another revision, and the write would change what the metadata holds apart
-from its revision and home directory. A write that changes nothing keeps the
-revision and is never refused, since it overwrites nobody's work. The store
-sends the program with the home directory it was loaded from, so the backend
-tells a save into it from a save into another directory, which replaces what is
-there, as a first save into a directory with no program metadata does. The
-backend makes the comparison and the writes under a lock on the program
-metadata, and replaces the metadata file whole, so that two writes arriving
-together cannot both pass the comparison (`persistence.save`).
+The backend refuses the write, with a conflict whose detail names the digest it
+holds, when the program goes into its own home directory, the artifact there
+holds another digest, and the write would change a file of the artifact or the
+local state. A write that changes nothing keeps the digest and is never refused,
+since it overwrites nobody's work. The store sends the program with the home
+directory it was loaded from, so the backend tells a save into it from a save
+into another directory, which replaces what is there, as a first save into a
+directory with no program does. The backend makes the comparison and the writes
+under a lock on the home directory, and replaces each file whole, so that two
+writes arriving together cannot both pass the comparison (`persistence.save`).
+A file of the artifact written by hand changes the digest as a save does, and
+a write that leaves the file as the editor loaded it is not a change.
 
 When a write is refused, the editor says that the program changed on disk since
 it was loaded, and shows a banner under the toolbar with two choices. "Load it
 (lose my changes)" replaces the program of the tab with the one on disk, and
 loses what was changed in the tab since it was loaded. "Save mine over it" saves
-the program of the tab naming the revision on disk, and loses what was saved
-there since the tab loaded it; if someone saved again meanwhile, that save is
-refused in turn, and the banner stays, now for the newer revision. Until the
-user chooses, the tab goes on as it is, and its writes into the home directory
-stay refused; a tab with no unsaved changes, which loses nothing, loads the
-program again at the next reading of the revision, as below. The revision is a
-guard against overwriting without knowing, not a merge.
+the program of the tab naming the digest on disk, and loses what was written
+there since the tab loaded it; if someone wrote again meanwhile, that save is
+refused in turn, and the banner stays, now for the newer digest. Until the user
+chooses, the tab goes on as it is, and its writes into the home directory stay
+refused; a tab with no unsaved changes, which loses nothing, loads the program
+again at the next reading of the digest, as below. The digest is a guard against
+overwriting without knowing, not a merge.
 
-A tab also learns of a revision saved elsewhere before it writes. While the page
-is visible and the program has a home directory, the editor reads the revision
-of the program metadata there every few seconds (`/revision`, which reads only
-the revision, polled by `store/useDiskRevision.ts`). When it is another than the
-one of the tab, a tab with no unsaved changes loads the program again on its
-own, since it loses nothing, and a tab with unsaved changes shows the same
-banner. Whether the tab holds unsaved changes is decided when the revision is
-read, from the latest program, not from the last render, so that an edit made
-meanwhile is never lost to a load that does not ask. A revision read while a
+A tab also learns of a digest written elsewhere before it writes. While the
+page is visible and the program has a home directory, the editor reads the
+digest of the artifact there every few seconds (`/digest`, which reads the files
+and builds no program, polled by `store/useDiskDigest.ts`). When it is another
+than the one of the tab, a tab with no unsaved changes loads the program again
+on its own, since it loses nothing, and a tab with unsaved changes shows the
+same banner. Whether the tab holds unsaved changes is decided when the digest
+is read, from the latest program, not from the last render, so that an edit
+made meanwhile is never lost to a load that does not ask. A digest read while a
 write of the tab is in flight, or read before such a write was answered, is set
 aside, since it may be that write's own, which the tab has not taken yet; and a
 reading never starts while the one before has not been answered. A program
@@ -1422,16 +1431,16 @@ the backend refuses to save the change (see "The home directory").
 
 # The artifact: the topology file and the process files
 
-*Designed; built so far: the model of the topology file, its reading and
-writing, and the conversion between it and the program model
-(`api/topology.py`). Until the rest is built, what the web UI saves is the
-program metadata of "The home directory", and that section describes the saved
-form of today.*
+*Built, but for three parts, which say so where they are described: script
+generation still embeds the process file of another language,
+`debasher_build` does not yet take a home directory, and the JSON Schema is
+not yet installed and published.*
 
-The program metadata of today fuses two things into one JSON file: the
+The program metadata, the saved form of before the artifact, fuses two
+things into one JSON file: the
 topology of the program (its processes, their options, their connections and
 their specifications) and the code of every process, embedded as strings, with
-the editor's own state beside them (ids, a revision, the directories of the
+the editor's own state beside them (ids, a save counter, the directories of the
 machine). A hand-written module fuses the same two things into one Bash file.
 The artifact stops fusing them: the program is saved as a **topology file**,
 `program.yaml` in the home directory, and one **process file** per process
@@ -1493,7 +1502,7 @@ option written as `-l: {type: int, description: Length, cmdline: true}` says
 all there is to say about it, and the file holds no default values. A command
 line option is mandatory unless it says `mandatory: false`.
 
-What the program metadata holds today and the topology file does not, and why:
+What the program metadata holds and the topology file does not, and why:
 
 - The ids of the program, the processes, the options and the edges: identity
   inside the model only. Loading assigns them from the names (`uuid5` of the
@@ -1506,10 +1515,11 @@ What the program metadata holds today and the topology file does not, and why:
 - The code of a process, of its options handler, of its additional methods and
   of a node: in the process files. The copy of the text of an external alias:
   in the script file, which the editor shows and does not write.
-- `revision`, `homeDir` and `outputDir`: state of the editor and of the
-  machine (see "Loading, saving and the local state"). `sourceDir`: import
-  writes the artifact into a home directory and copies the files there, so no
-  later save needs to know where the module came from.
+- The save counter (`revision`), `homeDir` and `outputDir`: state of the
+  editor and of the machine (see "Loading, saving and the local state").
+  `sourceDir`: import writes the artifact into a home directory and copies
+  the files there, so no later save needs to know where the module came
+  from.
 - `availableSharedDirs`: derived from the modules the preamble loads, and
   computed again when the editor needs it.
 
@@ -1621,8 +1631,8 @@ The tasks file (`tasks`) holds the code of the options handler as the editor
 keeps it, a Bash body: the code that builds the array of an `array` process,
 that prints the task count of a `generator` process, or the whole option
 definition function of a `manual` process. A method file holds the body of one
-additional method. Both are Bash bodies, not functions, as the program metadata
-keeps them today and as the SDK takes them.
+additional method. Both are Bash bodies, not functions, as the program model
+keeps them and as the SDK takes them.
 
 The paths are free: the SDK writes what the description gave, and a user may
 name a file as they like. What the editor and import choose when they create a
@@ -1643,7 +1653,8 @@ module gets the code is not the artifact's to say: script generation decides
 by the language. A Bash function is embedded in the module, since it relies on
 the library of the engine (`read_opt_value_from_func_args` and the rest),
 which a script run on its own would not have. A process file of another
-language is referred to as an external alias and run as it is, which at run
+language is referred to as an external alias and run as it is (not built yet:
+script generation still embeds it as a heredoc function), which at run
 time is what the heredoc function of today does (the interpreter given the
 code and `"$@"`, against the interpreter given the file and `"$@"`), and lets
 the file import a module beside it; for such a file, `code` and `script`
@@ -1661,11 +1672,12 @@ program can be deleted down to its artifact and built again identically.
 ## Loading, saving and the local state
 
 Loading reads the topology file and every file it names, and gives the editor
-the program model of today, with ids from the names. Saving writes the
-topology file, the process files whose content changed (a file whose content
-is what the editor loaded is not touched, so that its modification time and
-what git sees stay as they were) and the generated script, in that order after
-script generation has accepted the program. Running saves first.
+the program model, with ids from the names. Saving writes the process files
+whose content changed (a file whose content is what the editor loaded is not
+touched, so that its modification time and what git sees stay as they were),
+the topology file, the local state when the output directory changed, and the
+generated script, in that order after script generation has accepted the
+program. Running saves first.
 
 The process files are user files: the program files panel shows and edits
 them, and so does an agent through the MCP server or any editor of the
@@ -1673,30 +1685,22 @@ machine. A change to one of them is a change to the program. The topology file
 is shown read-only by the panel, since the canvas is its editor, and is
 changed through the MCP tools or by hand outside the web UI.
 
-The revision of the program metadata (see "Revisions of the program metadata")
-counts saves made through the backend, and a file that git, a person or an
-agent write is never counted. The artifact replaces it with the **digest** of
-the files: when the program is loaded, the backend returns the digest of the
-topology file and of every file it read, and the tab keeps them. A write of the
-program into its home directory names the digests of the files it loaded, and
-is refused with a conflict, the same conflict and the same banner as today,
-when a file on disk holds another digest, unless the write would leave every
-file as it is. The reading that the tab makes every few seconds reads the
-digests instead of the revision, so that a tab with no unsaved changes loads a
-program that changed on disk by any means, and a tab with unsaved changes
-shows the banner. The comparison and the writes happen under the lock of the
-home directory, as today. The rule of "Reserved names and user files", that
-the panel saves a file only over the version it read, stays as it is for the
-panel.
+The artifact is guarded by the digest of its files (see "The digest of the
+artifact") and not by a counter of saves, which would count saves made
+through the backend and never a file that git, a person or an agent wrote; a
+change made by any means is therefore seen: a tab with no unsaved changes
+loads the program again, and a tab with unsaved changes is asked. The rule of
+"Reserved names and user files", that the panel saves a file only over the
+version it read, stays as it is for the panel.
 
 `.debasher/` remains, for what belongs to the editor on this machine and not
 to the program: the lock, and `local.json`, which holds the output directory
 of the program. The output directory is a path of the machine, given to every
 run on its command line, which a program copied, moved or cloned cannot carry
-with it (the programs shipped with DeBasher leave it empty for that reason,
-and a moved program keeps pointing at the old one today): a program opened in
-a new place has no output directory until the user sets one, which `local.json`
-then keeps. The execution options and the environment variables stay in the
+with it (the programs shipped with DeBasher have none for that reason): a
+program opened in a new place has no output directory until the user sets
+one, which `local.json` then keeps. The execution options and the environment
+variables stay in the
 topology file: they say how the program is run and the SDK and import set
 them, and a value of them that fits another machine badly is changed, not
 broken.
@@ -1707,11 +1711,11 @@ The topology file has a model of its own, Pydantic as the program model is,
 with no ids and with the connections on the inputs, which refuses an unknown
 key, so that a misspelt key is an error and not a silently ignored one; the
 backend converts between it and the program model in both directions. Its JSON
-Schema, exported from it, is written by `make`, installed with the package,
-served by the backend and published with the documentation, and the first line
-of a topology file written by the backend names it for the editors that
-validate against a schema. The frontend defines nothing of it: the program
-model stays the one form it edits and receives.
+Schema is exported from it (`topology.json_schema`), and the first line of a
+topology file written by the backend names where it is published, for the
+editors that validate against a schema (writing it with `make`, installing it
+and publishing it with the documentation: not built yet). The frontend defines
+nothing of it: the program model stays the one form it edits and receives.
 
 `schema_version` is an integer. A reader reads every version up to its own,
 migrating an older one in memory, and refuses a newer one with a message that
@@ -1720,14 +1724,12 @@ goes; a key added with a default does not raise it, since a file without it
 reads the same under the old version and the new one, and a reader older than
 the key refuses the file as it refuses any unknown key.
 
-The program metadata of today is version 0 of the artifact. Loading reads it
-when the home directory has no topology file, as it does today, and the next
-save writes the artifact: the code of every process, options handler, method
-and node into its file under the default names, the copy of an external alias
-dropped since the file is there, the program metadata removed, so that a home
-directory never holds both forms. A save that would overwrite a user file
-that already exists under a default name is refused and says which. The
-programs of `data/webui_programs/` are kept as artifacts, and
+The program metadata is version 0 of the artifact. Loading reads it when the
+home directory has no topology file, and the next save writes the artifact:
+the code of every process, options handler, method and node into its file
+under the default names, the copy of an external alias dropped since the file
+is there, the program metadata removed, so that a home directory never holds
+both forms. The programs of `data/webui_programs/` are kept as artifacts, and
 `test/api/test_webui_programs.py` compares the generated script of each with
 the one built from its artifact.
 
@@ -1738,28 +1740,29 @@ but the engine:
 
 - The editor loads and saves as above.
 - The MCP server and the plugin operate on the program model through the
-  backend, as today, and nothing changes for them but what they say: an agent
-  edits a process file as a file, where today it goes through
-  `write_program_file` and the code box, and edits the topology through the
-  tools, which keep the canvas in step, or by hand, which the digest catches.
+  backend: an agent edits a process file as a file, or through
+  `update_process`, which writes the same file, and edits the topology
+  through the tools, which keep the canvas in step, or by hand, which the
+  digest catches.
 - The SDK writes `program.yaml` and refers to the process files, the tasks
   files and the method files where they are, instead of embedding their text,
   copying them only when it writes the program into another directory (see
-  "Future work" in `doc/design_doc_sdk.md`).
-- Import reads a module as today and saves the artifact into a new home
-  directory: the verbatim code of each process into its file, the code of a
-  recognized options handler into the tasks file, each method into its file,
-  the file of an external alias copied. Nothing is lost that is not lost today
-  (see "What the round trip preserves"); a process of another language held
-  in a heredoc comes back as a file that the module refers to, with the same
-  behavior and another shape of the module, and import stays a fixed point.
+  "Writing the program" in `doc/design_doc_sdk.md`).
+- Import reads a module and gives the editor the program model; the first
+  save writes the artifact: the verbatim code of each process into its file,
+  the code of a recognized options handler into the tasks file, each method
+  into its file, the file of an external alias copied. Nothing is lost that
+  import does not lose (see "What the round trip preserves"); a process of
+  another language held in a heredoc comes back as a file that the module
+  refers to, with the same behavior and another shape of the module, and
+  import stays a fixed point.
 - `debasher_build`, the tool of the SDK, regenerates the script from the
   artifact: given the Python file of the SDK that describes a program (a
   description, in `doc/design_doc_sdk.md`) it writes the artifact and then
   the script; given a topology file, a home directory, or nothing in a home
-  directory, it writes the script, which makes the artifact usable without the
-  editor, in a repository and in a pipeline. What script generation refuses it
-  refuses, with the same message.
+  directory, it writes the script (not built yet), which makes the artifact
+  usable without the editor, in a repository and in a pipeline. What script
+  generation refuses it refuses, with the same message.
 
 # Execution and observation
 
@@ -2051,7 +2054,7 @@ program" brings is checked before its edit is built (`mergeRefusal`).
 
 The store keeps no history, so there is no undo, but it keeps the program as
 it was last loaded or saved, and the program holds unsaved changes when it
-differs from it in anything but the revision and the home directory
+differs from it in anything but the digest and the home directory
 (`hasUnsavedChanges` in `models/externalChanges.ts`, which compares the two as
 the program metadata would hold them, whatever the order of the keys of an
 object). What a save keeps is the program it wrote, not the one the tab holds
@@ -2174,9 +2177,9 @@ mode, and the id, label and direction of each option, and for an input, where
 its value comes from when no connection can give it) or when the set of moved
 handles changes, keeping the positions that the list already has. Refreshing
 it on every change of the store would fight with the drag. After the program
-was loaded again from its home directory (see "Revisions of the program
-metadata"), the list takes the positions from the store instead, since they are
-those that someone else saved, a moved process included.
+was loaded again from its home directory (see "The digest of the artifact"),
+the list takes the positions from the store instead, since they are those
+that someone else saved, a moved process included.
 
 The rule that follows is that whatever a canvas node draws from its process
 must be part of the structural key; otherwise the canvas node keeps drawing an
@@ -2360,15 +2363,15 @@ gathered in "Guarantees and non-goals of a resident program".
   directory, and the output directory is never set to the home directory.
 - **No save over another's without knowing.** A save into a program's own home
   directory never overwrites what another tab or client saved there since the
-  program was loaded, unless the user, told so, chooses to (see "Revisions of
-  the program metadata").
+  program was loaded, unless the user, told so, chooses to (see "The digest of
+  the artifact").
 - **No write over another's file.** The editor of the program files panel never
   overwrites a file that someone else wrote since it read it, unless the user
   chooses to (see "Reserved names and user files").
-- **Unsaved changes are lost only when the user lets them go.** A revision saved
-  elsewhere is loaded on its own only into a tab with no unsaved changes, and
-  leaving the editor or closing its tab with unsaved changes asks first (see
-  "Revisions of the program metadata" and "Screens and the store").
+- **Unsaved changes are lost only when the user lets them go.** A program
+  written elsewhere is loaded on its own only into a tab with no unsaved
+  changes, and leaving the editor or closing its tab with unsaved changes asks
+  first (see "The digest of the artifact" and "Screens and the store").
 - **A program lives where it is loaded from.** Its home directory is the
   directory it was loaded from, even if it was copied or moved there (see
   "The home directory").
@@ -2470,10 +2473,10 @@ gathered in "Guarantees and non-goals of a resident program".
   protect").
 - **Several people on one program.** Two tabs on the same program or the same
   directories are not coordinated beyond two guards: a save over what another
-  saved since the program was loaded is refused (see "Revisions of the program
-  metadata"), and the guards based on the engine's own files (a run in progress)
-  see the other tab. A tab learns of a revision that another saved, and loads
-  it or asks, but nothing merges the changes of two tabs.
+  wrote since the program was loaded is refused (see "The digest of the
+  artifact"), and the guards based on the engine's own files (a run in
+  progress) see the other tab. A tab learns of a digest that another wrote,
+  and loads it or asks, but nothing merges the changes of two tabs.
 - **Keeping unsaved work.** There is no autosave and no undo: unsaved changes
   live only in the tab.
 - **Live updates.** The web UI learns what happens in a run by polling, every
@@ -3786,7 +3789,7 @@ an agent that writes a process can also write its tests.
 
 "Run tests", in the Run menu, runs the tests of the program in its home
 directory. Like "Validate program", it saves the program first, with its
-revision (see "Revisions of the program metadata"), so that the tests run the
+digest (see "The digest of the artifact"), so that the tests run the
 program as it is in the editor: a test reads the generated script, never the
 program model. The backend (`/run-tests`) then runs
 `debasher_test <home directory>` in a session of its own (`tool_sessions.py`),
@@ -4366,8 +4369,8 @@ first move towards an assistant in the web UI that helps to design and build a
 program, which would call the same MCP tools (see "Future work"). It relies on
 what the editor relies on too: the distinct option labels (see "Processes and
 options"), the guards of the backend against a run in progress (see "The home
-directory"), the revisions of the program metadata (see "Revisions of the
-program metadata"), the resolution of named edits (see "Programs, processes
+directory"), the digest of the artifact (see "The digest of the
+artifact"), the resolution of named edits (see "Programs, processes
 and options by name") and the placement of processes (see "From the store to
 the canvas").
 
@@ -4448,8 +4451,8 @@ Every MCP tool that edits a program applies its edits whole or not at all,
 with the actions that the store takes, and an answer in place of the dialogs
 (`editProgram` in `frontend/mcp/src/editing.ts`):
 
-1. Load the program from its home directory, with its revision (see
-   "Revisions of the program metadata"), and normalize it as the store does.
+1. Load the program from its home directory, with its digest (see
+   "The digest of the artifact"), and normalize it as the store does.
 2. Bring what the library has for each process that the named edits add, as
    the dialog that names a new process does: in a general program, a process
    that a module of the preamble defines comes with its description, options
@@ -4466,10 +4469,10 @@ with the actions that the store takes, and an answer in place of the dialogs
    from, unless the call says `detach_groups`, in which case the groups are
    dissolved with the edits, as when the user agrees.
 6. Apply them with `applyEdits`, which normalizes the result.
-7. Save the program, naming the revision it was loaded with. A save refused
-   for its revision ends the call with the message of the backend's conflict,
-   and the agent loads the program again (see "Revisions of the program
-   metadata").
+7. Save the program, naming the digest it was loaded with. A save refused
+   for its digest ends the call with the message of the backend's conflict,
+   and the agent loads the program again (see "The digest of the
+   artifact").
 
 An MCP tool called with `dry_run` stops before the save and answers with a
 **proposal**: the lines that the edits would add to the program and remove
@@ -4479,7 +4482,7 @@ they would dissolve, and, as structured content beside the text, the edits
 themselves, already resolved. An assistant in the web UI would show a
 proposal on the canvas and let the frontend apply it with `applyEdits` if the
 user accepts it, which needs no other code. A saved edit answers with the
-revision it wrote and the same lines.
+digest it wrote and the same lines.
 
 A process added by an agent has no position chosen by hand. The MCP server
 places it with `nextFreePosition`, each process that a call adds after the ones
@@ -4507,9 +4510,9 @@ fails, answers with the reason as an error.
   describe the processes, or in a resident program the nodes, that the modules
   of the preamble define, through the `processes` endpoints.
 - **Editing.** `create_program`, which, like `import_module`, refuses a
-  directory that already holds program metadata, since a save of a program not
-  loaded from a directory replaces what is there (see "Revisions of the program
-  metadata"); `add_process`, `update_process`, `remove_process` and
+  directory that already holds a program, since a save of a program not
+  loaded from a directory replaces what is there (see "The digest of the
+  artifact"); `add_process`, `update_process`, `remove_process` and
   `move_process` (which, with `layout`, lays out every process again in
   layers); `add_option`, `update_option` and `remove_option`; `connect`
   (which may make a label edge, see "Label edges"), `disconnect` and
@@ -4588,8 +4591,8 @@ registers it with the URL of the backend, for example
 The tests need no backend: the resolution of named edits is tested with the
 model (`frontend/src/models/programRefs.test.ts`), and each MCP tool, and the
 server over the protocol, under Node.js against a fake client of the backend
-that keeps the program metadata in memory with the revision check of the backend
-(`frontend/mcp/src/tools.test.ts`); the revision check itself is tested in the
+that keeps the programs in memory with the digest check of the backend
+(`frontend/mcp/src/tools.test.ts`); the digest check itself is tested in the
 backend's own tests.
 
 # Claude Code on a program
@@ -4600,7 +4603,7 @@ DeBasher.
 The user runs it in a terminal of their own, with the home directory of the
 program and the URL of the backend, and Claude Code edits the program through
 the MCP tools while the editor of the web UI follows what it saves (see
-"Revisions of the program metadata"). It uses the user's own installation and
+"The digest of the artifact"). It uses the user's own installation and
 account of Claude Code: the web UI calls no AI service, and holds no key of one.
 The backend also runs it, for the terminal panel of the editor (see "Claude Code
 in the page").
@@ -4713,7 +4716,7 @@ ruled with no other change:
 - the tools of Claude Code that edit files are denied the program metadata
   (`Edit(**/.debasher/**)`, a rule that Claude Code applies to each of them),
   which changes only through the MCP tools, keeping the rules of the editor
-  and the revision. A command of Bash is not covered by the rule, but Claude
+  and the digest. A command of Bash is not covered by the rule, but Claude
   Code asks before running one. Nothing denies editing the generated script,
   which the next save writes again; the reference of the plugin tells Claude
   Code to change the code of a process with `update_process` instead.
@@ -5009,7 +5012,7 @@ and no client of the backend is left to report it on its own. The tab
 - shows a notice that stays over every screen, saying that the backend no
   longer knows this tab, that it restarted with another token, and that the
   token URL it printed has to be opened;
-- stops its polling (the revision of the program, the files of the program
+- stops its polling (the digest of the program, the files of the program
   files panel, the process statuses, a watched FIFO), which would only get 401
   again every few seconds;
 - leaves the program in the store as it is, with its unsaved changes, and
@@ -5098,8 +5101,8 @@ backend that stops. Claude Code keeps its conversations on disk, by the
 directory where it runs, which `debasher_claude` makes the home directory of the
 program, so the end of a session loses only the answer that Claude Code was
 writing. What it had saved stays, and no edit is left half done, since every MCP
-tool saves the program metadata whole, under its revision (see "Revisions of the
-program metadata"). A session started again with the last conversation takes it
+tool saves the program whole, under its digest (see "The digest of the
+artifact"). A session started again with the last conversation takes it
 up where it was.
 
 A backend runs at most one session in the page per program, whatever tab asked
@@ -5120,7 +5123,7 @@ A session of `debasher_claude` that the user started in a terminal of their own,
 with the command to copy, is not in the registry: the backend does not
 know of it, and a session in the page can work on the same program at the same
 time. Neither breaks the program, since the backend refuses a write made on a
-stale revision, but each sees the program change under it. Both keep their
+stale digest, but each sees the program change under it. Both keep their
 conversations in the home directory, so either can take up a conversation of the
 other.
 
@@ -5349,13 +5352,11 @@ address of the WebSocket and the answers of the request in
 - **The group on the canvas.** Adding the group to the structural key of the
   canvas, so that a dissolved group loses its color and badge at once (see
   "Keeping the canvas in step with the store").
-- **Building the artifact.** Building what "The artifact: the topology file
-  and the process files" designs: the topology file and its model, the
-  process files, the digest in place of the revision, the local state, the
-  migration of the program metadata, and `debasher_build` given a home
-  directory. It also answers what a program loaded from a new place does with
-  an output directory that still points to the old one: the output directory
-  is local state, and a moved program has none until the user sets it.
+- **The rest of the artifact.** The parts of "The artifact: the topology
+  file and the process files" that are not built: script generation referring
+  to a process file of another language as an external alias instead of
+  embedding it, `debasher_build` given a home directory, and the JSON Schema
+  written by `make`, installed and published.
 - **Comments in the topology file.** Writing the topology file with a library
   that keeps the comments and the order of what the editor did not change
   (ruamel.yaml in its round-trip mode), so that a comment written by hand

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_fifo_sum
+description: >-
+  Example built with the web UI: a process writes the numbers from 1 to n into a
+  fifo, and another adds them up.
+program_options:
+  -n: '10'
+processes:
+  numbers:
+    description: Writes the numbers from 1 to n into a fifo, one per line.
+    code: numbers.sh
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    position: {x: 120, y: 100}
+    options:
+      -n:
+        type: int
+        description: how many numbers to write
+        cmdline: true
+      -outnums:
+        type: string
+        description: fifo with one number per line
+        value: numbers
+        channel: fifo
+  sum:
+    description: >-
+      Adds the numbers it reads from a fifo and writes the result into a file.
+    code: sum.sh
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    position: {x: 120, y: 320}
+    options:
+      -nums:
+        type: string
+        description: fifo with the numbers to add
+        from: numbers.-outnums
+      -outf:
+        type: file
+        description: file with the sum
+        value: ${process_outdir}/sum.txt

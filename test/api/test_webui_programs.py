@@ -4,12 +4,13 @@ data/webui_programs/, and for loading a program from a home directory
 other than the one it was saved in, which is what makes shipping them
 possible.
 
-Each program there is a home directory as the web UI saves it: the
-program metadata in .debasher/program.json and the generated script
-next to it. Such a program is loaded, never imported, so these tests
-check what loading relies on: the metadata loads, it names no directory
-of the machine it was built on, and the generated script is the one
-that script generation writes from it today.
+Each program there is a home directory as the web UI saves it: its
+artifact, the topology file program.yaml and the files it names, and
+the generated script next to them. Such a program is loaded, never
+imported, so these tests check what loading relies on: the artifact
+loads, it names no directory of the machine it was built on, no program
+metadata of before the artifact is left beside it, and the generated
+script is the one that script generation writes from it today.
 """
 
 import shutil
@@ -34,10 +35,7 @@ from api import persistence, script_generation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WEBUI_PROGRAMS_DIR = _REPO_ROOT / "data" / "webui_programs"
-_WEBUI_PROGRAMS = sorted(
-    path.parent.parent
-    for path in _WEBUI_PROGRAMS_DIR.glob(f"*/{persistence.METADATA_DIRNAME}/{persistence.PROGRAM_FILENAME}")
-)
+_WEBUI_PROGRAMS = sorted(path.parent for path in _WEBUI_PROGRAMS_DIR.glob(f"*/{persistence.TOPOLOGY_FILENAME}"))
 
 
 def test_there_are_webui_programs():
@@ -51,6 +49,8 @@ def test_a_webui_program_loads_from_where_it_is(home_dir):
     assert program.homeDir == str(home_dir.resolve())
     assert program.outputDir == ""
     assert program.sourceDir == ""
+    assert not (home_dir / persistence.METADATA_DIRNAME / persistence.PROGRAM_FILENAME).exists()
+    assert not (home_dir / persistence.METADATA_DIRNAME / persistence.LOCAL_FILENAME).exists()
 
 
 @pytest.mark.parametrize("home_dir", _WEBUI_PROGRAMS, ids=lambda path: path.name)

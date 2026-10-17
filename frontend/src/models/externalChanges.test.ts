@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { hasUnsavedChanges, onDiskRevision, savedContent } from "./externalChanges";
+import { hasUnsavedChanges, onDiskDigest, savedContent } from "./externalChanges";
 import { createEmptyProgram } from "../storage/programStorage";
 import type { Program } from "./program";
 
-const saved = (): Program => ({ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", revision: 3 });
+const saved = (): Program => ({ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", digest: "3" });
 
 describe("hasUnsavedChanges", () => {
 
-  it("sees no change in the revision or the home directory, which loading replaces", () => {
-    expect(hasUnsavedChanges({ ...saved(), revision: 9, homeDir: "/elsewhere" }, saved())).toBe(false);
+  it("sees no change in the digest or the home directory, which loading replaces", () => {
+    expect(hasUnsavedChanges({ ...saved(), digest: "9", homeDir: "/elsewhere" }, saved())).toBe(false);
   });
 
   it("sees no change in the order of the keys of an object", () => {
@@ -31,26 +31,26 @@ describe("hasUnsavedChanges", () => {
 
 });
 
-describe("onDiskRevision", () => {
+describe("onDiskDigest", () => {
 
-  const state = { tabRevision: 3, diskRevision: 3, unsavedChanges: false };
+  const state = { tabDigest: "3", diskDigest: "3", unsavedChanges: false };
 
   it("does nothing when there is no program metadata on disk", () => {
-    expect(onDiskRevision({ ...state, diskRevision: null })).toBe("none");
-    expect(onDiskRevision({ ...state, diskRevision: null, unsavedChanges: true })).toBe("none");
+    expect(onDiskDigest({ ...state, diskDigest: null })).toBe("none");
+    expect(onDiskDigest({ ...state, diskDigest: null, unsavedChanges: true })).toBe("none");
   });
 
-  it("clears any question once the tab holds the revision on disk", () => {
-    expect(onDiskRevision(state)).toBe("clear");
-    expect(onDiskRevision({ ...state, unsavedChanges: true })).toBe("clear");
+  it("clears any question once the tab holds the digest on disk", () => {
+    expect(onDiskDigest(state)).toBe("clear");
+    expect(onDiskDigest({ ...state, unsavedChanges: true })).toBe("clear");
   });
 
-  it("loads another revision when the tab holds nothing unsaved", () => {
-    expect(onDiskRevision({ ...state, diskRevision: 4 })).toBe("reload");
+  it("loads another digest when the tab holds nothing unsaved", () => {
+    expect(onDiskDigest({ ...state, diskDigest: "4" })).toBe("reload");
   });
 
   it("asks when the tab holds unsaved changes", () => {
-    expect(onDiskRevision({ ...state, diskRevision: 4, unsavedChanges: true })).toBe("ask");
+    expect(onDiskDigest({ ...state, diskDigest: "4", unsavedChanges: true })).toBe("ask");
   });
 
 });

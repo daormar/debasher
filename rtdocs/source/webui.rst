@@ -73,29 +73,45 @@ Where a Program Lives
 A program built with the web interface uses two directories:
 
 * Its **home directory**, where the web interface saves it: the
-  program as the web interface sees it, in ``.debasher/program.json``;
-  the generated script, ``<name>.sh``, a DeBasher module like any
-  other, which ``debasher_exec`` and the rest of the tools can use
-  without the web interface; and the files that the program needs,
-  which the "Program files" panel manages.
+  topology file ``program.yaml``, with the processes, their options,
+  their connections and their specifications, readable and reviewable
+  as it is; one file per process with its code, in its own language,
+  which the topology file names (``count.sh`` for a Bash process
+  ``count``, ``dispatch.py`` for one in Python, ``worker_tasks.sh`` for
+  the code that shapes the tasks of an array or a generator,
+  ``count_skip.sh`` for an additional method, and the whole class file
+  of a node of a resident program) and the "Program files" panel shows
+  and edits as any user file (a change to one is a change to the
+  program); the generated script, ``<name>.sh``, a DeBasher module like
+  any other, which ``debasher_exec`` and the rest of the tools can use
+  without the web interface; the files that the program needs, which
+  the "Program files" panel manages; and, in a hidden ``.debasher``
+  subdirectory, what the editor keeps for this machine, such as the
+  output directory, which is why a program copied or moved elsewhere,
+  or opened on another machine, has no output directory until you set
+  it. A program saved by an older version, as ``.debasher/program.json``,
+  opens as it is, and the next save writes it in this form.
 * Its **output directory**, where the engine writes when the program
   runs (see the :ref:`outdstruct` Section).
 
 The two must be different directories. Each is chosen in a dialog that
 browses the file system, or by typing its path in the field at the top
 of the dialog; the directory need not exist yet, since it is created
-when it is first used. A program is saved with the "Save" button, and loaded again from its home directory with "Load
-program". Nothing is kept in the browser: changes that have not been
+when it is first used. A program is saved with the "Save" button, and
+loaded again from its home directory with "Load program". Nothing is
+kept in the browser: changes that have not been
 saved are lost when the tab is closed, and "Close", or closing or
 reloading the tab of the browser, asks first.
 
 Another tab, or an AI agent through ``debasher_mcp`` (see the
-:ref:`tools` Section), may save the same program meanwhile. The editor
-notices within a few seconds: with nothing unsaved, it loads the program
-again on its own, positions on the canvas included; with unsaved
-changes, a banner under the toolbar offers to load it, losing them, or
-to save yours over it, losing what was saved. Until you choose, saving
-is refused, so that nobody's work is overwritten without your knowing.
+:ref:`tools` Section), may save the same program meanwhile, and so may
+anyone who edits ``program.yaml`` or the file of a process by hand, or
+a ``git pull`` that brings such a change. The editor notices within a
+few seconds: with nothing unsaved, it loads the program again on its
+own, positions on the canvas included; with unsaved changes, a banner
+under the toolbar offers to load it, losing them, or to save yours over
+it, losing what was written. Until you choose, saving is refused, so
+that nobody's work is overwritten without your knowing.
 
 The Home Screen
 ---------------
@@ -326,8 +342,13 @@ Program Files
 The "Program files" panel, in the corner of the canvas, manages the
 files of the home directory: it shows, edits, uploads, renames, moves
 and deletes them, and creates directories. It never shows the files
-that belong to the engine or to the web interface, and the generated
-script is shown read only, since every save writes it again. While it is
+that belong to the engine or what the web interface keeps in
+``.debasher``; the generated script and the topology file
+``program.yaml`` are shown read only, since every save writes them
+again; and the files of the processes are edited like any other file: a
+change saved there is a change to the program, which the editor loads
+on its own when nothing is unsaved, and asks about otherwise (see
+`Where a Program Lives`_). While it is
 open it shows the files that someone else adds, and a file shown that
 someone else writes is read again; if it has unsaved changes, a line
 above it offers to load the file, losing them, or to save it over what
@@ -669,8 +690,8 @@ Claude Code asks before it acts, as DeBasher sets it up:
   something, ask every time;
 * Claude Code may not edit by hand what DeBasher keeps in
   ``.debasher``; the generated script ``<name>.sh`` is written again
-  by every save, so it changes the code of a process instead of the
-  script.
+  by every save, so it changes the code of a process, in its file or
+  through the tools, instead of the script.
 
 The Editor and Claude Code Together
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

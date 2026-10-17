@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { LaunchRecordConflict, TEST_OUTCOME_MESSAGES } from "../../src/api/executionApi";
 import type { FileEntry } from "../../src/api/programFilesApi";
-import { RevisionConflict } from "../../src/api/revisionConflict";
+import { DigestConflict } from "../../src/api/digestConflict";
 import { hasSupervisor } from "../../src/models/node";
 import type { InspectNodeCommand, NodeSummary } from "../../src/models/nodeState";
 import { summaryRows } from "../../src/models/nodeState";
@@ -121,7 +121,7 @@ function processOf(program: Program, name: string): ProgramProcess {
   return process;
 }
 
-// Refuses a directory that already holds program metadata, which a save of
+// Refuses a directory that already holds a program, which a save of
 // a program not loaded from it would replace.
 async function refuseProgramIn(backend: Backend, homeDir: string): Promise<void> {
   try {
@@ -137,8 +137,8 @@ async function refuseProgramIn(backend: Backend, homeDir: string): Promise<void>
 
 // Saves a program that was not loaded from `homeDir` into it.
 async function saveNewProgram(backend: Backend, program: Program, homeDir: string): Promise<string> {
-  const { revision } = await backend.saveProgram(program, homeDir);
-  return describeProgram({ ...program, homeDir, revision });
+  const { digest } = await backend.saveProgram(program, homeDir);
+  return describeProgram({ ...program, homeDir, digest });
 }
 
 // The program, which a request of the run needs to have an output directory.
@@ -155,7 +155,7 @@ async function savingFirst<T>(request: () => Promise<T>): Promise<T> {
   try {
     return await request();
   } catch (err) {
-    if (err instanceof RevisionConflict) {
+    if (err instanceof DigestConflict) {
       throw new Refusal(`${err.message} Read the program again with get_program.`);
     }
     throw err;
@@ -386,7 +386,7 @@ const editingTools = [
 
   editTool(
     "update_process",
-    "Changes a process: its name, description, code, options handler, specifications, methods or, for a node, its code parts.",
+    "Changes a process: its name, description, code (written into the file that program.yaml names), options handler, specifications, methods or, for a node, its code parts.",
     { process: schemas.processName, changes: schemas.processChanges },
     ({ process, changes }) => [{ op: "updateProcess", process, changes }]
   ),
@@ -577,7 +577,7 @@ const runningTools = [
     async (backend, { home_dir, lines: count }) => {
       const program = await programWithOutputDir(backend, home_dir);
       const validation = await savingFirst(() => backend.validateProgram(program));
-      const check = await savingFirst(() => backend.checkProgramOptions({ ...program, revision: validation.revision }));
+      const check = await savingFirst(() => backend.checkProgramOptions({ ...program, digest: validation.digest }));
       return [
         "Validation:", lastLines(validation.output, count ?? OUTPUT_LINES),
         "Program options:", lastLines(check.output, count ?? OUTPUT_LINES),
@@ -947,11 +947,19 @@ function countFiles(entries: FileEntry[]): number {
   return entries.reduce((count, entry) => count + (entry.type === "dir" ? countFiles(entry.children ?? []) : 1), 0);
 }
 
-// The user files of a home directory, one per line, indented by depth, a
+// What the panel shows read-only: the topology file, or the generated script.
+function readonlyLabel(entry: FileEntry): string {
+  if (!entry.readonly) {
+    return "";
+  }
+  return entry.name === "program.yaml" ? " (topology file, read-only)" : " (generated script, read-only)";
+}
+
+// The files of a home directory, one per line, indented by depth, a
 // directory with a final slash.
 function fileTreeLines(entries: FileEntry[], depth = 0): string[] {
   return entries.flatMap(entry => [
-    `${"  ".repeat(depth)}${entry.name}${entry.type === "dir" ? "/" : ""}${entry.readonly ? " (generated script, read-only)" : ""}`,
+    `${"  ".repeat(depth)}${entry.name}${entry.type === "dir" ? "/" : ""}${readonlyLabel(entry)}`,
     ...fileTreeLines(entry.children ?? [], depth + 1),
   ]);
 }
@@ -1011,7 +1019,7 @@ const userFileTools = [
 
   tool(
     "list_program_files",
-    "Lists the user files of the home directory of the program, such as its tests and the data they read, or the Python description and the process files that debasher_build built the program from, with the generated script; files that DeBasher manages are not shown.",
+    "Lists the files of the home directory of the program: the topology file program.yaml and the files of its processes (the first read-only, the others holding the code of each process), the generated script, and the user files, such as its tests and the data they read, or the Python description that debasher_build built the program from; the files that DeBasher manages (.debasher/ and the engine's) are not shown.",
     { home_dir: schemas.homeDir },
     READS,
     async (backend, { home_dir }) => {
@@ -1023,7 +1031,7 @@ const userFileTools = [
 
   tool(
     "read_program_file",
-    "Reads a user file of the home directory of the program.",
+    "Reads a file of the home directory of the program: a user file, the file of a process, program.yaml or the generated script.",
     { home_dir: schemas.homeDir, path: filePath },
     READS,
     async (backend, { home_dir, path }) => {
@@ -1037,7 +1045,7 @@ const userFileTools = [
 
   tool(
     "write_program_file",
-    "Creates or replaces a user file of the home directory of the program, with the directories above it, such as a test or the data it reads. The generated script and the files that DeBasher manages are refused.",
+    "Creates or replaces a file of the home directory of the program, with the directories above it: a user file, such as a test or the data it reads, or the file of a process, which changes its code as update_process does. The generated script, the topology file program.yaml and the files that DeBasher manages are refused.",
     { home_dir: schemas.homeDir, path: filePath, content: z.string().describe("The whole content of the file.") },
     EDITS,
     async (backend, { home_dir, path, content }) => {
@@ -1049,7 +1057,7 @@ const userFileTools = [
 
   tool(
     "delete_program_file",
-    "Deletes a user file of the home directory of the program, or a directory with everything in it. It cannot be undone, so it needs confirm. The generated script and the files that DeBasher manages are refused.",
+    "Deletes a user file of the home directory of the program, or a directory with everything in it. It cannot be undone, so it needs confirm. The generated script, the topology file and the files that DeBasher manages are refused; a file that program.yaml names (the code of a process, its tasks or method files) is not to be deleted here, since the program could not be loaded without it: remove the process with remove_process instead.",
     { home_dir: schemas.homeDir, path: filePath, confirm },
     DELETES,
     async (backend, { home_dir, path, confirm: confirmed }) => {
@@ -1071,7 +1079,7 @@ const userFileTools = [
 
   tool(
     "move_program_file",
-    "Renames or moves a user file or directory of the home directory of the program, creating the directories above the new path. Refused when the new path exists, so nothing is overwritten.",
+    "Renames or moves a user file or directory of the home directory of the program, creating the directories above the new path. Refused when the new path exists, so nothing is overwritten; the generated script and the topology file are refused too, and a file that program.yaml names (the code of a process, its tasks or method files) is not to be moved here, since the program could not be loaded without it: rename it in program.yaml as well, or leave it.",
     { home_dir: schemas.homeDir, path: filePath, new_path: filePath.describe("The new path, relative to the home directory.") },
     EDITS,
     async (backend, { home_dir, path, new_path }) => {

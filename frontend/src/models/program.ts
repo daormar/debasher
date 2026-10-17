@@ -70,17 +70,18 @@ export interface Program {
 
   envVars: Record<string, string>;
 
-  // Directory the program's own definition (program.json) and .sh
-  // script are saved to (via the toolbar's "Save" button) — distinct
-  // from outputDir, which is where a run's results are written.
+  // Directory the program's artifact (program.yaml and the files of its
+  // processes) and .sh script are saved to (via the toolbar's "Save"
+  // button), distinct from outputDir, which is where a run's results are
+  // written.
   homeDir: string;
 
-  // The revision of the program metadata that the program was loaded with,
-  // or saved as; every request that writes the program metadata names it,
-  // and the backend refuses the write when the metadata holds another (see
-  // api/revisionConflict.ts). Absent from metadata saved without it, which
-  // is at revision 0.
-  revision?: number;
+  // The digest of the artifact (a hash of its files) that the program was
+  // loaded with, or saved as; every request that writes the program names
+  // it, and the backend refuses the write when the artifact holds another
+  // (see api/digestConflict.ts). Absent from a program not loaded from
+  // disk.
+  digest?: string;
 
   outputDir: string;
 

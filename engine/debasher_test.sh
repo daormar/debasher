@@ -25,9 +25,10 @@ print_desc()
     echo "debasher_test runs the business tests of a program"
     echo "Usage: debasher_test [--conda-support] [--docker-support] <prgdir>"
     echo "Notes: <prgdir> is a program directory: a directory that holds a program and its tests; the program"
-    echo "       file is <prgdir>/<name>.sh, where <name> is the name that the metadata of the web UI"
-    echo "       (<prgdir>/.debasher/program.json) gives, or, without that metadata, the only *.sh file at the"
-    echo "       top of <prgdir>; the tests are in <prgdir>/test, the files *.bats (run with bats) and"
+    echo "       file is <prgdir>/<name>.sh, where <name> is the name that the program saved by the web UI"
+    echo "       gives (<prgdir>/program.yaml, or <prgdir>/.debasher/program.json of an older save), or,"
+    echo "       without such a program, the only *.sh file at the top of <prgdir>; the tests are in"
+    echo "       <prgdir>/test, the files *.bats (run with bats) and"
     echo "       test_*.py (run with pytest)"
     echo "       --conda-support and --docker-support create the conda environments and pull the docker images"
     echo "       of the processes before the tests, as debasher_exec does before a run"
@@ -83,12 +84,13 @@ if [ ! -d "$1" ]; then
 fi
 prgdir=$("${REALPATH}" "$1") || fail_to_run "cannot resolve $1"
 
-# The program file: the one that the metadata of the web UI names, the
+# The program file: the one that the program saved by the web UI names
+# (its topology file, or the program metadata of an older save), the
 # directory being free to have any name, or else the only *.sh file at
 # the top of the directory, since other scripts may live beside it
-if [ -f "$(debasher::_get_ui_program_metadata_fname "${prgdir}")" ]; then
+if debasher::_has_ui_program "${prgdir}"; then
     name=$(debasher::_get_ui_program_name "${prgdir}") \
-        || fail_to_run "cannot read the name of the program from $(debasher::_get_ui_program_metadata_fname "${prgdir}")"
+        || fail_to_run "cannot read the name of the program saved by the web UI in ${prgdir}"
     pfile="${prgdir}/${name}.sh"
     if [ ! -f "${pfile}" ]; then
         fail_to_run "${prgdir} names the program ${name}, and has no program file ${name}.sh"

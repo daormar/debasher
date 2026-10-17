@@ -295,9 +295,9 @@ in the code editor.
 
 "Save" in the toolbar asks for the home directory of the program, a
 directory of your own, new or empty, and writes the program there: the
-module that the editor generates, ``webui_hello_world.sh``, and the
-program as the editor keeps it, in a hidden ``.debasher``
-subdirectory.
+program as the editor keeps it, a topology file ``program.yaml`` and
+the code of the process in ``hello_world.sh``, and the module that the
+editor generates from them, ``webui_hello_world.sh``.
 
 The "Run" menu of the toolbar runs the program. First "Set output
 directory", the directory where the run leaves what its processes
@@ -365,7 +365,8 @@ process as its command line arguments, so the code of the process is:
    :width: 100%
    :alt: The code editor with the Python code of the process
 
-Nothing else changes: the option, the saving, the run and the output
+Nothing else changes: the option, the saving (which now writes the code
+in ``hello_world.py``), the run and the output
 are the same, and so is the module that the editor writes, except that
 it now carries the Python program inside a function of the module,
 which the engine hands to the interpreter:

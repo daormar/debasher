@@ -101,7 +101,8 @@ connections of the data over ordering by hand.
   validates, which you can leave to `/debasher:implement` once you say so.
 
 If a tool refuses a save because the program changed on disk, someone else
-(the user in the editor, most likely) saved it meanwhile: read it again with
+(the user in the editor, most likely) saved it meanwhile, or a file of the
+program was edited: read it again with
 `get_program` and work from what is there; never redo their change away. A
 save is also refused while a run or a validation of the program is in
 progress: wait for it to end, or ask the user before stopping it.

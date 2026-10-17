@@ -1,13 +1,13 @@
 import type { Program } from "./program";
 
 // What the program metadata keeps of a program, as text: every field but the
-// revision and the home directory, which loading replaces, with the keys of
+// digest and the home directory, which loading replaces, with the keys of
 // every object in order, so that the order in which an edit built an object
 // does not count, and with no field that holds undefined, which the metadata
 // cannot hold.
 export function savedContent(program: Program): string {
   const kept: Partial<Program> = { ...program };
-  delete kept.revision;
+  delete kept.digest;
   delete kept.homeDir;
   return JSON.stringify(canonical(kept));
 }
@@ -34,29 +34,29 @@ export function hasUnsavedChanges(program: Program, saved: Program): boolean {
   return savedContent(program) !== savedContent(saved);
 }
 
-// What the editor does when it learns the revision of the program metadata in
-// the home directory: nothing, clear the question asked about a revision that
+// What the editor does when it learns the digest of the program metadata in
+// the home directory: nothing, clear the question asked about a digest that
 // the tab has since caught up with, load the program again, or ask the user.
-export type DiskRevisionAction = "none" | "clear" | "reload" | "ask";
+export type DiskDigestAction = "none" | "clear" | "reload" | "ask";
 
-export interface DiskRevisionState {
-  // The revision the tab loaded or last saved.
-  tabRevision: number;
-  // The revision of the program metadata on disk, null when there is none.
-  diskRevision: number | null;
+export interface DiskDigestState {
+  // The digest the tab loaded or last saved.
+  tabDigest: string;
+  // The digest of the program metadata on disk, null when there is none.
+  diskDigest: string | null;
   unsavedChanges: boolean;
 }
 
-// Someone else saved the program when the revision on disk is not the one of
+// Someone else saved the program when the digest on disk is not the one of
 // the tab. A tab with nothing unsaved loads the program again, since it loses
 // nothing; a tab with unsaved changes asks the user. Once the tab holds the
-// revision on disk, whoever brought it there, nothing is left to ask.
-export function onDiskRevision(state: DiskRevisionState): DiskRevisionAction {
-  const { tabRevision, diskRevision, unsavedChanges } = state;
-  if (diskRevision === null) {
+// digest on disk, whoever brought it there, nothing is left to ask.
+export function onDiskDigest(state: DiskDigestState): DiskDigestAction {
+  const { tabDigest, diskDigest, unsavedChanges } = state;
+  if (diskDigest === null) {
     return "none";
   }
-  if (diskRevision === tabRevision) {
+  if (diskDigest === tabDigest) {
     return "clear";
   }
   return unsavedChanges ? "ask" : "reload";

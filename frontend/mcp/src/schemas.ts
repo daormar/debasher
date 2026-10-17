@@ -6,7 +6,7 @@ import { z } from "zod";
 // models/programRefs.ts).
 
 export const homeDir = z.string().min(1)
-  .describe("The home directory of the program: the directory where its program metadata is saved.");
+  .describe("The home directory of the program: the directory where it is saved (its topology file program.yaml and the files of its processes).");
 
 export const processName = z.string().min(1).describe("The name of a process of the program.");
 

@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_batch_launcher
+type: resident
+description: >-
+  Example built with the web UI: a resident program whose launcher node runs the
+  general program webui_batch_greet once for each request written into its external
+  input, and whose other node reports on each batch run that ends.
+processes:
+  Sup:
+    description: >-
+      Watches Launch and Report and relaunches them if they go down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 120, y: 60}
+  Launch:
+    description: >-
+      Runs webui_batch_greet once for each request, and sends a message when each
+      batch run ends.
+    code: Launch.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: ProgramLauncher
+    initiator: true
+    position: {x: 120, y: 260}
+    options:
+      -requests:
+        type: string
+        description: >-
+          requests written from outside the program, one batch run each: {"opts":
+          {"-text": ..., "-secs": ...}, "run": ...}
+        value: requests
+        channel: fifo
+        fifo_tag: external
+      -outdone:
+        type: string
+        description: a message for each batch run that ends
+        value: done
+        channel: fifo
+  Report:
+    description: >-
+      Counts the batch runs that finish and those that fail, reports each end, and
+      leaves a warning notice while some batch run has failed.
+    code: Report.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    position: {x: 120, y: 520}
+    options:
+      -done:
+        type: string
+        description: the messages of the batch runs that end
+        from: Launch.-outdone
+      -outreport:
+        type: string
+        description: >-
+          one line for each batch run that ends, with how many finished and failed
+          so far, read outside the program
+        value: report
+        channel: fifo

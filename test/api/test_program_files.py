@@ -11,10 +11,12 @@ from fastapi import HTTPException  # noqa: E402
 from api.routers.program_files import (  # noqa: E402
     DeleteRequest,
     FileContentRequest,
+    FileTreeRequest,
     MoveRequest,
     WriteContentRequest,
     delete_entry,
     get_file_content,
+    get_file_tree,
     get_file_version,
     move_entry,
     write_file_content,
@@ -244,3 +246,24 @@ def test_the_version_of_a_reserved_or_outside_path_is_refused(tmp_path):
         with pytest.raises(HTTPException) as refused:
             _version(tmp_path, path)
         assert refused.value.status_code == 400
+
+
+# --- the topology file ----------------------------------------------------------
+
+
+def test_the_topology_file_is_shown_read_only_and_never_written_by_the_panel(tmp_path):
+    (tmp_path / "program.yaml").write_text("schema_version: 1\nname: prog\n")
+    (tmp_path / "prog.sh").write_text("# generated\n")
+    (tmp_path / "notes.txt").write_text("mine\n")
+
+    tree = get_file_tree(FileTreeRequest(homeDir=str(tmp_path), programName="prog"))
+
+    readonly = {entry.name: entry.readonly for entry in tree.entries}
+    assert readonly == {"program.yaml": True, "prog.sh": True, "notes.txt": False}
+    assert _refused(tmp_path, "program.yaml") == 400
+    assert (tmp_path / "program.yaml").read_text() == "schema_version: 1\nname: prog\n"
+    assert _status(lambda: delete_entry(DeleteRequest(homeDir=str(tmp_path), programName="prog", path="program.yaml"))) == 400
+    assert _status(
+        lambda: move_entry(MoveRequest(homeDir=str(tmp_path), programName="prog", srcPath="program.yaml", dstPath="p.yaml"))
+    ) == 400
+    assert (tmp_path / "program.yaml").exists()

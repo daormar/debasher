@@ -135,7 +135,7 @@ check_pars()
 
     # The tools of the MCP server work on a program saved in its home
     # directory, as the web UI saves it.
-    if [ ! -f "${home_dir}/.debasher/program.json" ]; then
+    if [ ! -f "${home_dir}/program.yaml" ] && [ ! -f "${home_dir}/.debasher/program.json" ]; then
         echo "Error: no program is saved in ${home_dir}: save it from the web UI, or write it with debasher_build, first" >&2
         exit 1
     fi

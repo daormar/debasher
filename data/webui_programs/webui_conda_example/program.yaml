@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_conda_example
+description: >-
+  Example built with the web UI: a general program whose process activates the conda
+  environment py27, which a run with conda support creates from py27.yml, and writes
+  the version of its Python into a file.
+execution:
+  conda_support: true
+processes:
+  python_version:
+    description: >-
+      Activates the conda environment py27 and writes the version of its Python
+      into a file.
+    code: python_version.sh
+    methods:
+      conda_envs: python_version_conda_envs.sh
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    position: {x: 100, y: 100}
+    options:
+      -outf:
+        type: file
+        description: file with the version of the Python of py27
+        value: ${process_outdir}/python_version.txt

@@ -573,9 +573,10 @@ order, the current directory first and then each directory of `DEBASHER_MOD_DIR`
 the current directory is never shadowed by one of the same name elsewhere. In
 each directory the engine tries the name as given and the name with `.sh`. It
 then looks one level below the directory for a program saved by the web UI,
-which it accepts only when the directory of the file holds a
-`.debasher/program.json` whose program has the same name, so that an unrelated
-file with the same name in some subdirectory is never taken for the module. A
+which it accepts only when the directory of the file holds a topology file
+(`program.yaml`, or `.debasher/program.json` for a program saved before the
+artifact) whose program has the same name, so that an unrelated file with the
+same name in some subdirectory is never taken for the module. A
 name found nowhere is looked for, last, in the directory where DeBasher is
 installed. The program file given to `debasher_exec` with `--pfile` is resolved
 in the same way, and the command line file records the canonical path it
@@ -2498,13 +2499,15 @@ Business tests are offered only to a program in a program directory: a
 directory, of any name, that holds a program and its tests. Its program file
 is found in one of two ways:
 
-- When the directory holds program metadata of the web UI
-  (`.debasher/program.json`, see "The home directory" in
-  `doc/design_doc_webui.md`), the program file is `<name>.sh`, where `<name>`
-  is the top-level `name` field of that metadata, after which the web UI names
-  the script that it generates. The name of the directory does not matter,
-  since the user chooses it, and a program renamed after its first save keeps
-  its directory. The metadata is read as JSON
+- When the directory holds a program saved by the web UI (its topology file
+  `program.yaml`, or `.debasher/program.json` for a program saved before the
+  artifact, see "The home directory" in `doc/design_doc_webui.md`), the
+  program file is `<name>.sh`, where `<name>` is the top-level `name` of that
+  file, after which the web UI names the script that it generates. The name
+  of the directory does not matter, since the user chooses it, and a program
+  renamed after its first save keeps its directory. The name is the `name:`
+  line of the topology file at column zero, or the top-level field of the
+  metadata read as JSON
   (`debasher::_get_ui_program_name`), since the processes and options of the
   program have `name` fields too.
 - Otherwise, for a program written by hand, the program file is the only

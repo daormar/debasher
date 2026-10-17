@@ -1,7 +1,7 @@
 import type { InspectNodeCommand, NodeNotice } from "../models/nodeState";
 import type { Program } from "../models/program";
 import type { ResidentFifoRead, TalkMode } from "../models/residentTalk";
-import { throwIfRevisionConflict } from "./revisionConflict";
+import { throwIfDigestConflict } from "./digestConflict";
 import { apiFetch } from "./apiFetch";
 
 // FastAPI's default error body is `{"detail": "..."}`. Prefer that
@@ -37,17 +37,17 @@ export interface RunProgramResult {
   // program.
   exitCode: number | null;
   output: string | null;
-  // The revision of the program metadata that the launch saved, null when
+  // The digest of the artifact that the launch saved, null when
   // it did not get as far as saving.
-  revision: number | null;
+  digest: string | null;
 }
 
 // What "Validate program" and "Check program options" answer: what
-// debasher_exec printed, and the revision of the program metadata saved
+// debasher_exec printed, and the digest of the artifact saved
 // before it ran.
 export interface SavedOutput {
   output: string;
-  revision: number;
+  digest: string;
 }
 
 // /run refused to resume the program state of a resident program, since the
@@ -87,7 +87,7 @@ export async function runProgram(
     }
   }
 
-  await throwIfRevisionConflict(response);
+  await throwIfDigestConflict(response);
 
   if (!response.ok) {
     throw new Error(
@@ -95,8 +95,8 @@ export async function runProgram(
     );
   }
 
-  const { started, exitCode, output, revision } = await response.json();
-  return { started, exitCode: exitCode ?? null, output: output ?? null, revision: revision ?? null };
+  const { started, exitCode, output, digest } = await response.json();
+  return { started, exitCode: exitCode ?? null, output: output ?? null, digest: digest ?? null };
 }
 
 export interface LaunchCheckResult {
@@ -135,11 +135,11 @@ export const TEST_OUTCOME_MESSAGES: Record<TestOutcome, string> = {
 };
 
 // What "Run tests" answers: the test outcome, the reports of bats and pytest,
-// and the revision of the program metadata saved before the tests ran.
+// and the digest of the artifact saved before the tests ran.
 export interface TestRun {
   outcome: TestOutcome;
   output: string;
-  revision: number;
+  digest: string;
 }
 
 // "Run tests": the business tests of the program, in its home directory,
@@ -151,14 +151,14 @@ export async function runTests(program: Program): Promise<TestRun> {
     body: JSON.stringify(program),
   });
 
-  await throwIfRevisionConflict(response);
+  await throwIfDigestConflict(response);
 
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Failed to run the tests (${response.status})`));
   }
 
-  const { outcome, output, revision } = await response.json();
-  return { outcome, output, revision };
+  const { outcome, output, digest } = await response.json();
+  return { outcome, output, digest };
 }
 
 // "Validate program" (debasher_exec --validate): everything but launching
@@ -171,14 +171,14 @@ export async function validateProgram(program: Program): Promise<SavedOutput> {
     body: JSON.stringify(program),
   });
 
-  await throwIfRevisionConflict(response);
+  await throwIfDigestConflict(response);
 
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Failed to validate the program (${response.status})`));
   }
 
-  const { output, revision } = await response.json();
-  return { output, revision };
+  const { output, digest } = await response.json();
+  return { output, digest };
 }
 
 export type ProgramState = "finished" | "in-progress" | "unfinished";
@@ -592,14 +592,14 @@ export async function checkProgramOptions(program: Program): Promise<SavedOutput
     body: JSON.stringify(program),
   });
 
-  await throwIfRevisionConflict(response);
+  await throwIfDigestConflict(response);
 
   if (!response.ok) {
     throw new Error(await errorDetail(response, `Failed to check program options (${response.status})`));
   }
 
-  const { output, revision } = await response.json();
-  return { output, revision };
+  const { output, digest } = await response.json();
+  return { output, digest };
 }
 
 // Deletes everything inside program.outputDir. Resolves to false

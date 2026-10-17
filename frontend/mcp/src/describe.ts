@@ -140,6 +140,21 @@ function codeBlock(title: string, code: string | undefined): string[] {
   return code ? [`${title}:`, code] : [];
 }
 
+// The files of the artifact that hold the code of a process, as program.yaml
+// names them; nothing for a process not yet saved.
+function filesLine(process: ProgramProcess): string[] {
+  const files = process.files;
+  if (!files) {
+    return [];
+  }
+  const named = [
+    files.code ? `code ${files.code}` : null,
+    files.tasks ? `tasks ${files.tasks}` : null,
+    ...Object.entries(files.methods ?? {}).map(([method, path]) => `method ${method} ${path}`),
+  ].filter(Boolean);
+  return named.length === 0 ? [] : [`Files: ${named.join(", ")}`];
+}
+
 // One process in full, its code included.
 export function describeProcess(program: Program, process: ProgramProcess): string {
   const { computationalSpecs, additionalSpecs, additionalMethods, optionsHandler, nodeCode } = process;
@@ -148,6 +163,7 @@ export function describeProcess(program: Program, process: ProgramProcess): stri
   );
   return [
     ...processLines(program, process),
+    ...filesLine(process),
     `Computational specs: ${setFields(computationalSpecs) || "none"}`,
     `Additional specs: ${setFields(additionalSpecs) || "none"}`,
     ...section("Connections", connections),

@@ -100,18 +100,25 @@ def _lexists(path: Path) -> bool:
     return path.exists() or path.is_symlink()
 
 
+def _owned_names(program_name: str) -> set[str]:
+    """The files of the home directory that the web UI writes and the
+    panel shows read-only: the generated script and the topology file."""
+    return {f"{program_name}.sh", persistence.TOPOLOGY_FILENAME}
+
+
 def _is_protected_script(target: Path, home: Path, program_name: str) -> bool:
     """
-    True for the program's own generated `<programName>.sh`, and only
-    that file, at the top level of `home`: the one entry the panel
-    shows but must never let the user delete, move, or overwrite.
+    True for the program's own generated `<programName>.sh` and for its
+    topology file, at the top level of `home`: the entries the panel
+    shows but must never let the user edit, delete, move, or overwrite,
+    since the editor writes them from the program.
     """
     try:
         parts = target.relative_to(home).parts
     except ValueError:
         return False
 
-    return len(parts) == 1 and parts[0] == f"{program_name}.sh"
+    return len(parts) == 1 and parts[0] in _owned_names(program_name)
 
 
 class FileEntry(BaseModel):
@@ -126,7 +133,7 @@ class FileEntry(BaseModel):
     children: list[FileEntry] | None = None
 
 
-def _build_tree(dir_path: Path, rel_prefix: str, script_name: str) -> list[FileEntry]:
+def _build_tree(dir_path: Path, rel_prefix: str, owned_names: set[str]) -> list[FileEntry]:
     entries: list[FileEntry] = []
 
     try:
@@ -147,11 +154,11 @@ def _build_tree(dir_path: Path, rel_prefix: str, script_name: str) -> list[FileE
                 name=child.name,
                 path=rel_path,
                 type="dir" if is_dir else "file",
-                readonly=(not is_dir and rel_prefix == "" and child.name == script_name),
+                readonly=(not is_dir and rel_prefix == "" and child.name in owned_names),
                 # Never descend into a symlinked directory: it could
                 # point anywhere, including outside homeDir.
                 children=(
-                    _build_tree(child, f"{rel_path}/", script_name)
+                    _build_tree(child, f"{rel_path}/", owned_names)
                     if is_dir and not is_symlink
                     else None
                 ),
@@ -169,7 +176,7 @@ def _tree_response(home_dir: str, program_name: str) -> FileTreeResponse:
     home = Path(home_dir).expanduser().resolve()
     if not home.is_dir():
         return FileTreeResponse(entries=[])
-    return FileTreeResponse(entries=_build_tree(home, "", f"{program_name}.sh"))
+    return FileTreeResponse(entries=_build_tree(home, "", _owned_names(program_name)))
 
 
 class FileTreeRequest(BaseModel):
@@ -182,8 +189,9 @@ def get_file_tree(request: FileTreeRequest) -> FileTreeResponse:
     """
     Lists everything under `request.homeDir` except DeBasher-reserved
     entries (see persistence.is_reserved_name), for the "Program files"
-    panel. The generated `<programName>.sh` is included but flagged
-    readonly=True; everything else is a plain user-managed file or dir.
+    panel. The generated `<programName>.sh` and the topology file are
+    included but flagged readonly=True; everything else is a plain
+    user-managed file or dir.
     """
     if not request.homeDir.strip():
         raise HTTPException(status_code=400, detail="homeDir must not be empty")
@@ -321,7 +329,7 @@ def write_file_content(request: WriteContentRequest) -> WriteContentResponse:
     home = Path(request.homeDir).expanduser().resolve()
     if _is_protected_script(target, home, request.programName):
         raise HTTPException(
-            status_code=400, detail="Cannot edit the program's generated script"
+            status_code=400, detail="Cannot edit the program's generated script or its topology file: change the program in the editor or with the MCP tools, which write both"
         )
 
     if target.is_dir():
@@ -371,7 +379,7 @@ def delete_entry(request: DeleteRequest) -> FileTreeResponse:
     home = Path(request.homeDir).expanduser().resolve()
     if _is_protected_script(target, home, request.programName):
         raise HTTPException(
-            status_code=400, detail="Cannot delete the program's generated script"
+            status_code=400, detail="Cannot delete the program's generated script or its topology file: both are written by every save"
         )
 
     if not _lexists(target):
@@ -416,7 +424,7 @@ def move_entry(request: MoveRequest) -> FileTreeResponse:
         dst, home, request.programName
     ):
         raise HTTPException(
-            status_code=400, detail="Cannot move the program's generated script"
+            status_code=400, detail="Cannot move the program's generated script or its topology file: both are written by every save"
         )
 
     if not _lexists(src):
@@ -471,7 +479,7 @@ async def upload_files(
         if _is_protected_script(dest, home, programName):
             raise HTTPException(
                 status_code=400,
-                detail=f"{filename!r} would overwrite the program's generated script",
+                detail=f"{filename!r} would overwrite the program's generated script or its topology file",
             )
 
         destinations.append((dest, upload))

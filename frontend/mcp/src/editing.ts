@@ -1,4 +1,4 @@
-import { RevisionConflict } from "../../src/api/revisionConflict";
+import { DigestConflict } from "../../src/api/digestConflict";
 import { validateEdits } from "../../src/models/editValidation";
 import type { NodeInfo } from "../../src/models/node";
 import type { ProcessInfo } from "../../src/models/process";
@@ -137,7 +137,7 @@ function groupList(groups: Map<string, string>): string {
 
 /**
  * Applies the named edits to the program saved in `homeDir`, whole or not at
- * all, and saves it, naming the revision it was loaded with; or, with
+ * all, and saves it, naming the digest it was loaded with; or, with
  * `dryRun`, answers with the proposal of the edits and saves nothing.
  */
 export async function editProgram(
@@ -185,11 +185,10 @@ export async function editProgram(
     };
   }
 
-  let revision: number;
   try {
-    ({ revision } = await backend.saveProgram(edited, homeDir));
+    await backend.saveProgram(edited, homeDir);
   } catch (err) {
-    if (err instanceof RevisionConflict) {
+    if (err instanceof DigestConflict) {
       throw new Refusal(
         `Nothing was saved: ${err.message} Read the program again with get_program and make the edits again.`
       );
@@ -197,6 +196,6 @@ export async function editProgram(
     throw err;
   }
 
-  return { text: `Saved (revision ${revision}). Changes:\n${changes}${dissolved}` };
+  return { text: `Saved. Changes:\n${changes}${dissolved}` };
 
 }

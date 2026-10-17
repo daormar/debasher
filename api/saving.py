@@ -10,25 +10,25 @@ from . import persistence
 from .models import Program
 
 # The code of the conflict with which a request that writes the program
-# metadata answers when the metadata holds another revision than the one
-# the program names (see persistence.save).
-REVISION_CONFLICT = "revision"
+# answers when the artifact in the home directory holds another digest
+# than the one the program names (see persistence.save).
+DIGEST_CONFLICT = "digest"
 
 
 def save_or_refuse(home_dir: str, program: Program) -> persistence.SavedProgram:
     """
     Save `program` into `home_dir` (see persistence.save). A save that the
-    revision of the program metadata refuses is a conflict whose detail has
-    the code "revision", the revision held and the message; a program that
-    script generation refuses is a bad request, or not implemented for what
-    it does not handle yet. Either way nothing is written.
+    digest of the artifact refuses is a conflict whose detail has the code
+    "digest", the digest held and the message; a program that script
+    generation refuses is a bad request, or not implemented for what it
+    does not handle yet. Either way nothing is written.
     """
     try:
         return persistence.save(home_dir, program)
-    except persistence.RevisionConflict as conflict:
+    except persistence.DigestConflict as conflict:
         raise HTTPException(
             status_code=409,
-            detail={"code": REVISION_CONFLICT, "revision": conflict.revision, "message": str(conflict)},
+            detail={"code": DIGEST_CONFLICT, "digest": conflict.digest, "message": str(conflict)},
         )
     except NotImplementedError as err:
         raise HTTPException(status_code=501, detail=str(err))

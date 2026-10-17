@@ -40,8 +40,8 @@ beforeAll(() => {
   executable(fakeClaude,
     `#!/bin/sh\npwd > "${root}/claude.cwd"\nfor arg in "$@"; do printf '%s\\n----\\n' "$arg"; done > "${root}/claude.args"\n`);
   home = join(root, "home with space");
-  mkdirSync(join(home, ".debasher"), { recursive: true });
-  writeFileSync(join(home, ".debasher", "program.json"), "{}");
+  mkdirSync(home, { recursive: true });
+  writeFileSync(join(home, "program.yaml"), "schema_version: 1\nname: p\n");
 });
 
 afterAll(() => {

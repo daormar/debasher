@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_watch_tally
+type: resident
+description: >-
+  Example built with the web UI: a resident program whose DirectoryWatcher watches
+  the directory given by -watchdir and, for each text file there once it is complete,
+  has a node count the files seen so far and write the count out.
+processes:
+  Watch:
+    description: >-
+      Watches the directory given by -watchdir and sends a request for each text
+      file there, once it is complete.
+    code: Watch.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: DirectoryWatcher
+    initiator: true
+    position: {x: 100, y: 100}
+    options:
+      -watchdir:
+        type: string
+        description: directory to watch, given on the command line
+        cmdline: true
+      -outrequests:
+        type: string
+        description: one request for each complete text file
+        value: requests
+        channel: fifo
+  Tally:
+    description: >-
+      Counts the files requested so far, and writes the count out with the name
+      of each file.
+    code: Tally.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    position: {x: 100, y: 260}
+    options:
+      -inrequests:
+        type: string
+        description: the requests of Watch
+        from: Watch.-outrequests
+      -outtally:
+        type: string
+        description: >-
+          the name of each file with the number of files seen so far, read outside
+          the program
+        value: tally
+        channel: fifo
+  Sup:
+    description: Watches Watch and Tally and relaunches them if they go down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 320, y: 100}

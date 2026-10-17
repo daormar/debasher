@@ -177,12 +177,12 @@ def _general(tmp_path, **program_fields):
 
 def _launched(program, **kwargs):
     """
-    Run `program` and return it at the revision that the launch saved, as
+    Run `program` and return it at the digest that the launch saved, as
     the tab that launched it goes on editing it.
     """
     response = execution.run_program(program, **kwargs)
     assert response.exitCode == 0
-    return program.model_copy(update={"revision": response.revision})
+    return program.model_copy(update={"digest": response.digest})
 
 
 def _flags(command):
@@ -379,8 +379,8 @@ def test_the_tests_run_the_program_as_it_is_saved_first(tmp_path, monkeypatch):
     response = execution.run_tests(program)
 
     assert response.output == "saved\n"
-    assert response.revision == 1
-    assert persistence.load_program(program.homeDir).revision == 1
+    assert response.digest
+    assert persistence.load_program(program.homeDir).digest == response.digest
 
 
 @pytest.mark.parametrize(

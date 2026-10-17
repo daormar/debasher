@@ -1,7 +1,7 @@
 import type { Program, ProgramType } from "../models/program";
 import { DEFAULT_SCHEDULER } from "../models/program";
 import { layoutProcesses } from "../models/programLayout";
-import { throwIfRevisionConflict } from "../api/revisionConflict";
+import { throwIfDigestConflict } from "../api/digestConflict";
 import { apiFetch } from "../api/apiFetch";
 
 // ---------------------------------------------------------------
@@ -29,47 +29,47 @@ async function errorMessage(response: Response): Promise<string> {
   return body;
 }
 
-// Saves the program into `outputDir` and returns the revision of the program
-// metadata written there, or throws a RevisionConflict when someone else
+// Saves the program into `outputDir` and returns the digest of the program
+// metadata written there, or throws a DigestConflict when someone else
 // saved the program since it was loaded.
 export async function saveProgram(
   program: Program,
   outputDir: string
-): Promise<{ revision: number }> {
+): Promise<{ digest: string }> {
   const response = await apiFetch("/api/programs/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ outputDir, program }),
   });
 
-  await throwIfRevisionConflict(response);
+  await throwIfDigestConflict(response);
 
   if (!response.ok) {
     throw new Error(`Failed to save program: ${await errorMessage(response)}`);
   }
 
-  const { revision } = await response.json();
-  return { revision };
+  const { digest } = await response.json();
+  return { digest };
 }
 
-// The revision of the program metadata in `homeDir`, null when there is
+// The digest of the artifact in `homeDir`, null when there is
 // none, without loading the program.
-export async function getProgramRevision(homeDir: string): Promise<number | null> {
-  const response = await apiFetch("/api/programs/revision", {
+export async function getProgramDigest(homeDir: string): Promise<string | null> {
+  const response = await apiFetch("/api/programs/digest", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ homeDir }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to read the revision of the program: ${await errorMessage(response)}`);
+    throw new Error(`Failed to read the digest of the program: ${await errorMessage(response)}`);
   }
 
-  const { revision } = await response.json();
-  return revision;
+  const { digest } = await response.json();
+  return digest;
 }
 
-// The directory holds no program metadata to load.
+// The directory holds no program to load.
 export class NoProgramMetadata extends Error {}
 
 export async function loadProgram(inputDir: string): Promise<Program> {
@@ -142,7 +142,7 @@ export function createEmptyProgram(name: string, programType: ProgramType = "gen
     homeDir: "",
     outputDir: "",
     sourceDir: "",
-    revision: 0,
+    digest: "",
     // Matches ExecutionOptionsEditor's own displayed default, so a
     // program that's run without ever opening that dialog still gets
     // a real --sched value instead of an empty one.

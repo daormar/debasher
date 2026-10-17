@@ -77,10 +77,10 @@ def run_or_validation_in_progress(output_dir: str, debasher_mod_dir: str) -> boo
 
 def _saved_output_dir(home_dir: str) -> str:
     """
-    The output directory that the program metadata in `home_dir` records,
-    or "" when there is none.
+    The output directory that the program in `home_dir` had when it was
+    last saved, or "" when there is none (see persistence.saved_output_dir).
     """
-    return str((persistence.read_raw_metadata(home_dir) or {}).get("outputDir", "") or "")
+    return persistence.saved_output_dir(home_dir)
 
 
 def refuse_while_running(program: Program, action: str, home_dir: str | None = None) -> None:

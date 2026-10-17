@@ -7,7 +7,7 @@ This section explains how to describe a program in Python with the SDK
 of DeBasher, for whoever prefers code to a canvas and Python to Bash.
 The SDK is a library with which processes are defined, with their
 options and their connections, and a program that adds them; the tool
-``debasher_build`` turns the description into the same program metadata
+``debasher_build`` turns the description into the same saved program
 and the same module that the web interface saves, so that the program
 opens in the editor and runs with ``debasher_exec`` like any other. The
 SDK executes nothing itself and generates no Bash of its own: what it
@@ -75,11 +75,13 @@ Building and running
     /path/to/sdk_hello_world_py/sdk_hello_world_py.sh
 
 ``debasher_build`` loads the file, finds the program it defines and
-writes it beside the file: the program metadata in
-``.debasher/program.json`` and the module ``sdk_hello_world_py.sh``,
+writes it beside the file: the program as the web interface saves it,
+the topology file ``program.yaml``, which names the file of each process
+where the description has it, and the module ``sdk_hello_world_py.sh``,
 exactly what the "Save" button of the editor writes (``-o <dir>`` writes
-them elsewhere). The file is named after its program, as a module is,
-and defines one program; anything else is an error that says so. From
+them elsewhere, with a copy of each process file). The file is named
+after its program, as a module is, and defines one program; anything
+else is an error that says so. From
 here the program is one more: it runs with ``debasher_exec``, its state
 is followed with ``debasher_status``, and its directory opens in the
 web interface with "Load program", where it shows on the canvas with
@@ -112,7 +114,9 @@ counts.
 The pieces, in the order a process is written:
 
 * **Where the code is.** ``code=`` names the file of the process, which
-  the build embeds in the program as the editor does. ``script=`` names
+  the topology file names in turn, where the description has it, and
+  the generated module embeds, as it embeds the code box of the editor.
+  ``script=`` names
   a file that the module runs as it is, an executable with the
   interpreter of its extension, which stays outside the module and is
   copied beside it (the dispatcher): the external alias of the
@@ -214,7 +218,11 @@ What the SDK does not do
   it.
 * It does not read a program: the way from a module or from the editor
   into Python does not exist. A program edited and saved in the editor
-  keeps its Python file as it was.
+  keeps its Python file as it was; the code of a process edited there
+  goes into the file that the description names, since the topology
+  file names the same file, and survives the next build, while a change
+  to the options, the connections or the specifications goes into
+  ``program.yaml`` only and is written over by the next build.
 * It computes no dynamic options in Python: the code that shapes the
   tasks of an array or a generator is the Bash that the editor accepts,
   in a file. The manual mode of the editor, a whole ``define_opts``

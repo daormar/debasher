@@ -37,9 +37,9 @@ import type { GeneralRunPhase } from "../models/generalRun";
 import type { ResidentRunPhase } from "../models/residentRun";
 import type { NodeNotice } from "../models/nodeState";
 import { useProgramRun, type WriteProgram } from "./useProgramRun";
-import { RevisionConflict } from "../api/revisionConflict";
+import { DigestConflict } from "../api/digestConflict";
 import { hasUnsavedChanges } from "../models/externalChanges";
-import { useDiskRevision, type ProgramWrites } from "./useDiskRevision";
+import { useDiskDigest, type ProgramWrites } from "./useDiskDigest";
 
 export type ProgramRunPhase = GeneralRunPhase;
 
@@ -56,13 +56,13 @@ interface ProgramContextType {
   // loaded or saved: what leaving the editor would lose.
   unsavedChanges: boolean;
 
-  // The revision of the program metadata in the home directory when someone
-  // else saved it while the program held unsaved changes, or when a write of
+  // The digest of the artifact in the home directory when someone else
+  // wrote it while the program held unsaved changes, or when a write of
   // the tab was refused for it, for the user to choose between loading it
   // (`loadExternal`, which loses those changes) and saving the tab over it
   // (`saveOverExternal`); null otherwise. A tab with nothing unsaved loads
-  // such a revision on its own.
-  externalRevision: number | null;
+  // such a digest on its own.
+  externalDigest: string | null;
 
   loadExternal: () => Promise<void>;
 
@@ -371,14 +371,14 @@ export function ProgramProvider({
     await saveInto(outputDir, program);
   }
 
-  // Saves the tab over the revision that someone else saved, which loses
+  // Saves the tab over the digest that someone else saved, which loses
   // their changes.
   async function saveOverExternal() {
-    if (externalRevision === null) {
+    if (externalDigest === null) {
       return;
     }
     const current = programRef.current;
-    await saveInto(current.homeDir, { ...current, revision: externalRevision });
+    await saveInto(current.homeDir, { ...current, digest: externalDigest });
     askAbout(null);
   }
 
@@ -416,10 +416,10 @@ export function ProgramProvider({
     }
 
     // The program goes with the home directory it was loaded from, which
-    // tells the backend a save into it, checked against the revision of the
-    // program metadata there, from a save into another directory.
+    // tells the backend a save into it, checked against the digest of the
+    // artifact there, from a save into another directory.
     await writeProgram(toSave, written => saveProgram(written, outputDir));
-    // Only homeDir and the revision are taken from the save: the user may
+    // Only homeDir and the digest are taken from the save: the user may
     // have kept editing while the request was in flight, and putting the
     // saved copy back whole would silently drop those edits.
     setProgram(current => ({ ...current, homeDir: outputDir }));
@@ -434,7 +434,7 @@ export function ProgramProvider({
     setDiskLoads(count => count + 1);
   }
 
-  const { externalRevision, askAbout } = useDiskRevision({
+  const { externalDigest, askAbout } = useDiskDigest({
     homeDir: program.homeDir,
     programRef,
     savedProgramRef,
@@ -442,17 +442,17 @@ export function ProgramProvider({
     reloadFromDisk,
   });
 
-  // Loads the revision that someone else saved, which loses the unsaved
+  // Loads the digest that someone else saved, which loses the unsaved
   // changes of the tab.
   async function loadExternal() {
     await reloadFromDisk();
     askAbout(null);
   }
 
-  // Sends a request that writes `written` into the program metadata, and
-  // takes the revision it wrote. When someone else saved the program since
+  // Sends a request that writes `written` into the home directory, and
+  // takes the digest it wrote. When someone else wrote the program since
   // it was loaded, the backend refuses it, and the user chooses, as for a
-  // revision that the tab finds on its own, between loading what they saved
+  // digest that the tab finds on its own, between loading what they wrote
   // and saving the tab over it.
   const writeProgram: WriteProgram = async (written, request) => {
     let result;
@@ -460,20 +460,20 @@ export function ProgramProvider({
     try {
       result = await request(written);
     } catch (err) {
-      if (err instanceof RevisionConflict) {
-        askAbout(err.revision);
+      if (err instanceof DigestConflict) {
+        askAbout(err.digest);
       }
       throw err;
     } finally {
       writesRef.current.inFlight -= 1;
       writesRef.current.answered += 1;
     }
-    const { revision } = result;
-    if (revision !== null) {
-      setProgram(current => ({ ...current, revision }));
+    const { digest } = result;
+    if (digest !== null) {
+      setProgram(current => ({ ...current, digest }));
       // What was written, not what the tab holds now: the user may have
       // kept editing while the request was in flight.
-      setSavedProgram(edits.normalizeProgram({ ...written, revision }));
+      setSavedProgram(edits.normalizeProgram({ ...written, digest }));
     }
     return result;
   };
@@ -743,7 +743,7 @@ export function ProgramProvider({
 
     unsavedChanges,
 
-    externalRevision,
+    externalDigest,
 
     loadExternal,
 
@@ -845,7 +845,7 @@ export function ProgramProvider({
     program,
     selectedProcess,
     unsavedChanges,
-    externalRevision,
+    externalDigest,
     diskLoads,
     runPhase,
     runOutput,

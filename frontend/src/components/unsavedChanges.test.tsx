@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ProgramEditor from "./ProgramEditor";
 import Toolbar from "./Toolbar";
 import { ProgramProvider } from "../store/ProgramContext";
-import { DISK_REVISION_POLL_INTERVAL_MS } from "../store/useDiskRevision";
+import { DISK_DIGEST_POLL_INTERVAL_MS } from "../store/useDiskDigest";
 import { createEmptyProgram } from "../storage/programStorage";
 import type { Program } from "../models/program";
 
@@ -24,7 +24,7 @@ function renderEditor() {
   );
 }
 
-const onDisk = (): Program => ({ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", revision: 2 });
+const onDisk = (): Program => ({ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", digest: "2" });
 
 function renderToolbar(onClose = vi.fn()) {
   render(
@@ -45,7 +45,7 @@ function rename(name: string) {
 describe("leaving a program with unsaved changes", () => {
 
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ revision: 2 }))));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ digest: "2" }))));
   });
 
   afterEach(() => {
@@ -93,7 +93,7 @@ describe("leaving a program with unsaved changes", () => {
 
 });
 
-describe("the banner of a revision saved elsewhere", () => {
+describe("the banner of a digest saved elsewhere", () => {
 
   afterEach(() => {
     cleanup();
@@ -106,11 +106,11 @@ describe("the banner of a revision saved elsewhere", () => {
     vi.useFakeTimers();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
-      if (url === "/api/programs/revision") {
-        return new Response(JSON.stringify({ revision: 3 }));
+      if (url === "/api/programs/digest") {
+        return new Response(JSON.stringify({ digest: "3" }));
       }
       if (url === "/api/programs/load") {
-        return new Response(JSON.stringify({ ...onDisk(), name: "theirs", revision: 3 }));
+        return new Response(JSON.stringify({ ...onDisk(), name: "theirs", digest: "3" }));
       }
       return new Response(JSON.stringify({ statuses: {}, hasProgramState: false, output: "", notices: [] }));
     }));
@@ -118,10 +118,10 @@ describe("the banner of a revision saved elsewhere", () => {
     rename("mine");
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(DISK_REVISION_POLL_INTERVAL_MS);
+      await vi.advanceTimersByTimeAsync(DISK_DIGEST_POLL_INTERVAL_MS);
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/saved from elsewhere/);
+    expect(screen.getByRole("alert")).toHaveTextContent(/written from elsewhere/);
     expect(screen.getByRole("button", { name: "Save mine over it" })).toBeInTheDocument();
 
     await act(async () => {

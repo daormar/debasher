@@ -76,8 +76,8 @@ function stubBackend(sessionAnswers: Array<{ status: number; body: unknown }>, t
       const { status, body } = answers.shift()!;
       return new Response(JSON.stringify(body), { status });
     }
-    if (url === "/api/programs/revision") {
-      return new Response(JSON.stringify({ revision: 2 }));
+    if (url === "/api/programs/digest") {
+      return new Response(JSON.stringify({ digest: "2" }));
     }
     return new Response(JSON.stringify({ statuses: {}, hasProgramState: false, output: "", notices: [] }));
   });
@@ -93,7 +93,7 @@ function sessionRequests(fetchMock: ReturnType<typeof stubBackend>) {
 
 function renderEditor() {
   render(
-    <ProgramProvider initialProgram={{ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", revision: 2 }}>
+    <ProgramProvider initialProgram={{ ...createEmptyProgram("p"), id: "p", homeDir: "/home/p", digest: "2" }}>
       <ProgramEditor onClose={vi.fn()} />
     </ProgramProvider>
   );

@@ -25,9 +25,11 @@ debasher_build
 ``debasher_build`` writes a program described in Python with the SDK
 (see the :ref:`implem_python` Section): it loads the Python file, which
 defines processes and one program and is named after it, and writes the
-program metadata (``.debasher/program.json``) and the module
-(``<name>.sh``) that the web interface saves, into the directory of the
-file, or into the directory given with ``-o``. The program is then run
+program as the web interface saves it (the topology file
+``program.yaml``, beside the files of the processes) and the module
+(``<name>.sh``), into the directory of the file, or into the directory
+given with ``-o`` (with a copy of each file of the processes). The
+program is then run
 with ``debasher_exec`` and opened in the web interface like any other.
 The tool runs with the Python that ``DEBASHER_WEBUI_PYTHON`` names, else
 with ``python3`` on the ``PATH``, which has to have the dependencies of
@@ -87,7 +89,7 @@ each process does with the values of its options, run on its own
 with ``debasher_exec_process``, outside any run. It applies to a
 program in a directory of its own, ``<prgdir>``, of any name. For a
 program saved by the web UI, the program file is the script named
-after the program in its metadata (``.debasher/program.json``); for a
+after the program in its topology file (``program.yaml``); for a
 program written by hand, it is the only ``*.sh`` file at the top of
 ``<prgdir>``, and the tool refuses a directory with several. The tests are the
 files ``<prgdir>/test/*.bats``, which the tool runs with bats, and, for
@@ -515,7 +517,8 @@ standard input and output. It is a client of the server that
 ``debasher_webui`` launches, which has to be running, and it edits programs
 with the same rules as the editor of the web interface: each tool that
 edits a program applies its edits whole or not at all, refuses a save over
-changes saved elsewhere since it read the program, and, called with
+changes saved or written elsewhere (a process file edited by hand
+included) since it read the program, and, called with
 ``dry_run``, answers with what it would change and saves nothing.
 
 ::

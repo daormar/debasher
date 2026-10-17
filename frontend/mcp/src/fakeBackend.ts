@@ -1,11 +1,11 @@
-import { RevisionConflict } from "../../src/api/revisionConflict";
+import { DigestConflict } from "../../src/api/digestConflict";
 import type { Program } from "../../src/models/program";
 import { NoProgramMetadata } from "../../src/storage/programStorage";
 import type { Backend } from "./backend";
 
 // A backend for the tests of the MCP tools, which needs no server: the
 // program metadata of each home directory in memory, saved with the
-// revision check of the backend (see persistence.save), and every other
+// digest check of the backend (see persistence.save), and every other
 // request answered by `overrides`, or refused as not faked.
 
 export interface FakeBackend extends Backend {
@@ -14,7 +14,7 @@ export interface FakeBackend extends Backend {
 }
 
 function sameContent(a: Program, b: Program): boolean {
-  const content = ({ revision: _revision, homeDir: _homeDir, ...rest }: Program) => rest;
+  const content = ({ digest: _digest, homeDir: _homeDir, ...rest }: Program) => rest;
   return JSON.stringify(content(a)) === JSON.stringify(content(b));
 }
 
@@ -37,17 +37,18 @@ export function fakeBackend(programs: Program[] = [], overrides: Partial<Backend
     async saveProgram(program: Program, homeDir: string) {
       const current = saved.get(homeDir);
       const ownHome = program.homeDir === homeDir;
-      if (current && ownHome && (current.revision ?? 0) !== (program.revision ?? 0) && !sameContent(current, program)) {
-        throw new RevisionConflict(
-          `The program in ${homeDir} was saved elsewhere since it was loaded (revision ${current.revision}).`,
-          current.revision ?? 0
+      if (current && ownHome && (current.digest ?? "") !== (program.digest ?? "") && !sameContent(current, program)) {
+        throw new DigestConflict(
+          `The program in ${homeDir} was saved elsewhere since it was loaded (digest ${current.digest}).`,
+          current.digest ?? ""
         );
       }
       const unchanged = current !== undefined && ownHome && sameContent(current, program);
-      const revision = unchanged ? current.revision ?? 0 : (ownHome ? current?.revision ?? 0 : 0) + 1;
-      saved.set(homeDir, structuredClone({ ...program, homeDir, revision }));
+      // A counter stands for the digest of the real backend
+      const digest = unchanged ? current.digest ?? "" : String(Number(ownHome ? current?.digest ?? "0" : "0") + 1);
+      saved.set(homeDir, structuredClone({ ...program, homeDir, digest }));
       fake.saves += 1;
-      return { revision };
+      return { digest };
     },
 
     async validateProcessName(name: string) {

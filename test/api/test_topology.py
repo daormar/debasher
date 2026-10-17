@@ -4,11 +4,10 @@ program model and the artifact in both directions, the reading and
 writing of the YAML, and what the module refuses.
 
 The round trip is checked on every program shipped under
-data/webui_programs/, loaded from its program metadata: taken apart into
-a topology and its files, written, read and put together again, the
-program is the one that was loaded, apart from its ids (derived from the
-names on the way back) and the value of a connected input, which the
-frontend derives from the connections.
+data/webui_programs/, loaded from its artifact: taken apart into a
+topology and its files, written, read and put together again, the
+program is the one that was loaded, apart from the value of a connected
+input, which the frontend derives from the connections.
 """
 
 from pathlib import Path
@@ -46,10 +45,7 @@ from api.topology import TopologyError, dumps, join, loads, split
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WEBUI_PROGRAMS = sorted(
-    path.parent.parent
-    for path in (_REPO_ROOT / "data" / "webui_programs").glob(
-        f"*/{persistence.METADATA_DIRNAME}/{persistence.PROGRAM_FILENAME}"
-    )
+    path.parent for path in (_REPO_ROOT / "data" / "webui_programs").glob(f"*/{persistence.TOPOLOGY_FILENAME}")
 )
 
 
@@ -103,7 +99,7 @@ def _canonical(program: Program) -> dict:
         for edge in program.edges
     )
     seq_processes = {seq.name: without_final_newlines(seq.model_dump(exclude={"id", "files"})) for seq in program.seqProcesses}
-    return program.model_dump(exclude={"id", "revision", "homeDir", "processes", "seqProcesses", "edges"}) | {
+    return program.model_dump(exclude={"id", "digest", "homeDir", "processes", "seqProcesses", "edges"}) | {
         "processes": processes,
         "seqProcesses": seq_processes,
         "edges": edges,
@@ -206,7 +202,7 @@ def test_two_joins_of_the_same_topology_give_the_same_ids():
     second = _round_trip(program)
 
     assert first.model_dump() == second.model_dump()
-    assert first.id != program.id
+    assert first.id == program.id  # a shipped program is loaded from its topology file, with the same ids
 
 
 def test_the_code_goes_to_files_named_after_the_processes():

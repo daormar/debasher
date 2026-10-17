@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from .. import persistence, program_import, run_guard, saving, script_generation
 from ..models import Program
+from ..topology import TopologyError
 
 router = APIRouter(prefix="/api/programs", tags=["programs"])
 
@@ -16,22 +17,22 @@ class SaveProgramRequest(BaseModel):
 class SaveProgramResponse(BaseModel):
     path: str
     scriptPath: str
-    # The revision of the program metadata just written.
-    revision: int
+    # The digest of the artifact just written.
+    digest: str
 
 
 class LoadProgramRequest(BaseModel):
     inputDir: str
 
 
-class ProgramRevisionRequest(BaseModel):
+class ProgramDigestRequest(BaseModel):
     homeDir: str
 
 
-class ProgramRevisionResponse(BaseModel):
-    # The revision of the program metadata in the home directory, None when
-    # there is no program metadata there.
-    revision: int | None
+class ProgramDigestResponse(BaseModel):
+    # The digest of the artifact in the home directory, None when there is
+    # no program saved there.
+    digest: str | None
 
 
 class ImportProgramRequest(BaseModel):
@@ -50,13 +51,13 @@ class GetAllEnvVarsResponse(BaseModel):
 @router.post("/save", response_model=SaveProgramResponse)
 def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     """
-    Serialize the whole program into a hidden directory inside
-    `request.outputDir`, creating the output directory if needed. Refused
-    while there is a run in progress in the program's output directory, or
-    in the one that the metadata already saved there names (see run_guard),
-    and, for a save into the program's own home directory, when the program
-    metadata there holds another revision than the program's, with a
-    conflict whose detail has the code "revision" (see persistence.save).
+    Save the whole program as its artifact into `request.outputDir`,
+    creating the directory if needed. Refused while there is a run in
+    progress in the program's output directory, or in the one that the
+    program already saved there names (see run_guard), and, for a save into
+    the program's own home directory, when the artifact there holds another
+    digest than the program's, with a conflict whose detail has the code
+    "digest" (see persistence.save).
     """
     if not request.outputDir.strip():
         raise HTTPException(status_code=400, detail="outputDir must not be empty")
@@ -78,22 +79,22 @@ def save_program_to_dir(request: SaveProgramRequest) -> SaveProgramResponse:
     saved = saving.save_or_refuse(request.outputDir, request.program)
 
     return SaveProgramResponse(
-        path=str(saved.program_path), scriptPath=str(saved.script_path), revision=saved.revision
+        path=str(saved.program_path), scriptPath=str(saved.script_path), digest=saved.digest
     )
 
 
-@router.post("/revision", response_model=ProgramRevisionResponse)
-def get_program_revision(request: ProgramRevisionRequest) -> ProgramRevisionResponse:
+@router.post("/digest", response_model=ProgramDigestResponse)
+def get_program_digest(request: ProgramDigestRequest) -> ProgramDigestResponse:
     """
-    The revision of the program metadata saved in `request.homeDir`, without
-    loading the program: what an editor polls to learn that someone else
-    saved the program since it was loaded. The metadata is replaced whole
-    when it is saved (see persistence.save), so reading it needs no lock.
+    The digest of the artifact saved in `request.homeDir`, without building
+    the program: what an editor polls to learn that someone else wrote the
+    program since it was loaded. Each file is replaced whole when it is
+    written (see persistence.save), so reading them needs no lock.
     """
     if not request.homeDir.strip():
         raise HTTPException(status_code=400, detail="homeDir must not be empty")
 
-    return ProgramRevisionResponse(revision=persistence.saved_revision(request.homeDir))
+    return ProgramDigestResponse(digest=persistence.saved_digest(request.homeDir))
 
 
 @router.post("/load", response_model=Program)
@@ -108,6 +109,8 @@ def load_program_from_dir(request: LoadProgramRequest) -> Program:
         return persistence.load_program(request.inputDir)
     except FileNotFoundError as err:
         raise HTTPException(status_code=404, detail=str(err))
+    except TopologyError as err:
+        raise HTTPException(status_code=400, detail=f"Cannot load the program in {request.inputDir!r}: {err}")
     except pydantic.ValidationError as err:
         raise HTTPException(
             status_code=400, detail=f"Invalid program data in {request.inputDir!r}: {err}"

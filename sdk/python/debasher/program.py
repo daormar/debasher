@@ -3,8 +3,9 @@ A program as the SDK describes it: the processes it adds, each with the
 specifications of its use there, as the `_program` method of a module
 adds them with `add_debasher_process`, and what the program is run with.
 `write()` turns it into the program model of the web UI (`api/models.py`)
-and saves it as the editor does (`api/persistence.py`): the program
-metadata in `.debasher/program.json` and the generated module beside it.
+and saves it as the editor does (`api/persistence.py`): the artifact, the
+topology file `program.yaml` and the files of the processes where the
+description has them, and the generated module beside it.
 """
 
 from __future__ import annotations
@@ -313,6 +314,39 @@ class Program:
         )
 
     @staticmethod
+    def _file_relative(process: Process, path: Path | None) -> str:
+        """
+        Where the artifact keeps a file of `process` that the SDK read
+        (its process file, its tasks file, a method file): the path
+        relative to the directory of the description when it stays below
+        it, which the program written into that directory leaves as it is,
+        and the name of the file alone when the path climbs out of it or
+        is absolute, so that the program written is self-contained.
+        """
+        if path is None:
+            return ""
+        try:
+            relative = path.resolve().relative_to(process.base_dir.resolve())
+        except ValueError:
+            return path.name
+        return str(relative)
+
+    def _files(self, process: Process):
+        """The paths of the files of `process` in the artifact (see
+        _file_relative), for saving to write each where it was read."""
+        from api.models import ProcessFiles
+        from api.topology import METHOD_FIELDS
+
+        method_names = {field: method for method, field in METHOD_FIELDS.items()}
+        return ProcessFiles(
+            code=self._file_relative(process, process.code_path),
+            tasks=self._file_relative(process, getattr(process, "tasks_path", None)),
+            methods={
+                method_names[field]: self._file_relative(process, path) for field, path in process.method_paths.items()
+            },
+        )
+
+    @staticmethod
     def _script_relative(process: Process) -> str | None:
         """
         How the module refers to the script of `process`: the path as it
@@ -390,6 +424,7 @@ class Program:
             nodeKind=kind,
             initiator=getattr(process, "initiator", False),
             nodeCode=node_code,
+            files=self._files(process),
         )
 
     def to_model(self):
@@ -441,12 +476,15 @@ class Program:
 
     def write(self, home_dir: str | Path) -> Path:
         """
-        Writes the program into `home_dir`, as Save does in the editor: the
-        program metadata in `.debasher/program.json`, the generated module
-        `<name>.sh`, and a copy of every script (external alias), replacing
-        an older copy. Returns the path of the module. A program that
-        the SDK or script generation refuses leaves the directory as it
-        was.
+        Writes the program into `home_dir`, as Save does in the editor: its
+        artifact, the topology file `program.yaml` and the process files,
+        the tasks files and the method files where the description had
+        them, relative to its directory (each written only when its content
+        differs, so a program written into the directory of the description
+        leaves its files as they are), the generated module `<name>.sh`,
+        and a copy of every script (external alias), replacing an older
+        copy. Returns the path of the module. A program that the SDK or
+        script generation refuses leaves the directory as it was.
         """
         from api import persistence
 

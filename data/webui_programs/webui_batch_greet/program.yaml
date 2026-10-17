@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_batch_greet
+description: >-
+  Example built with the web UI: a general program that waits for some seconds and
+  writes a greeting; webui_batch_launcher runs it once for each request.
+processes:
+  greet:
+    description: Waits for some seconds and writes a greeting into a file.
+    code: greet.sh
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    position: {x: 120, y: 160}
+    options:
+      -text:
+        type: string
+        description: whom to greet; the text fail makes the program fail
+        cmdline: true
+      -secs:
+        type: int
+        description: how many seconds to wait before greeting
+        cmdline: true
+      -outf:
+        type: file
+        description: file with the greeting
+        value: ${process_outdir}/greeting.txt

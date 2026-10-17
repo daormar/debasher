@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/schema/program-1.json
+schema_version: 1
+name: webui_hello_world_py
+processes:
+  hello_world:
+    description: Prints a greeting.
+    code: hello_world.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    position: {x: 100, y: 100}
+    options:
+      -s:
+        type: string
+        description: string to print ('Hello World!' by default)
+        cmdline: true
+        mandatory: false

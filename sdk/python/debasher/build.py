@@ -59,9 +59,10 @@ def load_program(path: str | Path) -> Program:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="debasher_build",
-        description="Writes a program described in Python with the SDK of DeBasher: its program "
-        "metadata (.debasher/program.json) and its generated module (<name>.sh), which "
-        "debasher_exec runs and the web interface opens.",
+        description="Writes a program described in Python with the SDK of DeBasher: the program as "
+        "the web interface saves it (the topology file program.yaml, beside the files of the "
+        "processes) and its generated module (<name>.sh), which debasher_exec runs and the web "
+        "interface opens.",
     )
     parser.add_argument("file", help="the Python file that defines the program, named after it")
     parser.add_argument(

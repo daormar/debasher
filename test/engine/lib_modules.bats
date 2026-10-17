@@ -19,6 +19,8 @@ setup() {
     FIND="$(command -v find)"
     SORT="$(command -v sort)"
     GREP="$(command -v grep)"
+    SED="$(command -v sed)"
+    PYTHON="$(command -v python3)"
     REALPATH="$(command -v realpath)"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
@@ -133,9 +135,9 @@ setup() {
 # --- modules saved by the DeBasher UI -----------------------------------
 
 @test "a module saved by the UI into its own directory is found with or without its extension" {
-    mkdir -p "${mod_dir}/some_outdir/.debasher"
+    mkdir -p "${mod_dir}/some_outdir"
     touch "${mod_dir}/some_outdir/prg.sh"
-    echo '{"name": "prg"}' > "${mod_dir}/some_outdir/.debasher/program.json"
+    printf 'schema_version: 1\nname: prg\nprocesses:\n  other:\n    description: x\n' > "${mod_dir}/some_outdir/program.yaml"
     DEBASHER_MOD_DIR="${mod_dir}"
 
     run debasher::_resolve_pfile "prg"
@@ -145,6 +147,39 @@ setup() {
     run debasher::_resolve_pfile "prg.sh"
     [ "${status}" -eq 0 ]
     [ "${output}" = "${mod_dir}/some_outdir/prg.sh" ]
+}
+
+@test "the name of a program saved by the UI is read from its topology file, quoted or not, or from older metadata" {
+    mkdir -p "${mod_dir}/yaml_dir" "${mod_dir}/quoted_dir" "${mod_dir}/json_dir/.debasher"
+    printf 'schema_version: 1\nname: prg\nprocesses:\n  name:\n    description: a process named name\n' > "${mod_dir}/yaml_dir/program.yaml"
+    printf 'schema_version: 1\nname: "quoted prg"\n' > "${mod_dir}/quoted_dir/program.yaml"
+    echo '{"name": "old"}' > "${mod_dir}/json_dir/.debasher/program.json"
+
+    run debasher::_get_ui_program_name "${mod_dir}/yaml_dir"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "prg" ]
+
+    run debasher::_get_ui_program_name "${mod_dir}/quoted_dir"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "quoted prg" ]
+
+    run debasher::_get_ui_program_name "${mod_dir}/json_dir"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "old" ]
+
+    run debasher::_get_ui_program_name "${mod_dir}"
+    [ "${status}" -eq 1 ]
+}
+
+@test "a module saved by an older UI, with program metadata, is still found" {
+    mkdir -p "${mod_dir}/old_outdir/.debasher"
+    touch "${mod_dir}/old_outdir/prg.sh"
+    echo '{"name": "prg"}' > "${mod_dir}/old_outdir/.debasher/program.json"
+    DEBASHER_MOD_DIR="${mod_dir}"
+
+    run debasher::_resolve_pfile "prg"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "${mod_dir}/old_outdir/prg.sh" ]
 }
 
 # --- debasher::load_debasher_module -------------------------------------
@@ -178,7 +213,7 @@ EOM
     echo "load_debasher_module mod_a" > "${mod_dir}/mod_b.sh"
     DEBASHER_MOD_DIR="${mod_dir}"
 
-    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP SED REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
     [ "${status}" -ne 0 ]
     [ "${status}" -ne 124 ]
     [[ "${output}" == *"modules load each other in a cycle (mod_a.sh -> mod_b.sh -> mod_a.sh)"* ]]
@@ -188,7 +223,7 @@ EOM
     echo "load_debasher_module mod_self" > "${mod_dir}/mod_self.sh"
     DEBASHER_MOD_DIR="${mod_dir}"
 
-    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_self"
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP SED REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_self"
     [ "${status}" -ne 0 ]
     [ "${status}" -ne 124 ]
     [[ "${output}" == *"(mod_self.sh -> mod_self.sh)"* ]]
@@ -221,7 +256,7 @@ EOM
     ln -s "${mod_dir}" "${BATS_TEST_TMPDIR}/link"
     DEBASHER_MOD_DIR="${BATS_TEST_TMPDIR}/link"
 
-    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
+    run timeout 20 bash -c "$(declare -p DEBASHER_MOD_DIR BASENAME DIRNAME FIND SORT GREP SED REALPATH debasher_pkglibdir debasher_bindir); source \"${ENGINE_BUILDDIR}/debasher_lib.sh\"; cd \"${cwd_dir}\"; load_debasher_module mod_a"
     [ "${status}" -ne 0 ]
     [ "${status}" -ne 124 ]
     [[ "${output}" == *"modules load each other in a cycle (mod_a.sh -> mod_b.sh -> mod_a.sh)"* ]]

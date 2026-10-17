@@ -79,6 +79,31 @@ debasher::_get_ui_program_metadata_fname()
 }
 
 ########
+# Echoes the name of the topology file of a program saved by the web UI
+# in the directory `dir`: program.yaml, the saved form of a program (see
+# "The artifact: the topology file and the process files" in
+# doc/design_doc_webui.md). The program metadata, .debasher/program.json,
+# is the saved form of before the artifact, still read when a directory
+# has no topology file.
+debasher::_get_ui_program_topology_fname()
+{
+    local dir=$1
+
+    echo "${dir}/${DEBASHER_UI_PROGRAM_TOPOLOGY_FNAME}"
+}
+
+########
+# True when the directory `dir` holds a program saved by the web UI, in
+# either of its forms.
+debasher::_has_ui_program()
+{
+    local dir=$1
+
+    [ -f "$(debasher::_get_ui_program_topology_fname "${dir}")" ] \
+        || [ -f "$(debasher::_get_ui_program_metadata_fname "${dir}")" ]
+}
+
+########
 debasher::_is_ui_program_dir()
 {
     # $1 - directory that may hold a module the DeBasher UI generated
@@ -98,6 +123,13 @@ debasher::_is_ui_program_dir()
     local dir=$1
     local module=$2
 
+    if [ -f "$(debasher::_get_ui_program_topology_fname "${dir}")" ]; then
+        local name
+        name=$(debasher::_get_ui_program_name "${dir}") || return 1
+        [ "${name}" = "${module}" ]
+        return
+    fi
+
     local metadata_fname=$(debasher::_get_ui_program_metadata_fname "${dir}")
 
     [ -f "${metadata_fname}" ] || return 1
@@ -106,16 +138,30 @@ debasher::_is_ui_program_dir()
 }
 
 ########
-# Echoes the name of the program whose metadata the DeBasher UI keeps in
-# the directory `dir`: the top-level "name" field of
-# .debasher/program.json, after which the UI names the script of the
-# program, <name>.sh, whatever the name of the directory. Read as JSON,
-# since the processes and options of the program have "name" fields too.
-# Returns 1, with no output, when the directory has no such metadata or
-# the name cannot be read from it.
+# Echoes the name of the program that the DeBasher UI saved in the
+# directory `dir`, after which the UI names the script of the program,
+# <name>.sh, whatever the name of the directory: the top-level "name" of
+# the topology file, the line "name: <name>" at column zero (the processes
+# are named by keys indented below "processes:", never at column zero),
+# with or without quotes; or, for a directory that has no topology file,
+# the top-level "name" field of .debasher/program.json, read as JSON, since
+# the processes and options of the program have "name" fields too. Returns
+# 1, with no output, when the directory holds neither or the name cannot
+# be read.
 debasher::_get_ui_program_name()
 {
     local dir=$1
+
+    local topology_fname=$(debasher::_get_ui_program_topology_fname "${dir}")
+    if [ -f "${topology_fname}" ]; then
+        local name
+        name=$("${GREP}" -m 1 '^name:' "${topology_fname}" \
+                   | "${SED}" -e 's/^name:[[:space:]]*//' -e 's/[[:space:]]*$//' \
+                              -e "s/^[\"']\(.*\)[\"']\$/\\1/")
+        [ -n "${name}" ] || return 1
+        echo "${name}"
+        return 0
+    fi
 
     local metadata_fname=$(debasher::_get_ui_program_metadata_fname "${dir}")
 
@@ -148,8 +194,9 @@ debasher::_search_mod_in_immediate_subdirs()
     # program any deeper than that, so this never descends further).
     # Unlike a hand-written module, the file must carry the ".sh"
     # extension and is only accepted once debasher::_is_ui_program_dir
-    # confirms it via the sibling .debasher/program.json metadata the UI
-    # always writes alongside it.
+    # confirms it via the sibling topology file (program.yaml), or the
+    # program metadata (.debasher/program.json) of an older save, that
+    # the UI always writes alongside it.
     #
     # Leaves the resolved path in DEBASHER_SUBDIR_MOD_MATCH on success
     # (empty otherwise) -- not echoed, since this is called directly

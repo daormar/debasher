@@ -57,7 +57,6 @@ hello_world()
 }
 
 
-
 webui_hello_world_program()
 {
     add_debasher_process "hello_world" "cpus=1 mem=256 time=01:00:00" ""
