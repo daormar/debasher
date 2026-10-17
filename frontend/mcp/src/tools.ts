@@ -246,7 +246,7 @@ const readingTools = [
         const handler = process.optionsHandler;
         if (handler.language === "python" && (handler.mode === "array" || handler.mode === "generator")) {
           throw new Refusal(
-            `The options handler of ${name} is the Python tasks file ${process.files?.tasks || `${name}_tasks.py`}, which defines tasks(run) (see "The Tasks in Python" in the documentation): the code prompt is for Bash code; change that file with write_program_file.`
+            `The options handler of ${name} is the Python tasks file ${process.files?.tasks || `${name}_tasks.py`}, which defines tasks(run) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): the code prompt is for Bash code; change that file with write_program_file.`
           );
         }
         if (handler.mode === "array") {
@@ -267,13 +267,13 @@ const readingTools = [
       const methods = process.additionalMethods;
       if (method.key === "skipCode" && methods.skipLanguage === "python") {
         throw new Refusal(
-          `The skip method of ${name} is the Python skip file ${process.files?.methods?.skip || `${name}_skip.py`}, which defines skip(task): the code prompt is for Bash code; change that file with write_program_file.`
+          `The skip method of ${name} is the Python skip file ${process.files?.methods?.skip || `${name}_skip.py`}, which defines skip(task) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): the code prompt is for Bash code; change that file with write_program_file.`
         );
       }
       const listed = method.key === "condaEnvsCode" ? methods.condaEnvs : method.key === "dockerImgsCode" ? methods.dockerImgs : undefined;
       if (listed?.length) {
         throw new Refusal(
-          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments" : "Docker images"} as a list, under ${method.name} in program.yaml, from which the method is written: change them there.`
+          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments as data (name: YAML file)" : "Docker images as data (a list of images)"}, under ${method.name} in program.yaml, from which the method is written: change them there, or, in a program described in Python (a <name>.py beside <name>.sh), in ${method.name}= of its description, then run debasher_build <name>.py.`
         );
       }
       return buildMethodPrompt(program, process, method.key, methods[method.key] ?? "", request);

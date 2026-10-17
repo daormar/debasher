@@ -213,6 +213,47 @@ def test_the_module_of_an_array_loops_over_its_array(tmp_path):
     assert 'for task_idx in "${!array[@]}"; do' in module
 
 
+@pytest.mark.parametrize(
+    "cls, field, code",
+    [
+        (Array, "arrayCode", "def tasks(run):\n    return ['a', 'b']"),
+        (Generator, "generatorSizeCode", "def tasks(run):\n    return 2"),
+    ],
+)
+def test_a_tasks_file_in_python_gives_a_handler_in_python(tmp_path, cls, field, code):
+    work = cls("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+               tasks=_file(tmp_path, "work_tasks.py", code + "\n"))
+    prg = Program("prg")
+    prg.add(work)
+
+    process = prg.to_model().processes[0]
+    assert process.optionsHandler.language == "python"
+    assert getattr(process.optionsHandler, field) == code
+    assert process.files.tasks == "work_tasks.py"
+
+
+def test_a_tasks_file_of_another_extension_is_bash(tmp_path):
+    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+                 tasks=_file(tmp_path, "tasks.txt", "local array=(a)\n"))
+    prg = Program("prg")
+    prg.add(work)
+
+    assert prg.to_model().processes[0].optionsHandler.language == "bash"
+
+
+def test_the_module_of_an_array_in_python_calls_its_tasks_file(tmp_path):
+    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+                 tasks=_file(tmp_path, "work_tasks.py", "def tasks(run):\n    return ['a']\n"))
+    prg = Program("prg")
+    prg.add(work)
+
+    home = tmp_path / "home"
+    module = prg.write(home).read_text()
+    assert ('    debasher::tasks_from_file array "work_tasks.py" "${cmdline}" "${process_name}" '
+            '"${process_outdir}" || return 1\n') in module
+    assert (home / "work_tasks.py").read_text() == "def tasks(run):\n    return ['a']\n"
+
+
 # --- additional methods -----------------------------------------------------------
 
 
@@ -241,12 +282,74 @@ def test_the_additional_methods_come_from_their_files(tmp_path):
     assert "work_conda_envs()\n{\n    define_conda_env py27 py27.yml\n}" in module
 
 
+def test_a_skip_file_in_python_gives_a_skip_method_in_python(tmp_path):
+    work = Process("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+                   skip=_file(tmp_path, "work_skip.py", "def skip(task):\n    return False\n"))
+    prg = Program("prg")
+    prg.add(work)
+
+    process = prg.to_model().processes[0]
+    assert process.additionalMethods.skipLanguage == "python"
+    assert process.additionalMethods.skipCode == "def skip(task):\n    return False"
+    assert process.files.methods == {"skip": "work_skip.py"}
+    module = prg.write(tmp_path / "home").read_text()
+    assert 'work_skip()\n{\n    debasher::skip_from_file "work" "work_skip.py" "$@"\n}' in module
+
+
+@pytest.mark.parametrize("method", ["post", "reset_outfiles", "outdir_basename", "conda_envs", "docker_imgs"])
+def test_a_python_file_for_another_method_is_refused(tmp_path, method):
+    with pytest.raises(DefinitionError, match="only the skip method takes one"):
+        Process("work", code="work.sh", **{method: "method.py"})
+
+
+def test_the_environments_given_as_data_go_into_the_model_and_the_module(tmp_path):
+    work = Process("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+                   conda_envs={"py27": "py27.yml", "tools": "tools.yml"},
+                   docker_imgs=["ubuntu:24.04"])
+    prg = Program("prg")
+    prg.add(work)
+
+    methods = prg.to_model().processes[0].additionalMethods
+    assert [(env.name, env.file) for env in methods.condaEnvs] == [("py27", "py27.yml"), ("tools", "tools.yml")]
+    assert methods.dockerImgs == ["ubuntu:24.04"]
+    assert methods.condaEnvsCode is None and methods.dockerImgsCode is None
+    module = prg.write(tmp_path / "home").read_text()
+    assert ('work_conda_envs()\n{\n    debasher::define_conda_env "py27" "py27.yml" || return 1\n'
+            '    debasher::define_conda_env "tools" "tools.yml" || return 1\n}') in module
+    assert 'work_docker_imgs()\n{\n    debasher::pull_docker_img "ubuntu:24.04" || return 1\n}' in module
+
+
+@pytest.mark.parametrize(
+    "fields, message",
+    [
+        ({"conda_envs": ["py27.yml"]}, "conda_envs is a dict"),
+        ({"conda_envs": {"py27": ""}}, "conda_envs is a dict"),
+        ({"docker_imgs": {"ubuntu": "24.04"}}, "docker_imgs is a list"),
+        ({"docker_imgs": ["ubuntu", 3]}, "docker_imgs is a list"),
+    ],
+)
+def test_environments_of_the_wrong_shape_are_refused(fields, message):
+    with pytest.raises(DefinitionError, match=message):
+        Process("work", code="work.sh", **fields)
+
+
+def test_an_environment_that_the_module_cannot_write_is_refused_when_written(tmp_path):
+    work = Process("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
+                   docker_imgs=['ubuntu"; rm -rf /'])
+    prg = Program("prg")
+    prg.add(work)
+
+    with pytest.raises(DefinitionError):
+        prg.write(tmp_path / "home")
+    assert not (tmp_path / "home").exists()
+
+
 def test_a_process_without_additional_methods_has_none(tmp_path):
     prg = Program("prg")
     prg.add(_work(tmp_path))
 
     methods = prg.to_model().processes[0].additionalMethods
-    assert all(getattr(methods, field) is None for field in type(methods).model_fields)
+    assert not methods.model_dump(exclude_defaults=True)
 
 
 def test_a_missing_method_file_is_reported_when_the_program_is_written(tmp_path):

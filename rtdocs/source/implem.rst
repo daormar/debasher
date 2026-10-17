@@ -12,9 +12,10 @@ Python with the SDK, as processes with their options and a program that
 adds them, which a tool turns into the same saved program and the
 same module that the editor saves, so that the program opens in the
 editor and runs with the same tools. The first way needs no Python; the
-second keeps Bash to the code of the processes written in it and to the
-pieces that the editor takes in Bash, the tasks of an array or a
-generator and the additional methods of a process.
+second keeps Bash to the code of the processes written in it, the values
+of the options and the bodies of most additional methods, while the
+tasks of an array or a generator and the skip method may be Python
+functions, and the environments of a process are data.
 
 .. toctree::
    :maxdepth: 2

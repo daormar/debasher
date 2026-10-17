@@ -17,9 +17,13 @@ from examples import SDK_PROGRAMS_DIR, TWINS, example_file  # noqa: E402
 
 _EXAMPLES = sorted(path.name for path in SDK_PROGRAMS_DIR.iterdir() if path.is_dir())
 
+# The examples whose twin the web UI cannot save yet, since the editor
+# does not take a skip file in Python nor Conda environments as data
+_WITHOUT_TWIN = {"sdk_skip_py", "sdk_conda_envs"}
+
 
 def test_every_example_has_a_twin_of_the_web_ui():
-    assert _EXAMPLES == sorted(TWINS)
+    assert sorted(set(_EXAMPLES) - _WITHOUT_TWIN) == sorted(TWINS)
 
 
 @pytest.mark.parametrize("name", _EXAMPLES)

@@ -25,7 +25,7 @@ webui_dynamic_fanout_fifos/generate.sh	\
 webui_dynamic_fanout_fifos/program.yaml	\
 webui_dynamic_fanout_fifos/webui_dynamic_fanout_fifos.sh	\
 webui_dynamic_fanout_fifos/worker.sh	\
-webui_dynamic_fanout_fifos/worker_tasks.sh	\
+webui_dynamic_fanout_fifos/worker_tasks.py	\
 webui_fifo_sum/numbers.sh	\
 webui_fifo_sum/program.yaml	\
 webui_fifo_sum/sum.sh	\

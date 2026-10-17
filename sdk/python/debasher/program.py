@@ -301,16 +301,19 @@ class Program:
 
         tasks = self._read(process, process.tasks_path, "tasks file")
         if process.mode == "array":
-            return OptionsHandler(mode="array", arrayCode=tasks)
+            return OptionsHandler(mode="array", arrayCode=tasks, language=process.tasks_language)
         if process.mode == "generator":
-            return OptionsHandler(mode="generator", generatorSizeCode=tasks)
+            return OptionsHandler(mode="generator", generatorSizeCode=tasks, language=process.tasks_language)
         return OptionsHandler(mode=process.mode)
 
     def _additional_methods(self, process: Process):
-        from api.models import AdditionalMethods
+        from api.models import AdditionalMethods, CondaEnv
 
         return AdditionalMethods(
-            **{field: self._read(process, path, "method file") for field, path in process.method_paths.items()}
+            **{field: self._read(process, path, "method file") for field, path in process.method_paths.items()},
+            skipLanguage=process.skip_language,
+            condaEnvs=[CondaEnv(name=name, file=file) for name, file in process.conda_envs.items()],
+            dockerImgs=process.docker_imgs,
         )
 
     @staticmethod

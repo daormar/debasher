@@ -167,17 +167,23 @@ The pieces, in the order a process is written:
   of the process it is connected to.
 * **Arrays and generators.** ``Array`` and ``Generator`` are processes
   with several tasks, the array and generator modes of the options
-  handler of the editor, and ``tasks=`` names a Bash file with the code
-  that the editor accepts in that mode: for an array, the code that
-  builds the array of its tasks from the command line of the run
-  (``worker_tasks.sh``, one element per worker); for a generator, the
-  code that prints the number of tasks. That code runs when
+  handler of the editor, and ``tasks=`` names the file that shapes
+  them. A Python file (``.py``) defines a function ``tasks(run)``, which
+  returns the elements of the array, or the number of tasks of a
+  generator, from the command line of the run: ``worker_tasks.py`` gives
+  one element per worker,
+
+  .. literalinclude:: ../../data/sdk_programs/python/sdk_dynamic_fanout_fifos/worker_tasks.py
+     :language: python
+
+  and any other file is Bash, the code that the editor accepts in that
+  mode (see :ref:`tasks_in_python` for what ``run`` holds and how the
+  module calls the function). Either way the code runs when
   ``debasher_exec`` prepares a run, as it does for a program of the
-  editor, since the tasks depend on the command line of each run. The
-  additional methods of a process (``skip``, ``post``,
-  ``reset_outfiles``, ``outdir_basename``, ``conda_envs``,
-  ``docker_imgs``) are Bash files too, each with the body that the
-  editor takes.
+  editor, since the tasks depend on the command line of each run, and
+  only the shape of the tasks comes from it: the values of the options
+  of each task are still the Bash words of their declarations, such as
+  ``subpath="${task_idx}"``.
 * **The program.** ``Program`` takes the description, the program
   options that a run is given (what "Set program options" of the editor
   holds), the preamble, the environment variables, the shared
@@ -187,6 +193,56 @@ The pieces, in the order a process is written:
   explicit dependencies (``processdeps="afterok:count"``), ``force``,
   and ``position`` on the canvas when the layout of the editor is not
   wanted.
+
+Skipping tasks, and the environments of a process
+-------------------------------------------------
+
+The additional methods of a process (``skip``, ``post``,
+``reset_outfiles``, ``outdir_basename``) are given as files, each with
+the Bash body that the editor takes. The skip method may be a Python
+file instead, with a function ``skip(task)`` that returns ``True`` to
+skip the task and ``False`` to run it. The skip example of the
+:ref:`implem_bash` Section, shipped as ``sdk_skip_py``, skips the
+process that reads a sum when the sum is odd:
+
+.. literalinclude:: ../../data/sdk_programs/python/sdk_skip_py/sdk_skip_py.py
+   :language: python
+   :start-at: from debasher
+
+.. literalinclude:: ../../data/sdk_programs/python/sdk_skip_py/value_reader_skip.py
+   :language: python
+
+``task.value`` reads an option of the task as
+``read_opt_value_from_func_args`` does, so the value that a value
+descriptor holds comes back as it is. The function runs inside the
+task, with the options of the task, before anything of its process
+output directory is touched; an error in it (an exception, a value that
+is not ``True`` or ``False``) fails the task instead of running it.
+Only ``skip`` takes a Python file: any other method given one is an
+error.
+
+The Conda environments and the Docker images of a process are data:
+``conda_envs=`` takes the name of each environment and its yml file,
+and ``docker_imgs=`` a list of images, from which the module writes the
+lines that prepare them when the run has conda or docker support
+(``conda_support=True`` or ``docker_support=True`` in ``Program``, or
+``--conda-support`` or ``--docker-support`` given to ``debasher_exec``).
+The yml file is found in the directories that ``DEBASHER_YML_DIR``
+lists, else among those installed with DeBasher, where ``py27.yml`` is,
+and not beside the description. ``sdk_conda_envs`` activates the
+environment ``py27``, which its runs create if it does not exist:
+
+.. literalinclude:: ../../data/sdk_programs/python/sdk_conda_envs/sdk_conda_envs.py
+   :language: python
+   :start-at: python_version =
+   :end-before: python_version.output
+
+A path given to ``conda_envs=`` or ``docker_imgs=`` is a method file
+with the Bash body instead, as for the other methods.
+
+A tasks file and a skip file in Python run with the Python of DeBasher,
+not inside the Conda environment or the Docker image of the process, so
+the packages they import are those of that Python.
 
 A resident program
 ------------------
@@ -229,7 +285,10 @@ What the SDK does not do
   file names the same file, and survives the next build, while a change
   to the options, the connections or the specifications goes into
   ``program.yaml`` only and is written over by the next build.
-* It computes no dynamic options in Python: the code that shapes the
-  tasks of an array or a generator is the Bash that the editor accepts,
-  in a file. The manual mode of the editor, a whole ``define_opts``
-  written by hand, is not offered either.
+* It shapes no tasks itself: a tasks file in Python is run by the
+  engine when it prepares a run, and only shapes the tasks; the values
+  of the options, the preamble and the bodies of ``post``,
+  ``reset_outfiles`` and ``outdir_basename`` stay Bash, as the engine
+  reads them. The manual mode of the editor, a whole ``define_opts``
+  written by hand, is not offered: a program that needs it is written
+  as a module (see the :ref:`implem_bash` Section).

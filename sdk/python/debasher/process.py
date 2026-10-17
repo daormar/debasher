@@ -7,7 +7,7 @@ several programs.
 
 A process defines one task from its declared options; an Array or a
 Generator defines several, with the code of the options handler that the
-editor accepts, kept in a file (`tasks=`).
+editor accepts, kept in a file (`tasks=`), in Bash or in Python.
 
 Every option is declared by a method of the process that gives it its
 value source (the command line, a connection, a literal value) and its
@@ -99,6 +99,40 @@ def option_direction(label: str) -> str:
     return "output" if label.startswith("-out") or label.startswith("--out") else "input"
 
 
+def func_language(path: Path | None) -> str:
+    """The language of a tasks file or a skip file, by its extension, as the
+    topology file tells it: Python for `.py`, Bash for any other."""
+    return "python" if path is not None and path.suffix == ".py" else "bash"
+
+
+def _conda_envs_data(process_name: str, conda_envs) -> dict[str, str]:
+    """The Conda environments given as data, name to yml file; empty when
+    none are, or when a method file is given instead."""
+    if conda_envs is None or isinstance(conda_envs, (str, Path)):
+        return {}
+    if not isinstance(conda_envs, dict) or not all(
+        isinstance(name, str) and name and isinstance(file, str) and file for name, file in conda_envs.items()
+    ):
+        raise DefinitionError(
+            f'Process "{process_name}": conda_envs is a dict of the name of each Conda environment to '
+            'its yml file ({"py27": "py27.yml"}), or the path of a method file.'
+        )
+    return dict(conda_envs)
+
+
+def _docker_imgs_data(process_name: str, docker_imgs) -> list[str]:
+    """The Docker images given as data; empty when none are, or when a
+    method file is given instead."""
+    if docker_imgs is None or isinstance(docker_imgs, (str, Path)):
+        return []
+    if not isinstance(docker_imgs, (list, tuple)) or not all(isinstance(img, str) and img for img in docker_imgs):
+        raise DefinitionError(
+            f'Process "{process_name}": docker_imgs is a list of Docker images (["ubuntu:24.04"]), or '
+            "the path of a method file."
+        )
+    return list(docker_imgs)
+
+
 # A source of an input: the output option it reads, or the name of the
 # process and the label of the output, as a hand-written module names them.
 Source = Union["Option", tuple[str, str]]
@@ -183,12 +217,16 @@ class Process:
     - none of them: the code of a process of that name that a module
       loaded by the preamble of the program provides.
 
-    The additional methods of the process, which the editor takes as Bash
-    bodies, are given as files too: `skip` (whether the process is
-    skipped), `post` (run after the process), `reset_outfiles` (what to
-    remove before a rerun), `outdir_basename` (the name of the process
-    output directory), `conda_envs` and `docker_imgs` (the environments
-    the process declares).
+    The additional methods of the process are given as files too, each
+    with the body that the editor takes: `skip` (whether a task is
+    skipped), a Bash body, or a skip file in Python (`.py`) that defines
+    `skip(task)`; `post` (run after the process), `reset_outfiles` (what
+    to remove before a rerun) and `outdir_basename` (the name of the
+    process output directory), Bash bodies. The environments that the
+    process declares are data: `conda_envs`, a dict of the name of each
+    Conda environment to its yml file, and `docker_imgs`, a list of
+    Docker images; a path given instead is a file with the Bash body of
+    the method.
 
     A relative path is taken from the directory of the Python file that
     creates the process (`base_dir` names another directory).
@@ -210,8 +248,8 @@ class Process:
         post: str | Path | None = None,
         reset_outfiles: str | Path | None = None,
         outdir_basename: str | Path | None = None,
-        conda_envs: str | Path | None = None,
-        docker_imgs: str | Path | None = None,
+        conda_envs: str | Path | dict[str, str] | None = None,
+        docker_imgs: str | Path | list[str] | tuple[str, ...] | None = None,
     ):
         check_process_name(name)
         given = [kind for kind, value in (("code", code), ("script", script), ("alias", alias)) if value]
@@ -238,8 +276,10 @@ class Process:
         self.alias = alias
         self.alias_opt_map = dict(alias_opt_map or {})
         self.language = language or self._language_of(self.code_path or self.script_path) or "bash"
-        # The files of the additional methods, by the field of the program
-        # model that holds each body
+        # The environments given as data, and the files of the additional
+        # methods, by the field of the program model that holds each body
+        self.conda_envs = _conda_envs_data(name, conda_envs)
+        self.docker_imgs = _docker_imgs_data(name, docker_imgs)
         self.method_paths: dict[str, Path] = {}
         for field, path in (
             ("skipCode", skip),
@@ -249,9 +289,17 @@ class Process:
             ("condaEnvsCode", conda_envs),
             ("dockerImgsCode", docker_imgs),
         ):
-            if path is not None:
+            if isinstance(path, (str, Path)):
                 self.method_paths[field] = self._resolve(path)
+        for field, path in self.method_paths.items():
+            if field != "skipCode" and func_language(path) == "python":
+                raise DefinitionError(
+                    f'Process "{name}": {path.name} is a Python file, and only the skip method '
+                    "takes one; give the body of this method in Bash."
+                )
+        self.skip_language = func_language(self.method_paths.get("skipCode"))
         self.tasks_path: Path | None = None
+        self.tasks_language = "bash"
         self.options: list[Option] = []
 
     def __repr__(self) -> str:
@@ -437,7 +485,8 @@ class Process:
 
 class _TaskedProcess(Process):
     """A process with several tasks, shaped by the code of its options
-    handler, which `tasks` names: a Bash file, as the editor accepts it."""
+    handler, which `tasks` names: a Bash file, as the editor accepts it,
+    or a tasks file in Python (`.py`), which defines `tasks(run)`."""
 
     def __init__(self, name: str, *args, tasks: str | Path | None = None, **kwargs):
         super().__init__(name, *args, **kwargs)
@@ -447,6 +496,7 @@ class _TaskedProcess(Process):
                 "its options handler."
             )
         self.tasks_path = self._resolve(tasks)
+        self.tasks_language = func_language(self.tasks_path)
 
 
 class Array(_TaskedProcess):
@@ -454,9 +504,11 @@ class Array(_TaskedProcess):
     An array process: `tasks` is a Bash file that builds the array of its
     tasks, under the name `array`, from the command line and the files of
     the run (`local w=$(debasher::read_opt_value_from_line "${cmdline}"
-    "-w")`, then `array+=(...)`); every option is defined once per element,
-    with `${task_idx}` and `${array[$task_idx]}` at hand in its value. It is
-    the array mode of the options handler of the editor.
+    "-w")`, then `array+=(...)`), or a Python file whose `tasks(run)`
+    returns the elements (`range(int(run.value("-w")))`); every option is
+    defined once per element, with `${task_idx}` and `${array[$task_idx]}`
+    at hand in its value. It is the array mode of the options handler of
+    the editor.
     """
 
     mode = "array"
@@ -466,9 +518,10 @@ class Array(_TaskedProcess):
 class Generator(_TaskedProcess):
     """
     An option generator: `tasks` is a Bash file that prints the number of
-    tasks, from the command line and the files of the run; the options of
-    each task are defined from its index, `${task_idx}`, in their values. It
-    is the generator mode of the options handler of the editor.
+    tasks, from the command line and the files of the run, or a Python
+    file whose `tasks(run)` returns it; the options of each task are
+    defined from its index, `${task_idx}`, in their values. It is the
+    generator mode of the options handler of the editor.
     """
 
     mode = "generator"

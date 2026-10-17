@@ -380,12 +380,8 @@ worker_define_opts()
     local process_name=$3
     local process_outdir=$4
 
-    # Build one array element per worker task
-    local w=$(debasher::read_opt_value_from_line "${cmdline}" "-w")
-    local array=()
-    for ((i=0; i<w; i++)); do
-        array+=("$i")
-    done
+    local array
+    debasher::tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1
 
     local task_idx
     for task_idx in "${!array[@]}"; do

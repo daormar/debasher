@@ -131,7 +131,8 @@ describe("reading a program", () => {
 
     await expect(prompt("options_handler")).rejects.toThrow("Python tasks file w_tasks.py, which defines tasks(run)");
     await expect(prompt("skip")).rejects.toThrow("Python skip file w_skip.py, which defines skip(task)");
-    await expect(prompt("conda_envs")).rejects.toThrow("Conda environments as a list, under conda_envs in program.yaml");
+    await expect(prompt("conda_envs")).rejects.toThrow("Conda environments as data (name: YAML file), under conda_envs in program.yaml");
+    await expect(prompt("conda_envs")).rejects.toThrow("in conda_envs= of its description, then run debasher_build <name>.py");
   });
 
   it("refuses an edit that would put other code into a Python file or a body beside environments given as data", async () => {
@@ -147,7 +148,8 @@ describe("reading a program", () => {
     await expect(update({ optionsHandler: { arrayCode: "array=(1)" } })).rejects.toThrow("Python tasks file w_tasks.py");
     await expect(update({ optionsHandler: { mode: "manual" } })).rejects.toThrow("Python tasks file w_tasks.py");
     await expect(update({ additionalMethods: { skipCode: "return 1" } })).rejects.toThrow("Python skip file w_skip.py");
-    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("Docker images as a list, under docker_imgs");
+    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("Docker images as data (a list of images), under docker_imgs");
+    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("in docker_imgs= of its description");
     // What the edit does not touch is no problem
     await update({ description: "A new description." });
     await update({ optionsHandler: { mode: "standard" } });

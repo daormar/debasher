@@ -1343,10 +1343,12 @@ missing.
 
 * ``conda_envs``: declares the Conda environments the process needs,
   using the ``define_conda_env`` function (given an environment name
-  and a ``.yml`` file). When the program runs with ``--conda-support``,
-  DeBasher creates the environment if it does not exist yet, and the
-  process implementation, which activates it with ``conda_activate``,
-  can just assume it already exists:
+  and a ``.yml`` file, looked for in the directories that the
+  environment variable ``DEBASHER_YML_DIR`` lists, separated by ``:``,
+  else among those installed with DeBasher). When the program runs with
+  ``--conda-support``, DeBasher creates the environment if it does not
+  exist yet, and the process implementation, which activates it with
+  ``conda_activate``, can just assume it already exists:
 
   .. code-block:: bash
 

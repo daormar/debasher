@@ -122,7 +122,7 @@ processes:
       another file for each one.
     code: worker.sh
     mode: array
-    tasks: worker_tasks.sh
+    tasks: worker_tasks.py
     specs: {cpus: 1, mem: 32, time: '00:01:00'}
     position: {x: 360, y: 580}
     options:

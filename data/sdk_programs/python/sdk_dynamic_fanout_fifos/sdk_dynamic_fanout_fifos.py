@@ -3,8 +3,8 @@
 # dispatcher streams through FIFOs to a pool of workers, an array process
 # with one task per worker, and a last process merges their counts. Each
 # process has its code in a file beside this one; the worker is an array,
-# whose tasks a Bash file shapes (worker_tasks.sh), and the dispatcher is
-# a script that the module runs as it is.
+# whose tasks a Python function shapes (worker_tasks.py), and the
+# dispatcher is a script that the module runs as it is.
 
 from debasher import Array, Process, Program, in_outdir
 
@@ -45,7 +45,7 @@ dispatch.cmdline_opt("--log-level", "string",
                      "Logging verbosity. Choices: DEBUG, INFO, WARNING, ERROR, CRITICAL (default: INFO).",
                      mandatory=False)
 
-worker = Array("worker", code="worker.sh", tasks="worker_tasks.sh",
+worker = Array("worker", code="worker.sh", tasks="worker_tasks.py",
                description="Executes an array of w tasks. Each task takes a list of text files "
                "and generates another file for each one.")
 worker.outdir_opt("-outd", "directory of the task, below the output directory of the process",

@@ -1,9 +1,9 @@
 """
 The examples described with the SDK that ship under
-data/sdk_programs/python, each the program that the web UI saved under
-data/webui_programs with another name: loaded for the tests that compare
-the two, as the web UI's twin (the name, the description text and the
-positions of the editor, which the examples do not carry).
+data/sdk_programs/python, most of them the program that the web UI saved
+under data/webui_programs with another name: loaded for the tests that
+compare the two, as the web UI's twin (the name, the description text and
+the positions of the editor, which the examples do not carry).
 """
 
 from pathlib import Path

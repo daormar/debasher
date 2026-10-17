@@ -108,14 +108,27 @@ entries below that refer to them.
   (`Process`); the array mode (`Array`) and the generator mode
   (`Generator`), several tasks shaped by code; the manual mode, a whole
   `_define_opts` by hand, which the SDK does not offer.
-- **tasks file**: the Bash file that shapes the tasks of an `Array` or a
-  `Generator` (`tasks=`): the code that the editor accepts in the options
-  handler of that mode, which builds the array of the tasks or prints
-  their number, and which the engine runs when it prepares a run.
-- **method file**: a Bash file with the body of one of the additional
-  methods of a process (`skip`, `post`, `reset_outfiles`,
-  `outdir_basename`, `conda_envs`, `docker_imgs`), as the editor takes
-  it in its additional methods.
+- **tasks file**: the file that shapes the tasks of an `Array` or a
+  `Generator` (`tasks=`), which the engine runs when it prepares a run:
+  in Bash, the code that the editor accepts in the options handler of
+  that mode, which builds the array of the tasks or prints their number;
+  in Python (`.py`), a Python function file of the engine that defines
+  `tasks(run)`, which returns the elements of the array or the number of
+  tasks (see "Python function files" in `doc/design_doc_engine.md`). The
+  term is wider here than in the design of the engine, where a tasks
+  file is the Python case only.
+- **method file**: a file with the body of one of the additional methods
+  of a process (`skip`, `post`, `reset_outfiles`, `outdir_basename`,
+  `conda_envs`, `docker_imgs`), as the editor takes it in its additional
+  methods: a Bash body, or, for `skip` only, a skip file.
+- **skip file**: as in the design of the engine: a Python function file
+  that defines `skip(task)`, which returns whether a task is skipped,
+  given as the method file of `skip` (`skip=` with a `.py` path).
+- **environments as data**: the Conda environments of a process, a name
+  and a YAML file each (`conda_envs=` given as a dict), and its Docker
+  images (`docker_imgs=` given as a list), which the program model keeps
+  as data (`condaEnvs`, `dockerImgs`) and from which script generation
+  writes the bodies of the `conda_envs` and `docker_imgs` methods.
 - **node**: as in the design of resident programs: a process of a
   resident program, whose code is a Python class derived from a class of
   the runtime library (its node kind). In the SDK, a `Node`, whose code
@@ -222,25 +235,70 @@ ways, which the process may not combine:
 
 A `Process` defines one task from its declared options. An `Array` and a
 `Generator` define several, shaped by a tasks file that they require
-(`tasks=`): for an array, the Bash that builds the array of the tasks
-under the name `array`, from the command line of the run and the files
-present then, after which every option of the process is defined once
-per element, with `${task_idx}` and `${array[$task_idx]}` at hand in its
-value; for a generator, the Bash that prints the number of tasks, each
-task's options being defined from `${task_idx}`. They are the array and
-generator modes of the options handler, and the tasks file is the code
-of the options handler as the editor keeps it, in a file instead of a
-box. A task shaping option of such a process
+(`tasks=`): for an array, the code that builds the array of the tasks
+(in Bash, under the name `array`), from the command line of the run and
+the files present then, after which every option of the process is
+defined once per element, with `${task_idx}` and `${array[$task_idx]}`
+at hand in its value; for a generator, the code that gives the number of
+tasks, each task's options being defined from `${task_idx}`. They are
+the array and generator modes of the options handler, and the tasks file
+is the code of the options handler as the editor keeps it, in a file
+instead of a box. A task shaping option of such a process
 (`cmdline_opt(..., shaping=True)`) is read by the tasks file only, as in
 the editor. The code of the tasks file runs when the engine prepares a
 run, not when the program is built: the tasks depend on the command line
-of each run, which a build does not know (see "Future work" for the same
-code in Python).
+of each run, which a build does not know.
+
+The extension of the tasks file says its language, as the topology file
+reads it: a `.py` file is a tasks file in Python, and any other is Bash.
+In Python the file defines `tasks(run)`, which returns the elements of
+the array, or the number of tasks of a generator, from the command line
+of the run (`run.value("-w")`), its process and its process output
+directory; the generated module calls it through `tasks_from_file` or
+`num_tasks_from_file` of the engine, in the one line that replaces the
+Bash. Only the shape of the tasks moves to Python: the option
+definitions of each task stay those that script generation writes, and
+their values the Bash words that reach the element or the index of the
+task (`${array[$task_idx]}`, `${task_idx}`).
+
+```python
+from debasher import Array
+
+worker = Array("worker", code="worker.sh", tasks="worker_tasks.py")
+worker.cmdline_opt("-w", "int", "Number of workers.", shaping=True)
+
+# worker_tasks.py
+def tasks(run):
+    return range(int(run.value("-w")))
+```
 
 The additional methods of a process are given as method files (`skip=`,
 `post=`, `reset_outfiles=`, `outdir_basename=`, `conda_envs=`,
 `docker_imgs=`), each a Bash body that the editor would take in its
-additional methods, and go into the program model as such.
+additional methods, and go into the program model as such. The method
+file of `skip` may be a skip file instead, by the same rule of the
+extension: `skip(task)` returns `True` to skip the task and `False` to
+run it, reading the options of the task (`task.value("-val-desc")`
+gives the value that a value descriptor holds), and the module calls it
+through `skip_from_file`. A Python file for any other method is
+refused, since the engine runs no other method from one.
+
+The environments of a process may be given as data instead of a body:
+`conda_envs={"py27": "py27.yml"}`, the name of each Conda environment
+and its YAML file, and `docker_imgs=["ubuntu:24.04"]`, the Docker images
+it uses. A path given to either is a method file with the Bash body, as
+for the other methods; a dict or a list of the wrong shape (an empty
+name or file, an image that is not a string) is refused when the
+process is created.
+
+`script=` and `code=` are two arguments, although script generation
+writes the same external alias for a `code=` file of another language
+(see "The process files" in `doc/design_doc_webui.md`): they say who
+owns the file. The editor shows a `code=` file as the code of the
+process and writes it on Save, while it only shows a script, which the
+user keeps as an executable of their own (the dispatcher of
+`sdk_dynamic_fanout_fifos`); and a script may be Bash, which as a
+`code=` file would be embedded in the module instead.
 
 ## Options
 
@@ -401,9 +459,15 @@ with these rules:
   the module will refer to (see "Writing the program").
 - **Options handler.** The mode of the process, with the text of the
   tasks file as the array code or the generator size code of an `Array`
-  or a `Generator`; a `Process` is in the standard mode. The text of each
-  method file goes into the additional methods of the process. Both are
-  read at this moment, and a file that cannot be read is refused.
+  or a `Generator`, and its language (`language`, Python for a `.py`
+  file); a `Process` is in the standard mode. The text of each method
+  file goes into the additional methods of the process, with the
+  language of the skip file (`skipLanguage`), and the environments as
+  data go into `condaEnvs` and `dockerImgs`. The files are read at this
+  moment, and a file that cannot be read is refused. The paths of the
+  tasks file and of the method files go into the files of the process
+  (`files.tasks`, `files.methods`), which the module names when it calls
+  a tasks file or a skip file in Python.
 - **Nodes.** The node file of a `Node` is read and split with
   `decompose_heredoc` of the API, the code that import uses on the
   heredoc of a node, into the node kind and the parts of its code
@@ -519,22 +583,36 @@ a change to it is followed by another `debasher_build`.
 
 ## The examples
 
-Three descriptions ship under `data/sdk_programs/python/`, installed
-under `sdk_programs/python` of `$(pkgdatadir)`, one
-directory per program with the description named after it and the
-files of its processes beside it: `sdk_hello_world_py`, the hello world
-of the quickstart with its process in Python; `sdk_dynamic_fanout_fifos`,
-a generated file cut into fragments that a dispatcher, run as a script,
-streams through FIFOs to an array of workers whose tasks a tasks file
-shapes; and `sdk_running_sum`, a resident program with a node given as
-a file and a Supervisor. Each is the twin of a program saved under
-`data/webui_programs/`, which the tests check by writing the example as
+Five descriptions ship under `data/sdk_programs/python/`, installed
+under `sdk_programs/python` of `$(pkgdatadir)`, one directory per program
+with the description named after it and the files of its processes
+beside it:
+
+- `sdk_hello_world_py`, the hello world of the quickstart with its
+  process in Python;
+- `sdk_dynamic_fanout_fifos`, a generated file cut into fragments that a
+  dispatcher, run as a script, streams through FIFOs to an array of
+  workers whose tasks a tasks file in Python shapes;
+- `sdk_running_sum`, a resident program with a node given as a file and
+  a Supervisor;
+- `sdk_skip_py`, the skip example of the engine: a process sums two
+  numbers into a value descriptor, and another, skipped by its skip file
+  when the sum is odd, writes the sum plus one;
+- `sdk_conda_envs`, a process that activates a Conda environment given
+  as data and writes the version of its Python.
+
+The first three are the twins of programs saved under
+`data/webui_programs/`, which the tests check by writing each example as
 its twin and comparing the programs loaded from both and the module (see
-"Guarantees"). `make installcheck` builds each example from its installed
-directory with `debasher_build` into a directory of its own and runs the
-program built as it runs the others,
-or skips the three when the Python of `debasher_build` lacks the
-dependencies of the SDK, as it skips the checks of conda without conda.
+"Guarantees"); the editor has no field for a skip file in Python nor for
+the environments as data, so the last two have no twin (see "Future
+work"). `make installcheck`
+builds each example from its installed directory with `debasher_build`
+into a directory of its own and runs the program built as it runs the
+others (`sdk_skip_py` with an odd sum, checking that the skipped process
+wrote nothing), or skips them all when the Python of `debasher_build`
+lacks the dependencies of the SDK, and `sdk_conda_envs` without conda,
+as it skips the other checks of conda.
 
 # Installation, and finding the API and the engine
 
@@ -603,8 +681,8 @@ the positions and `api.topology` for the ids derived from names.
   the ids, the digest and home directory of the save and the names of the
   files of the artifact, and the module that script generation writes
   from it, byte for byte: the three examples of
-  `data/sdk_programs/python/`, written as their twins, are compared in
-  the tests with `data/webui_programs/webui_hello_world_py`,
+  `data/sdk_programs/python/` that have a twin, written as their twins,
+  are compared in the tests with `data/webui_programs/webui_hello_world_py`,
   `data/webui_programs/webui_dynamic_fanout_fifos` and
   `data/webui_programs/webui_running_sum` (see "The examples").
 - **Deterministic.** Two builds of the same description give the same
@@ -634,37 +712,37 @@ the positions and `api.topology` for the ids derived from names.
   through the persistence of the API and gives it back to it unchanged,
   with nothing of the SDK in between.
 - **A second engine.** No option is resolved, no dependency inferred and
-  no task defined in Python: what the engine does with the module it
-  does for a program of the SDK as for any other.
-- **Dynamic options in Python.** In this version the code of the options
-  handler of an array or a generator is the Bash that the editor accepts,
-  kept in a file (see "Future work").
+  no task defined by the SDK: what the engine does with the module it
+  does for a program of the SDK as for any other. A tasks file or a skip
+  file in Python is run by the engine, through its own functions, when
+  the module would run the Bash it replaces.
+- **Bash where the engine reads Bash.** What the engine itself takes as
+  Bash stays Bash in a description: the preamble of the program; the
+  value of an option, a Bash word that the engine expands when the
+  option is defined (`${process_outdir}/name`, `${array[$task_idx]}`),
+  so that the per-task values of an array or a generator are Bash words
+  even when a Python function shapes the tasks; and the bodies of
+  `post`, `reset_outfiles` and `outdir_basename`, the last two until the
+  program model has a field for them (see "Future work"). `post` runs
+  inside the task after the process and belongs with the code of the
+  process, which may be in any language.
+- **The manual mode.** A whole `_define_opts` written by hand, the
+  manual mode of the options handler of the editor, is not offered: it
+  is the method of a module, and a description that needs it is a
+  module.
 
 # Future work
 
-- **Dynamic options as Python functions.** The code of the options handler
-  of an array or a generator as a Python function in a tasks file, and
-  the skip rule of a process (`skip`) as one in a skip file, the Python
-  function files of the engine (see "Python function files" in
-  `doc/design_doc_engine.md`): the generated module calls them through
-  `tasks_from_file`, `num_tasks_from_file` and `skip_from_file`, which
-  give the elements of the array, the number of tasks or the decision as
-  data, and the option definitions of each task stay those that script
-  generation writes. It is exactly what the Bash does today, in Python,
-  and nothing more: the tasks code runs when `debasher_exec` prepares a
-  run, since the tasks depend on the command line of each run, which a
-  build does not know, and the skip rule inside each task, with its
-  options.
-- **The additional methods as data.** The Conda environments and Docker
-  images of a process, the files it removes before a rerun and the name
-  of its process output directory are data (a name and a file, a list of
-  names) that the editor and the SDK carry as Bash bodies because the
-  program model has no field for them. When the process contract of the
-  engine gives them a form, the SDK takes them as arguments
-  (`conda_envs={"py27": "py27.yml"}`) and the method files go; until
-  then the SDK writes no Bash from data, however short the body would
-  be. The `post` method, which runs inside the task after the process,
-  belongs with the code of the process.
+- **The other additional methods as data.** The files that a process
+  removes before a rerun and the name of its process output directory
+  are data (a list of paths, a name) that the editor and the SDK carry
+  as Bash bodies because the program model has no field for them. When
+  the program model gives them one, as it does for the environments, the
+  SDK takes them as arguments and script generation writes the body.
+- **Twins of the skip and environment examples.** When the editor edits a
+  skip file in Python and the environments as data, `sdk_skip_py` and
+  `sdk_conda_envs` get their twins under `data/webui_programs/`, and the
+  guarantee "What the editor saves" covers the five examples.
 - **Processes as a library, and namespaces.** A process defined in a
   Python module of the user and added to several programs, as a process
   of a loaded module is. The namespace of DeBasher is a naming convention
@@ -680,12 +758,3 @@ the positions and `api.topology` for the ids derived from names.
 - **Processes as decorated functions.** A Python function in the
   description itself, whose source the build extracts to a process file,
   for a process too small for a file of its own.
-- **`script=` as another name of `code=`.** For a file of another language
-  the two give the same module, since script generation refers to a
-  `code=` file as an external alias too (see "The process files" in
-  `doc/design_doc_webui.md`); the one difference left is who owns the
-  file (the editor writes a `code=` file and only shows a script). Whether
-  to keep `script=` for that difference or make it another name of `code=`
-  is to be decided. A tasks file in Python, when dynamic options as Python
-  functions exist, is named by `tasks` as a Bash one is, its extension
-  saying which.

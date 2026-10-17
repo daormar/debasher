@@ -1325,7 +1325,7 @@ echo "# Checks of the programs described with the Python SDK"
 echo ""
 
 if ! "${debasher_bindir}/debasher_build" --help > /dev/null 2>&1; then
-    for progname in sdk_hello_world_py sdk_dynamic_fanout_fifos sdk_running_sum; do
+    for progname in sdk_hello_world_py sdk_dynamic_fanout_fifos sdk_running_sum sdk_skip_py sdk_conda_envs; do
         print_skipped_check "${progname}" "debasher_build cannot run: the Python packages of the SDK are not installed"
         ((checks_skipped++))
     done
@@ -1390,6 +1390,59 @@ else
         esac
     else
         ((checks_failed++))
+    fi
+
+    # The skip rule in Python: the sum of 1 and 2 is odd, so value_reader
+    # is skipped, finished without having written its output
+    progname="sdk_skip_py"
+    if build_sdk_program "${tmpdir}" "${progname}"; then
+        check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
+                           "${progname}_builtin" "BUILTIN" 1 256 "-num-a 1 -num-b 2"
+        ret=$?
+        if [ ${ret} -eq 0 ] && [ -e "${tmpdir}/${progname}_builtin/value_reader/value_reader.out" ]; then
+            echo "value_reader was run instead of skipped"
+            echo ""
+            ret=1
+        fi
+        case ${ret} in
+            0)
+                ((checks_passed++))
+                ;;
+            1)
+                ((checks_failed++))
+                ;;
+            124)
+                ((checks_timedout++))
+                ;;
+        esac
+    else
+        ((checks_failed++))
+    fi
+
+    # The Conda environment given as data, which the run creates if it does
+    # not exist
+    progname="sdk_conda_envs"
+    if conda_is_usable; then
+        if build_sdk_program "${tmpdir}" "${progname}"; then
+            check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
+                               "${progname}_builtin" "BUILTIN" 1 256 ""
+            case $? in
+                0)
+                    ((checks_passed++))
+                    ;;
+                1)
+                    ((checks_failed++))
+                    ;;
+                124)
+                    ((checks_timedout++))
+                    ;;
+            esac
+        else
+            ((checks_failed++))
+        fi
+    else
+        print_skipped_check "${progname}" "conda not found"
+        ((checks_skipped++))
     fi
 fi
 

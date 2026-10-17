@@ -230,7 +230,7 @@ function pythonFilesProblem(process: ProgramProcess, changes: ProcessChanges): s
       handler.generatorSizeCode !== oldHandler.generatorSizeCode)
   ) {
     const path = process.files?.tasks || `${process.name}_tasks.py`;
-    return `The options handler of "${process.name}" is the Python tasks file ${path}, which defines tasks(run): change that file with write_program_file, not its mode or code here.`;
+    return `The options handler of "${process.name}" is the Python tasks file ${path}, which defines tasks(run) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): change that file with write_program_file, not its mode or code here.`;
   }
 
   const methods = changes.additionalMethods;
@@ -244,14 +244,14 @@ function pythonFilesProblem(process: ProgramProcess, changes: ProcessChanges): s
     methods.skipCode !== oldMethods.skipCode
   ) {
     const path = process.files?.methods?.skip || `${process.name}_skip.py`;
-    return `The skip method of "${process.name}" is the Python skip file ${path}, which defines skip(task): change that file with write_program_file.`;
+    return `The skip method of "${process.name}" is the Python skip file ${path}, which defines skip(task) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): change that file with write_program_file.`;
   }
   for (const [list, body, oldBody, what, key] of [
-    [methods.condaEnvs ?? oldMethods.condaEnvs, methods.condaEnvsCode, oldMethods.condaEnvsCode, "Conda environments", "conda_envs"],
-    [methods.dockerImgs ?? oldMethods.dockerImgs, methods.dockerImgsCode, oldMethods.dockerImgsCode, "Docker images", "docker_imgs"],
+    [methods.condaEnvs ?? oldMethods.condaEnvs, methods.condaEnvsCode, oldMethods.condaEnvsCode, "Conda environments as data (name: YAML file)", "conda_envs"],
+    [methods.dockerImgs ?? oldMethods.dockerImgs, methods.dockerImgsCode, oldMethods.dockerImgsCode, "Docker images as data (a list of images)", "docker_imgs"],
   ] as const) {
     if (list?.length && body && body !== oldBody) {
-      return `"${process.name}" gives its ${what} as a list, under ${key} in program.yaml: change them there, or remove that key before giving the body of the method.`;
+      return `"${process.name}" gives its ${what}, under ${key} in program.yaml: change them there, or remove that key before giving the body of the method; in a program described in Python (a <name>.py beside <name>.sh), do it in ${key}= of its description, then run debasher_build <name>.py.`;
     }
   }
   return null;

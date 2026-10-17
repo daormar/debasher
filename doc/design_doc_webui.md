@@ -1625,7 +1625,7 @@ processes:
       and generates another file for each one.
     code: worker.sh
     mode: array
-    tasks: worker_tasks.sh
+    tasks: worker_tasks.py
     specs: {cpus: 1, mem: 32, time: "00:01:00"}
     position: {x: 360, y: 580}
     options:
@@ -1682,11 +1682,12 @@ keeps it: the code that builds the array of an `array` process, that prints
 the task count of a `generator` process, or the whole option definition
 function of a `manual` process. A method file holds the body of one additional
 method. Both are Bash bodies, not functions, as the program model keeps them
-and as the SDK takes them. In the program model, a tasks file of an `array` or
+and as the SDK takes them; the Conda environments and Docker images given as
+data have no method file. In the program model, a tasks file of an `array` or
 `generator` process and the skip file may instead be Python function files: the
-extension of the file gives the language, `.py` Python and any
-other Bash, and a Python file named as the tasks file of a `manual` process or
-as another method file is refused when the program is loaded.
+extension of the file gives the language, `.py` Python and any other Bash, and
+a Python file named as the tasks file of a `manual` process or as another
+method file is refused when the program is loaded.
 
 The paths are free: the SDK writes what the description gave, and a user may
 name a file as they like. What the editor and import choose when they create a

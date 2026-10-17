@@ -13,8 +13,14 @@ sdk_dynamic_fanout_fifos/dynamic_fanout_dispatcher.py			\
 sdk_dynamic_fanout_fifos/fragment.sh					\
 sdk_dynamic_fanout_fifos/generate.sh					\
 sdk_dynamic_fanout_fifos/worker.sh					\
-sdk_dynamic_fanout_fifos/worker_tasks.sh				\
+sdk_dynamic_fanout_fifos/worker_tasks.py				\
 sdk_running_sum/sdk_running_sum.py					\
-sdk_running_sum/accumulate.py
+sdk_running_sum/accumulate.py						\
+sdk_skip_py/sdk_skip_py.py						\
+sdk_skip_py/value_reader.sh						\
+sdk_skip_py/value_reader_skip.py					\
+sdk_skip_py/value_writer.sh						\
+sdk_conda_envs/sdk_conda_envs.py					\
+sdk_conda_envs/python_version.sh
 
 EXTRA_DIST = $(nobase_sdkprg_DATA)

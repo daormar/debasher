@@ -32,15 +32,19 @@ which one you start with.
    language, the options and where their values come from, the connections,
    and the form of the answer. Follow it; it is more precise than anything
    here. Use its `part` for the code of an options handler or of an
-   additional method when that is what is missing.
+   additional method when that is what is missing. A tasks file or a skip
+   file in Python has no code prompt: follow "Options handler mode" and
+   "Additional methods" in the reference, and write the file with
+   `write_program_file`.
 3. **Write the code** with `update_process`, which writes it into the
    process file that `program.yaml` names; writing that file with
    `write_program_file` or an editor is the same change. In a program
    described in Python (a `<name>.py` beside `<name>.sh`, see "Programs
    described in Python" in the reference) the description names the same
-   file, so the code needs no rebuild; only a change of the options or the
-   connections goes into the description and needs
-   `debasher_build <name>.py` again. Keep it small and readable, and
+   file, so the code needs no rebuild; only a change of the options, the
+   connections, the specifications, the Conda environments and Docker
+   images given as data, or of which file `tasks=` or `skip=` names, goes
+   into the description and needs `debasher_build <name>.py` again. Keep it small and readable, and
    make it fail loudly (a non-zero exit) on bad input rather than produce a
    wrong output. Comment it as the code prompt asks under "How to comment the
    code": what each function, and each hook a node redefines, does and why, the

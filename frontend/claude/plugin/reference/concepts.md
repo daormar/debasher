@@ -67,12 +67,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   description of the Python SDK: the processes, their options and their
   connections are defined there, and the code of each process is in the
   file the description names, the same file that the topology file names,
-  so a change to the code of a process, with `update_process` or as a
-  file, is a change to what both read. The topology is another matter: a
-  save, from the tools or the editor, changes `program.yaml` and leaves the
-  description as it was, and the next `debasher_build <name>.py` writes
-  `program.yaml` again from the description, so a change to the options,
-  the connections or the specifications made with the tools is lost then.
+  so a change to the code of a process, or to its tasks file or a method
+  file, is a change to what both read: made with `update_process` or as a
+  file, and a Python tasks file or skip file only as a file
+  (`write_program_file`). The topology is another matter: a save, from the
+  tools or the editor, changes `program.yaml` and leaves the description as
+  it was, and the next `debasher_build <name>.py` writes `program.yaml`
+  again from the description, so a change made with the tools to the
+  options, the connections, the specifications, the Conda environments and
+  Docker images given as data (`conda_envs=`, `docker_imgs=`) or which file
+  `tasks=` or `skip=` names is lost then.
   Change the topology of such a program in its description, and have it
   built again with `debasher_build <name>.py` in the home directory (no
   tool runs it; the file is never run with `python` nor given to
@@ -141,7 +145,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   Python tasks file (`optionsHandler.language` `python`) that defines
   `tasks(run)`, which returns the elements of the array or the number of
   tasks; the module calls it with `tasks_from_file` or
-  `num_tasks_from_file`, and it is changed as a file. `manual`: the whole
+  `num_tasks_from_file`, and it is changed as a file. `run` holds the
+  command line of the run, read with `run.value(label)` (`None` when not
+  given or without a value), `run.given(label)` for a flag and `run.args`,
+  and `run.process` and `run.outdir`; an array returns a list or another
+  iterable of strings, numbers or paths, a generator an integer, 0 or
+  more. The values of the options of each task stay Bash words
+  (`${task_idx}`, `${array[$task_idx]}`), and relative paths are taken from
+  the directory where `debasher_exec` runs. The rules, for `skip(task)` too:
+  https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python.
+  `manual`: the whole
   option definition written by hand (general programs only), always Bash.
   When both ends of a connection have several tasks, task i reads task i.
 - **Number of tasks taken from another process.** When a process has as many
@@ -176,10 +189,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `condaEnvsCode`, `dockerImgsCode`, `postCode`, `resetOutfilesCode`,
   `outdirBasenameCode`. The skip method may instead be a Python skip file
   (`skipLanguage` `python`) that defines `skip(task)`, which returns `True`
-  to skip the task, changed as a file. The Conda environments and Docker
-  images may be data instead of bodies: `condaEnvs` (a name and a YAML file
-  each) and `dockerImgs`, `conda_envs:` (name: file) and `docker_imgs:` (a
-  list) in `program.yaml`, from which script generation writes the
+  to skip the task and `False` to run it, changed as a file;
+  `task.value(label)` reads an option of the task as
+  `read_opt_value_from_func_args` does (the value that a value descriptor
+  holds), and anything but `True` or `False`, or an exception, fails the
+  task. A Python tasks file or skip file runs with the Python of DeBasher,
+  not in the Conda environment or Docker image of the process. The Conda
+  environments and Docker images may be data instead of bodies: `condaEnvs`
+  (a name and a YAML file each) and `dockerImgs`, `conda_envs:` (name: file)
+  and `docker_imgs:` (a list) in `program.yaml`, or `conda_envs=` and
+  `docker_imgs=` in a description, from which script generation writes the
   `define_conda_env` and `pull_docker_img` calls; a process gives either the
   data or the body, never both, and import turns a body made only of those
   calls into data.

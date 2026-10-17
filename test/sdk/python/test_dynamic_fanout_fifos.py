@@ -2,7 +2,7 @@
 The dynamic fanout example of the web UI, described with the SDK
 (data/sdk_programs/python/sdk_dynamic_fanout_fifos), is the program that
 the editor saved as data/webui_programs/webui_dynamic_fanout_fifos: an
-array process shaped by its Bash tasks file, a family of FIFOs counted by
+array process shaped by its tasks file in Python, a family of FIFOs counted by
 a command line option, a family of inputs gathering the task
 subdirectories of the array, a dispatcher run as a script, and an explicit
 dependency.
