@@ -59,7 +59,7 @@ inside:
 git clone https://github.com/daormar/debasher.git
 cd debasher
 chmod 777 demo-data
-docker compose up --build -d             # build and start, on port 8000
+docker compose up --build -d            # build and start, on port 8000
 docker compose exec debasher webui-url  # print its address
 ```
 
