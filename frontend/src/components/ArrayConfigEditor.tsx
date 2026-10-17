@@ -5,7 +5,9 @@ import { useProgram } from "../store/ProgramContext";
 import { languageExtensions } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 import { buildOptionsHandlerPrompt } from "../models/optionsHandlerPrompt";
+import { ARRAY_TASKS_PY_TEMPLATE } from "../models/codeTemplates";
 import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
+import FuncLanguageSelect, { useLanguageDrafts } from "./FuncLanguageSelect";
 
 interface Props {
   process: ProgramProcess;
@@ -16,8 +18,11 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
 
   const { program, setOptionsHandler } = useProgram();
 
-  const [draft, setDraft] =
-    useState(process.optionsHandler.arrayCode ?? "");
+  const { language, setLanguage, draft, setDraft } = useLanguageDrafts(
+    process.optionsHandler.language ?? "bash",
+    process.optionsHandler.arrayCode,
+    { bash: "", python: ARRAY_TASKS_PY_TEMPLATE },
+  );
 
   function handleSave() {
 
@@ -25,6 +30,7 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
       ...process.optionsHandler,
       mode: "array",
       arrayCode: draft,
+      language,
     });
 
     onClose();
@@ -37,8 +43,8 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
   const [codeRequest, setCodeRequest] = useState("");
 
   const codePrompt = useMemo(
-    () => isPromptOpen ? buildOptionsHandlerPrompt(program, process, "array", draft, codeRequest) : "",
-    [isPromptOpen, program, process, draft, codeRequest]
+    () => isPromptOpen ? buildOptionsHandlerPrompt(program, process, "array", draft, codeRequest, language) : "",
+    [isPromptOpen, program, process, draft, codeRequest, language]
   );
 
   return (
@@ -81,10 +87,25 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
             Array Configuration: {process.name}
           </h3>
 
-          <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <FuncLanguageSelect value={language} onChange={setLanguage} />
+            <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+          </div>
 
         </div>
 
+        {language === "python" ? (
+        <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
+          A Python file that defines <code>tasks(run)</code>, which returns
+          the elements of the array, one per task: a list of strings,
+          numbers or paths. <code>run.value("-opt")</code> reads an option
+          of the command line, <code>run.process</code> and{" "}
+          <code>run.outdir</code> are the name and the output directory of
+          the process. Option values below can then reference{" "}
+          <code>{"${array[$task_idx]}"}</code> (the current element) or{" "}
+          <code>{"${task_idx}"}</code> (its index).
+        </p>
+        ) : (
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
           Add your code below. Bash code that builds an array named{" "}
           <code>array</code>, run once before the per-task loop. Option
@@ -101,6 +122,7 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
           <br />
           <code>local process_outdir=$4</code>
         </p>
+        )}
 
         <div
           style={{
@@ -124,7 +146,7 @@ export default function ArrayConfigEditor({ process, onClose }: Props) {
 
               height="400px"
 
-              extensions={languageExtensions("bash")}
+              extensions={languageExtensions(language)}
 
               // The setter itself, which keeps its identity: a new function at each
 

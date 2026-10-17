@@ -1299,6 +1299,9 @@ missing.
           skip_from_file "value_reader" "value_reader_skip.py" "$@"
       }
 
+  The same program built in the web interface, with its skip method in
+  Python, is shipped as ``webui_skip_py``.
+
 * ``define_opt_deps``: changes the type of the dependency that DeBasher
   infers from one option on the process that produces its value. It
   receives the name of the option and the name of that process, and

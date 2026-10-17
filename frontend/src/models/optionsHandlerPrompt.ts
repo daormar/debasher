@@ -1,6 +1,6 @@
-import type { ProgramProcess } from "./process";
+import type { FuncLanguage, ProgramProcess } from "./process";
 import type { Program } from "./program";
-import { GENERATOR_SIZE_TEMPLATE, LANGUAGE_NAMES, isCodeStillTemplate } from "./codeTemplates";
+import { LANGUAGE_NAMES, isCodeStillTemplate, isFuncTemplate } from "./codeTemplates";
 import { NODE_CODE_PARTS, nodeClassName } from "./node";
 import { ASK_BEFORE_GUESSING, commentSection, describedAs, fenceFor, optionsSection } from "./codePrompt";
 
@@ -22,17 +22,22 @@ const HEADER = [
 // The code prompt of the code of the options handler of a process: as that
 // of the code of a process (see buildCodePrompt), with the rules of the
 // options handler mode, and the code of the process as context, since how
-// the process uses the options of a task says what a task is.
+// the process uses the options of a task says what a task is. In Python
+// the code is a tasks file, which defines tasks(run).
 export function buildOptionsHandlerPrompt(
   program: Program,
   process: ProgramProcess,
   mode: PromptedHandlerMode,
   draft: string,
   request: string,
+  language: FuncLanguage = "bash",
 ): string {
-  const what = mode === "array"
-    ? "the code that builds the array of tasks"
-    : "the code that prints the number of tasks";
+  const python = language === "python";
+  const what = python
+    ? `the Python tasks file of ${mode === "array" ? "an array" : "an option generator"}`
+    : mode === "array"
+      ? "the code that builds the array of tasks"
+      : "the code that prints the number of tasks";
   const noun = program.programType === "resident" ? "node" : "process";
 
   const sections = [
@@ -41,7 +46,7 @@ export function buildOptionsHandlerPrompt(
       "",
       `DeBasher runs programs made of processes, each of which receives its options from the engine; a process can run as several tasks, each with options of its own. Write ${what} of the ${noun} described below.`,
     ],
-    rulesSection(program, process, mode),
+    python ? pythonRulesSection(program, process, mode) : rulesSection(program, process, mode),
     ["## The program", "", `- Name: \`${program.name}\``, ...describedAs(program.description)],
     [
       "## The process",
@@ -52,25 +57,29 @@ export function buildOptionsHandlerPrompt(
     ],
     optionsSection(program, process),
     program.programType === "resident" ? nodeCodeSection(process) : processCodeSection(process),
-    codeSection(mode === "generator" && draft.trim() === GENERATOR_SIZE_TEMPLATE.trim() ? "" : draft),
+    codeSection(isFuncTemplate(draft) ? "" : draft, language),
     [
       "## What the code has to do",
       "",
       request.trim() !== ""
         ? request.trim()
         : mode === "array"
-          ? "Build the array that the description of the process and the values of its options call for."
-          : "Print the number of tasks that the description of the process and the values of its options call for.",
+          ? `${python ? "Return the elements of the array" : "Build the array"} that the description of the process and the values of its options call for.`
+          : `${python ? "Return" : "Print"} the number of tasks that the description of the process and the values of its options call for.`,
     ],
-    commentSection("bash", [
-      `- A comment at the start of the code: what a task of the ${noun} is, and where the number of tasks comes from.`,
+    commentSection(language, [
+      python
+        ? `- A docstring for \`tasks\`: what a task of the ${noun} is, and where the number of tasks comes from.`
+        : `- A comment at the start of the code: what a task of the ${noun} is, and where the number of tasks comes from.`,
     ]),
     [
       "## What to return",
       "",
       ASK_BEFORE_GUESSING,
       "",
-      "Return the whole code in a single fenced code block tagged `bash`, with nothing else inside the block, and without the lines `local cmdline=$1` to `local process_outdir=$4` that come before it.",
+      python
+        ? "Return the whole file in a single fenced code block tagged `python`, with nothing else inside the block: the function `tasks(run)` and what it needs."
+        : "Return the whole code in a single fenced code block tagged `bash`, with nothing else inside the block, and without the lines `local cmdline=$1` to `local process_outdir=$4` that come before it.",
     ],
   ];
 
@@ -103,6 +112,26 @@ function rulesSection(program: Program, process: ProgramProcess, mode: PromptedH
   ];
 }
 
+// The rules of a tasks file in Python, as the engine runs it (see "Python
+// function files" in doc/design_doc_engine.md): the same moment and the
+// same inputs as the Bash it replaces, read through `run`.
+function pythonRulesSection(program: Program, process: ProgramProcess, mode: PromptedHandlerMode): string[] {
+  const own = mode === "array"
+    ? `- The code is a Python file that defines a function \`tasks(run)\`, which the engine calls to build the array of the tasks of the process. It returns the elements of the array, one per task: a list, or any other iterable, of strings, numbers or paths. The function \`${process.name}_define_opts\` of the module then defines the options of each task in Bash, whose values can use \`\${array[$task_idx]}\`, the text of the element of the task, and \`\${task_idx}\`, its index; nothing else of the Python code reaches them.`
+    : `- The code is a Python file that defines a function \`tasks(run)\`, which the engine calls to count the tasks of the process. It returns the number of tasks, an integer, 0 or more. The options of the task of index \`task_idx\`, from 0, are defined in Bash, and their values can use \`\${task_idx}\`; nothing of the Python code reaches them.`;
+  return [
+    "## How the engine runs the code",
+    "",
+    own,
+    "- `run` holds what the code may read: `run.value(\"<label>\")` is the value of a command line option of the program (`None` when it is not given or has no value; a second argument gives another default), `run.given(\"<label>\")` says whether an option or a flag is given, and `run.args` is the whole command line; `run.process` is the name of the process and `run.outdir` its output directory.",
+    `- \`debasher_exec\` calls the function each time it prepares a run, so a later run ${mode === "array" ? "builds the array" : "counts the tasks"} again, from what it reads then; within a run it may call it more than once, when another process asks for the number of tasks of this one with \`get_process_num_tasks\` before this one is defined. It has to return the same ${mode === "array" ? "elements" : "number"} every time: a file or a directory that it reads, such as one given on the command line, has to stay unchanged while the run lasts.`,
+    "- The function runs while `debasher_exec` prepares the run, before any process of the program does. It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO. It cannot read what a process of the program produces either: a file left by an earlier run would hold old data. It may read what exists before the run, such as a file or a directory given on the command line; the number of tasks usually comes from a command line option.",
+    "- The file runs with the Python that DeBasher was configured with, not in the Conda environment or the Docker image of the process, so it imports only what that Python has; its own directory is first on `sys.path`, so it can import files beside it. A relative path is taken from the directory where `debasher_exec` runs. What it prints goes to the standard error. An exception, or a value of the wrong kind (a string or a dictionary for the elements, a negative number or a boolean for the number of tasks), stops the preparation of the run with the traceback.",
+    "- Python cannot ask another process for its number of tasks (`get_process_num_tasks` is a Bash function of the engine): when the tasks of this process follow those of another one, the code of the options handler is better written in Bash.",
+    ...taskByTaskSourcesLine(program, process),
+  ];
+}
+
 // How the code takes its number of tasks from another process of the
 // program, with get_process_num_tasks, instead of computing it again with
 // the rule of that process, which two copies could apply differently. The
@@ -117,12 +146,18 @@ function numTasksRules(program: Program, process: ProgramProcess, mode: Prompted
   const rule = mode === "array"
     ? `- If the array has as many elements as another process of the program has tasks, read that number with \`n=$(get_process_num_tasks "<process>") || return 1\` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. ${COST_OF_ASKING}`
     : `- If the process has as many tasks as another process of the program, as when each task reads the task with the same index of that process, print that number with \`get_process_num_tasks "<process>"\` instead of computing it again, which would repeat the rule by which the other process counts its tasks, and could apply it differently. ${COST_OF_ASKING} Make it the last command of the code, or read it with \`n=$(get_process_num_tasks "<process>") || return 1\`, so that a failure stops the preparation of the run.`;
+  return [rule, ...taskByTaskSourcesLine(program, process)];
+}
+
+// The rule that names the processes whose tasks this one reads task by
+// task, when there are any.
+function taskByTaskSourcesLine(program: Program, process: ProgramProcess): string[] {
   const sources = taskByTaskSources(program, process);
   if (sources.length === 0) {
-    return [rule];
+    return [];
   }
   const listed = sources.map(source => `\`${source.name}\` (\`${source.optionsHandler.mode}\` mode)`).join(", ");
-  return [rule, `- This process reads, task by task, the tasks of: ${listed}.`];
+  return [`- This process reads, task by task, the tasks of: ${listed}.`];
 }
 
 // The processes in array or generator mode that an input of this process is
@@ -183,7 +218,7 @@ function nodeCodeSection(process: ProgramProcess): string[] {
   return lines;
 }
 
-export function codeSection(draft: string): string[] {
+export function codeSection(draft: string, language: FuncLanguage = "bash"): string[] {
   const header = ["## The code to complete", ""];
   if (draft.trim() === "") {
     return [...header, "Empty: write it from scratch."];
@@ -191,7 +226,7 @@ export function codeSection(draft: string): string[] {
   const fence = fenceFor(draft);
   return [
     ...header,
-    `${fence}bash`,
+    `${fence}${language}`,
     draft.replace(/\n+$/, ""),
     fence,
     "",

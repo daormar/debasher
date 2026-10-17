@@ -601,18 +601,14 @@ beside it:
 - `sdk_conda_envs`, a process that activates a Conda environment given
   as data and writes the version of its Python.
 
-The first three are the twins of programs saved under
-`data/webui_programs/`, which the tests check by writing each example as
-its twin and comparing the programs loaded from both and the module (see
-"Guarantees"); the editor has no field for a skip file in Python nor for
-the environments as data, so the last two have no twin (see "Future
-work"). `make installcheck`
-builds each example from its installed directory with `debasher_build`
-into a directory of its own and runs the program built as it runs the
-others (`sdk_skip_py` with an odd sum, checking that the skipped process
-wrote nothing), or skips them all when the Python of `debasher_build`
-lacks the dependencies of the SDK, and `sdk_conda_envs` without conda,
-as it skips the other checks of conda.
+Each is the twin of a program saved under `data/webui_programs/`, which the
+tests check by writing each example as its twin and comparing the programs
+loaded from both and the module (see "Guarantees"). `make installcheck` builds
+each example from its installed directory with `debasher_build` into a directory
+of its own and runs the program built as it runs the others (`sdk_skip_py` with
+an odd sum, checking that the skipped process wrote nothing), or skips them all
+when the Python of `debasher_build` lacks the dependencies of the SDK, and
+`sdk_conda_envs` without conda, as it skips the other checks of conda.
 
 # Installation, and finding the API and the engine
 
@@ -680,11 +676,11 @@ the positions and `api.topology` for the ids derived from names.
   program that the editor would save for the same program, apart from
   the ids, the digest and home directory of the save and the names of the
   files of the artifact, and the module that script generation writes
-  from it, byte for byte: the three examples of
-  `data/sdk_programs/python/` that have a twin, written as their twins,
-  are compared in the tests with `data/webui_programs/webui_hello_world_py`,
-  `data/webui_programs/webui_dynamic_fanout_fifos` and
-  `data/webui_programs/webui_running_sum` (see "The examples").
+  from it, byte for byte: the five examples of
+  `data/sdk_programs/python/`, written as their twins, are compared in
+  the tests with `webui_hello_world_py`, `webui_dynamic_fanout_fifos`,
+  `webui_running_sum`, `webui_skip_py` and `webui_conda_envs` of
+  `data/webui_programs/` (see "The examples").
 - **Deterministic.** Two builds of the same description give the same
   artifact: ids come from names, positions from the layout, and nothing
   from the clock or from randomness.
@@ -739,10 +735,6 @@ the positions and `api.topology` for the ids derived from names.
   as Bash bodies because the program model has no field for them. When
   the program model gives them one, as it does for the environments, the
   SDK takes them as arguments and script generation writes the body.
-- **Twins of the skip and environment examples.** When the editor edits a
-  skip file in Python and the environments as data, `sdk_skip_py` and
-  `sdk_conda_envs` get their twins under `data/webui_programs/`, and the
-  guarantee "What the editor saves" covers the five examples.
 - **Processes as a library, and namespaces.** A process defined in a
   Python module of the user and added to several programs, as a process
   of a loaded module is. The namespace of DeBasher is a naming convention

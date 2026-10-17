@@ -3,7 +3,8 @@ The examples that ship under data/sdk_programs/python, as they are: each
 is a description named after its program that debasher_build writes into
 a home directory the web UI loads, with the files of its processes beside
 it. What each one reproduces of the web UI is checked by its own test
-module (test_hello_world, test_dynamic_fanout_fifos, test_running_sum).
+module (test_hello_world, test_dynamic_fanout_fifos, test_running_sum,
+test_skip_py, test_conda_envs).
 """
 
 import pytest
@@ -17,13 +18,9 @@ from examples import SDK_PROGRAMS_DIR, TWINS, example_file  # noqa: E402
 
 _EXAMPLES = sorted(path.name for path in SDK_PROGRAMS_DIR.iterdir() if path.is_dir())
 
-# The examples whose twin the web UI cannot save yet, since the editor
-# does not take a skip file in Python nor Conda environments as data
-_WITHOUT_TWIN = {"sdk_skip_py", "sdk_conda_envs"}
-
 
 def test_every_example_has_a_twin_of_the_web_ui():
-    assert sorted(set(_EXAMPLES) - _WITHOUT_TWIN) == sorted(TWINS)
+    assert _EXAMPLES == sorted(TWINS)
 
 
 @pytest.mark.parametrize("name", _EXAMPLES)

@@ -32,35 +32,33 @@ which one you start with.
    language, the options and where their values come from, the connections,
    and the form of the answer. Follow it; it is more precise than anything
    here. Use its `part` for the code of an options handler or of an
-   additional method when that is what is missing. A tasks file or a skip
-   file in Python has no code prompt: follow "Options handler mode" and
-   "Additional methods" in the reference, and write the file with
-   `write_program_file`.
-3. **Write the code** with `update_process`, which writes it into the
-   process file that `program.yaml` names; writing that file with
-   `write_program_file` or an editor is the same change. In a program
-   described in Python (a `<name>.py` beside `<name>.sh`, see "Programs
-   described in Python" in the reference) the description names the same
-   file, so the code needs no rebuild; only a change of the options, the
-   connections, the specifications, the Conda environments and Docker
-   images given as data, or of which file `tasks=` or `skip=` names, goes
-   into the description and needs `debasher_build <name>.py` again. Keep it small and readable, and
-   make it fail loudly (a non-zero exit) on bad input rather than produce a
-   wrong output. Comment it as the code prompt asks under "How to comment the
-   code": what each function, and each hook a node redefines, does and why, the
-   reason of each step that the code does not show, and what the node state
-   holds, never what the code already says. Read each option as what the code
-   prompt says it receives: the data itself, or the path of a FIFO, a value
-   descriptor or a directory. In a node, use the methods of the runtime library
-   that the code prompt lists rather than writing your own: `self.sleep()` for
-   the pace, `inject` from `observe` for what it sees outside, and `set_notice`
-   for what whoever watches the program should know (a missing configuration
-   file), set again in `restore_node_state` when it follows from the node state.
-   A directory watcher or a launcher needs little code or none: its class sends
-   on `-outrequests` and `-outdone`, so the code never does. A node that reads
-   the results of a batch run takes the run directory from `run_dir` in the
-   message on `-outdone`, rather than building it again from a runs root of its
-   own.
+   additional method when that is what is missing; for a tasks file or a
+   skip file in Python it is the prompt of the whole Python file.
+3. **Write the code** with `update_process`, which writes it into the process
+   file that `program.yaml` names; writing that file with `write_program_file`
+   or an editor is the same change. In a program described in Python (a
+   `<name>.py` beside `<name>.sh`, see "Programs described in Python" in the
+   reference) the description names the same file, so the code needs no rebuild;
+   only a change of the options, the connections, the specifications, the Conda
+   environments and Docker images given as data, or the language of a tasks file
+   or a skip file (which file `tasks=` or `skip=` names), goes into the
+   description and needs `debasher_build <name>.py` again. Keep it small and
+   readable, and make it fail loudly (a non-zero exit) on bad input rather than
+   produce a wrong output. Comment it as the code prompt asks under "How to
+   comment the code": what each function, and each hook a node redefines, does
+   and why, the reason of each step that the code does not show, and what the
+   node state holds, never what the code already says. Read each option as what
+   the code prompt says it receives: the data itself, or the path of a FIFO, a
+   value descriptor or a directory. In a node, use the methods of the runtime
+   library that the code prompt lists rather than writing your own:
+   `self.sleep()` for the pace, `inject` from `observe` for what it sees
+   outside, and `set_notice` for what whoever watches the program should know (a
+   missing configuration file), set again in `restore_node_state` when it
+   follows from the node state. A directory watcher or a launcher needs little
+   code or none: its class sends on `-outrequests` and `-outdone`, so the code
+   never does. A node that reads the results of a batch run takes the run
+   directory from `run_dir` in the message on `-outdone`, rather than building
+   it again from a runs root of its own.
 4. **Write a test.** `add_test` writes the skeleton of a business test into
    `test/` (bats for a process of a general program, pytest for a node). Read
    it with `read_program_file`, fill in its TODOs with a real check of what

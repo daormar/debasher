@@ -68,15 +68,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   connections are defined there, and the code of each process is in the
   file the description names, the same file that the topology file names,
   so a change to the code of a process, or to its tasks file or a method
-  file, is a change to what both read: made with `update_process` or as a
-  file, and a Python tasks file or skip file only as a file
-  (`write_program_file`). The topology is another matter: a save, from the
-  tools or the editor, changes `program.yaml` and leaves the description as
-  it was, and the next `debasher_build <name>.py` writes `program.yaml`
-  again from the description, so a change made with the tools to the
-  options, the connections, the specifications, the Conda environments and
-  Docker images given as data (`conda_envs=`, `docker_imgs=`) or which file
-  `tasks=` or `skip=` names is lost then.
+  file, with `update_process` or as a file, is a change to what both read.
+  The topology is another matter: a save, from the tools or the editor,
+  changes `program.yaml` and leaves the description as it was, and the next
+  `debasher_build <name>.py` writes `program.yaml` again from the
+  description, so a change made with the tools to the options, the
+  connections, the specifications, the Conda environments and Docker images
+  given as data (`conda_envs=`, `docker_imgs=`), or the language of a tasks
+  file or a skip file (which file `tasks=` or `skip=` names), is lost then.
   Change the topology of such a program in its description, and have it
   built again with `debasher_build <name>.py` in the home directory (no
   tool runs it; the file is never run with `python` nor given to
@@ -136,27 +135,26 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   holds the path (file or FIFO) to write to; standard output goes to a task
   file that no other process reads. `get_code_prompt` gives the exact rules
   for a given process: follow it.
-- **Options handler mode.** `standard`: one task. `array`: one task per
-  element of a Bash array named `array`, which `arrayCode` builds; option
-  values may use `${task_idx}`, its index, and `${array[$task_idx]}`, its
-  element. `generator`: one task per index below the count that
-  `generatorSizeCode` prints; option values may use that index,
-  `${task_idx}`. The code of an array or a generator may instead be a
-  Python tasks file (`optionsHandler.language` `python`) that defines
-  `tasks(run)`, which returns the elements of the array or the number of
-  tasks; the module calls it with `tasks_from_file` or
-  `num_tasks_from_file`, and it is changed as a file. `run` holds the
-  command line of the run, read with `run.value(label)` (`None` when not
-  given or without a value), `run.given(label)` for a flag and `run.args`,
-  and `run.process` and `run.outdir`; an array returns a list or another
-  iterable of strings, numbers or paths, a generator an integer, 0 or
-  more. The values of the options of each task stay Bash words
-  (`${task_idx}`, `${array[$task_idx]}`), and relative paths are taken from
-  the directory where `debasher_exec` runs. The rules, for `skip(task)` too:
+- **Options handler mode.** `standard`: one task. `array`: one task per element
+  of a Bash array named `array`, which `arrayCode` builds; option values may use
+  `${task_idx}`, its index, and `${array[$task_idx]}`, its element. `generator`:
+  one task per index below the count that `generatorSizeCode` prints; option
+  values may use that index, `${task_idx}`. The code of an array or a generator
+  may instead be a Python tasks file (`optionsHandler.language` `python`) that
+  defines `tasks(run)`, which returns the elements of the array or the number of
+  tasks; the module calls it with `tasks_from_file` or `num_tasks_from_file`,
+  and its code (`arrayCode`, `generatorSizeCode`) is the whole file. `run` holds
+  the command line of the run, read with `run.value(label)` (`None` when not
+  given or without a value), `run.given(label)` for a flag and `run.args`, and
+  `run.process` and `run.outdir`; an array returns a list or another iterable of
+  strings, numbers or paths, a generator an integer, 0 or more. The values of
+  the options of each task stay Bash words (`${task_idx}`,
+  `${array[$task_idx]}`), and relative paths are taken from the directory where
+  `debasher_exec` runs. The rules, for `skip(task)` too:
   https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python.
-  `manual`: the whole
-  option definition written by hand (general programs only), always Bash.
-  When both ends of a connection have several tasks, task i reads task i.
+  `manual`: the whole option definition written by hand (general programs only),
+  always Bash. When both ends of a connection have several tasks, task i reads
+  task i.
 - **Number of tasks taken from another process.** When a process has as many
   tasks as another one (each task reads the task with the same index), its
   options handler asks for that number with `get_process_num_tasks
@@ -167,14 +165,17 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   process that is not defined yet runs its whole option definition again, in a
   subshell, so when other processes need the number of tasks of a process,
   make that process a `generator` if it can be one. A chain of such questions
-  that comes back to the asking process stops the preparation of the run.
-- **The options handler runs more than once.** The engine calls the code of
-  a generator again whenever it needs the options of a task, inside the task
-  too, and the code of an array again, in a subshell whose result it throws
-  away, when another process asks for its number of tasks before the array is
-  defined. A file or directory that either reads (such as one given on the
-  command line to count the tasks) has to stay unchanged while the run lasts,
-  so that the number of tasks is the same every time.
+  that comes back to the asking process stops the preparation of the run. A
+  Python tasks file cannot ask (`get_process_num_tasks` is Bash): such a
+  handler is written in Bash.
+- **The options handler runs more than once.** The size code of a generator (or
+  its `tasks(run)`) and the code of an array run while the run is prepared,
+  again, in a subshell whose result is thrown away, when another process asks
+  for the number of tasks before the process is defined; the option definitions
+  of a task of a generator (the Bash words built on `${task_idx}`) run again
+  inside the task. A file or directory that either reads (such as one given on
+  the command line to count the tasks) has to stay unchanged while the run
+  lasts, so that the number of tasks is the same every time.
 - **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`);
   `additionalSpecs` (general programs only): `force` to rerun in every run,
   `processdeps` to replace the dependencies inferred from the connections
@@ -189,8 +190,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `condaEnvsCode`, `dockerImgsCode`, `postCode`, `resetOutfilesCode`,
   `outdirBasenameCode`. The skip method may instead be a Python skip file
   (`skipLanguage` `python`) that defines `skip(task)`, which returns `True`
-  to skip the task and `False` to run it, changed as a file;
-  `task.value(label)` reads an option of the task as
+  to skip the task and `False` to run it, its code (`skipCode`) the whole
+  file; `task.value(label)` reads an option of the task as
   `read_opt_value_from_func_args` does (the value that a value descriptor
   holds), and anything but `True` or `False`, or an exception, fails the
   task. A Python tasks file or skip file runs with the Python of DeBasher,

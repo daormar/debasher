@@ -4,6 +4,7 @@ import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { buildMethodPrompt } from "./methodPrompt";
 import { PROCESS_METHODS } from "./processMethods";
+import { SKIP_PY_TEMPLATE } from "./codeTemplates";
 
 // A process that writes a file and runs a tool of a conda environment.
 const align = {
@@ -100,5 +101,17 @@ describe("buildMethodPrompt", () => {
     const prompt = buildMethodPrompt(program, align, "dockerImgsCode", "", "");
     expect(prompt).toContain("## What to return\n\nIf something that the code depends on is missing or ambiguous");
     expect(prompt).toContain("without the line `align_docker_imgs()` and the braces around the body.");
+  });
+  it("gives the rules of a skip file in Python, and asks for the whole file", () => {
+    const prompt = buildMethodPrompt(program, align, "skipCode", SKIP_PY_TEMPLATE, "", "python");
+    expect(prompt).toContain("a Python file that defines a function `skip(task)`");
+    expect(prompt).toContain("It returns `True` to skip the task and `False` to run it");
+    expect(prompt).toContain("the value of an input that is a value descriptor is the value it holds");
+    expect(prompt).toContain("A process at either end of a FIFO must not be skipped");
+    expect(prompt).toContain("## The code to complete\n\nEmpty: write it from scratch.");
+    expect(prompt).toContain("tagged `python`, with nothing else inside the block: the function `skip(task)`");
+    expect(prompt).not.toContain("You write only its body");
+    // Python is for the skip method only
+    expect(buildMethodPrompt(program, align, "postCode", "", "", "python")).toContain("The method is a Bash function");
   });
 });

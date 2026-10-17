@@ -130,4 +130,20 @@ describe("validateEdits", () => {
     ]);
   });
 
+  it("refuses a manual handler in Python and environments given both as data and as a body", () => {
+    expect(validateEdits(program(), [
+      { op: "updateProcess", processId: "id-a", changes: { optionsHandler: { mode: "manual", language: "python" } } },
+      { op: "updateProcess", processId: "id-a", changes: { additionalMethods: { condaEnvs: [{ name: "py27", file: "py27.yml" }], condaEnvsCode: "define_conda_env x x.yml" } } },
+      { op: "updateProcess", processId: "id-a", changes: { additionalMethods: { dockerImgs: ["img"], dockerImgsCode: "pull_docker_img img" } } },
+    ])).toEqual([
+      'The options handler of "a" is in manual mode, whose code is a Bash function, and in Python: set optionsHandler.language to bash, or use the array or generator mode for a Python tasks file.',
+      '"a" gives its Conda environments both as data (condaEnvs) and as a body (condaEnvsCode): give one of them, with the other empty.',
+      '"a" gives its Docker images both as data (dockerImgs) and as a body (dockerImgsCode): give one of them, with the other empty.',
+    ]);
+    expect(validateEdits(program(), [
+      { op: "updateProcess", processId: "id-a", changes: { optionsHandler: { mode: "array", language: "python", arrayCode: "def tasks(run):\n    return [1]" } } },
+      { op: "updateProcess", processId: "id-a", changes: { additionalMethods: { condaEnvs: [{ name: "py27", file: "py27.yml" }], condaEnvsCode: "" } } },
+    ])).toEqual([]);
+  });
+
 });

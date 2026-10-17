@@ -323,12 +323,15 @@ export default function Inspector() {
 
         value={selectedProcess.optionsHandler.mode}
 
-        onChange={(event) =>
+        onChange={(event) => {
+          const mode = event.target.value as OptionsHandlerMode;
           setOptionsHandler(selectedProcess.id, {
             ...selectedProcess.optionsHandler,
-            mode: event.target.value as OptionsHandlerMode,
-          })
-        }
+            mode,
+            // The option definition of a manual process is a Bash function
+            language: mode === "manual" ? "bash" : selectedProcess.optionsHandler.language,
+          });
+        }}
 
         style={{
           width: "100%",

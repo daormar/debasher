@@ -70,7 +70,7 @@ export default function AdditionalMethodsEditor({ process, onClose }: Props) {
               onClick={() => setEditingMethod(method)}
             >
               Edit {method.name}
-              {process.additionalMethods[method.key] ? " (defined)" : ""}
+              {isDefined(process, method) ? " (defined)" : ""}
             </button>
           ))}
 
@@ -104,4 +104,15 @@ export default function AdditionalMethodsEditor({ process, onClose }: Props) {
 
   );
 
+}
+
+// Whether the process defines the method: a body, or, for the Conda
+// environments and the Docker images, the data that it is written from.
+function isDefined(process: ProgramProcess, method: ProcessMethod): boolean {
+  const methods = process.additionalMethods;
+  return Boolean(
+    methods[method.key] ||
+    (method.key === "condaEnvsCode" && methods.condaEnvs?.length) ||
+    (method.key === "dockerImgsCode" && methods.dockerImgs?.length)
+  );
 }

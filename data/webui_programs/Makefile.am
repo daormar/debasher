@@ -17,6 +17,9 @@ webui_conda_example/python_version.sh	\
 webui_conda_example/python_version_conda_envs.sh	\
 webui_conda_example/test/python_version.bats	\
 webui_conda_example/webui_conda_example.sh	\
+webui_conda_envs/program.yaml	\
+webui_conda_envs/python_version.sh	\
+webui_conda_envs/webui_conda_envs.sh	\
 webui_dynamic_fanout_fifos/aggregate.sh	\
 webui_dynamic_fanout_fifos/count.sh	\
 webui_dynamic_fanout_fifos/dynamic_fanout_dispatcher.py	\
@@ -40,6 +43,11 @@ webui_running_sum/Accumulate.py	\
 webui_running_sum/program.yaml	\
 webui_running_sum/test/test_accumulate.py	\
 webui_running_sum/webui_running_sum.sh	\
+webui_skip_py/program.yaml	\
+webui_skip_py/value_reader.sh	\
+webui_skip_py/value_reader_skip.py	\
+webui_skip_py/value_writer.sh	\
+webui_skip_py/webui_skip_py.sh	\
 webui_watch_tally/Tally.py	\
 webui_watch_tally/Watch.py	\
 webui_watch_tally/program.yaml	\

@@ -51,12 +51,12 @@ its code. Offer to run the tests when what they do matters to a finding.
   outputs where its options say, and nothing outside its output directory
   and the shared directories its options name?
 - **Several tasks.** In array or generator mode, does each task use its own
-  values (`${task_idx}`), and write only into its own subdirectory, never
-  into the outputs of the others? Does an options handler that needs the
-  number of tasks of another process ask for it with
-  `get_process_num_tasks` rather than count it again with a copy of its
-  rule, and does the options handler (array or generator) read only inputs
-  that stay unchanged during the run?
+  values (`${task_idx}`), and write only into its own subdirectory, never into
+  the outputs of the others? Does an options handler that needs the number of
+  tasks of another process ask for it with `get_process_num_tasks` rather than
+  count it again with a copy of its rule (in Bash: a Python tasks file cannot
+  ask), and does the options handler (array or generator) read only inputs that
+  stay unchanged during the run?
 - **Nodes** of a resident program: is `process_data` deterministic, does it
   send only from there, is the node state complete and serializable as JSON,
   and are effects outside the program idempotent? Does it wait with

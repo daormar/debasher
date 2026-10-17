@@ -1,7 +1,7 @@
 """
 The examples described with the SDK that ship under
-data/sdk_programs/python, most of them the program that the web UI saved
-under data/webui_programs with another name: loaded for the tests that
+data/sdk_programs/python, each the program that the web UI saved under
+data/webui_programs with another name: loaded for the tests that
 compare the two, as the web UI's twin (the name, the description text and
 the positions of the editor, which the examples do not carry).
 """
@@ -21,6 +21,8 @@ TWINS = {
     "sdk_hello_world_py": "webui_hello_world_py",
     "sdk_dynamic_fanout_fifos": "webui_dynamic_fanout_fifos",
     "sdk_running_sum": "webui_running_sum",
+    "sdk_skip_py": "webui_skip_py",
+    "sdk_conda_envs": "webui_conda_envs",
 }
 
 

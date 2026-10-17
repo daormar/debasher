@@ -83,7 +83,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
         (edit.changes.name === undefined
           ? null
           : processNameProblem(takenNames(edit.processId), edit.changes.name, program.programType)) ??
-        pythonFilesProblem(processById(edit.processId)!, edit.changes)
+        handlerAndMethodsProblem(processById(edit.processId)!, edit.changes)
       );
     }
 
@@ -211,47 +211,28 @@ function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): st
   return null;
 }
 
-// An edit of the code that a process keeps in a Python function file, its
-// tasks file or its skip file, which the edit would fill with code of
-// another kind, and an edit of the body of the conda_envs or docker_imgs
-// method of a process that gives them as data, which script generation
-// would refuse: each names the way that does change it.
-function pythonFilesProblem(process: ProgramProcess, changes: ProcessChanges): string | null {
+// The combinations of the options handler and of the additional methods of
+// a process that script generation refuses: a manual handler in Python,
+// whose code is a Bash function, and Conda environments or Docker images
+// given both as data and as the body of their method. Each says what to
+// change.
+function handlerAndMethodsProblem(process: ProgramProcess, changes: ProcessChanges): string | null {
 
   const handler = changes.optionsHandler;
-  const oldHandler = process.optionsHandler;
-  if (
-    handler &&
-    oldHandler.language === "python" &&
-    (handler.language ?? "python") === "python" &&
-    handler.mode !== "standard" &&
-    (handler.mode !== oldHandler.mode ||
-      handler.arrayCode !== oldHandler.arrayCode ||
-      handler.generatorSizeCode !== oldHandler.generatorSizeCode)
-  ) {
-    const path = process.files?.tasks || `${process.name}_tasks.py`;
-    return `The options handler of "${process.name}" is the Python tasks file ${path}, which defines tasks(run) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): change that file with write_program_file, not its mode or code here.`;
+  if (handler && handler.mode === "manual" && handler.language === "python") {
+    return `The options handler of "${process.name}" is in manual mode, whose code is a Bash function, and in Python: set optionsHandler.language to bash, or use the array or generator mode for a Python tasks file.`;
   }
 
   const methods = changes.additionalMethods;
   if (!methods) {
     return null;
   }
-  const oldMethods = process.additionalMethods;
-  if (
-    oldMethods.skipLanguage === "python" &&
-    (methods.skipLanguage ?? "python") === "python" &&
-    methods.skipCode !== oldMethods.skipCode
-  ) {
-    const path = process.files?.methods?.skip || `${process.name}_skip.py`;
-    return `The skip method of "${process.name}" is the Python skip file ${path}, which defines skip(task) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): change that file with write_program_file.`;
-  }
-  for (const [list, body, oldBody, what, key] of [
-    [methods.condaEnvs ?? oldMethods.condaEnvs, methods.condaEnvsCode, oldMethods.condaEnvsCode, "Conda environments as data (name: YAML file)", "conda_envs"],
-    [methods.dockerImgs ?? oldMethods.dockerImgs, methods.dockerImgsCode, oldMethods.dockerImgsCode, "Docker images as data (a list of images)", "docker_imgs"],
+  for (const [list, body, what, field, key] of [
+    [methods.condaEnvs, methods.condaEnvsCode, "Conda environments", "condaEnvs", "condaEnvsCode"],
+    [methods.dockerImgs, methods.dockerImgsCode, "Docker images", "dockerImgs", "dockerImgsCode"],
   ] as const) {
-    if (list?.length && body && body !== oldBody) {
-      return `"${process.name}" gives its ${what}, under ${key} in program.yaml: change them there, or remove that key before giving the body of the method; in a program described in Python (a <name>.py beside <name>.sh), do it in ${key}= of its description, then run debasher_build <name>.py.`;
+    if (list?.length && body?.trim()) {
+      return `"${process.name}" gives its ${what} both as data (${field}) and as a body (${key}): give one of them, with the other empty.`;
     }
   }
   return null;

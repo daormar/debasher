@@ -4,7 +4,7 @@ import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { generateCodeTemplate } from "./codeTemplates";
 import { buildOptionsHandlerPrompt } from "./optionsHandlerPrompt";
-import { GENERATOR_SIZE_TEMPLATE } from "./codeTemplates";
+import { ARRAY_TASKS_PY_TEMPLATE, GENERATOR_SIZE_TEMPLATE } from "./codeTemplates";
 import { emptyNodeCode } from "./node";
 
 // An array process with one task per file of a directory given on the
@@ -201,5 +201,25 @@ describe("buildOptionsHandlerPrompt", () => {
     const prompt = buildOptionsHandlerPrompt(program, count, "array", "", "");
     expect(prompt).toContain("## What to return\n\nIf something that the code depends on is missing or ambiguous");
     expect(prompt).toContain("without the lines `local cmdline=$1` to `local process_outdir=$4` that come before it.");
+  });
+  it("gives the rules of a tasks file in Python, and asks for the whole file", () => {
+    const array = buildOptionsHandlerPrompt(program, count, "array", "", "", "python");
+    expect(array).toContain("# Write the Python tasks file of an array of the DeBasher process `count`");
+    expect(array).toContain("a Python file that defines a function `tasks(run)`");
+    expect(array).toContain("`${array[$task_idx]}`, the text of the element of the task");
+    expect(array).toContain("`run.value(\"<label>\")`");
+    expect(array).toContain("not in the Conda environment or the Docker image of the process");
+    expect(array).toContain("`get_process_num_tasks` is a Bash function of the engine");
+    expect(array).toContain("A docstring for `tasks`");
+    expect(array).toContain("tagged `python`, with nothing else inside the block: the function `tasks(run)`");
+    expect(array).not.toContain("local cmdline=$1");
+    const generator = buildOptionsHandlerPrompt(program, count, "generator", "def tasks(run):\n    return 4\n", "", "python");
+    expect(generator).toContain("It returns the number of tasks, an integer, 0 or more.");
+    expect(generator).toContain("```python\ndef tasks(run):\n    return 4\n```");
+  });
+
+  it("takes the first code of a tasks file in Python as no code", () => {
+    const prompt = buildOptionsHandlerPrompt(program, count, "array", ARRAY_TASKS_PY_TEMPLATE, "", "python");
+    expect(prompt).toContain("## The code to complete\n\nEmpty: write it from scratch.");
   });
 });

@@ -15,6 +15,30 @@ export const TEMPLATE_MARKER = "ADD YOUR CODE HERE";
 export const GENERATOR_SIZE_TEMPLATE = `# TODO: return the number of tasks
 `;
 
+// The first code of a tasks file and of a skip file in Python, the Python
+// function files that the engine runs (see "Python function files" in
+// doc/design_doc_engine.md), which the code prompt takes as no code at all.
+export const ARRAY_TASKS_PY_TEMPLATE = `def tasks(run):
+    # TODO: return the elements of the array, one per task
+    return []
+`;
+
+export const GENERATOR_TASKS_PY_TEMPLATE = `def tasks(run):
+    # TODO: return the number of tasks
+    return 1
+`;
+
+export const SKIP_PY_TEMPLATE = `def skip(task):
+    # TODO: return True to skip the task, False to run it
+    return False
+`;
+
+// Whether `code` is still one of the first codes above, or empty.
+export function isFuncTemplate(code: string): boolean {
+  return [GENERATOR_SIZE_TEMPLATE, ARRAY_TASKS_PY_TEMPLATE, GENERATOR_TASKS_PY_TEMPLATE, SKIP_PY_TEMPLATE]
+    .some(template => code.trim() === template.trim()) || code.trim() === "";
+}
+
 export function isCodeStillTemplate(code: string): boolean {
   return code.trim() === "" || code.includes(TEMPLATE_MARKER);
 }

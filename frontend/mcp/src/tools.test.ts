@@ -116,7 +116,7 @@ describe("reading a program", () => {
     expect(shown).not.toContain("skipLanguage");
   });
 
-  it("gives no Bash code prompt for code in a Python file, nor for environments given as data", async () => {
+  it("composes the code prompt of a Python tasks file or skip file, and refuses one for environments given as data", async () => {
     const worker: ProgramProcess = {
       ...process("w", ["-x"]),
       optionsHandler: { mode: "array", arrayCode: "def tasks(run):\n    return [1]", language: "python" },
@@ -127,15 +127,20 @@ describe("reading a program", () => {
       },
     };
     const backend = fakeBackend([program({ processes: [worker] })]);
-    const prompt = (part: string) => call(backend, "get_code_prompt", { home_dir: HOME, process: "w", part });
+    const prompt = (part: string) => text(backend, "get_code_prompt", { home_dir: HOME, process: "w", part });
 
-    await expect(prompt("options_handler")).rejects.toThrow("Python tasks file w_tasks.py, which defines tasks(run)");
-    await expect(prompt("skip")).rejects.toThrow("Python skip file w_skip.py, which defines skip(task)");
-    await expect(prompt("conda_envs")).rejects.toThrow("Conda environments as data (name: YAML file), under conda_envs in program.yaml");
-    await expect(prompt("conda_envs")).rejects.toThrow("in conda_envs= of its description, then run debasher_build <name>.py");
+    const tasks = await prompt("options_handler");
+    expect(tasks).toContain("defines a function `tasks(run)`");
+    expect(tasks).toContain("```python\ndef tasks(run):\n    return [1]\n```");
+    expect(tasks).toContain("tagged `python`");
+    const skip = await prompt("skip");
+    expect(skip).toContain("defines a function `skip(task)`");
+    expect(skip).toContain("```python\ndef skip(task):\n    return False\n```");
+    await expect(prompt("conda_envs")).rejects.toThrow("Conda environments as data (a name and a YAML file each)");
+    await expect(prompt("conda_envs")).rejects.toThrow("update_process (additionalMethods.condaEnvs)");
   });
 
-  it("refuses an edit that would put other code into a Python file or a body beside environments given as data", async () => {
+  it("writes Python into a Python file, and sets environments as data, refusing what script generation would", async () => {
     const worker: ProgramProcess = {
       ...process("w", ["-x"]),
       optionsHandler: { mode: "array", arrayCode: "def tasks(run):\n    return [1]", language: "python" },
@@ -144,15 +149,18 @@ describe("reading a program", () => {
     const backend = fakeBackend([program({ processes: [worker] })]);
     const update = (changes: Record<string, unknown>) =>
       call(backend, "update_process", { home_dir: HOME, process: "w", changes });
+    const saved = () => savedProgram(backend).processes[0];
 
-    await expect(update({ optionsHandler: { arrayCode: "array=(1)" } })).rejects.toThrow("Python tasks file w_tasks.py");
-    await expect(update({ optionsHandler: { mode: "manual" } })).rejects.toThrow("Python tasks file w_tasks.py");
-    await expect(update({ additionalMethods: { skipCode: "return 1" } })).rejects.toThrow("Python skip file w_skip.py");
-    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("Docker images as data (a list of images), under docker_imgs");
-    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("in docker_imgs= of its description");
-    // What the edit does not touch is no problem
-    await update({ description: "A new description." });
-    await update({ optionsHandler: { mode: "standard" } });
+    await update({ optionsHandler: { arrayCode: "def tasks(run):\n    return [1, 2]" } });
+    expect(saved().optionsHandler).toMatchObject({ mode: "array", language: "python", arrayCode: "def tasks(run):\n    return [1, 2]" });
+    await update({ additionalMethods: { condaEnvs: [{ name: "py27", file: "py27.yml" }] } });
+    expect(saved().additionalMethods).toMatchObject({ condaEnvs: [{ name: "py27", file: "py27.yml" }], dockerImgs: ["img"], skipLanguage: "python" });
+    await expect(update({ optionsHandler: { mode: "manual" } })).rejects.toThrow("in manual mode, whose code is a Bash function, and in Python");
+    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("Docker images both as data (dockerImgs) and as a body (dockerImgsCode)");
+    // The body replaces the data when the data goes in the same change
+    await update({ additionalMethods: { dockerImgsCode: "pull_docker_img x", dockerImgs: [] } });
+    expect(saved().additionalMethods).toMatchObject({ dockerImgsCode: "pull_docker_img x", dockerImgs: [] });
+    await update({ optionsHandler: { mode: "manual", language: "bash" } });
   });
 
 });

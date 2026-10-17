@@ -5,8 +5,9 @@ import { useProgram } from "../store/ProgramContext";
 import { languageExtensions } from "./codeLanguages";
 import type { ProgramProcess } from "../models/process";
 import { buildOptionsHandlerPrompt } from "../models/optionsHandlerPrompt";
-import { GENERATOR_SIZE_TEMPLATE } from "../models/codeTemplates";
+import { GENERATOR_SIZE_TEMPLATE, GENERATOR_TASKS_PY_TEMPLATE } from "../models/codeTemplates";
 import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
+import FuncLanguageSelect, { useLanguageDrafts } from "./FuncLanguageSelect";
 
 interface Props {
   process: ProgramProcess;
@@ -18,8 +19,11 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
 
   const { program, setOptionsHandler } = useProgram();
 
-  const [draft, setDraft] =
-    useState(process.optionsHandler.generatorSizeCode ?? GENERATOR_SIZE_TEMPLATE);
+  const { language, setLanguage, draft, setDraft } = useLanguageDrafts(
+    process.optionsHandler.language ?? "bash",
+    process.optionsHandler.generatorSizeCode,
+    { bash: GENERATOR_SIZE_TEMPLATE, python: GENERATOR_TASKS_PY_TEMPLATE },
+  );
 
   function handleSave() {
 
@@ -27,6 +31,7 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
       ...process.optionsHandler,
       mode: "generator",
       generatorSizeCode: draft,
+      language,
     });
 
     onClose();
@@ -39,8 +44,8 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
   const [codeRequest, setCodeRequest] = useState("");
 
   const codePrompt = useMemo(
-    () => isPromptOpen ? buildOptionsHandlerPrompt(program, process, "generator", draft, codeRequest) : "",
-    [isPromptOpen, program, process, draft, codeRequest]
+    () => isPromptOpen ? buildOptionsHandlerPrompt(program, process, "generator", draft, codeRequest, language) : "",
+    [isPromptOpen, program, process, draft, codeRequest, language]
   );
 
   return (
@@ -83,10 +88,23 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
             Generator Configuration: {process.name}
           </h3>
 
-          <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <FuncLanguageSelect value={language} onChange={setLanguage} />
+            <CodePromptButton isOpen={isPromptOpen} onToggle={() => setPromptOpen(open => !open)} />
+          </div>
 
         </div>
 
+        {language === "python" ? (
+        <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
+          A Python file that defines <code>tasks(run)</code>, which returns
+          the number of tasks, an integer. <code>run.value("-opt")</code>{" "}
+          reads an option of the command line, <code>run.process</code> and{" "}
+          <code>run.outdir</code> are the name and the output directory of
+          the process. Option values can then reference{" "}
+          <code>{"${task_idx}"}</code>, the index of the task.
+        </p>
+        ) : (
         <p style={{ margin: 0, color: "#666", fontSize: 13 }}>
           Bash code returning the number of tasks on stdout. The simplest
           implementation is just a fixed number, e.g. <code>echo 5</code>,
@@ -102,6 +120,7 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
           <br />
           <code>local process_outdir=$4</code>
         </p>
+        )}
 
         <div
           style={{
@@ -125,7 +144,7 @@ export default function GeneratorConfigEditor({ process, onClose }: Props) {
 
               height="400px"
 
-              extensions={languageExtensions("bash")}
+              extensions={languageExtensions(language)}
 
               // The setter itself, which keeps its identity: a new function at each
 

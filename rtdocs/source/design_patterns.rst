@@ -99,7 +99,8 @@ can be a Python function in a file beside the module instead of Bash
 
 In the web interface, the options handler of the process is set to
 "array" or "generator", and "Configure" takes the code that builds the
-array or prints the number of tasks (see the :ref:`webui` Section).
+array or prints the number of tasks, in Bash or, with "Language", as a
+Python ``tasks(run)`` (see the :ref:`webui` Section).
 
 One task per entry, and a chain of steps for each entry
 -------------------------------------------------------

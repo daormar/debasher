@@ -245,11 +245,17 @@ Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
 ``docker_imgs``, and the rest of the process methods described in the
 :ref:`implem_bash` Section) are edited with "Configure additional methods",
 whose editor of each method has the same "AI prompt" button as the
-code editor, with the rules of that method. The Conda environments and
-Docker images that a process keeps as a list, and a tasks function or a
-``skip`` method in Python, are not shown in those editors yet: they are
-kept as ``program.yaml`` and the files it names hold them, and edited in
-"Program files".
+code editor (except for environments given as data), with the rules of
+that method. The editor of ``skip`` has
+a "Language" choice: Bash, or a Python function ``skip(task)`` that
+returns ``True`` to skip the task (see :ref:`tasks_in_python`). Those
+of ``conda_envs`` and ``docker_imgs`` take the environments as data by
+default: a row for each Conda environment, with its name and its
+``.yml`` file, or for each Docker image, from which the generated
+script writes the lines that prepare them when the run has conda or
+docker support ("Save" waits until no row has an empty field). "Given
+as: Bash body" writes the method by hand instead.
+
 The **specifications** are the computational ones (CPUs, memory and
 time) and, for a general program, the additional ones: process
 dependencies, ``force``, and an alias or an external alias.
@@ -269,8 +275,9 @@ The options handler of a process says how it defines its options, and
 so how many tasks it runs:
 
 * **standard**: one task.
-* **array**: one task for each element of a Bash array named ``array``,
-  which code written with "Configure" builds; the values of the options
+* **array**: one task for each element of the array that code written
+  with "Configure" builds (a Bash array named ``array``, or the list
+  that a Python ``tasks(run)`` returns); the values of the options
   can use its index, ``${task_idx}``, and its element,
   ``${array[$task_idx]}``.
 * **generator**: one task for each index from 0 to the number that
@@ -279,11 +286,19 @@ so how many tasks it runs:
 * **manual**: the option definition function is written whole, by
   hand (general programs only).
 
-The editors of the code of an array and of a generator have the same
-"AI prompt" button as the code editor. Its prompt carries the options
-of the process with their values, which show what each task needs, and
-the code of the process, if it is written; it lets the AI tool ask
-what a task is when nothing says so.
+The code of an array or a generator may also be a Python function,
+chosen with "Language" in its editor: ``tasks(run)`` returns the
+elements of the array, or the number of tasks, from the command line
+of the run, ``run.value("-samples")`` (see :ref:`tasks_in_python`). The
+values of the options still use ``${array[$task_idx]}`` and
+``${task_idx}``. The code of a manual process is always Bash.
+
+The editors of the code of an array and of a generator have the
+same "AI prompt" button as the code editor, in Bash or in Python.
+Its prompt carries the options of the process with their values,
+which show what each task needs, and the code of the process, if
+it is written; it lets the AI tool ask what a task is when
+nothing says so.
 
 An option of a standard process whose label ends in ``-ith``, such as
 ``-outf-ith``, is a *fanout family*: it stands for as many numbered

@@ -93,3 +93,7 @@ environment does not exist:
 
 .. literalinclude:: ../../data/webui_programs/webui_conda_example/test/python_version.bats
    :language: bash
+
+The program ``webui_conda_envs`` does the same with the environment
+given as data in the editor of ``conda_envs``, which ``program.yaml``
+keeps as ``conda_envs: {py27: py27.yml}``.

@@ -589,6 +589,15 @@ Docker images of a process are given either as the bodies of `_conda_envs` and
 file each) and `additionalMethods.dockerImgs`, from which script generation
 writes one `define_conda_env` or `pull_docker_img` per entry.
 
+The editor of an additional method follows the same split. That of `skip` has a
+language selector, Bash or Python, which starts a skip file from a `skip(task)`
+that runs every task. Those of `conda_envs` and `docker_imgs` offer the data, a
+row per environment (a name and a YAML file) or per image, or the Bash body, the
+data by default, or the body when the process has one; saving the one empties
+the other, so a process never holds both, and a row with an empty field cannot
+be saved. The editor keeps a draft per language, or the data beside the body,
+until Save, so switching back and forth loses nothing.
+
 An option has a `label`, a `direction`, a `dataType`, an option channel, a
 `description`, a `value` and a `subpath`, and five flags: `commandLine` and
 `mandatory`, `taskShaping` (a task shaping option), `fromProcessSpec` (its value
@@ -852,7 +861,10 @@ loop of `array` mode, and `num_tasks_from_file` as the body of
 `doc/design_doc_engine.md`). The rest of the option definition functions is
 the same in both languages, so the options of each task are defined in the
 module whatever language shapes the tasks. The code of `manual` mode is always
-Bash.
+Bash. The configuration dialog of `array` and `generator` mode has a language
+selector, which starts a tasks file from a `tasks(run)` that returns no
+elements, or one task; choosing `manual` mode in the inspector sets the
+language back to Bash.
 
 When both ends of a connection run in `array` or `generator` mode, each task
 reads the output of the task with the same index at the other end. In every
@@ -4361,6 +4373,20 @@ builds it, pure like `buildCodePrompt`, whose description of the options it
 reuses. The option definition function of a `manual` process has no code
 prompt (see "Future work").
 
+For a tasks file in Python the same parts carry the rules of the engine for it
+(see "Python function files" in `doc/design_doc_engine.md`): the file defines
+`tasks(run)`, which returns the elements of the array (strings, numbers or
+paths) or the number of tasks; `run` reads the command line of the run, the
+name of the process and its output directory; the options of each task are
+still defined in Bash, from `${array[$task_idx]}` and `${task_idx}`; the
+function runs at the same moments as the Bash it replaces, with the Python of
+DeBasher rather than in the environment of the process, and an exception or a
+value of the wrong kind stops the preparation of the run. Since Python cannot
+call `get_process_num_tasks`, the code prompt says that a process whose tasks
+follow those of another one is better shaped in Bash. The code to complete
+leaves out the first code of the dialog, the comment asks for a docstring of
+`tasks`, and the answer is the whole file, tagged `python`.
+
 ## The code prompt of an additional method
 
 The editor of each additional method of a process (`reset_outfiles`, `post`,
@@ -4401,6 +4427,16 @@ prompt says so, after a title and a sentence on what a method is:
    whole body in a single fenced code block tagged `bash`, without the line
    that names the function and the braces around the body.
 
+For a skip file in Python, the first part says instead that the file defines
+`skip(task)`, which returns `True` to skip the task and `False` to run it, with
+anything else or an exception failing the task, how `task` reads the options of
+the task (a value descriptor read for its value), that the file runs with the
+Python of DeBasher, and the rules of `skip` that do not depend on the language,
+which `PYTHON_SKIP_RULES` takes from the same list as `PROCESS_METHODS`; the
+comment asks for a docstring of `skip`, and the answer is the whole file, tagged
+`python`. The Conda environments and the Docker images given as data have no
+code prompt: the editor hides the button while it shows the data.
+
 The rules of each method are those of the engine (see "Processes and their
 methods", "Executing a task", "When one end fails" and "Conda and Docker
 environments" in `doc/design_doc_engine.md`). Unlike the node reference, which
@@ -4421,16 +4457,18 @@ It builds it with the same functions, from the program as it is saved, with the
 code saved for that piece as the draft and the code request of the call; for a
 node, it reads the node reference and the inherited hooks from the backend, as
 the node code editor does, and says in the code prompt what it could not read.
-It refuses what the editor does not offer: the code of a `Supervisor`, the
-options handler of a process in a mode other than `array` or `generator`, and an
-additional method of a node; and, since the code prompt is for Bash, the code
-kept in a Python tasks file or skip file, which an agent changes as a file, and
-the Conda environments or Docker images that a process gives as data, which it
-changes in the topology file. `update_process` refuses for the same reason an
-edit that would put other code into such a Python file, or a body beside such
-data. An agent follows the code prompt to write that
-code, which it then saves with the MCP tools that edit a program, or hands it to
-another model; an assistant in the web UI would compose it the same way.
+It composes the Python code prompt for a tasks file or a skip file in Python, by
+the language that the process holds, and refuses what the editor does not offer:
+the code of a `Supervisor`, the options handler of a process in a mode other
+than `array` or `generator`, an additional method of a node, and the Conda
+environments or Docker images that a process gives as data, which an agent
+changes with `update_process` (`additionalMethods.condaEnvs`,
+`additionalMethods.dockerImgs`). `update_process` sets the language of the
+options handler and of the skip method and the data as the editor does, and
+refuses, as script generation would, a `manual` handler in Python and data given
+beside a body. An agent follows the code prompt to write that code, which it
+then saves with the MCP tools that edit a program, or hands it to another model;
+an assistant in the web UI would compose it the same way.
 
 # Editing a program from an agent: the MCP server
 

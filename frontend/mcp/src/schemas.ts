@@ -25,6 +25,10 @@ export const position = z.object({ x: z.number(), y: z.number() }).strict()
 
 const language = z.enum(["bash", "python", "perl", "r", "groovy"]);
 
+// The language of a tasks file or of a skip file: a Bash body, or a Python
+// function file that the engine runs.
+const funcLanguage = z.enum(["bash", "python"]);
+
 export const nodeKind = z.enum(["FBPProcess", "ProgramLauncher", "DirectoryWatcher", "Supervisor"]);
 
 export const optionFields = z.object({
@@ -82,6 +86,7 @@ export const processChanges = z.object({
     generatorSizeCode: z.string().optional(),
     arrayCode: z.string().optional(),
     manualCode: z.string().optional(),
+    language: funcLanguage.optional().describe("The language of arrayCode and generatorSizeCode: python makes them a tasks file that defines tasks(run). A manual handler is bash. Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
   }).strict().optional(),
   computationalSpecs: computationalSpecs.optional(),
   additionalSpecs: z.object({
@@ -98,6 +103,11 @@ export const processChanges = z.object({
     skipCode: z.string().optional(),
     condaEnvsCode: z.string().optional(),
     dockerImgsCode: z.string().optional(),
+    skipLanguage: funcLanguage.optional().describe("The language of skipCode: python makes it a skip file that defines skip(task). Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
+    condaEnvs: z.array(z.object({ name: z.string().min(1), file: z.string().min(1) }).strict()).optional()
+      .describe("The Conda environments as data, a name and a YAML file each (looked for in the directories of DEBASHER_YML_DIR, then among those that DeBasher installs), instead of condaEnvsCode, which has to be empty: give it as an empty string in the same change when the process has one. [] removes them, for a body to be given."),
+    dockerImgs: z.array(z.string().min(1)).optional()
+      .describe("The Docker images as data instead of dockerImgsCode, which has to be empty: give it as an empty string in the same change when the process has one. [] removes them, for a body to be given."),
   }).strict().optional(),
   initiator: z.boolean().optional().describe("In a resident program: the node where a round starts."),
   nodeCode: z.object({
@@ -110,7 +120,7 @@ export const processChanges = z.object({
     observe: z.string().optional(),
   }).strict().optional().describe("In a resident program: the parts of the code of the node, each a body without its def line."),
 }).strict().describe(
-  "Of a field that holds an object, give only the fields that change. A tasks file or a skip file in Python is changed as a file (write_program_file); Conda environments and Docker images given as data are changed in program.yaml, or, in a program described in Python, in its description (then debasher_build <name>.py)."
+  "Of a field that holds an object, give only the fields that change. The code of a tasks file or a skip file in Python is the whole file, which defines tasks(run) or skip(task). In a program described in Python, the Conda environments and Docker images given as data and the language of a tasks file or skip file belong to its description (then debasher_build <name>.py)."
 );
 
 export const seqProcessChanges = z.object({

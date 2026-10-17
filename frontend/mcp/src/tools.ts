@@ -210,7 +210,7 @@ const readingTools = [
 
   tool(
     "get_code_prompt",
-    "The code prompt that the \"AI prompt\" button of the editor composes for a piece of code of a process, from the program as it is saved: the rules of the engine for that code, the options and connections, the code so far, and the form of the answer. part is \"code\" for the code of the process (or the parts of a node), \"options_handler\" for the code of an array or generator options handler, or the name of an additional method (reset_outfiles, post, outdir_basename, skip, conda_envs, docker_imgs). Follow it to write that code, or hand it to another model.",
+    "The code prompt that the \"AI prompt\" button of the editor composes for a piece of code of a process, from the program as it is saved: the rules of the engine for that code, the options and connections, the code so far, and the form of the answer. part is \"code\" for the code of the process (or the parts of a node), \"options_handler\" for the code of an array or generator options handler, or the name of an additional method (reset_outfiles, post, outdir_basename, skip, conda_envs, docker_imgs). options_handler and skip follow the language of the process (optionsHandler.language, skipLanguage): in Python the prompt is for the whole file. conda_envs and docker_imgs given as data have none: change them with update_process. Follow it to write that code, or hand it to another model.",
     {
       home_dir: schemas.homeDir,
       process: schemas.processName,
@@ -244,16 +244,12 @@ const readingTools = [
       }
       if (part === "options_handler") {
         const handler = process.optionsHandler;
-        if (handler.language === "python" && (handler.mode === "array" || handler.mode === "generator")) {
-          throw new Refusal(
-            `The options handler of ${name} is the Python tasks file ${process.files?.tasks || `${name}_tasks.py`}, which defines tasks(run) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): the code prompt is for Bash code; change that file with write_program_file.`
-          );
-        }
+        const language = handler.language ?? "bash";
         if (handler.mode === "array") {
-          return buildOptionsHandlerPrompt(program, process, "array", handler.arrayCode ?? "", request);
+          return buildOptionsHandlerPrompt(program, process, "array", handler.arrayCode ?? "", request, language);
         }
         if (handler.mode === "generator") {
-          return buildOptionsHandlerPrompt(program, process, "generator", handler.generatorSizeCode ?? GENERATOR_SIZE_TEMPLATE, request);
+          return buildOptionsHandlerPrompt(program, process, "generator", handler.generatorSizeCode ?? GENERATOR_SIZE_TEMPLATE, request, language);
         }
         throw new Refusal(`${name} is in ${handler.mode} mode: only the code of an array or generator options handler has a code prompt.`);
       }
@@ -265,18 +261,15 @@ const readingTools = [
         throw new Refusal("A node of a resident program has no additional methods.");
       }
       const methods = process.additionalMethods;
-      if (method.key === "skipCode" && methods.skipLanguage === "python") {
-        throw new Refusal(
-          `The skip method of ${name} is the Python skip file ${process.files?.methods?.skip || `${name}_skip.py`}, which defines skip(task) (see https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python): the code prompt is for Bash code; change that file with write_program_file.`
-        );
-      }
       const listed = method.key === "condaEnvsCode" ? methods.condaEnvs : method.key === "dockerImgsCode" ? methods.dockerImgs : undefined;
       if (listed?.length) {
+        const field = method.key === "condaEnvsCode" ? "condaEnvs" : "dockerImgs";
         throw new Refusal(
-          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments as data (name: YAML file)" : "Docker images as data (a list of images)"}, under ${method.name} in program.yaml, from which the method is written: change them there, or, in a program described in Python (a <name>.py beside <name>.sh), in ${method.name}= of its description, then run debasher_build <name>.py.`
+          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments as data (a name and a YAML file each)" : "Docker images as data (a list of images)"}, from which the method is written, and data has no code prompt: change them with update_process (additionalMethods.${field}), or, in a program described in Python (a <name>.py beside <name>.sh), in ${method.name}= of its description, then run debasher_build <name>.py.`
         );
       }
-      return buildMethodPrompt(program, process, method.key, methods[method.key] ?? "", request);
+      const language = method.key === "skipCode" ? methods.skipLanguage ?? "bash" : "bash";
+      return buildMethodPrompt(program, process, method.key, methods[method.key] ?? "", request, language);
     }
   ),
 
