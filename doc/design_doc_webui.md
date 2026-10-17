@@ -219,9 +219,13 @@ refer to it.
   file, that the module runs as it is (the external alias of the engine); the
   editor shows it and never writes it.
 - **tasks file**: a file that holds the code of the options handler of an
-  `array`, `generator` or `manual` process, a Bash body, named by `tasks`.
+  `array`, `generator` or `manual` process, named by `tasks`: a Bash body, or,
+  for an `array` or `generator` process, a Python function file that defines
+  `tasks(run)`, which is then a tasks file in the sense of the engine too (see
+  "Python function files" in `doc/design_doc_engine.md`).
 - **method file**: a file that holds the body of one additional method of a
-  process, named under `methods`.
+  process, named under `methods`: a Bash body, or, for the skip method, a
+  Python function file that defines `skip(task)` (a skip file of the engine).
 - **schema version**: the integer `schema_version` of a topology file, the
   version of the schema it is written in, which a reader reads up to its own.
 - **digest**: a hash of the content of the topology file and of every file it
@@ -577,7 +581,13 @@ and `additionalSpecs`) and its code. The code has three parts: `language` and
 interpreter, which the engine wraps in a function); `additionalMethods`, the
 bodies of the other methods a process may define (`_post`, `_skip`,
 `_conda_envs`, ...); and the option methods, which script generation derives
-from the options and the options handler.
+from the options and the options handler. The body of the skip method is Bash
+or Python, as `additionalMethods.skipLanguage` says: in Python, it is the text
+of the skip file, which the module calls. The Conda environments and the
+Docker images of a process are given either as the bodies of `_conda_envs` and
+`_docker_imgs` or as data, `additionalMethods.condaEnvs` (a name and a YAML
+file each) and `additionalMethods.dockerImgs`, from which script generation
+writes one `define_conda_env` or `pull_docker_img` per entry.
 
 An option has a `label`, a `direction`, a `dataType`, an option channel, a
 `description`, a `value` and a `subpath`, and five flags: `commandLine` and
@@ -832,6 +842,18 @@ The index of a task has the same name, `task_idx`, in `array` and `generator`
 mode, so an option value written for one of them, such as
 `${process_outdir}/${task_idx}`, means the same in the other.
 
+In `array` and `generator` mode the user's code is Bash or Python, as
+`optionsHandler.language` says. In Python it is the text of a tasks file that
+defines `tasks(run)`, which returns the elements of the array or the number of
+tasks, and script generation writes, in place of the code, the call of the
+engine that runs the file: `local array` and `tasks_from_file` before the
+loop of `array` mode, and `num_tasks_from_file` as the body of
+`_generate_opts_size` (see "Python function files" in
+`doc/design_doc_engine.md`). The rest of the option definition functions is
+the same in both languages, so the options of each task are defined in the
+module whatever language shapes the tasks. The code of `manual` mode is always
+Bash.
+
 When both ends of a connection run in `array` or `generator` mode, each task
 reads the output of the task with the same index at the other end. In every
 other case the connection names the output of the source process as a whole,
@@ -879,15 +901,17 @@ The generated module holds, in this order:
    `explain_task_shaping_opt` per task shaping option, only for a process that
    has one), `_identify_cmdline_opts` (one `opt_is_cmdline` or
    `opt_is_non_mandatory_cmdline` per other command line option), the option
-   definition functions of its options handler mode (see "Option
-   definitions"), its code, and one function for each additional method that
-   has a body. Code in Bash is written as it is; code in another language
-   becomes a heredoc function `<process>_heredoc_<suffix>` (`py`, `r`,
-   `perl`, `groovy`) that prints it, which the engine wraps in the
-   function of the process. The engine also accepts the older form, a
-   variable `<process>_<suffix>`, which import reads, but a Bash variable
-   name cannot contain the dot of a namespaced process, so script
-   generation never writes it.
+   definition functions of its options handler mode (see "Option definitions"),
+   its code, and one function for each additional method that has a body or, for
+   the Conda environments and the Docker images, data. A tasks file or a skip
+   file in Python is not embedded: the function calls it, so the module needs it
+   beside it at run time, as it needs the process files of other languages. Code
+   in Bash is written as it is; code in another language becomes a heredoc
+   function `<process>_heredoc_<suffix>` (`py`, `r`, `perl`, `groovy`) that
+   prints it, which the engine wraps in the function of the process. The engine
+   also accepts the older form, a variable `<process>_<suffix>`, which import
+   reads, but a Bash variable name cannot contain the dot of a namespaced
+   process, so script generation never writes it.
 4. For each sequential process, its `_document` function and its code (see
    "Generating and importing a sequential process").
 5. The code of each function that an alias runs and that nothing else in the
@@ -1042,7 +1066,12 @@ mirrored or uses an option channel other than `none` or `fifo`, or whose input
 is not connected to a process in `array` or `generator` mode; a connection to a
 fanout family from a process in another mode; and a sequential process in a
 resident program, or with the name of a process or of another sequential process
-(see "Generating and importing a sequential process"). The save generates the
+(see "Generating and importing a sequential process"); an options handler in
+`manual` mode whose language is Python; Conda environments or Docker images
+given both as data and as the body of their method; and a path of a Python tasks
+file or skip file, the name or the YAML file of a Conda environment, or a Docker
+image that is empty or holds a double quote, `$`, a backquote, a backslash or a
+newline, which the module could not write as a word. The save generates the
 script before it writes anything, so a program that script generation refuses
 leaves the home directory as it was. The save answers with the reason of the
 refusal, which the frontend shows.
@@ -1125,6 +1154,17 @@ and close the function. From the shape of the functions it decides the mode:
 - Anything else: `manual` mode, with the functions kept as their verbatim
   source.
 
+In `array` and `generator` mode, code that is exactly the call of the engine
+that script generation writes for a tasks file in Python, naming a `.py` file
+that exists, relative to the directory of the module, comes back in Python: the
+text of that file is the code, and its path the path of the tasks file. The same
+holds for a skip method that is exactly the call of `skip_from_file` for the
+process. A body of `_conda_envs` or `_docker_imgs` made only of
+`define_conda_env` or `pull_docker_img` calls with literal arguments comes back
+as data. Any other body stays Bash, which runs the same: a call of a Python file
+that cannot be read is still a Bash body that makes it
+(`function_files_import.py`).
+
 What the grammar recognizes gives the values, the subpaths, the option channels,
 the flags `mirror` and `fromProcessSpec`, and the connections. A function kept
 in `manual` mode is still scanned for connections anywhere in its text, so that
@@ -1181,24 +1221,29 @@ script generation writes: the flat definitions of `standard` mode, the fixed
 loop of `array` mode, the pair of functions of `generator` mode, and the
 functions of `manual` mode, which come back as they went. The processes, their
 options with their values, subpaths, option channels and flags, the connections,
-the modes, the code, the additional methods, the specifications, the
-descriptions and the sequential processes survive. The order of the processes,
-and of the options of a process, follows the module documentation and may differ
-from the original. What lives only in the program metadata does not survive: the
-ids, which are new; the positions, which are laid out again; which edges are
-label edges, since import draws every edge as a line; the groups, which come
-back flattened; the connection sentinels, derived again from the connections
-when the program is loaded; the environment variables, except the
-`DEBASHER_MOD_DIR` given to import; the execution options and program options;
-and the home and output directories. A `manual` function that happens to fit the
-grammar of `standard` mode comes back in `standard` mode, which defines the same
-options.
+the modes, the code, the additional methods, the languages of the tasks and of
+the skip method, the Conda environments and Docker images given as data, the
+specifications, the descriptions and the sequential processes survive. The order
+of the processes, and of the options of a process, follows the module
+documentation and may differ from the original. What lives only in the program
+metadata does not survive: the ids, which are new; the positions, which are laid
+out again; which edges are label edges, since import draws every edge as a line;
+the groups, which come back flattened; the connection sentinels, derived again
+from the connections when the program is loaded; the environment variables,
+except the `DEBASHER_MOD_DIR` given to import; the execution options and program
+options; and the home and output directories. A `manual` function that happens
+to fit the grammar of `standard` mode comes back in `standard` mode, which
+defines the same options.
 
 **From a module to the model and back.** A module that import recognizes comes
 back with the same behavior, but written the way script generation writes it:
 the option definition functions of a recognized mode lose their comments and
 their layout, while the functions kept in `manual` mode, the code and the
-methods keep their verbatim source. Code in another language that the module
+methods keep their verbatim source, but for the methods that import turns into
+data (a `_conda_envs` or `_docker_imgs` body made only of `define_conda_env`
+or `pull_docker_img` calls, which comes back as script generation writes those
+calls) and for a call of a Python tasks file or skip file, which comes back as
+that file. Code in another language that the module
 held in a heredoc comes back as a process file that the module runs as it is
 (see "The process files"), and import gives it back as a script file, an
 external alias of that file, which the round trip takes for the same process.
@@ -1474,7 +1519,11 @@ edits it:
   the standard mode) and `tasks`, the path of its tasks file; `methods`, a
   map from the name of an additional method (`skip`,
   `post`, `reset_outfiles`, `outdir_basename`, `conda_envs`, `docker_imgs`)
-  to the path of its method file; `specs`, one map with the names that the
+  to the path of its method file; `conda_envs`, a map from the name of a
+  Conda environment to its YAML file, and `docker_imgs`, a list of Docker
+  images, the environments of the process given as data, in place of the
+  method files of the same names, a process that gives both being refused when
+  the program is loaded; `specs`, one map with the names that the
   engine gives the computational and additional specifications (`cpus`,
   `mem`, `time`, `processdeps`, `force`, and the limits of a node); `group`,
   for a process that "Add program" brought in; and, for a node of a resident
@@ -1629,18 +1678,24 @@ the parts cannot hold is refused when the program is loaded, with the problems
 that import reports, each with its line.
 
 The tasks file (`tasks`) holds the code of the options handler as the editor
-keeps it, a Bash body: the code that builds the array of an `array` process,
-that prints the task count of a `generator` process, or the whole option
-definition function of a `manual` process. A method file holds the body of one
-additional method. Both are Bash bodies, not functions, as the program model
-keeps them and as the SDK takes them.
+keeps it: the code that builds the array of an `array` process, that prints
+the task count of a `generator` process, or the whole option definition
+function of a `manual` process. A method file holds the body of one additional
+method. Both are Bash bodies, not functions, as the program model keeps them
+and as the SDK takes them. In the program model, a tasks file of an `array` or
+`generator` process and the skip file may instead be Python function files: the
+extension of the file gives the language, `.py` Python and any
+other Bash, and a Python file named as the tasks file of a `manual` process or
+as another method file is refused when the program is loaded.
 
 The paths are free: the SDK writes what the description gave, and a user may
 name a file as they like. What the editor and import choose when they create a
-file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks
-file and `<process>_<method>.sh` for a method file; and, for a Bash process
-named as its program, whose file would otherwise be the generated script,
-`<process>_process.sh`.
+file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks file
+and `<process>_<method>.sh` for a method file, with `.py` for a tasks file or a
+skip file in Python, which is also the name a file gets when its language
+changes and the name it was loaded with no longer says it; and, for a Bash
+process named as its program, whose file would otherwise be the generated
+script, `<process>_process.sh`.
 
 Two keys say where the code of a process is, by who owns the file. `code`
 names a process file that the editor owns: it writes the file from the code of
@@ -1757,7 +1812,8 @@ but the engine:
 - Import reads a module and gives the editor the program model; the first
   save writes the artifact: the verbatim code of each process into its file,
   the code of a recognized options handler into the tasks file, each method
-  into its file, the file of an external alias copied. Nothing is lost that
+  into its file, or into `conda_envs` and `docker_imgs` when import recovered
+  them as data, the file of an external alias copied. Nothing is lost that
   import does not lose (see "What the round trip preserves"); a process of
   another language held in a heredoc comes back as a file that the module
   refers to, with the same behavior and another shape of the module, and
@@ -4366,7 +4422,12 @@ node, it reads the node reference and the inherited hooks from the backend, as
 the node code editor does, and says in the code prompt what it could not read.
 It refuses what the editor does not offer: the code of a `Supervisor`, the
 options handler of a process in a mode other than `array` or `generator`, and an
-additional method of a node. An agent follows the code prompt to write that
+additional method of a node; and, since the code prompt is for Bash, the code
+kept in a Python tasks file or skip file, which an agent changes as a file, and
+the Conda environments or Docker images that a process gives as data, which it
+changes in the topology file. `update_process` refuses for the same reason an
+edit that would put other code into such a Python file, or a body beside such
+data. An agent follows the code prompt to write that
 code, which it then saves with the MCP tools that edit a program, or hands it to
 another model; an assistant in the web UI would compose it the same way.
 

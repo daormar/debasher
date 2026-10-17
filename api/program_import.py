@@ -20,6 +20,7 @@ from .doc_mod import (
     split_seq_process_chunks,
 )
 from .additional_methods_import import resolve_additional_methods
+from .function_files_import import recover_function_files
 from .markdown_parsing import (
     ProcessInfoOption,
     function_header_name,
@@ -618,6 +619,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
                 additionalMethods=resolve_additional_methods(info.methods, script_path, debasher_mod_dir),
             )
         )
+        recover_function_files(processes[-1], script_path.resolve().parent)
 
     _downgrade_unverifiable_task_indexed_connections(processes, pending_connections, option_handler_code_by_process)
     _downgrade_unverifiable_fanout_counts(

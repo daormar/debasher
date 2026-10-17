@@ -82,7 +82,10 @@ A program built with the web interface uses two directories:
   which the topology file names (``count.sh`` for a Bash process
   ``count``, ``dispatch.py`` for one in Python, ``worker_tasks.sh`` for
   the code that shapes the tasks of an array or a generator,
-  ``count_skip.sh`` for an additional method, and the whole class file
+  ``count_skip.sh`` for an additional method, ``worker_tasks.py`` or
+  ``count_skip.py`` for the tasks or the ``skip`` method written as a
+  Python function (see :ref:`tasks_in_python`), whose extension says the
+  language and which the module calls, and the whole class file
   of a node of a resident program) and the "Program files" panel shows
   and edits as any user file (a change to one is a change to the
   program); the generated script, ``<name>.sh``, a DeBasher module like
@@ -141,9 +144,18 @@ The home screen offers three ways to open a program:
 Import keeps the processes, their options and connections, their code,
 methods and specifications, and the descriptions, but not the layout,
 nor the comments of the option definitions, which come back written the
-way the web interface writes them. A module that is maintained by hand
-is best kept by hand; import is the way into the web interface for a
-module written without it.
+way the web interface writes them. A tasks function or a ``skip``
+method that is only the call of ``tasks_from_file``,
+``num_tasks_from_file`` or ``skip_from_file`` on a Python file beside
+the module comes in as that Python file, which the next save writes
+into the home directory (a file elsewhere leaves the call as the Bash it
+is); a ``conda_envs`` or ``docker_imgs`` method made only of
+``define_conda_env`` or ``pull_docker_img`` calls comes in as the list
+of its environments or images, which ``program.yaml`` keeps under
+``conda_envs`` (a map from the name of an environment to its ``.yml``
+file) and ``docker_imgs`` (a list of images). A module that is
+maintained by hand is best kept by hand; import is the way into the web
+interface for a module written without it.
 
 The examples of the ``data/webui_programs`` folder, installed under
 ``<prefix>/share/debasher/webui_programs``, are programs built with the
@@ -233,7 +245,11 @@ Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
 ``docker_imgs``, and the rest of the process methods described in the
 :ref:`implem_bash` Section) are edited with "Configure additional methods",
 whose editor of each method has the same "AI prompt" button as the
-code editor, with the rules of that method.
+code editor, with the rules of that method. The Conda environments and
+Docker images that a process keeps as a list, and a tasks function or a
+``skip`` method in Python, are not shown in those editors yet: they are
+kept as ``program.yaml`` and the files it names hold them, and edited in
+"Program files".
 The **specifications** are the computational ones (CPUs, memory and
 time) and, for a general program, the additional ones: process
 dependencies, ``force``, and an alias or an external alias.

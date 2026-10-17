@@ -95,6 +95,64 @@ describe("reading a program", () => {
     await expect(call(backend, "get_process", { home_dir: HOME, process: "nope" })).rejects.toThrow('no process named "nope"');
   });
 
+  it("says which code is Python and shows the environments given as data, as the backend sends them", async () => {
+    const worker: ProgramProcess = {
+      ...process("w", ["-x"]),
+      optionsHandler: { mode: "array", arrayCode: "def tasks(run):\n    return [1]", language: "python" },
+      additionalMethods: {
+        skipCode: "def skip(task):\n    return False",
+        skipLanguage: "python",
+        condaEnvs: [{ name: "py27", file: "py27.yml" }],
+        dockerImgs: ["library/hello-world"],
+      },
+    };
+    const backend = fakeBackend([program({ processes: [worker] })]);
+
+    const shown = await text(backend, "get_process", { home_dir: HOME, process: "w" });
+    expect(shown).toContain("Options handler code (Python):\ndef tasks(run):");
+    expect(shown).toContain("Method skipCode (Python):\ndef skip(task):");
+    expect(shown).toContain("Conda environments (data):\npy27 py27.yml");
+    expect(shown).toContain("Docker images (data):\nlibrary/hello-world");
+    expect(shown).not.toContain("skipLanguage");
+  });
+
+  it("gives no Bash code prompt for code in a Python file, nor for environments given as data", async () => {
+    const worker: ProgramProcess = {
+      ...process("w", ["-x"]),
+      optionsHandler: { mode: "array", arrayCode: "def tasks(run):\n    return [1]", language: "python" },
+      additionalMethods: {
+        skipCode: "def skip(task):\n    return False",
+        skipLanguage: "python",
+        condaEnvs: [{ name: "py27", file: "py27.yml" }],
+      },
+    };
+    const backend = fakeBackend([program({ processes: [worker] })]);
+    const prompt = (part: string) => call(backend, "get_code_prompt", { home_dir: HOME, process: "w", part });
+
+    await expect(prompt("options_handler")).rejects.toThrow("Python tasks file w_tasks.py, which defines tasks(run)");
+    await expect(prompt("skip")).rejects.toThrow("Python skip file w_skip.py, which defines skip(task)");
+    await expect(prompt("conda_envs")).rejects.toThrow("Conda environments as a list, under conda_envs in program.yaml");
+  });
+
+  it("refuses an edit that would put other code into a Python file or a body beside environments given as data", async () => {
+    const worker: ProgramProcess = {
+      ...process("w", ["-x"]),
+      optionsHandler: { mode: "array", arrayCode: "def tasks(run):\n    return [1]", language: "python" },
+      additionalMethods: { skipCode: "def skip(task):\n    return False", skipLanguage: "python", dockerImgs: ["img"] },
+    };
+    const backend = fakeBackend([program({ processes: [worker] })]);
+    const update = (changes: Record<string, unknown>) =>
+      call(backend, "update_process", { home_dir: HOME, process: "w", changes });
+
+    await expect(update({ optionsHandler: { arrayCode: "array=(1)" } })).rejects.toThrow("Python tasks file w_tasks.py");
+    await expect(update({ optionsHandler: { mode: "manual" } })).rejects.toThrow("Python tasks file w_tasks.py");
+    await expect(update({ additionalMethods: { skipCode: "return 1" } })).rejects.toThrow("Python skip file w_skip.py");
+    await expect(update({ additionalMethods: { dockerImgsCode: "pull_docker_img x" } })).rejects.toThrow("Docker images as a list, under docker_imgs");
+    // What the edit does not touch is no problem
+    await update({ description: "A new description." });
+    await update({ optionsHandler: { mode: "standard" } });
+  });
+
 });
 
 describe("the code prompt", () => {

@@ -79,7 +79,7 @@ def _check_process(process: ProgramProcess) -> list[_Problem]:
                 "alias), which a resident program does not offer: remove them",
             )
         )
-    if any(value for value in process.additionalMethods.model_dump().values()):
+    if process.additionalMethods.model_dump(exclude_defaults=True):
         problems.append(
             _Problem(
                 process.name,

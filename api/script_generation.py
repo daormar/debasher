@@ -27,7 +27,7 @@ from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program, SeqAdditionalSpecs, SeqComputationalSpecs
 from .resident_generation import resident_program_for_generation
-from .topology import code_file_path, write_code_files
+from .topology import code_file_path, method_file_path, tasks_file_path, write_code_files
 
 INDENT_WIDTH = 4
 INDENT = " " * INDENT_WIDTH
@@ -855,7 +855,17 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
     lines = [f"{process.name}{PROCESS_METHOD_DEFINE_OPTS_SUFFIX}()", "{"]
     lines.extend(_define_opts_func_header()[:-1])
     lines.append("")
-    if process.optionsHandler.arrayCode:
+    if process.optionsHandler.language == "python":
+        # The tasks file in Python gives the elements of the array, which
+        # the engine reads from it (see "Python function files" in
+        # doc/design_doc_engine.md)
+        lines.append(f"{INDENT}local array")
+        lines.append(
+            f'{INDENT}debasher::tasks_from_file array {_func_file_word(process, tasks_file_path(process))} '
+            f'{_PY_TASKS_ARGS} || return 1'
+        )
+        lines.append("")
+    elif process.optionsHandler.arrayCode:
         lines.append(_indent_block(process.optionsHandler.arrayCode, INDENT))
         lines.append("")
     lines.append(f"{INDENT}local {TASK_IDX_VAR}")
@@ -884,10 +894,37 @@ def _add_generate_opts_size_func(process):
     lines = [f"{process.name}{PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX}()", "{"]
     lines.extend(_define_opts_func_header()[:-1])
     lines.append("")
-    if process.optionsHandler.generatorSizeCode:
+    if process.optionsHandler.language == "python":
+        # The tasks file in Python prints the number of tasks
+        lines.append(
+            f"{INDENT}debasher::num_tasks_from_file {_func_file_word(process, tasks_file_path(process))} {_PY_TASKS_ARGS}"
+        )
+    elif process.optionsHandler.generatorSizeCode:
         lines.append(_indent_block(process.optionsHandler.generatorSizeCode, INDENT))
     lines.append("}")
     return lines
+
+
+# The arguments that a Python tasks file is called with, after its path:
+# those that the engine gives _define_opts and _generate_opts_size
+_PY_TASKS_ARGS = '"${cmdline}" "${process_name}" "${process_outdir}"'
+
+# What a path, a name or an image written as a word of the module between
+# double quotes may not contain, since Bash would expand it or it would end
+# the word
+_UNQUOTABLE_RE = re.compile(r'["$`\\\n]')
+
+
+def _quoted_word(text: str, what: str) -> str:
+    """`text` between double quotes, as a word of the module; refused when
+    Bash would read it as something else."""
+    if not text or _UNQUOTABLE_RE.search(text):
+        raise ValueError(f"{what} {text!r} cannot be written in the module: it is empty or holds a quote, $, `, \\ or a newline.")
+    return f'"{text}"'
+
+
+def _func_file_word(process, path: str) -> str:
+    return _quoted_word(path, f'The path of a Python file of process "{process.name}",')
 
 
 def _add_opts_handler(process, process_modes, connections_by_option, readers_by_option):
@@ -918,6 +955,11 @@ def _add_opts_handler(process, process_modes, connections_by_option, readers_by_
     if handler.mode == "array":
         return _add_array_opts_func(process, process_modes, connections_by_option)
     if handler.mode == "manual":
+        if handler.language == "python":
+            raise ValueError(
+                f'Process "{process.name}" is in manual mode, whose code is a Bash function, and its options handler is in Python: '
+                "set optionsHandler.language to bash, or use the array or generator mode for a Python tasks file."
+            )
         manual_code = handler.manualCode
         return [manual_code] if manual_code else []
     raise NotImplementedError(
@@ -984,6 +1026,44 @@ _ADDITIONAL_METHOD_SUFFIXES = (
 )
 
 
+def _method_bodies(process) -> dict[str, str]:
+    """The body of each additional method of a process, by the field of
+    AdditionalMethods that holds it: as the process gives it, but for a skip
+    method in Python, which calls its skip file, and for the Conda
+    environments and Docker images given as data, which become the calls
+    of the engine that declare them."""
+    methods = process.additionalMethods
+    bodies = {field: getattr(methods, field) for field, _ in _ADDITIONAL_METHOD_SUFFIXES}
+    if methods.skipLanguage == "python" and methods.skipCode:
+        path = _func_file_word(process, method_file_path(process, "skip"))
+        bodies["skipCode"] = f'debasher::skip_from_file "{process.name}" {path} "$@"'
+    for data, field, line in (
+        (
+            methods.condaEnvs,
+            "condaEnvsCode",
+            lambda env: (
+                f"debasher::define_conda_env {_quoted_word(env.name, 'A Conda environment name')} "
+                f"{_quoted_word(env.file, 'A Conda environment file')} || return 1"
+            ),
+        ),
+        (
+            methods.dockerImgs,
+            "dockerImgsCode",
+            lambda img: f"debasher::pull_docker_img {_quoted_word(img, 'A Docker image')} || return 1",
+        ),
+    ):
+        if not data:
+            continue
+        if bodies[field]:
+            what = "Conda environments" if field == "condaEnvsCode" else "Docker images"
+            raise ValueError(
+                f'Process "{process.name}" gives its {what} both as a list and as the body of the method: '
+                f"empty {field} or remove {'condaEnvs' if field == 'condaEnvsCode' else 'dockerImgs'}."
+            )
+        bodies[field] = "\n".join(line(item) for item in data)
+    return bodies
+
+
 def _add_method_body_func(process_name, suffix, code):
     if not code:
         return []
@@ -995,8 +1075,9 @@ def _add_method_body_func(process_name, suffix, code):
 
 def _add_additional_methods_funcs(process):
     lines = []
+    bodies = _method_bodies(process)
     for field, suffix in _ADDITIONAL_METHOD_SUFFIXES:
-        method_lines = _add_method_body_func(process.name, suffix, getattr(process.additionalMethods, field))
+        method_lines = _add_method_body_func(process.name, suffix, bodies[field])
         if method_lines:
             lines.extend(method_lines)
             lines.extend(["", ""])

@@ -1,4 +1,4 @@
-import type { AdditionalMethods } from "./process";
+import type { MethodCodeKey } from "./process";
 
 // The additional methods of a process that the web UI edits, each a Bash
 // function that script generation writes as "<process>_<name>()" around
@@ -7,7 +7,7 @@ import type { AdditionalMethods } from "./process";
 // what the editor of the method shows; the rules are what the code prompt
 // of the method says. Code spans are written between backquotes.
 export interface ProcessMethod {
-  key: keyof AdditionalMethods;
+  key: MethodCodeKey;
   name: string;
   // Whether the engine calls it with the options of the task as its
   // arguments; the others take no arguments.
@@ -96,7 +96,7 @@ export const PROCESS_METHODS: ProcessMethod[] = [
   },
 ];
 
-export function processMethod(key: keyof AdditionalMethods): ProcessMethod {
+export function processMethod(key: MethodCodeKey): ProcessMethod {
   const method = PROCESS_METHODS.find(m => m.key === key);
   if (!method) {
     throw new Error(`no additional method ${key}`);

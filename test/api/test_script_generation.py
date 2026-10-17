@@ -633,3 +633,115 @@ def test_a_process_with_an_alias_of_its_own_keeps_it():
 
     assert '"ext_alias=./tools/hello.py"' in script
     assert "ext_alias=hello.py" not in script
+
+
+# --- Python function files, and the environments of a process as data ----------
+
+from api.models import AdditionalMethods, CondaEnv  # noqa: E402
+
+
+def _bash_process(name="worker", **fields):
+    return _make_process([]).model_copy(update={"id": f"id-{name}", "name": name, "code": f"{name}()\n{{\n    :\n}}"} | fields)
+
+
+def test_the_tasks_of_an_array_in_python_come_from_its_tasks_file():
+    process = _bash_process(
+        optionsHandler=OptionsHandler(mode="array", arrayCode="def tasks(run):\n    return [1]", language="python")
+    )
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert (
+        "    local array\n"
+        '    debasher::tasks_from_file array "worker_tasks.py" "${cmdline}" "${process_name}" "${process_outdir}" || return 1\n'
+        "\n"
+        "    local task_idx\n"
+    ) in script
+    assert "def tasks" not in script
+
+
+def test_the_number_of_tasks_of_a_generator_in_python_comes_from_its_tasks_file():
+    process = _bash_process(
+        optionsHandler=OptionsHandler(
+            mode="generator", generatorSizeCode="def tasks(run):\n    return 2", language="python"
+        ),
+        files=ProcessFiles(tasks="py/worker.py"),
+    )
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert (
+        '    debasher::num_tasks_from_file "py/worker.py" "${cmdline}" "${process_name}" "${process_outdir}"\n}'
+    ) in script
+
+
+def test_a_skip_method_in_python_calls_its_skip_file():
+    process = _bash_process(
+        additionalMethods=AdditionalMethods(skipCode="def skip(task):\n    return False", skipLanguage="python")
+    )
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert 'worker_skip()\n{\n    debasher::skip_from_file "worker" "worker_skip.py" "$@"\n}' in script
+
+
+def test_the_conda_environments_and_docker_images_as_data_become_the_calls_that_declare_them():
+    process = _bash_process(
+        additionalMethods=AdditionalMethods(
+            condaEnvs=[CondaEnv(name="py27", file="py27.yml"), CondaEnv(name="r4", file="r4.yml")],
+            dockerImgs=["library/hello-world"],
+        )
+    )
+
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert (
+        "worker_conda_envs()\n{\n"
+        '    debasher::define_conda_env "py27" "py27.yml" || return 1\n'
+        '    debasher::define_conda_env "r4" "r4.yml" || return 1\n}'
+    ) in script
+    assert 'worker_docker_imgs()\n{\n    debasher::pull_docker_img "library/hello-world" || return 1\n}' in script
+
+
+@pytest.mark.parametrize(
+    "fields, message",
+    [
+        (
+            {"additionalMethods": AdditionalMethods(condaEnvs=[CondaEnv(name="a", file="a.yml")], condaEnvsCode=":")},
+            "both as a list and as the body",
+        ),
+        (
+            {"additionalMethods": AdditionalMethods(dockerImgs=["img"], dockerImgsCode=":")},
+            "both as a list and as the body",
+        ),
+        ({"additionalMethods": AdditionalMethods(dockerImgs=['bad"img'])}, "cannot be written in the module"),
+        (
+            {"additionalMethods": AdditionalMethods(condaEnvs=[CondaEnv(name="$HOME", file="a.yml")])},
+            "cannot be written in the module",
+        ),
+        (
+            {
+                "optionsHandler": OptionsHandler(mode="array", arrayCode="x", language="python"),
+                "files": ProcessFiles(tasks="my tasks$.py"),
+            },
+            "cannot be written in the module",
+        ),
+        (
+            {"optionsHandler": OptionsHandler(mode="manual", manualCode="worker_define_opts() { :; }", language="python")},
+            "manual mode",
+        ),
+    ],
+)
+def test_what_cannot_be_written_as_a_call_of_the_engine_is_refused(fields, message):
+    with pytest.raises(ValueError, match=message):
+        generate_script(_seq_program([], [_bash_process(**fields)]), skip_redundant_check=True)
+
+
+def test_a_refusal_says_what_to_change():
+    both = _bash_process(additionalMethods=AdditionalMethods(dockerImgs=["img"], dockerImgsCode=":"))
+    with pytest.raises(ValueError, match="empty dockerImgsCode or remove dockerImgs"):
+        generate_script(_seq_program([], [both]), skip_redundant_check=True)
+
+    manual = _bash_process(optionsHandler=OptionsHandler(mode="manual", manualCode=":", language="python"))
+    with pytest.raises(ValueError, match="set optionsHandler.language to bash, or use the array or generator mode"):
+        generate_script(_seq_program([], [manual]), skip_redundant_check=True)

@@ -1,4 +1,4 @@
-import type { AdditionalMethods, ProgramProcess } from "./process";
+import type { MethodCodeKey, ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { ASK_BEFORE_GUESSING, commentSection, describedAs, optionsSection } from "./codePrompt";
 import { codeSection, processCodeSection } from "./optionsHandlerPrompt";
@@ -12,7 +12,7 @@ import { processMethod } from "./processMethods";
 export function buildMethodPrompt(
   program: Program,
   process: ProgramProcess,
-  key: keyof AdditionalMethods,
+  key: MethodCodeKey,
   draft: string,
   request: string,
 ): string {

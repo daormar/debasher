@@ -93,6 +93,24 @@ export interface OptionsHandler {
 
   manualCode?: string;
 
+  /** The language of arrayCode and generatorSizeCode: a Bash body, or the
+   * text of a Python tasks file that defines tasks(run). */
+  language?: FuncLanguage;
+
+}
+
+/** The language of the code that shapes the tasks of a process and of its
+ * skip method (see "Python function files" in doc/design_doc_engine.md). */
+export type FuncLanguage = "bash" | "python";
+
+/** A Conda environment of a process: its name and the YAML file it is
+ * created from. */
+export interface CondaEnv {
+
+  name: string;
+
+  file: string;
+
 }
 
 /**
@@ -116,7 +134,26 @@ export interface AdditionalMethods {
 
   dockerImgsCode?: string;
 
+  /** The language of skipCode. */
+  skipLanguage?: FuncLanguage;
+
+  /** The Conda environments and the Docker images as data, from which
+   * script generation writes the two methods; given instead of their
+   * bodies. */
+  condaEnvs?: CondaEnv[];
+
+  dockerImgs?: string[];
+
 }
+
+/** The fields of AdditionalMethods that hold the body of a method. */
+export type MethodCodeKey =
+  | "resetOutfilesCode"
+  | "postCode"
+  | "outdirBasenameCode"
+  | "skipCode"
+  | "condaEnvsCode"
+  | "dockerImgsCode";
 
 /**
  * Marks a process as having been brought in as part of a batch via

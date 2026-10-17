@@ -6,7 +6,7 @@ persistence.py program_import.py requirements.txt resident_generation.py	\
 resident_fifos.py resident_import.py resident_node_code.py resident_supervisor_wiring.py	\
 launch_record.py program_state.py run_guard.py saving.py script_generation.py	\
 tool_sessions.py serve.py token_auth.py claude_sessions.py page_files.py	\
-layout.py topology.py
+layout.py topology.py function_files_import.py
 
 routersdir = $(apidir)/routers
 dist_routers_DATA = routers/__init__.py routers/execution.py		\

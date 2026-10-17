@@ -136,11 +136,27 @@ class AdditionalSpecs(BaseModel):
     externalAlias: Optional[str] = None
 
 
+# The language of the code that shapes the tasks of a process, and of its
+# skip method: Bash, a body that the module embeds, or Python, the text of
+# a Python function file that the module calls through the engine
+# (tasks_from_file, num_tasks_from_file, skip_from_file).
+FuncLanguage = Literal["bash", "python"]
+
+
 class OptionsHandler(BaseModel):
     mode: Literal["standard", "array", "generator", "manual"]
     generatorSizeCode: Optional[str] = None
     arrayCode: Optional[str] = None
     manualCode: Optional[str] = None
+    # The language of arrayCode and generatorSizeCode; manualCode is Bash
+    language: FuncLanguage = "bash"
+
+
+class CondaEnv(BaseModel):
+    # A Conda environment that a process needs: its name, and the YAML file
+    # it is created from, looked for as define_conda_env looks for it.
+    name: str
+    file: str
 
 
 class AdditionalMethods(BaseModel):
@@ -156,6 +172,13 @@ class AdditionalMethods(BaseModel):
     skipCode: Optional[str] = None
     condaEnvsCode: Optional[str] = None
     dockerImgsCode: Optional[str] = None
+    # The language of skipCode
+    skipLanguage: FuncLanguage = "bash"
+    # The Conda environments and the Docker images of the process as data,
+    # from which script generation writes the bodies of the conda_envs and
+    # docker_imgs methods; a process gives either these or the bodies
+    condaEnvs: list[CondaEnv] = []
+    dockerImgs: list[str] = []
 
 
 class GroupSource(BaseModel):

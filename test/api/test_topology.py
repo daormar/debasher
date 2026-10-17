@@ -33,6 +33,7 @@ from api.models import (
     AdditionalMethods,
     AdditionalSpecs,
     ComputationalSpecs,
+    CondaEnv,
     ExecutionOptions,
     NodeCode,
     OptionsHandler,
@@ -506,6 +507,21 @@ def test_a_topology_file_that_cannot_be_read_is_refused(text, message):
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    code: b.sh\n", {}, "names the file b.sh, which is missing"),
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    tasks: b_tasks.sh\n", {"b_tasks.sh": ""}, "no mode"),
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    mode: array\n", {}, "names no tasks file"),
+        (
+            "schema_version: 1\nname: prg\nprocesses:\n  b:\n    mode: manual\n    tasks: b_tasks.py\n",
+            {"b_tasks.py": ""},
+            "manual mode, whose tasks file is a Bash function",
+        ),
+        (
+            "schema_version: 1\nname: prg\nprocesses:\n  b:\n    methods: {post: b_post.py}\n",
+            {"b_post.py": ""},
+            "the post method is a Bash body",
+        ),
+        (
+            "schema_version: 1\nname: prg\nprocesses:\n  b:\n    methods: {conda_envs: b_envs.sh}\n    conda_envs: {py27: py27.yml}\n",
+            {"b_envs.sh": "define_conda_env py27 py27.yml\n"},
+            "both conda_envs and a conda_envs method file",
+        ),
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    code: b.txt\n", {"b.txt": ""}, "says no language"),
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    code: b.sh\n    alias: a\n", {"b.sh": ""}, "give one of them"),
         ("schema_version: 1\nname: prg\nprocesses:\n  b:\n    alias_opt_map: {-a: -b}\n", {}, "without an alias"),
@@ -529,6 +545,70 @@ def test_a_file_with_an_explicit_language_is_read():
 
     assert (joined.processes[0].language, joined.processes[0].code) == ("perl", "print 1;")
     assert split(joined).topology.processes["b"].language == "perl"
+
+
+def test_a_tasks_file_and_a_skip_file_in_python_are_read_as_python():
+    text = (
+        "schema_version: 1\nname: prg\nprocesses:\n  w:\n    code: w.sh\n    mode: array\n"
+        "    tasks: py/w_tasks.py\n    methods: {skip: py/w_skip.py, post: w_post.sh}\n"
+    )
+    files = {
+        "w.sh": "w() { :; }\n",
+        "py/w_tasks.py": "def tasks(run):\n    return [1, 2]\n",
+        "py/w_skip.py": "def skip(task):\n    return False\n",
+        "w_post.sh": "echo post\n",
+    }
+
+    joined = join(loads(text), files)
+
+    process = joined.processes[0]
+    assert (process.optionsHandler.language, process.optionsHandler.arrayCode) == (
+        "python",
+        "def tasks(run):\n    return [1, 2]",
+    )
+    assert (process.additionalMethods.skipLanguage, process.additionalMethods.skipCode) == (
+        "python",
+        "def skip(task):\n    return False",
+    )
+    assert split(joined).files == files
+
+
+def test_a_tasks_file_takes_the_extension_of_its_language():
+    process = _process(
+        "w",
+        optionsHandler=OptionsHandler(mode="generator", generatorSizeCode="def tasks(run):\n    return 2", language="python"),
+        additionalMethods=AdditionalMethods(skipCode="def skip(task):\n    return True", skipLanguage="python"),
+    )
+    taken_apart = split(_program("prg", [process]))
+    assert taken_apart.topology.processes["w"].tasks == "w_tasks.py"
+    assert taken_apart.topology.processes["w"].methods == {"skip": "w_skip.py"}
+
+    # A file loaded in one language and changed to the other is written
+    # under the default name of the new one
+    process.files.tasks = "tasks/w.sh"
+    process.files.methods = {"skip": "w_skip.sh"}
+    taken_apart = split(_program("prg", [process]))
+    assert taken_apart.topology.processes["w"].tasks == "w_tasks.py"
+    assert taken_apart.topology.processes["w"].methods == {"skip": "w_skip.py"}
+
+    process.optionsHandler.language = "bash"
+    assert split(_program("prg", [process])).topology.processes["w"].tasks == "tasks/w.sh"
+
+
+def test_the_conda_environments_and_docker_images_as_data_survive_the_round_trip():
+    process = _process(
+        "w",
+        additionalMethods=AdditionalMethods(
+            condaEnvs=[CondaEnv(name="py27", file="py27.yml"), CondaEnv(name="r4", file="envs/r4.yml")],
+            dockerImgs=["library/hello-world", "ubuntu:24.04"],
+        ),
+    )
+    program = _program("prg", [process])
+
+    taken_apart = split(program)
+    assert "conda_envs:\n      py27: py27.yml\n      r4: envs/r4.yml" in dumps(taken_apart.topology)
+    assert taken_apart.topology.processes["w"].methods == {}
+    assert _canonical(_round_trip(program)) == _canonical(program)
 
 
 def test_the_published_schema_is_the_one_of_the_model():

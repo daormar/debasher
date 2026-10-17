@@ -136,6 +136,33 @@ export function describeProgram(program: Program): string {
   ].join("\n");
 }
 
+// The bodies of the additional methods of a process, each with its title,
+// and what the process gives as data in their place, its Conda
+// environments and its Docker images, saying which code is Python.
+function methodCodes(process: ProgramProcess): [string, string | undefined][] {
+  const { skipLanguage, condaEnvs, dockerImgs, ...codes } = process.additionalMethods;
+  return [
+    ...Object.entries(codes).map(([name, code]): [string, string | undefined] =>
+      [`Method ${name}${name === "skipCode" && skipLanguage === "python" ? " (Python)" : ""}`, code]),
+    ["Conda environments (data)", condaEnvs?.length ? condaEnvs.map(env => `${env.name} ${env.file}`).join("\n") : undefined],
+    ["Docker images (data)", dockerImgs?.length ? dockerImgs.join("\n") : undefined],
+  ];
+}
+
+// The code of the options handler of a process, with its title, saying when
+// it is Python.
+function handlerCode(process: ProgramProcess): [string, string | undefined] {
+  const { arrayCode, generatorSizeCode, manualCode, language } = process.optionsHandler;
+  const code = arrayCode ?? generatorSizeCode ?? manualCode;
+  return [`Options handler code${language === "python" && !manualCode ? " (Python)" : ""}`, code];
+}
+
+// A title of the two above, as a line of selfContainedLines writes it after
+// the name of the process.
+function lowerTitle(title: string): string {
+  return title.charAt(0).toLowerCase() + title.slice(1);
+}
+
 function codeBlock(title: string, code: string | undefined): string[] {
   return code ? [`${title}:`, code] : [];
 }
@@ -157,7 +184,7 @@ function filesLine(process: ProgramProcess): string[] {
 
 // One process in full, its code included.
 export function describeProcess(program: Program, process: ProgramProcess): string {
-  const { computationalSpecs, additionalSpecs, additionalMethods, optionsHandler, nodeCode } = process;
+  const { computationalSpecs, additionalSpecs, nodeCode } = process;
   const connections = connectionLines(program).filter(line =>
     line.startsWith(`${process.name} `) || line.includes(`-> ${process.name} `)
   );
@@ -167,8 +194,8 @@ export function describeProcess(program: Program, process: ProgramProcess): stri
     `Computational specs: ${setFields(computationalSpecs) || "none"}`,
     `Additional specs: ${setFields(additionalSpecs) || "none"}`,
     ...section("Connections", connections),
-    ...codeBlock("Options handler code", optionsHandler.arrayCode ?? optionsHandler.generatorSizeCode ?? optionsHandler.manualCode),
-    ...Object.entries(additionalMethods).flatMap(([name, code]) => codeBlock(`Method ${name}`, code)),
+    ...codeBlock(...handlerCode(process)),
+    ...methodCodes(process).flatMap(([title, code]) => codeBlock(title, code)),
     ...(nodeCode
       ? Object.entries(nodeCode).flatMap(([part, code]) => codeBlock(`Node code ${part}`, code))
       : codeBlock("Code", process.code)),
@@ -203,7 +230,7 @@ function selfContainedLines(program: Program): string[] {
     ...Object.entries(program.envVars).map(([name, value]) => `Environment variable ${name}=${value}`),
     ...Object.entries(program.programOptions).map(([label, value]) => `Program option ${label} ${value}`),
     ...program.processes.flatMap(process => {
-      const { computationalSpecs, additionalSpecs, additionalMethods, optionsHandler, nodeCode } = process;
+      const { computationalSpecs, additionalSpecs, nodeCode } = process;
       const at = `Process ${process.name}`;
       return [
         `${at}: ${processHeader(process)}`,
@@ -211,8 +238,8 @@ function selfContainedLines(program: Program): string[] {
         ...process.options.map(option => `${at} option ${optionLine(process, option, program)}`),
         `${at} computational specs: ${setFields(computationalSpecs) || "none"}`,
         `${at} additional specs: ${setFields(additionalSpecs) || "none"}`,
-        ...codeLines(`${at} options handler code | `, optionsHandler.arrayCode ?? optionsHandler.generatorSizeCode ?? optionsHandler.manualCode),
-        ...Object.entries(additionalMethods).flatMap(([name, code]) => codeLines(`${at} method ${name} | `, code)),
+        ...codeLines(`${at} ${lowerTitle(handlerCode(process)[0])} | `, handlerCode(process)[1]),
+        ...methodCodes(process).flatMap(([title, code]) => codeLines(`${at} ${lowerTitle(title)} | `, code)),
         ...(nodeCode
           ? Object.entries(nodeCode).flatMap(([part, code]) => codeLines(`${at} node code ${part} | `, code))
           : codeLines(`${at} code | `, process.code)),

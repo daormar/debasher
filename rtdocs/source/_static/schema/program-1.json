@@ -358,6 +358,22 @@
           "title": "Methods",
           "type": "object"
         },
+        "conda_envs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Conda Envs",
+          "type": "object"
+        },
+        "docker_imgs": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Docker Imgs",
+          "type": "array"
+        },
         "specs": {
           "$ref": "#/$defs/TopologySpecs",
           "default": {

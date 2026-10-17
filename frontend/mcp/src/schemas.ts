@@ -109,7 +109,9 @@ export const processChanges = z.object({
     initializeRuntime: z.string().optional(),
     observe: z.string().optional(),
   }).strict().optional().describe("In a resident program: the parts of the code of the node, each a body without its def line."),
-}).strict().describe("Of a field that holds an object, give only the fields that change.");
+}).strict().describe(
+  "Of a field that holds an object, give only the fields that change. A tasks file or a skip file in Python is changed as a file (write_program_file); Conda environments and Docker images given as data are changed in program.yaml."
+);
 
 export const seqProcessChanges = z.object({
   description: z.string().optional(),

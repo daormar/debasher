@@ -38,7 +38,9 @@ from .models import (
     AdditionalSpecs,
     AliasOptMapping,
     ComputationalSpecs,
+    CondaEnv,
     ExecutionOptions,
+    FuncLanguage,
     GroupSource,
     NodeKind,
     OptionsHandler,
@@ -99,6 +101,11 @@ METHOD_FIELDS = {
 }
 
 MethodName = Literal["reset_outfiles", "post", "outdir_basename", "skip", "conda_envs", "docker_imgs"]
+
+# The extension of a tasks file and of a skip file in each of the languages
+# that they may be written in: a Python function file of the engine, or a
+# Bash body. Any other method file is a Bash body.
+FUNC_EXTENSION_BY_LANGUAGE = {"bash": "sh", "python": "py"}
 
 Language = Literal["bash", "python", "perl", "r", "groovy"]
 
@@ -217,6 +224,11 @@ class TopologyProcess(_Strict):
     mode: Optional[Literal["array", "generator", "manual"]] = None
     tasks: Optional[str] = None
     methods: dict[MethodName, str] = {}
+    # The Conda environments of the process, name to YAML file, and its
+    # Docker images, as data; a process that gives them names no
+    # conda_envs or docker_imgs method file.
+    conda_envs: dict[str, str] = {}
+    docker_imgs: list[str] = []
     specs: TopologySpecs = TopologySpecs()
     group: Optional[TopologyGroup] = None
     # Only in a resident program.
@@ -434,6 +446,41 @@ def code_file_path(program_name: str, process) -> str:
     return process.files.code or _default_code_path(program_name, process.name, process.language)
 
 
+def _func_language_of(path: str) -> FuncLanguage:
+    """The language of a tasks file or a skip file by its extension: Python
+    for `.py`, Bash for any other."""
+    return "python" if path.endswith(".py") else "bash"
+
+
+def _func_file_path(path: str, language: str, default_stem: str) -> str:
+    """The path of a tasks file or a method file: the one it was loaded
+    with, while its extension still says its language, or else the default
+    name with the extension of the language."""
+    if path and _func_language_of(path) == language:
+        return path
+    return f"{default_stem}.{FUNC_EXTENSION_BY_LANGUAGE[language]}"
+
+
+def tasks_language(process) -> str:
+    """The language of the tasks file of a process: that of its options
+    handler in the array and generator modes, Bash in the manual mode."""
+    handler = process.optionsHandler
+    return handler.language if handler.mode in ("array", "generator") else "bash"
+
+
+def tasks_file_path(process) -> str:
+    """The path of the tasks file of a process in the artifact, which the
+    module refers to when the file is in Python."""
+    return _func_file_path(process.files.tasks, tasks_language(process), f"{process.name}_tasks")
+
+
+def method_file_path(process, method: str) -> str:
+    """The path of the method file of a process in the artifact, which the
+    module refers to when it is the skip file in Python."""
+    language = process.additionalMethods.skipLanguage if method == "skip" else "bash"
+    return _func_file_path(process.files.methods.get(method, ""), language, f"{process.name}_{method}")
+
+
 def _inside(path: str) -> bool:
     """Whether a relative path stays below the directory it is relative to."""
     return not Path(path).is_absolute() and ".." not in Path(path).parts
@@ -565,14 +612,14 @@ def _split_process(split: SplitProgram, program: Program, process: ProgramProces
             "generator": handler.generatorSizeCode,
             "manual": handler.manualCode,
         }[handler.mode]
-        tasks = process.files.tasks or f"{process.name}_tasks.sh"
+        tasks = tasks_file_path(process)
         split.files[tasks] = _file_text(code or "")
 
     methods = {}
     for method, field_name in METHOD_FIELDS.items():
         code = getattr(process.additionalMethods, field_name)
         if code:
-            path = process.files.methods.get(method) or f"{process.name}_{method}.sh"
+            path = method_file_path(process, method)
             split.files[path] = _file_text(code)
             methods[method] = path
 
@@ -581,6 +628,8 @@ def _split_process(split: SplitProgram, program: Program, process: ProgramProces
         mode=None if handler.mode == "standard" else handler.mode,
         tasks=tasks,
         methods=methods,
+        conda_envs={env.name: env.file for env in process.additionalMethods.condaEnvs},
+        docker_imgs=list(process.additionalMethods.dockerImgs),
         specs=_split_specs(process.computationalSpecs, process.additionalSpecs),
         group=_split_group(process.groupSource),
         kind=process.nodeKind,
@@ -783,14 +832,32 @@ def _join_process(topology: Topology, files: Mapping[str, str], name: str, proce
             raise TopologyError(f"{what} is in {process.mode} mode and names no tasks file")
         code = _read_file(files, process.tasks, what)
         setattr(handler, {"array": "arrayCode", "generator": "generatorSizeCode", "manual": "manualCode"}[process.mode], code)
+        handler.language = _func_language_of(process.tasks)
+        if process.mode == "manual" and handler.language == "python":
+            raise TopologyError(
+                f"{what} is in manual mode, whose tasks file is a Bash function, and names the Python file {process.tasks}: "
+                "rename the tasks file to .sh, or use the array or generator mode"
+            )
         fields["files"].tasks = process.tasks
     elif process.tasks is not None:
         raise TopologyError(f"{what} names a tasks file and no mode")
 
-    methods = AdditionalMethods()
+    methods = AdditionalMethods(
+        condaEnvs=[CondaEnv(name=name, file=file) for name, file in process.conda_envs.items()],
+        dockerImgs=list(process.docker_imgs),
+    )
     for method, path in process.methods.items():
+        if method != "skip" and _func_language_of(path) == "python":
+            raise TopologyError(f"{what}: the {method} method is a Bash body, and names the Python file {path}")
         setattr(methods, METHOD_FIELDS[method], _read_file(files, path, what))
         fields["files"].methods[method] = path
+    if "skip" in process.methods:
+        methods.skipLanguage = _func_language_of(process.methods["skip"])
+    for method, data_key in (("conda_envs", "conda_envs"), ("docker_imgs", "docker_imgs")):
+        if method in process.methods and getattr(process, data_key):
+            raise TopologyError(
+                f"{what} gives both {data_key} and a {method} method file: remove the {data_key} key or the {method} entry of methods"
+            )
 
     spec_fields = process.specs.model_dump(exclude={"processdeps", "force"})
     labels = set(process.options)

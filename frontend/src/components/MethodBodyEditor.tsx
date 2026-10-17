@@ -3,14 +3,14 @@ import CodeMirror from "@uiw/react-codemirror";
 
 import { useProgram } from "../store/ProgramContext";
 import { languageExtensions } from "./codeLanguages";
-import type { AdditionalMethods, ProgramProcess } from "../models/process";
+import type { MethodCodeKey, ProgramProcess } from "../models/process";
 import { processMethod } from "../models/processMethods";
 import { buildMethodPrompt } from "../models/methodPrompt";
 import CodePromptPanel, { CodePromptButton } from "./CodePromptPanel";
 
 interface Props {
   process: ProgramProcess;
-  methodKey: keyof AdditionalMethods;
+  methodKey: MethodCodeKey;
   onClose: () => void;
 }
 

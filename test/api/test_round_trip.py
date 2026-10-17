@@ -44,6 +44,7 @@ from api.models import (
     AdditionalMethods,
     AdditionalSpecs,
     ComputationalSpecs,
+    CondaEnv,
     ExecutionOptions,
     NodeCode,
     OptionsHandler,
@@ -343,6 +344,63 @@ def test_every_options_handler_mode_survives_the_round_trip(tmp_path):
     )
 
     _assert_model_round_trip(program, tmp_path)
+
+
+def test_python_tasks_files_a_python_skip_file_and_environments_as_data_survive_the_round_trip(tmp_path):
+    arrayproc = _process(
+        "arrayproc",
+        [_option("-id", value="${array[$task_idx]}")],
+        optionsHandler=OptionsHandler(
+            mode="array", arrayCode="def tasks(run):\n    return ['a', 'b']", language="python"
+        ),
+        additionalMethods=AdditionalMethods(
+            skipCode="def skip(task):\n    return task.value('-id') == 'b'",
+            skipLanguage="python",
+            condaEnvs=[CondaEnv(name="py27", file="py27.yml")],
+            dockerImgs=["library/hello-world"],
+        ),
+    )
+    genproc = _process(
+        "genproc",
+        [_option("-n", value="${task_idx}")],
+        optionsHandler=OptionsHandler(
+            mode="generator", generatorSizeCode="def tasks(run):\n    return 3", language="python"
+        ),
+    )
+    program = _program("rt_pyfuncs", [arrayproc, genproc], [])
+
+    _assert_model_round_trip(program, tmp_path)
+
+
+def test_a_hand_written_call_of_a_python_file_that_is_missing_is_imported_as_bash(tmp_path):
+    process = _process(
+        "arrayproc",
+        [_option("-id", value="${array[$task_idx]}")],
+        optionsHandler=OptionsHandler(mode="array", arrayCode="def tasks(run):\n    return ['a']", language="python"),
+    )
+    program = _program("rt_missing", [process], [])
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        _write_script(tmp_dir, program)
+        (Path(tmp_dir) / "arrayproc_tasks.py").unlink()
+        imported = import_program_from_script(Path(tmp_dir) / "rt_missing.sh", str(tmp_path))
+
+    handler = imported.processes[0].optionsHandler
+    assert (handler.mode, handler.language) == ("array", "bash")
+    assert "tasks_from_file array" in handler.arrayCode
+
+
+def test_hand_written_conda_and_docker_methods_are_imported_as_data():
+    imported = {
+        name: import_program_from_script(_PROGRAMS_DIR / f"debasher_{name}_example.sh", str(_PROGRAMS_DIR))
+        for name in ("conda", "docker")
+    }
+
+    conda_methods = imported["conda"].processes[0].additionalMethods
+    assert conda_methods.condaEnvs == [CondaEnv(name="py27", file="py27.yml")]
+    assert conda_methods.condaEnvsCode is None
+    docker_methods = imported["docker"].processes[0].additionalMethods
+    assert docker_methods.dockerImgs == ["library/hello-world"]
+    assert docker_methods.dockerImgsCode is None
 
 
 def test_a_fanout_family_survives_the_round_trip(tmp_path):

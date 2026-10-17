@@ -6,7 +6,7 @@ import { DIRECTORY_CHANNELS } from "./option";
 import type { ProgramProcess } from "./process";
 import { optionLabelProblem, processNameProblem } from "./process";
 import type { Program } from "./program";
-import type { EditOp } from "./programEdits";
+import type { EditOp, ProcessChanges } from "./programEdits";
 import { applyEdit } from "./programEdits";
 import { seqProcessesProblem } from "./seqProcess";
 
@@ -79,9 +79,12 @@ function editProblem(program: Program, edit: EditOp): string | null {
       if (!processById(edit.processId)) {
         return missingProcess(edit.processId);
       }
-      return edit.changes.name === undefined
-        ? null
-        : processNameProblem(takenNames(edit.processId), edit.changes.name, program.programType);
+      return (
+        (edit.changes.name === undefined
+          ? null
+          : processNameProblem(takenNames(edit.processId), edit.changes.name, program.programType)) ??
+        pythonFilesProblem(processById(edit.processId)!, edit.changes)
+      );
     }
 
     case "addOption": {
@@ -206,4 +209,51 @@ function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): st
     return `${where} has a subpath, which only the channels "shared_dir" and "process_outdir" take.`;
   }
   return null;
+}
+
+// An edit of the code that a process keeps in a Python function file, its
+// tasks file or its skip file, which the edit would fill with code of
+// another kind, and an edit of the body of the conda_envs or docker_imgs
+// method of a process that gives them as data, which script generation
+// would refuse: each names the way that does change it.
+function pythonFilesProblem(process: ProgramProcess, changes: ProcessChanges): string | null {
+
+  const handler = changes.optionsHandler;
+  const oldHandler = process.optionsHandler;
+  if (
+    handler &&
+    oldHandler.language === "python" &&
+    (handler.language ?? "python") === "python" &&
+    handler.mode !== "standard" &&
+    (handler.mode !== oldHandler.mode ||
+      handler.arrayCode !== oldHandler.arrayCode ||
+      handler.generatorSizeCode !== oldHandler.generatorSizeCode)
+  ) {
+    const path = process.files?.tasks || `${process.name}_tasks.py`;
+    return `The options handler of "${process.name}" is the Python tasks file ${path}, which defines tasks(run): change that file with write_program_file, not its mode or code here.`;
+  }
+
+  const methods = changes.additionalMethods;
+  if (!methods) {
+    return null;
+  }
+  const oldMethods = process.additionalMethods;
+  if (
+    oldMethods.skipLanguage === "python" &&
+    (methods.skipLanguage ?? "python") === "python" &&
+    methods.skipCode !== oldMethods.skipCode
+  ) {
+    const path = process.files?.methods?.skip || `${process.name}_skip.py`;
+    return `The skip method of "${process.name}" is the Python skip file ${path}, which defines skip(task): change that file with write_program_file.`;
+  }
+  for (const [list, body, oldBody, what, key] of [
+    [methods.condaEnvs ?? oldMethods.condaEnvs, methods.condaEnvsCode, oldMethods.condaEnvsCode, "Conda environments", "conda_envs"],
+    [methods.dockerImgs ?? oldMethods.dockerImgs, methods.dockerImgsCode, oldMethods.dockerImgsCode, "Docker images", "docker_imgs"],
+  ] as const) {
+    if (list?.length && body && body !== oldBody) {
+      return `"${process.name}" gives its ${what} as a list, under ${key} in program.yaml: change them there, or remove that key before giving the body of the method.`;
+    }
+  }
+  return null;
+
 }

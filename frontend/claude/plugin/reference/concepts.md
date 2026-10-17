@@ -30,8 +30,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   with its code, which the topology file names (`count.sh` for a Bash
   process `count`, a function named as the process; `dispatch.py` for one
   in Python, the whole script; `<process>_tasks.sh` for the code of the
-  options handler of an array or a generator; `<process>_<method>.sh` for
-  an additional method; a whole class file for a node; those are the names
+  options handler of an array or a generator, or `<process>_tasks.py` for
+  a Python tasks file; `<process>_<method>.sh` for an additional method, or
+  `<process>_skip.py` for a skip method in Python; the extension of a tasks
+  file or a skip file says its language, `.py` Python and any other Bash,
+  and the tasks file of a manual process and the other method files are
+  always Bash; a whole class file for a node; those are the names
   chosen when a file is first written, `program.yaml` is what says which
   file holds the code of a process, a renamed process keeps its file, and a
   Bash process named as its program gets `<process>_process.sh`, since
@@ -133,9 +137,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   values may use `${task_idx}`, its index, and `${array[$task_idx]}`, its
   element. `generator`: one task per index below the count that
   `generatorSizeCode` prints; option values may use that index,
-  `${task_idx}`. `manual`: the whole option definition written by hand
-  (general programs only). When both ends of a connection have several tasks,
-  task i reads task i.
+  `${task_idx}`. The code of an array or a generator may instead be a
+  Python tasks file (`optionsHandler.language` `python`) that defines
+  `tasks(run)`, which returns the elements of the array or the number of
+  tasks; the module calls it with `tasks_from_file` or
+  `num_tasks_from_file`, and it is changed as a file. `manual`: the whole
+  option definition written by hand (general programs only), always Bash.
+  When both ends of a connection have several tasks, task i reads task i.
 - **Number of tasks taken from another process.** When a process has as many
   tasks as another one (each task reads the task with the same index), its
   options handler asks for that number with `get_process_num_tasks
@@ -166,7 +174,15 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   functions: `skipCode` (return 0 to skip a task, 1 to run it, any other
   status fails it; never on a process at either end of a FIFO),
   `condaEnvsCode`, `dockerImgsCode`, `postCode`, `resetOutfilesCode`,
-  `outdirBasenameCode`.
+  `outdirBasenameCode`. The skip method may instead be a Python skip file
+  (`skipLanguage` `python`) that defines `skip(task)`, which returns `True`
+  to skip the task, changed as a file. The Conda environments and Docker
+  images may be data instead of bodies: `condaEnvs` (a name and a YAML file
+  each) and `dockerImgs`, `conda_envs:` (name: file) and `docker_imgs:` (a
+  list) in `program.yaml`, from which script generation writes the
+  `define_conda_env` and `pull_docker_img` calls; a process gives either the
+  data or the body, never both, and import turns a body made only of those
+  calls into data.
 
 ## Options
 

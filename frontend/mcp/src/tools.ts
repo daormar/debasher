@@ -244,6 +244,11 @@ const readingTools = [
       }
       if (part === "options_handler") {
         const handler = process.optionsHandler;
+        if (handler.language === "python" && (handler.mode === "array" || handler.mode === "generator")) {
+          throw new Refusal(
+            `The options handler of ${name} is the Python tasks file ${process.files?.tasks || `${name}_tasks.py`}, which defines tasks(run) (see "The Tasks in Python" in the documentation): the code prompt is for Bash code; change that file with write_program_file.`
+          );
+        }
         if (handler.mode === "array") {
           return buildOptionsHandlerPrompt(program, process, "array", handler.arrayCode ?? "", request);
         }
@@ -259,7 +264,19 @@ const readingTools = [
       if (program.programType === "resident") {
         throw new Refusal("A node of a resident program has no additional methods.");
       }
-      return buildMethodPrompt(program, process, method.key, process.additionalMethods[method.key] ?? "", request);
+      const methods = process.additionalMethods;
+      if (method.key === "skipCode" && methods.skipLanguage === "python") {
+        throw new Refusal(
+          `The skip method of ${name} is the Python skip file ${process.files?.methods?.skip || `${name}_skip.py`}, which defines skip(task): the code prompt is for Bash code; change that file with write_program_file.`
+        );
+      }
+      const listed = method.key === "condaEnvsCode" ? methods.condaEnvs : method.key === "dockerImgsCode" ? methods.dockerImgs : undefined;
+      if (listed?.length) {
+        throw new Refusal(
+          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments" : "Docker images"} as a list, under ${method.name} in program.yaml, from which the method is written: change them there.`
+        );
+      }
+      return buildMethodPrompt(program, process, method.key, methods[method.key] ?? "", request);
     }
   ),
 
