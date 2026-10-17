@@ -61,13 +61,17 @@ cd debasher
 chmod 777 demo-data
 docker compose up --build -d            # build and start, on port 8000
 docker compose exec debasher webui-url  # print its address
+
+# To stop it, freeing port 8000:
+docker compose down
 ```
 
-The last command prints the address of the web interface, which carries its
-token; open it in a browser. The image is for trying DeBasher out, not for
-real work: inside it, processes cannot have Conda environments or Docker
-containers of their own, and there is no Slurm. [DOCKER.md](DOCKER.md) has
-the details, and how to run Claude Code inside the container.
+The `webui-url` command prints the address of the web interface, which
+carries its token; open it in a browser. The image is for trying DeBasher
+out, not for real work: inside it, processes cannot have Conda environments
+or Docker containers of their own, and there is no Slurm.
+[DOCKER.md](DOCKER.md) has the details, and how to run Claude Code inside the
+container.
 
 ## Installation
 
