@@ -5475,8 +5475,9 @@ address of the WebSocket and the answers of the request in
 - **A Bash process as a script.** Running the file of a Bash process as the
   module runs the file of another language, as an external alias, instead of
   embedding it as a function: it needs the file to have the library of the
-  engine without being sourced into the module, which the process contract of
-  the engine would give it.
+  engine without being sourced into the module, and so a process that keeps
+  to the process contract of the engine (see "What the module form adds" in
+  `doc/design_doc_engine.md`).
 - **A code prompt for the rest of the code.** The code prompt for the other code
   that the user writes: the preamble, and the option definition function of a
   `manual` process, which is written with the API of the engine for options and

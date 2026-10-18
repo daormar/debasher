@@ -31,7 +31,7 @@ declared and connected, but the code of a process can be in another language,
 embedded in the module or kept in a file of its own, or be any program that a
 Bash function runs. A process receives a list of options and produces files,
 values or data written into a FIFO, and nothing in that contract depends on the
-language of its code.
+language of its code (see "The process contract").
 
 Nor does it depend on the number of tasks of the process. A process is like a
 Unix command: its function receives a list of options, and its implementation is
@@ -81,9 +81,10 @@ implementations and what happens to a task that will not be launched, and
 tasks. "The state of a run" describes the output directory, the life cycle of
 the run resources, the status of a process, reruns and the tools that read a
 run. "Business tests of a program" describes how the processes of a program are
-tested one at a time, outside any run. "Guarantees and non-goals" gathers the
-guarantees stated along the way, and "Future work" lists what is known to be
-missing.
+tested one at a time, outside any run. "The process contract" states what a
+process provides to the engine apart from the form in which it is written.
+"Guarantees and non-goals" gathers the guarantees stated along the way, and
+"Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -127,6 +128,33 @@ relative to the output directory of the run.
   `_post` or `_reset_outfiles` (see "Processes and their methods").
 - **process function**: the method with no suffix, named as the process itself,
   which does the work of each task, or of a step for a sequential process.
+- **process contract**: what a process provides to the engine, and what the
+  engine gives it in return, apart from the form in which the process is
+  written: its **static parts**, data that do not depend on the run (name,
+  specification, declared options, documentation, environments, output
+  directory name), and its **computed parts**, code that the engine calls
+  (task options, dependency types, and the body, skip rule, reset rule, post
+  hook and termination handler of a task). See "The process contract".
+- **form of a process**: a way of writing a process that honors the process
+  contract. The **module form**, the functions of a module, is the only one
+  that the engine reads; the topology file and the process files that the web
+  UI and the Python SDK save are another, translated into a module before the
+  engine reads it (see `doc/design_doc_webui.md`).
+- **declared options**: the part of the process contract that declares the
+  options a task receives, which of them are command line options, and the
+  task shaping options; in the module form, `_explain_opts`,
+  `_identify_cmdline_opts` and `_explain_task_shaping_opts`, or the older
+  `_explain_cmdline_opts`.
+- **task options**: the part of the process contract that gives the number of
+  tasks of a process and the option list of each; in the module form,
+  `_define_opts` or an option generator.
+- **body**: the part of the process contract that does the work of a task, in
+  any language; in the module form, the process function.
+- **skip rule**, **reset rule**, **post hook**, **termination handler**: the
+  parts of the process contract that decide whether a task runs, reset its
+  process output directory before the body, run after the body, and run when
+  Slurm sends the task `SIGTERM`; in the module form, the `_skip`,
+  `_reset_outfiles`, `_post` and `_slurm_sigterm_handler` methods.
 - **heredoc process**: a process whose code is in Python, R, Perl or Groovy,
   given in a `_heredoc_py`, `_heredoc_r`, `_heredoc_perl` or `_heredoc_groovy`
   method and run by the interpreter of that language.
@@ -2255,9 +2283,9 @@ parts:
   the process or a default one that prints a message and exits with an error.
   Under the built-in scheduler it makes the script ignore `SIGTERM` (see "The
   built-in scheduler").
-- **A body** that runs one task, the one whose index the scheduler gives it
-  (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), as "Executing a task"
-  describes, and sends its output and errors to the log of the task.
+- **A last part** that runs one task, the one whose index the scheduler gives
+  it (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), as "Executing a
+  task" describes, and sends its output and errors to the log of the task.
 
 Since the context is copied when the script is written, a task runs the code
 that the modules had when its run was prepared, and a later run, which writes
@@ -2807,6 +2835,220 @@ helpers and the node harness work as installed, which no test of `make check`
 can, since those run on the build tree. The two programs also show a module
 author how to write each kind of test.
 
+# The process contract
+
+The sections above describe a process as the engine reads it: Bash
+functions of a module, named after the process, which the engine finds by
+name and calls at given moments. The process contract states what those
+functions provide to the engine, and what the engine gives them in return,
+apart from the form in which a process is written. It is what any form of a
+process has to honor for the engine to run it as it runs a process of a
+module, and what any implementation of the engine has to expect from a
+process and give it. This section lists the parts of the contract, describes
+each one with its obligations and the sections where the engine's side of it
+is described, and then says what the module form gives a process beyond the
+contract, which another form would not.
+
+## The parts of a process
+
+A process provides the parts below. The static ones are data: they do not
+depend on the run, and a form of a process can give them as values. The
+computed ones depend on the run or on the task, and a form of a process gives
+them as code that the engine calls.
+
+| Part | Kind | What the engine does with it | Form in a module |
+|---|---|---|---|
+| name | static | identifies the process in the program, the output directory and every record of the run | the name of the process function, given to `add_debasher_process` |
+| specification | static | schedules the process with its resources, and changes how it treats it | the computational and additional specifications of `add_debasher_process` |
+| declared options | static | documents the program, lists its command line options and checks the options of the first task | `_explain_opts`, `_identify_cmdline_opts`, `_explain_task_shaping_opts`, or the older `_explain_cmdline_opts` |
+| documentation | static | documents the module | `_document`, and the descriptions in the declared options |
+| environments | static | creates them before any process runs, when asked to | `_conda_envs`, `_docker_imgs` |
+| output directory name | static | names the process output directory | `_outdir_basename` |
+| task options | computed, per run | builds the option list of every task, from which the dependencies, the FIFOs and the directories of the run follow | `_define_opts`, or `_generate_opts_size` and `_generate_opts` |
+| dependency types | computed, per option and producer | replaces the inferred dependency type of one option | `_define_opt_deps` |
+| body | computed, per task | runs the work of the task | the process function |
+| skip rule | computed, per task | decides whether the task runs | `_skip` |
+| reset rule | computed, per task | resets what the task finds in its process output directory | `_reset_outfiles` |
+| post hook | computed, per task | runs after the body, whatever its result | `_post` |
+| termination handler | computed, per task | runs when Slurm sends the task `SIGTERM` | `_slurm_sigterm_handler` |
+
+The name, the specification, the declared options, the task options and the
+body are required. Every other part is optional, and a process without it
+gets the behavior that "Processes and their methods" gives to the absent
+method, whatever the form in which the process is written.
+
+## The static parts
+
+**The name and the specification.** The name follows the rules of "Processes
+and their methods", and the specification those of "Process specifications":
+`cpus`, `mem` and `time` always, and the other computational and additional
+specifications when the process needs them. An alias belongs to the
+specification and not to the body, since it names where the body is taken
+from (see "Processes in other languages, and aliases").
+
+**The declared options.** The options that a task receives, each with a name, a
+placeholder for its value, or none for a flag, and a description; which of them
+are command line options, mandatory or optional; and the task shaping options,
+which no task receives. The declaration is what the engine knows about the
+options of a process without defining them: what `--show-cmdline-opts`,
+`debasher_doc_mod` and `debasher_exec_process` show, and what the option list of
+the first task is checked against (see "Command line options" and "Arrays and
+option generators"). Whether a mandatory command line option is given is decided
+when the options are defined, except for a task shaping option, whose absence
+stops the preparation of the run before the task options are computed.
+
+**The documentation.** A description of the process, which `debasher_doc_mod`
+shows with the declared options.
+
+**The environments.** The names of the Conda environments that the process
+needs, each with the file it is created from, and the Docker images it needs.
+The engine makes sure that they exist, and the body activates them or runs
+them itself (see "Conda and Docker environments").
+
+**The output directory name.** The name of the process output directory, the
+name of the process when it is not given.
+
+## The task options
+
+The task options are the part that decides the shape of the process in a run:
+how many tasks it has and the option list of each one. They are computed from
+the run, and their inputs are the command line of the run, the specification
+of the process, its name and the absolute path of its process output
+directory, together with the number of tasks of any other process, which the
+engine gives on request (see "Arrays and option generators"). A form of a
+process gives them in one of two shapes:
+
+- **All at once.** One call gives the option lists of every task, in the
+  order of their task indexes. This is `_define_opts`.
+- **On demand.** One call gives the number of tasks, and another the option
+  list of the task with a given index. This is `_generate_opts_size` and
+  `_generate_opts`, the option generator.
+
+**What an option list holds.** A set of options by name, each a flag or one
+value, with the limits on values that "Defining the options of a task" sets.
+A value is either a literal or something that the engine resolves or creates,
+and the contract carries which one it is, since each kind makes the engine
+do something with it:
+
+- a literal, which the engine passes as it is;
+- the path of a file or a directory shipped with the program, which the
+  engine resolves against the directory of the module that added the process
+  and requires to exist;
+- a value of the command line, which the engine requires when the option is
+  mandatory, and a path on it, which it makes absolute and requires to exist;
+- an attribute of the specification of the process;
+- an output option of a task of another process, a connection, which the
+  engine resolves once every process has defined its options (see
+  "Connections between processes");
+- a value descriptor, which the engine names after the option and the task
+  (see "Output options");
+- a shared directory or a shared subdirectory, which the engine creates (see
+  "Shared subdirectories");
+- the process output directory, which the engine creates, and empties for a
+  process with a single task (see "Executing a task"), or a task
+  subdirectory, which the engine creates and empties (see "Task
+  subdirectories");
+- a FIFO, which the engine registers with the task as its owner, and creates
+  (see "Declaring and owning a FIFO").
+
+An option whose name starts with `-out` or `--out` is an output option,
+whatever the kind of its value, and an absolute path that it holds is
+recorded as produced by the task. Every dependency, every FIFO end, every
+shared subdirectory and every task subdirectory of the run follows from the
+option lists and from nothing else of the process, except the dependency
+types and the explicit dependencies of its specification.
+
+**Obligations.** The engine computes the task options more than once, in
+different shells, and keeps no state between the calls but what it is given
+back:
+
+- For the same command line, every call gives the same number of tasks and,
+  for the same task index, the same option list. The engine does not check it
+  (see "Guarantees and non-goals").
+- A call may happen while the run is prepared, as many times as the engine
+  needs, in a subshell whose effects are discarded, or inside a task, where
+  only the option list of that task is asked for. A call therefore does
+  nothing that the run depends on besides giving its answer, and a file that
+  it reads stays unchanged while the run lasts.
+- A call that fails stops the preparation of the run, or fails the task when
+  the task computes its own option list.
+
+## The dependency types
+
+Given the name of an input option and a producer, the dependency type that
+replaces the inferred one, among the types of "Dependency types and how they
+merge", or no answer, which keeps the inferred one. The engine asks for it
+while the dependencies are inferred, for every option of every task that has a
+producer, so the answer depends only on the option and the producer (see
+"Inferring dependencies from options").
+
+## The parts of a task
+
+The body, the skip rule, the reset rule and the post hook run inside the
+task, in the order of "Executing a task", and each receives the option list of
+the task as its arguments, the words of the list with the options in no given
+order, read by name. The termination handler runs inside the task too,
+whenever the signal arrives, with no arguments.
+
+**The body.** The work of the task. It writes what its output options name, a
+value into its value descriptors, and to the FIFOs it owns, and reads its
+input options and the FIFOs of which it is the reader; the engine checks none
+of it. What it prints on its standard output goes to the `.stdout` file of the
+task, and what it prints on its standard error to the log of the task. It
+succeeds with the status 0 and fails with any other; a body that ends the task
+itself, by `exit` or by a signal, leaves the process `UNFINISHED` (see
+"Executing a task"). Under the built-in scheduler it also finds in its
+environment the directories and facts of the task that "Executing a task"
+lists. The body can be in any language: a body in Bash has the library of
+the engine, the Python code of a heredoc process can import the Python
+library of the engine, and any other body reads its options from its
+arguments.
+
+**The skip rule.** Called before the process output directory is reset: the
+status 0 skips the task, 1 runs it, and any other fails it.
+
+**The reset rule.** Called once the task is known to run and before the body,
+to reset what the task finds in its process output directory, in place of the
+reset of the engine.
+
+**The post hook.** Called after the body, whether the body succeeded or failed;
+when it fails, the task fails.
+
+**The termination handler.** Called under the Slurm scheduler when Slurm sends
+the task `SIGTERM`, as when its time runs out.
+
+The node of a resident program is a body that keeps, besides this contract,
+the contract of `doc/design_doc_resident.md`.
+
+## What the module form adds
+
+The module is the only form of a process that the engine reads. The programs
+that the web UI and the Python SDK save, a topology file and the files of
+their processes, are another form, which script generation translates into a
+module before the engine reads it (see `doc/design_doc_webui.md`), and
+within a module the body of a process can be in another language, and its
+task options and its skip rule in Python function files. Every form thus
+reaches the engine as a module.
+
+The module form gives a process more than the contract, and a process that
+relies on it honors the module form, not the contract alone:
+
+- **The execution context.** Every method and the body of a Bash process see
+  every function and variable that the modules define at their top level,
+  since the execution context carries them into the task (see "The process
+  script: how code travels"). A process that reads a variable of its module,
+  or calls a function of it that is not a method of the process, depends on
+  state that the contract does not carry, and a form that runs the body as a
+  program of its own would have to carry it.
+- **Methods found by name.** The engine looks a method up when it needs it,
+  so a module can define a method or not depending on what its top level
+  finds. The contract has a fixed set of parts.
+- **Option lists built by calls.** The task options of a module are built by
+  calls to the `define_*` functions of the engine, which give each value its
+  kind and register it, and the code of the method can mix those calls with
+  anything else. The contract holds only the result: the number of tasks and
+  the option lists, with the kind of every value.
+
 # Guarantees and non-goals
 
 This section gathers the guarantees that the engine gives to a general
@@ -3036,6 +3278,26 @@ What is known to be missing from the design, or left open by it:
   take precedence. Such an option would apply to every one of those steps
   alike, light or heavy, which is why the choice for a single step stays in its
   declaration.
+- **A conformance suite for the process contract.** Tests that exercise a
+  process only through the process contract: give it a command line, ask for
+  its declared options and its task options, run its tasks and check its skip
+  rule, on every program of `data/programs` and `data/webui_programs`. Any
+  form of a process, and any implementation of the engine, would then be
+  checked against the same suite.
+- **A second reader of the process contract.** The engine could read the
+  topology file and the process files of a program directly, with no module
+  generated from them. That needs the task options as data that a program in
+  any language prints, such as each option list as a list of options with the
+  kind of every value, of which the calls to the `define_*` functions of a
+  module would be one implementation. Left open: whether the task options are
+  only such a program, or also a restricted language of expressions for the
+  common cases (counting the lines of a file, taking a column of a sample
+  sheet), translated into one.
+- **A Bash process as a script.** A body in Bash kept in a file of its own and
+  run as a program, as an external alias in another language is, instead of a
+  function of the module. It needs the library of the engine without the
+  execution context, and so a process that keeps to the process contract, with
+  no variable or function of its module besides its own parts.
 - **Gathering the runs of a batch.** `debasher_exec_batch` executes a file of
   `debasher_exec` commands, one per line, each a run with its own output
   directory, at most a given number at the same time, such as one run of the
