@@ -528,6 +528,16 @@ debasher::document_module()
     echo $desc
 }
 
+########
+# Public: Generates a description for a module.
+#
+# $1 - Text describing the module
+#
+# Examples
+#
+#   document_module "This module implements the \"Hello World!\" program."
+#
+# The function prints the given module description to the standard output.
 document_module() { debasher::document_module "$@"; }
 
 ########

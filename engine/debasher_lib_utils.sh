@@ -33,6 +33,16 @@ debasher::_version_to_number()
 }
 
 ########
+# Public: Tells whether a command of the last pipeline failed, which the
+# exit status of a pipeline (that of its last command) does not tell. It
+# has to be called right after the pipeline, before any other command.
+#
+# Examples
+#
+#   sort "${inf}" | uniq > "${outf}" ; debasher::pipe_fail || return 1
+#
+# Returns 1 if some command of the last pipeline exited with a non-zero
+# status, 0 otherwise.
 debasher::pipe_fail()
 {
     # test if there is at least one command to exit with a non-zero status
@@ -46,6 +56,17 @@ debasher::pipe_fail()
     return 0
 }
 
+########
+# Public: Tells whether a command of the last pipeline failed, which the
+# exit status of a pipeline (that of its last command) does not tell. It
+# has to be called right after the pipeline, before any other command.
+#
+# Examples
+#
+#   sort "${inf}" | uniq > "${outf}" ; pipe_fail || return 1
+#
+# Returns 1 if some command of the last pipeline exited with a non-zero
+# status, 0 otherwise.
 pipe_fail() { debasher::pipe_fail "$@"; }
 
 ########
@@ -238,21 +259,63 @@ debasher::_var_exists()
 }
 
 ########
+# Public: Writes an error message to the log of the task, that is, to the
+# standard error.
+#
+# $1 - Message.
+#
+# Examples
+#
+#   debasher::errmsg "Input file not found"
+#
+# The function does not return any value
 debasher::errmsg()
 {
     local msg=$1
     echo "$msg" >&2
 }
 
+########
+# Public: Writes an error message to the log of the task, that is, to the
+# standard error.
+#
+# $1 - Message.
+#
+# Examples
+#
+#   errmsg "Input file not found"
+#
+# The function does not return any value
 errmsg() { debasher::errmsg "$@"; }
 
 ########
+# Public: Writes a message to the log of the task, that is, to the
+# standard error.
+#
+# $1 - Message.
+#
+# Examples
+#
+#   debasher::logmsg "Cleaning directory..."
+#
+# The function does not return any value
 debasher::logmsg()
 {
     local msg=$1
     echo "$msg" >&2
 }
 
+########
+# Public: Writes a message to the log of the task, that is, to the
+# standard error.
+#
+# $1 - Message.
+#
+# Examples
+#
+#   logmsg "Cleaning directory..."
+#
+# The function does not return any value
 logmsg() { debasher::logmsg "$@"; }
 
 ########

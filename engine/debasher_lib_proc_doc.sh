@@ -19,12 +19,37 @@
 ###########################################
 
 ########
+# Public: Generates the description of a process. A process calls it in
+# its _document method, before it describes its options with explain_opt,
+# explain_cmdline_opt and the like.
+#
+# $1 - Text describing the process.
+#
+# Examples
+#
+#   debasher::document_process "Writes a greeting to a file."
+#
+# The function prints the given process description to the standard
+# output.
 debasher::document_process()
 {
     local desc=$1
     echo $desc
 }
 
+########
+# Public: Generates the description of a process. A process calls it in
+# its _document method, before it describes its options with explain_opt,
+# explain_cmdline_opt and the like.
+#
+# $1 - Text describing the process.
+#
+# Examples
+#
+#   document_process "Writes a greeting to a file."
+#
+# The function prints the given process description to the standard
+# output.
 document_process() { debasher::document_process "$@"; }
 
 ########

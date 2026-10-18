@@ -1,6 +1,6 @@
 .. _cmdline-opts:
 
-Option Characterization
-=======================
+Process Documentation
+=====================
 
 .. include:: api_characterize_opts_doc.md

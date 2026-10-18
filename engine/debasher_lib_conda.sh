@@ -19,6 +19,24 @@
 ###########################
 
 ########
+# Public: Creates a conda environment from a YAML file, unless an
+# environment with that name exists already. A process calls it in its
+# _conda_envs method, which a run with --conda-support executes before
+# it launches anything.
+#
+# $1 - Name of the environment, or its absolute path.
+# $2 - Name of the YAML file that describes the environment, searched in
+#      the directories that DEBASHER_YML_DIR lists (separated by ":") and
+#      then in the conda_envs directory of the DeBasher installation.
+#
+# Examples
+#
+#   debasher::define_conda_env py27 py27.yml
+#
+# The output of conda goes to <name>.log in the directory that
+# DEBASHER_CONDA_DIR names, or else in the .conda directory of the output
+# directory of the program. Returns 0 if the environment exists or was
+# created, 1 otherwise.
 debasher::define_conda_env()
 {
     local env_name=$1
@@ -36,6 +54,25 @@ debasher::define_conda_env()
     fi
 }
 
+########
+# Public: Creates a conda environment from a YAML file, unless an
+# environment with that name exists already. A process calls it in its
+# _conda_envs method, which a run with --conda-support executes before
+# it launches anything.
+#
+# $1 - Name of the environment, or its absolute path.
+# $2 - Name of the YAML file that describes the environment, searched in
+#      the directories that DEBASHER_YML_DIR lists (separated by ":") and
+#      then in the conda_envs directory of the DeBasher installation.
+#
+# Examples
+#
+#   define_conda_env py27 py27.yml
+#
+# The output of conda goes to <name>.log in the directory that
+# DEBASHER_CONDA_DIR names, or else in the .conda directory of the output
+# directory of the program. Returns 0 if the environment exists or was
+# created, 1 otherwise.
 define_conda_env() { debasher::define_conda_env "$@"; }
 
 ########
@@ -88,6 +125,20 @@ debasher::conda_activate()
     conda activate "${env_name}"
 }
 
+########
+# Public: Activates a conda environment in the current shell, loading the
+# shell functions of conda first if the shell does not have them, so that
+# it works however the shell that runs the process was started (a run, a
+# Slurm job, debasher_exec_process, a business test). After it returns,
+# `conda` itself (conda deactivate, another conda activate) can be used.
+#
+# $1 - Name of the environment, or its absolute path.
+#
+# Examples
+#
+#   conda_activate py27 || return 1
+#
+# Returns 0 if the environment was activated, 1 otherwise.
 conda_activate() { debasher::conda_activate "$@"; }
 
 ########

@@ -684,6 +684,19 @@ debasher::define_shared_dir()
 define_shared_dir() { debasher::define_shared_dir "$@"; }
 
 ########
+# Public: Gets the value of an option of the command line of the program,
+# so that a process can use it to define its own options in its
+# _define_opts method (for instance, to know the number of its tasks).
+#
+# $1 - Command line of the program (the cmdline argument of _define_opts).
+# $2 - Name of the option.
+#
+# Examples
+#
+#   local n=$(debasher::get_cmdline_opt "${cmdline}" "-n")
+#
+# The function prints the value of the option to the standard output, or
+# nothing if the command line does not give it.
 debasher::get_cmdline_opt()
 {
     local cmdline=$1
@@ -697,6 +710,20 @@ debasher::get_cmdline_opt()
     echo "${value}"
 }
 
+########
+# Public: Gets the value of an option of the command line of the program,
+# so that a process can use it to define its own options in its
+# _define_opts method (for instance, to know the number of its tasks).
+#
+# $1 - Command line of the program (the cmdline argument of _define_opts).
+# $2 - Name of the option.
+#
+# Examples
+#
+#   local n=$(get_cmdline_opt "${cmdline}" "-n")
+#
+# The function prints the value of the option to the standard output, or
+# nothing if the command line does not give it.
 get_cmdline_opt() { debasher::get_cmdline_opt "$@"; }
 
 ########

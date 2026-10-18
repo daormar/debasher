@@ -585,6 +585,34 @@ debasher::define_opt_from_process_outdir()
 #   define_opt_from_process_outdir "-outd" "optlist" --subdir "${task_idx}"
 #
 # The function does not return any value
+########
+# Public: Defines process option whose value is the absolute path of the
+# process output directory, or of a task subdirectory below it.
+#
+# $1 - Option name.
+# $2 - Name of variable that will store the information about the option to be added.
+# $3... - (optional) "--subdir <subpath>": the option gets the absolute
+#      path of the task subdirectory <subpath> instead, a directory below
+#      the process output directory that the engine creates when the
+#      process is prepared and that the task empties before it runs, as
+#      the process output directory of a process with a single task is
+#      emptied, so that the process function finds it there and empty
+#      whatever the number of tasks of its process. The subpath follows
+#      the rules of debasher::define_opt_from_shared_dir --subdir. Two
+#      tasks may not ask for the same task subdirectory, and no task
+#      subdirectory may be below another one of the same process. A
+#      process output directory for which some task asks for a task
+#      subdirectory belongs to its task subdirectories: when the process
+#      is prepared, every entry that is neither a task subdirectory of the
+#      run, nor a path that an output option of the run names, nor a
+#      directory on the way to one of them is removed from it.
+#
+# Examples
+#
+#   define_opt_from_process_outdir "-outd" "optlist"
+#   define_opt_from_process_outdir "-outd" "optlist" --subdir "${task_idx}"
+#
+# The function does not return any value
 define_opt_from_process_outdir() { debasher::define_opt_from_process_outdir "$@"; }
 
 ########

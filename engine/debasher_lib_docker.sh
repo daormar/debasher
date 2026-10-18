@@ -42,6 +42,17 @@ debasher::_pull_docker_imgs()
 }
 
 ########
+# Public: Pulls a docker image, unless it is present already. A process
+# calls it in its _docker_imgs method, which a run with --docker-support
+# executes before it launches anything.
+#
+# $1 - Name of the image.
+#
+# Examples
+#
+#   debasher::pull_docker_img "library/hello-world"
+#
+# Returns 0 if the image is present or was pulled, 1 otherwise.
 debasher::pull_docker_img()
 {
     local img_name=$1
@@ -51,6 +62,18 @@ debasher::pull_docker_img()
     fi
 }
 
+########
+# Public: Pulls a docker image, unless it is present already. A process
+# calls it in its _docker_imgs method, which a run with --docker-support
+# executes before it launches anything.
+#
+# $1 - Name of the image.
+#
+# Examples
+#
+#   pull_docker_img "library/hello-world"
+#
+# Returns 0 if the image is present or was pulled, 1 otherwise.
 pull_docker_img() { debasher::pull_docker_img "$@"; }
 
 ########
