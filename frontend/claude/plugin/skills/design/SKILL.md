@@ -29,9 +29,10 @@ it in this session.
   description of the Python SDK, from which `debasher_build` writes the saved
   program (see "Programs described in Python" in the reference). Then the
   design lives in that file: change it with `write_program_file`, following
-  https://debasher.readthedocs.io/en/latest/implem_python.html, and have the
-  program built again, rather than editing the saved program with the tools,
-  which the next build overwrites.
+  https://debasher.readthedocs.io/en/latest/implem_python.html (every class
+  and method: https://debasher.readthedocs.io/en/latest/api_sdk.html), and
+  have the program built again, rather than editing the saved program with
+  the tools, which the next build overwrites.
 - Ask what the program has to do, if the user has not said: what comes in, what
   comes out, the steps in between, how much data, whether it runs once or keeps
   running (a resident program), where it runs (the built-in scheduler or Slurm;

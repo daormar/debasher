@@ -69,7 +69,11 @@ the web UI shows them.
   describing a program in Python with the SDK (`debasher_build`, which,
   given the home directory, also writes the generated script of any saved
   program again) is
-  https://debasher.readthedocs.io/en/latest/implem_python.html.
+  https://debasher.readthedocs.io/en/latest/implem_python.html, with every
+  class and method of the SDK in
+  https://debasher.readthedocs.io/en/latest/api_sdk.html; every key of
+  `program.yaml` is in
+  https://debasher.readthedocs.io/en/latest/api_program_yaml.html.
 - `validate_program` checks the program as the Run menu does, but it saves
   the program and runs part of its code: offer it rather than run it unasked.
 - Keep the answer short, with a small example when it helps.

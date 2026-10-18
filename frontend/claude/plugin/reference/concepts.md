@@ -54,7 +54,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   editor; the editor of the web UI sees the change and loads it, or asks
   the user when the tab holds unsaved changes. The topology itself (the
   options, the connections, the specifications) is changed with the tools,
-  which keep the editor in step, or by hand in `program.yaml`.
+  which keep the editor in step, or by hand in `program.yaml`, whose keys
+  are described one by one in
+  https://debasher.readthedocs.io/en/latest/api_program_yaml.html.
 - **The generated script is never edited by hand.** Every save writes it
   again from the saved program, so a change made to it is lost: change the
   code of a process instead. `debasher_build` given the home directory or
@@ -80,7 +82,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   built again with `debasher_build <name>.py` in the home directory (no
   tool runs it; the file is never run with `python` nor given to
   `debasher_exec`), then read it again. How a description is written:
-  https://debasher.readthedocs.io/en/latest/implem_python.html.
+  https://debasher.readthedocs.io/en/latest/implem_python.html; every class
+  and method of the SDK:
+  https://debasher.readthedocs.io/en/latest/api_sdk.html.
 - **Preamble.** Bash code at the top of the generated script, mostly
   `load_debasher_module "<module>"` lines, which bring in the processes that
   other modules define: the library (`search_library`, `get_library_process`;
@@ -144,14 +148,17 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   defines `tasks(run)`, which returns the elements of the array or the number of
   tasks; the module calls it with `tasks_from_file` or `num_tasks_from_file`,
   and its code (`arrayCode`, `generatorSizeCode`) is the whole file. `run` holds
-  the command line of the run, read with `run.value(label)` (`None` when not
-  given or without a value), `run.given(label)` for a flag and `run.args`, and
+  the command line of the run, read with `run.value(label)` or
+  `run.value(label, default)` (`None` or the default when not given or
+  without a value), `run.given(label)` for a flag and `run.args`, and
   `run.process` and `run.outdir`; an array returns a list or another iterable of
   strings, numbers or paths, a generator an integer, 0 or more. The values of
   the options of each task stay Bash words (`${task_idx}`,
   `${array[$task_idx]}`), and relative paths are taken from the directory where
   `debasher_exec` runs. The rules, for `skip(task)` too:
-  https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python.
+  https://debasher.readthedocs.io/en/latest/implem_bash.html#the-tasks-in-python;
+  the objects `run` and `task`, member by member:
+  https://debasher.readthedocs.io/en/latest/api_sdk.html#python-functions-of-a-process.
   `manual`: the whole option definition written by hand (general programs only),
   always Bash. When both ends of a connection have several tasks, task i reads
   task i.
