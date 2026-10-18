@@ -573,8 +573,10 @@ def _split_option(option: ProgramOption, process: ProgramProcess, sources: list[
         type="flag" if is_flag else option.dataType,
         description=option.description,
         # A connected input holds its connection sentinel, derived again
-        # from the connections when the program is loaded.
-        value="" if sources else option.value,
+        # from the connections when the program is loaded; a shared_dir
+        # input holds the name of its directory, which its connections only
+        # document.
+        value="" if sources and option.channel != "shared_dir" else option.value,
         channel=option.channel,
         subpath=option.subpath,
         mirror=option.mirror,

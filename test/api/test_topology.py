@@ -311,6 +311,23 @@ def test_connections_are_kept_on_the_inputs_that_read_them():
     assert _canonical(_round_trip(program)) == _canonical(program)
 
 
+def test_a_connected_shared_dir_input_keeps_the_name_of_its_directory():
+    program = _program(
+        "prg",
+        [
+            _process("a", [_option("-outd", channel="shared_dir", value="summary")]),
+            _process("b", [_option("-ind", channel="shared_dir", value="summary")]),
+        ],
+        [_edge("a", "-outd", "b", "-ind")],
+    )
+
+    taken_apart = split(program)
+
+    b = taken_apart.topology.processes["b"].options["-ind"]
+    assert (b.value, b.from_) == ("summary", "a.-outd")
+    assert _canonical(_round_trip(program)) == _canonical(program)
+
+
 def test_a_namespaced_source_is_read():
     text = (
         "schema_version: 1\nname: prg\nprocesses:\n  org.ns.a:\n    options:\n"
