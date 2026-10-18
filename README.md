@@ -47,7 +47,73 @@ Among its features:
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
 - a visual editor to build, run and observe programs from a browser, with
-  AI assistance.
+  AI assistance;
+- programs saved as a readable `program.yaml` and one file per process,
+  which the editor, the Python SDK, an AI agent or a text editor all
+  write, and git versions.
+
+## A program in Python
+
+A program can also be described in Python with the SDK. This one has two
+processes: `write` writes a greeting into a file, and `shout`, which
+reads that file, writes it in capitals. Connecting the input of `shout`
+to the output of `write` is all it takes for `shout` to run after it:
+
+```python
+from debasher import Process, Program, in_outdir
+
+write = Process("write", code="write.sh", description="Writes a greeting.")
+write.cmdline_opt("-name", "string", "who to greet")
+write.output("-outf", "file", "the greeting", value=in_outdir("greeting.txt"))
+
+shout = Process("shout", code="shout.py", description="Turns it into capitals.")
+shout.input("-inf", "file", "the greeting", source=write["-outf"])
+shout.output("-outf", "file", "the result", value=in_outdir("shout.txt"))
+
+prg = Program("greet")
+prg.add(write, cpus=1, mem=32, time="00:01:00")
+prg.add(shout, cpus=1, mem=32, time="00:01:00")
+```
+
+Each process keeps its code in a file of its own language, and gets its
+options on its command line. `write.sh` is a Bash function:
+
+```bash
+write()
+{
+    local name=$(read_opt_value_from_func_args "-name" "$@")
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    echo "Hello, ${name}!" > "${outf}"
+}
+```
+
+and `shout.py` an ordinary Python script:
+
+```python
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-inf")
+parser.add_argument("-outf")
+args = parser.parse_args()
+with open(args.inf) as inf, open(args.outf, "w") as outf:
+    outf.write(inf.read().upper())
+```
+
+`debasher_build` writes the program beside the description, as the
+editor saves it, and `debasher_exec` runs it:
+
+```bash
+debasher_build greet.py
+debasher_exec --pfile greet.sh --outdir out -name World --wait
+cat out/shout/shout.txt      # HELLO, WORLD!
+```
+
+The directory now holds `program.yaml`, which the web interface opens
+with "Load program", and `greet.sh`, the module that `debasher_exec`
+runs. The same program could have been drawn in the editor, or written by
+hand as a Bash module; see the
+[documentation](https://debasher.readthedocs.io/en/latest/implem.html).
 
 ## Try it
 

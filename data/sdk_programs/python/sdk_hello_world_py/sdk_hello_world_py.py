@@ -3,8 +3,8 @@
 #
 #     debasher_build sdk_hello_world_py.py
 #
-# which leaves .debasher/program.json and sdk_hello_world_py.sh beside
-# this file, and run with
+# which leaves program.yaml and sdk_hello_world_py.sh beside this file,
+# and run with
 #
 #     debasher_exec --pfile sdk_hello_world_py.sh --outdir out --wait
 
