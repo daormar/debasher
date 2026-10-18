@@ -116,6 +116,11 @@ written in the ``heredoc_py`` method of the process:
    :start-at: Accumulate_heredoc_py()
    :end-before: Sup_document()
 
+The web interface keeps the class in a file of the home directory of
+the program, ``Accumulate.py``, which is what you edit, in the editor,
+in the "Program files" panel or by hand; the ``heredoc_py`` method of
+the module is written again from it when the program is saved.
+
 The node state is the sum, ``self.total``. ``process_data`` receives
 each number as a Python value, already decoded from JSON, updates the
 sum and sends it on ``outsum``. ``capture_node_state`` and

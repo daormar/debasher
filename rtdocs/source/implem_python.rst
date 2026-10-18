@@ -81,11 +81,11 @@ where the description has it, and the module ``sdk_hello_world_py.sh``,
 exactly what the "Save" button of the editor writes (``-o <dir>`` writes
 them elsewhere, with a copy of each process file). The file is named
 after its program, as a module is, and defines one program; anything
-else is an error that says so. From
-here the program is one more: it runs with ``debasher_exec``, its state
-is followed with ``debasher_status``, and its directory opens in the
-web interface with "Load program", where it shows on the canvas with
-its processes laid out as those of an imported module are.
+else is an error that says so. From here the program is one more: it
+runs with ``debasher_exec``, its state is followed with
+``debasher_status``, and its directory opens in the web interface with
+"Load program", where it shows on the canvas with its processes laid out
+as those of an imported module are.
 
 ::
 
@@ -119,18 +119,17 @@ The pieces, in the order a process is written:
 
 * **Where the code is.** ``code=`` names the file of the process, which
   the topology file names in turn, where the description has it: the
-  module embeds it when it is Bash, and runs it as it is, as an
-  external alias of the file, in any other language. ``script=`` names
-  a file that the module runs as it is too, an executable with the
-  interpreter of its extension, but that is not the code of the
-  process: the editor shows a ``code=`` file as the code of the process
-  and edits it, and leaves a ``script=`` file alone (the dispatcher);
-  the external alias of the :ref:`implem_bash` Section. ``alias=`` runs
-  the code of another
+  module embeds it when it is Bash, and runs it as it is, as an external
+  alias of the file, in any other language. ``script=`` names a file
+  that the module runs as it is too, an executable with the interpreter
+  of its extension, but that is not the code of the process: the editor
+  shows a ``code=`` file as the code of the process and edits it, and
+  leaves a ``script=`` file alone (the dispatcher); the external alias
+  of the :ref:`implem_bash` Section. ``alias=`` runs the code of another
   process under this one's name and options
   (``alias_opt_map={"-x": "-y"}`` renames the options it passes on, as
-  the alias option map of a module does), and a process with none
-  of them takes its code from a module that the preamble of the program
+  the alias option map of a module does), and a process with none of
+  them takes its code from a module that the preamble of the program
   loads (``Program(..., preamble="load_debasher_module ...")``).
 * **Options.** Every option is declared by a method that says where its
   value comes from and how it is delivered, with the data types of the
@@ -144,14 +143,13 @@ The pieces, in the order a process is written:
   output directory), ``fifo_output`` and ``fifo_input`` for an option
   delivered through a FIFO of a given name (``mirror=True`` keeps the
   copy of what is written that ``debasher_get_fifo_mirror`` reads),
-  ``outdir_opt`` for an output
-  that names the process output directory or a task subdirectory of it
-  (``subpath="${task_idx}"``), ``shared_dir_opt``, ``procspec_opt`` and
-  ``value_desc_output`` for the other option channels of the editor, and
-  ``opt`` for any option with its fields given by name. The direction of
-  an option comes from its label, as the engine reads it: an output
-  starts with ``-out``. An option is reached again by its label,
-  ``generate["-outf"]``.
+  ``outdir_opt`` for an output that names the process output directory
+  or a task subdirectory of it (``subpath="${task_idx}"``),
+  ``shared_dir_opt``, ``procspec_opt`` and ``value_desc_output`` for the
+  other option channels of the editor, and ``opt`` for any option with
+  its fields given by name. The direction of an option comes from its
+  label, as the engine reads it: an output starts with ``-out``. An
+  option is reached again by its label, ``generate["-outf"]``.
 * **Connections.** An input names the output it reads, as the module
   does in ``define_opt_from_proc_out``: ``source=`` takes the option of
   another process, or the name of the process and the label of the
@@ -212,8 +210,8 @@ process that reads a sum when the sum is odd:
 .. literalinclude:: ../../data/sdk_programs/python/sdk_skip_py/value_reader_skip.py
    :language: python
 
-``task.value`` reads an option of the task as
-``read_opt_value_from_func_args`` does, so the value that a value
+``task.value`` (``task.value(label, default)`` for a default) reads an
+option of the task as ``read_opt_value_from_func_args`` does, so the value that a value
 descriptor holds comes back as it is. The function runs inside the
 task, with the options of the task, before anything of its process
 output directory is touched; an error in it (an exception, a value that

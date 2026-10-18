@@ -72,34 +72,38 @@ Where a Program Lives
 
 A program built with the web interface uses two directories:
 
-* Its **home directory**, where the web interface saves it: the
-  topology file ``program.yaml``, with the processes, their options,
-  their connections and their specifications, readable and reviewable
-  as it is (its first line names the JSON Schema of the file, published
-  with this documentation, which an editor with YAML support uses to
-  check and complete it; ``debasher_build --schema`` prints it); one
-  file per process with its code, in its own language,
-  which the topology file names (``count.sh`` for a Bash process
-  ``count``, ``dispatch.py`` for one in Python, ``worker_tasks.sh`` for
-  the code that shapes the tasks of an array or a generator,
-  ``count_skip.sh`` for an additional method, ``worker_tasks.py`` or
-  ``count_skip.py`` for the tasks or the ``skip`` method written as a
-  Python function (see :ref:`tasks_in_python`), whose extension says the
-  language and which the module calls, and the whole class file
-  of a node of a resident program) and the "Program files" panel shows
-  and edits as any user file (a change to one is a change to the
-  program); the generated script, ``<name>.sh``, a DeBasher module like
-  any other, which ``debasher_exec`` and the rest of the tools can use
-  without the web interface, and which, for a process in a language
-  other than Bash, runs the file of the process as it is, by a path
-  relative to its own, so that the module and the files of the
-  processes go together; the files that the program needs, which
-  the "Program files" panel manages; and, in a hidden ``.debasher``
-  subdirectory, what the editor keeps for this machine, such as the
-  output directory, which is why a program copied or moved elsewhere,
-  or opened on another machine, has no output directory until you set
-  it. A program saved by an older version, as ``.debasher/program.json``,
-  opens as it is, and the next save writes it in this form.
+* Its **home directory**, where the web interface saves it. The
+  topology file, ``program.yaml``, holds the processes, their options,
+  their connections and their specifications, and is readable and
+  reviewable as it is. Its first line names the JSON Schema of the
+  file, published with this documentation, which an editor with YAML
+  support uses to check and complete it (``debasher_build --schema``
+  prints it).
+
+  Next to it, one file per process holds its code, in its own
+  language, and the topology file names it: ``count.sh`` for a Bash
+  process ``count``, ``dispatch.py`` for one in Python,
+  ``worker_tasks.sh`` for the code that shapes the tasks of an array or
+  a generator, ``count_skip.sh`` for an additional method,
+  ``worker_tasks.py`` or ``count_skip.py`` for the tasks or the
+  ``skip`` method written as a Python function (see
+  :ref:`tasks_in_python`), and the whole class file of a node of a
+  resident program. The extension of a file says its language. The
+  "Program files" panel shows and edits these files as any user file,
+  and a change to one is a change to the program. The panel also
+  manages the other files that the program needs.
+
+  The generated script, ``<name>.sh``, is a DeBasher module like any
+  other, which ``debasher_exec`` and the rest of the tools can use
+  without the web interface. For a process in a language other than
+  Bash, it runs the file of the process as it is, by a path relative to
+  its own, so the module and the files of the processes go together.
+  A hidden ``.debasher`` subdirectory keeps what the editor needs on
+  this machine, such as the output directory, which is why a program
+  copied or moved elsewhere, or opened on another machine, has no
+  output directory until you set it. A program saved by an older
+  version, as ``.debasher/program.json``, opens as it is, and the next
+  save writes it in this form.
 * Its **output directory**, where the engine writes when the program
   runs (see the :ref:`outdstruct` Section).
 
@@ -133,8 +137,10 @@ The home screen offers three ways to open a program:
 
 * **Create new program** asks for its name and its type, "General
   program" or "Resident program". The type cannot be changed later.
-* **Load program** opens a program saved with the web interface, from
-  its home directory.
+* **Load program** opens a program from its home directory: one saved
+  with the web interface or written by ``debasher_build`` (see the
+  :ref:`implem_python` Section), or any directory with a
+  ``program.yaml``, such as a clone of a repository that keeps one.
 * **Import program** opens a DeBasher module written by hand (a
   ``.sh`` file), which the engine loads and describes. The
   ``DEBASHER_MOD_DIR`` field says where to find the modules that it
@@ -240,21 +246,21 @@ an input, as the engine requires. Its editor sets:
 * its **value**, for a direct value, which is a Bash word such as
   ``10`` or ``${task_idx}``, written into the generated script as it is.
 
-The **code** of a process is written in Bash, Python, Perl, R or
-Groovy, and its other methods (``skip``, ``post``, ``conda_envs``,
+The **code** of a process is written in Bash, Python, Perl, R or Groovy,
+and its other methods (``skip``, ``post``, ``conda_envs``,
 ``docker_imgs``, and the rest of the process methods described in the
-:ref:`implem_bash` Section) are edited with "Configure additional methods",
-whose editor of each method has the same "AI prompt" button as the
-code editor (except for environments given as data), with the rules of
-that method. The editor of ``skip`` has
-a "Language" choice: Bash, or a Python function ``skip(task)`` that
-returns ``True`` to skip the task (see :ref:`tasks_in_python`). Those
-of ``conda_envs`` and ``docker_imgs`` take the environments as data by
-default: a row for each Conda environment, with its name and its
-``.yml`` file, or for each Docker image, from which the generated
-script writes the lines that prepare them when the run has conda or
-docker support ("Save" waits until no row has an empty field). "Given
-as: Bash body" writes the method by hand instead.
+:ref:`implem_bash` Section) are edited with "Configure additional
+methods", whose editor of each method has the same "AI prompt" button as
+the code editor (except for environments given as data), with the rules
+of that method. The editor of ``skip`` has a "Language" choice: Bash, or
+a Python function ``skip(task)`` that returns ``True`` to skip the task
+(see :ref:`tasks_in_python`). Those of ``conda_envs`` and
+``docker_imgs`` take the environments as data by default: a row for each
+Conda environment, with its name and its ``.yml`` file, or for each
+Docker image, from which the generated script writes the lines that
+prepare them when the run has conda or docker support ("Save" waits
+until no row has an empty field). "Given as: Bash body" writes the
+method by hand instead.
 
 The **specifications** are the computational ones (CPUs, memory and
 time) and, for a general program, the additional ones: process

@@ -149,7 +149,11 @@ installed with the following steps:
    files and documentation.
 
 #. Optionally, type ``make installcheck`` to check the installation:
-   it runs the example programs with the installed tools.
+   it runs the example programs with the installed tools. The examples
+   described with the Python SDK are skipped unless ``debasher_build``
+   finds a Python with pydantic 2, the one of an activated virtual
+   environment or the one that ``DEBASHER_WEBUI_PYTHON`` names, and the
+   Conda examples are skipped without Conda.
 
 #. You can remove the program binaries and object files from the
    source code directory by typing ``make clean``.

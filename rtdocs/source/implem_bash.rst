@@ -891,25 +891,27 @@ array process has one task per sample of a sample sheet given with
     }
 
 ``run`` gives what the Bash of the method has: the command line of the
-run, read with ``run.value(label)`` (``None`` when the option is not
-given or has no value), ``run.given(label)`` for a flag and ``run.args`` for all of it,
-the name of the process, ``run.process``, and its output directory,
+run, read with ``run.value(label)`` or ``run.value(label, default)``
+(``None`` or the default when the option is not given or has no value),
+``run.given(label)`` for a flag and ``run.args`` for all of it, the name
+of the process, ``run.process``, and its output directory,
 ``run.outdir``. For an array, the function returns a list (or any
 iterable) of strings, numbers or paths, which become the elements of
 ``array``; for a generator, an integer, 0 or more. The options of each
 task are still defined by the method, in Bash, from
 ``${array[$task_idx]}`` or ``${task_idx}``. The function runs when the
 Bash would run, while the run is prepared, so it sees the command line
-of each run and the files present then, and its relative paths are
-taken from the directory where ``debasher_exec`` runs. The file itself
-is found relative to the module, so that a program and its files move
+of each run and the files present then, and its relative paths are taken
+from the directory where ``debasher_exec`` runs. The file itself is
+found relative to the module, so that a program and its files move
 together, and it may import other files beside it. The function runs
 with the Python that DeBasher was installed with, not in the Conda
 environment or Docker image of the process, so the packages it imports
 have to be installed there (on the nodes, under Slurm, for a ``skip``
 function). What the function prints goes to the standard error (of
-``debasher_exec`` for ``tasks``, of the task for ``skip``), and an
-error in it, with its traceback, stops the preparation of the run.
+``debasher_exec`` for ``tasks``, of the task for ``skip``), and an error
+in it, with its traceback, stops the preparation of the run for a
+``tasks`` function, and fails the task for a ``skip`` function.
 
 An option generator calls the same kind of file from its
 ``generate_opts_size`` method, with no array name in front:

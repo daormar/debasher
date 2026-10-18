@@ -4,13 +4,12 @@ DeBasher Tools
 ==============
 
 Besides the Bash API used to define programs (see the :ref:`API`
-Section), DeBasher installs a set of standalone command-line tools
-that execute, monitor, inspect and manage DeBasher programs. This
+Section), DeBasher installs a set of standalone command-line tools that
+build, execute, monitor, inspect and manage DeBasher programs. This
 section describes each of these tools. Some of them are already
-introduced, in context, in the :ref:`quickstart_example` and
-:ref:`exec` Sections; they are described here again for completeness.
-Every tool accepts a ``--help`` option that prints a summary of its
-usage.
+introduced, in context, in the :ref:`quickstart_example` and :ref:`exec`
+Sections; they are described here again for completeness. Every tool
+accepts a ``--help`` option that prints a summary of its usage.
 
 Program Building
 ----------------
@@ -30,19 +29,21 @@ defines processes and one program and is named after it, and writes the
 program as the web interface saves it (the topology file
 ``program.yaml``, beside the files of the processes) and the module
 (``<name>.sh``), into the directory of the file, or into the directory
-given with ``-o`` (with a copy of each file of the processes). The
-program is then run with ``debasher_exec`` and opened in the web
-interface like any other. Given a home directory, its ``program.yaml``,
-or nothing in a home directory, the tool writes the module again from
-the program saved there, whoever saved it, so that a program kept in a
-repository as its ``program.yaml`` and the files of its processes is
-built without the web interface (``-o`` goes with a Python file only);
-``--schema`` prints the JSON Schema of ``program.yaml``, which editors
-use to check the file as it is written. The tool runs with the Python
-that ``DEBASHER_WEBUI_PYTHON`` names, else
-with ``python3`` on the ``PATH``, which has to have the dependencies of
-the web interface installed (see the :ref:`webui` Section); when it
-does not, the tool says what to install.
+given with ``-o`` (``--outdir``; with a copy of each file of the
+processes). The program is then run with ``debasher_exec`` and opened in
+the web interface like any other. Given a home directory, its
+``program.yaml``, or nothing in a home directory, the tool writes the
+module again from the program saved there, whoever saved it, so that a
+program kept in a repository as its ``program.yaml`` and the files of
+its processes is built without the web interface (``-o`` goes with a
+Python file only); ``--schema`` prints the JSON Schema of
+``program.yaml``, which editors use to check the file as it is written.
+The tool runs with the Python that ``DEBASHER_WEBUI_PYTHON`` names, else
+with ``python3`` on the ``PATH`` (that of an activated virtual
+environment), else with the Python found when DeBasher was configured.
+That Python has to have the dependencies of the web interface installed
+(see the :ref:`webui` Section); when it does not, the tool says what to
+install.
 
 Program Execution
 ------------------
