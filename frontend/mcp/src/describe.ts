@@ -2,7 +2,8 @@ import { fanoutCountProcesses } from "../../src/models/connections";
 import { isLabelEdge } from "../../src/models/edge";
 import { isFanoutOption } from "../../src/models/option";
 import type { ProgramOption } from "../../src/models/option";
-import type { ProgramProcess } from "../../src/models/process";
+import { DEFAULT_COMPUTATIONAL_SPECS } from "../../src/models/process";
+import type { ComputationalSpecs, ProgramProcess } from "../../src/models/process";
 import type { Program } from "../../src/models/program";
 import type { SeqProcess } from "../../src/models/seqProcess";
 
@@ -21,6 +22,16 @@ function setFields(fields: object): string {
     .filter(([, value]) => !(Array.isArray(value) && value.length === 0))
     .map(([key, value]) => `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`)
     .join(", ");
+}
+
+// The computational specifications of a process, with the default of each
+// of cpus, mem and time that it does not give, which script generation
+// writes in its place; a sequential process has no defaults.
+function processSpecFields(specs: ComputationalSpecs): string {
+  const defaults = Object.entries(DEFAULT_COMPUTATIONAL_SPECS)
+    .filter(([key]) => specs[key as keyof typeof DEFAULT_COMPUTATIONAL_SPECS] == null)
+    .map(([key, value]) => `${key}=${value} (default)`);
+  return [setFields(specs), ...defaults].filter(Boolean).join(", ");
 }
 
 // The name of the option of `process` with the given id.
@@ -191,7 +202,7 @@ export function describeProcess(program: Program, process: ProgramProcess): stri
   return [
     ...processLines(program, process),
     ...filesLine(process),
-    `Computational specs: ${setFields(computationalSpecs) || "none"}`,
+    `Computational specs: ${processSpecFields(computationalSpecs)}`,
     `Additional specs: ${setFields(additionalSpecs) || "none"}`,
     ...section("Connections", connections),
     ...codeBlock(...handlerCode(process)),
@@ -236,7 +247,7 @@ function selfContainedLines(program: Program): string[] {
         `${at}: ${processHeader(process)}`,
         ...(process.description ? [`${at} description: ${process.description}`] : []),
         ...process.options.map(option => `${at} option ${optionLine(process, option, program)}`),
-        `${at} computational specs: ${setFields(computationalSpecs) || "none"}`,
+        `${at} computational specs: ${processSpecFields(computationalSpecs)}`,
         `${at} additional specs: ${setFields(additionalSpecs) || "none"}`,
         ...codeLines(`${at} ${lowerTitle(handlerCode(process)[0])} | `, handlerCode(process)[1]),
         ...methodCodes(process).flatMap(([title, code]) => codeLines(`${at} ${lowerTitle(title)} | `, code)),

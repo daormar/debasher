@@ -3,6 +3,9 @@ import tempfile
 from pathlib import Path
 
 from .debasher_constants import (
+    DEFAULT_PROCESS_CPUS,
+    DEFAULT_PROCESS_MEM,
+    DEFAULT_PROCESS_TIME,
     MODULE_DOCUMENT_SUFFIX,
     MODULE_PROGRAM_SUFFIX,
     MODULE_PROGRAM_TYPE_SUFFIX,
@@ -37,6 +40,20 @@ def _indent_block(text: str, indent: str) -> str:
     """Prefixes every non-blank line of `text` with `indent`, preserving its own relative indentation."""
     return "\n".join(indent + line if line else line for line in text.splitlines())
 SCRIPT_HEADER = "# AUTOMATICALLY GENERATED DEBASHER SCRIPT"
+
+def _with_default_specs(specs: ComputationalSpecs) -> ComputationalSpecs:
+    """The computational specifications of a process with the default of
+    each of cpus, mem and time that it does not give, which the engine
+    requires of a process; a sequential process keeps its own, all of them
+    optional."""
+    return specs.model_copy(
+        update={
+            "cpus": DEFAULT_PROCESS_CPUS if specs.cpus is None else specs.cpus,
+            "mem": DEFAULT_PROCESS_MEM if specs.mem is None else specs.mem,
+            "time": specs.time or DEFAULT_PROCESS_TIME,
+        }
+    )
+
 
 def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) -> str:
     parts = []
@@ -1126,7 +1143,10 @@ def _add_program_function(program):
             emitted_group_ids.add(group.groupId)
             lines.append(f'{INDENT}add_debasher_program "{group.programName}"')
             continue
-        comp_specs = _computational_specs_str(member.computationalSpecs)
+        specs = member.computationalSpecs
+        if add_function == "add_debasher_process":
+            specs = _with_default_specs(specs)
+        comp_specs = _computational_specs_str(specs)
         add_specs = _additional_specs_str(member.additionalSpecs)
         lines.append(
             f'{INDENT}{add_function} "{member.name}" "{comp_specs}" "{add_specs}"'

@@ -185,7 +185,10 @@ keys of a process are:
     (``input_log_max_mb``, ``out_backlog_max_mb``,
     ``out_backlog_fail_mb``, ``gil_switch_interval_ms``,
     ``startup_timeout_s``, ``max_concurrent_runs``, ``batch_sched``,
-    ``heartbeat_timeout_s``).
+    ``heartbeat_timeout_s``). A process takes the default of each of
+    ``cpus``, ``mem`` and ``time`` that it leaves out: 1 CPU, 256
+    megabytes, ``01:00:00``, the values that the editor gives a new
+    process.
 
 ``kind``
     Only in a resident program: ``FBPProcess``, ``ProgramLauncher`` or
@@ -286,4 +289,5 @@ A sequential process (see the :ref:`seq_processes` Section)
 takes ``description``, ``code``, ``script``, ``alias``,
 ``alias_opt_map``, ``language`` and ``group`` as a process does, and
 ``specs`` with ``cpus``, ``mem``, ``time`` and ``sched``, the
-scheduler of its steps (``BUILTIN``, the default, or ``SLURM``).
+scheduler of its steps (``BUILTIN``, the default, or ``SLURM``). Its
+``cpus``, ``mem`` and ``time`` are optional and have no default.

@@ -183,7 +183,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   inside the task. A file or directory that either reads (such as one given on
   the command line to count the tasks) has to stay unchanged while the run
   lasts, so that the number of tasks is the same every time.
-- **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`);
+- **Specifications.** `computationalSpecs` (`cpus`, `mem` in MB, `time`;
+  each one a process leaves unset is 1, 256 and `01:00:00` respectively,
+  except in a sequential process, which keeps only those it gives);
   `additionalSpecs` (general programs only): `force` to rerun in every run,
   `processdeps` to replace the dependencies inferred from the connections
   (`afterok:<process>`, several joined by `,` when all have to hold or by

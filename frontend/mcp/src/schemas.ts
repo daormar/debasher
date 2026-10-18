@@ -88,7 +88,7 @@ export const processChanges = z.object({
     manualCode: z.string().optional(),
     language: funcLanguage.optional().describe("The language of arrayCode and generatorSizeCode: python makes them a tasks file that defines tasks(run). A manual handler is bash. Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
   }).strict().optional(),
-  computationalSpecs: computationalSpecs.optional(),
+  computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class."),
   additionalSpecs: z.object({
     force: z.boolean().optional(),
     processdeps: z.string().optional(),

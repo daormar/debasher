@@ -96,6 +96,9 @@ entries below that refer to them.
   process and the label of the option, as a module names them in
   `define_opt_from_proc_out`. The connections of the program model are
   derived from the sources of the inputs of the processes it adds.
+- **default specifications**: as in the design of the web UI: the `cpus`,
+  `mem` and `time` that script generation writes for a process that does not
+  give them.
 - **specifications of a use**: what a program says about a process when it
   adds it: its computational specifications (`cpus`, `mem`, `time`), its
   explicit dependencies (`processdeps`), whether it is forced
@@ -384,12 +387,15 @@ the execution options of the editor, given by name (`scheduler`,
 process name without namespaces, since it names the `_program` method of
 the module.
 
-`add(process, cpus=, mem=, time=, processdeps=, force=, position=)` adds
-a process with the specifications of its use, as `add_debasher_process`
-does in the `_program` method, and returns it. A process added twice, or a
+`add(process, cpus=, mem=, time=, processdeps=, force=, position=)` adds a
+process with the specifications of its use, as `add_debasher_process` does in
+the `_program` method, and returns it. A specification it does not give is not
+written into the topology file, and script generation takes the default
+specifications for `cpus`, `mem` and `time` (see "From the model to a module:
+script generation" in the design of the web UI). A process added twice, or a
 process with the name of one already added, is refused. The order of the
-processes is the order they are added in, which is the order of the
-functions in the module and of the processes in the topology file.
+processes is the order they are added in, which is the order of the functions
+in the module and of the processes in the topology file.
 
 A program does not declare connections: they belong to the processes, as
 in a module, where the `_define_opts` method of a process names the

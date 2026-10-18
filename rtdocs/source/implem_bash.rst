@@ -1403,7 +1403,11 @@ Computational specifications (space-separated ``attribute=value``
 pairs, second argument):
 
 * ``cpus``, ``mem``, ``time``: number of CPUs, amount of RAM (in MBs)
-  and wall-clock time budget assigned to the process.
+  and wall-clock time budget assigned to the process. A module written
+  by hand gives all three for every process added with
+  ``add_debasher_process``, and the engine stops with an error when one
+  is missing; the defaults of the web interface, the SDK and
+  ``program.yaml`` apply only to a generated module.
 * ``nodes``, ``account``, ``partition``: SLURM-specific scheduling
   attributes (number of nodes, billing account, and partition/queue to
   submit to), only meaningful when running under the SLURM scheduler.

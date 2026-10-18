@@ -188,10 +188,11 @@ Section lists every class and method):
   holds), the preamble, the environment variables, the shared
   directories and the execution options of the editor by name
   (``scheduler``, ``conda_support``, ...); ``add`` takes the process and
-  the specifications of its use there: ``cpus``, ``mem``, ``time``, the
-  explicit dependencies (``processdeps="afterok:count"``), ``force``,
-  and ``position`` on the canvas when the layout of the editor is not
-  wanted.
+  the specifications of its use there: ``cpus``, ``mem``, ``time`` (1
+  CPU, 256 megabytes and ``01:00:00`` for those not given, as the editor
+  gives a new process), the explicit dependencies
+  (``processdeps="afterok:count"``), ``force``, and ``position`` on the
+  canvas when the layout of the editor is not wanted.
 
 Skipping tasks, and the environments of a process
 -------------------------------------------------

@@ -95,6 +95,14 @@ describe("reading a program", () => {
     await expect(call(backend, "get_process", { home_dir: HOME, process: "nope" })).rejects.toThrow('no process named "nope"');
   });
 
+  it("shows the default of each computational specification that a process does not give, which it runs with", async () => {
+    const backend = fakeBackend([program()]);
+
+    expect(await text(backend, "get_process", { home_dir: HOME, process: "b" })).toContain(
+      "Computational specs: cpus=1, mem=256, time=01:00:00 (default)"
+    );
+  });
+
   it("says which code is Python and shows the environments given as data, as the backend sends them", async () => {
     const worker: ProgramProcess = {
       ...process("w", ["-x"]),

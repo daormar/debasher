@@ -240,6 +240,11 @@ refer to it.
   files").
 - **generated script**: the module that script generation writes as `<name>.sh`
   in the home directory.
+- **default specifications**: 1 CPU, 256 megabytes and `01:00:00`, the
+  computational specifications `cpus`, `mem` and `time` that the editor gives a
+  new process and shows for one that a process does not give, and that script
+  generation writes for a process (not a sequential one) that does not give
+  them (`DEFAULT_PROCESS_CPUS` and the others in `api/debasher_constants.py`).
 - **reserved name**: a file or directory name that the engine or the web UI
   manages, by a rule rather than a list (`is_reserved_name()`): a name that
   starts with a dot, a name wrapped in double underscores (`__exec__`,
@@ -929,11 +934,12 @@ The generated module holds, in this order:
 5. The code of each function that an alias runs and that nothing else in the
    program writes (see "Code that a loaded module already provides").
 6. `<name>_program`, with one `add_debasher_process` per process, carrying its
-   computational specifications (`cpus=... mem=... time=...`) and its
-   additional specifications (`force=yes;processdeps=...;alias=...`), then one
-   `add_debasher_seq_process` per sequential process. The members of a group
-   that is still whole, of either kind, give way to one `add_debasher_program`
-   for the group.
+   computational specifications (`cpus=... mem=... time=...`, with the default
+   specifications for those of the three that the process does not give, since
+   the engine requires them) and its additional specifications
+   (`force=yes;processdeps=...;alias=...`), then one `add_debasher_seq_process`
+   per sequential process. The members of a group that is still whole, of
+   either kind, give way to one `add_debasher_program` for the group.
 
 A function with nothing to say gets the body `:`, since the engine expects it
 to exist. What the model holds about runs or about the canvas stays out of the

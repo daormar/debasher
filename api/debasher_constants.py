@@ -78,6 +78,16 @@ SEQ_PROCESS_DOC_HEADING_PREFIX = "Sequential Process: "
 # recognizes it, so both modes give option values the same name.
 TASK_IDX_VAR = "task_idx"
 
+# Not an engine constant either: the computational specifications that a
+# process gets when it gives none, which the engine requires of every
+# process but a sequential one. The editor gives them to a new process and
+# shows them for a missing one (DEFAULT_COMPUTATIONAL_SPECS in
+# frontend/src/models/process.ts), and script generation writes them, so
+# a program from any door runs as the editor shows it.
+DEFAULT_PROCESS_CPUS = 1
+DEFAULT_PROCESS_MEM = 256
+DEFAULT_PROCESS_TIME = "01:00:00"
+
 # Mirrors DEBASHER_LOCK_BASENAME: the lock file of an output directory,
 # which a debasher_exec holds while it validates, prepares or runs a
 # program there.

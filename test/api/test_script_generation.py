@@ -279,6 +279,23 @@ def test_a_sequential_process_is_written_after_the_processes_and_added_with_its_
     )
 
 
+def test_a_process_without_computational_specifications_gets_the_defaults():
+    # The engine requires cpus, mem and time of every process; one that
+    # gives none, as a program.yaml written by hand or an SDK description
+    # may, gets those that the editor gives a new process.
+    script = generate_script(_seq_program([], [_make_process([])]), skip_redundant_check=True)
+
+    assert 'add_debasher_process "count" "cpus=1 mem=256 time=01:00:00" ""' in script
+
+
+def test_a_process_keeps_the_computational_specifications_it_gives():
+    process = _make_process([])
+    process.computationalSpecs = ComputationalSpecs(cpus=4, time="02:00:00")
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert 'add_debasher_process "count" "cpus=4 mem=256 time=02:00:00" ""' in script
+
+
 def test_a_sequential_process_with_an_alias_gets_no_code():
     alias = SeqProcess(
         id="a",

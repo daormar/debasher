@@ -43,6 +43,9 @@ export interface ComputationalSpecs {
 
 }
 
+// The same values as DEFAULT_PROCESS_CPUS, DEFAULT_PROCESS_MEM and
+// DEFAULT_PROCESS_TIME of api/debasher_constants.py, which script generation
+// writes for a process that gives none.
 export const DEFAULT_COMPUTATIONAL_SPECS: Required<Pick<ComputationalSpecs, "cpus" | "mem" | "time">> = {
   cpus: 1,
   mem: 256,

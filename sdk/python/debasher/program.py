@@ -145,8 +145,10 @@ class Program:
         """
         Adds `process` to the program with the computational specifications
         of its use there (`cpus`, `mem` in megabytes, `time` as
-        `hh:mm:ss`), its explicit dependencies (`processdeps`, as the
-        engine writes them, `afterok:count`), whether it is rerun on every
+        `hh:mm:ss`; 1 CPU, 256 megabytes and 01:00:00 for those not
+        given, as the editor gives a new process), its explicit
+        dependencies (`processdeps`, as the engine writes them,
+        `afterok:count`), whether it is rerun on every
         run (`force`), and where it goes on the canvas (`position`, else
         the layout of the editor). A node of a resident program takes the
         specifications of a node too, under the names of the engine
