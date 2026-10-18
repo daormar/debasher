@@ -3312,3 +3312,48 @@ What is known to be missing from the design, or left open by it:
   its status, whether the final command runs when some runs failed or the batch
   stopped before launching them all, and whether its result counts in the exit
   status of the batch.
+- **Task counts known only during the run.** Every array is sized while the
+  run is prepared, since `_define_opts` and `_generate_opts_size` run then
+  (see "Arrays and option generators" and "Architecture"), and every process
+  is handed to the scheduler before any task runs, the Slurm scheduler
+  needing the size of an array when it submits it. An array whose count a
+  process of the same run produces, such as one task per chunk of a file
+  that an earlier process splits, cannot be expressed. The pool of workers
+  pattern of the user documentation ("Fan-out to a pool of workers, and
+  fan-in" in `rtdocs/source/design_patterns.rst`) covers the load with a
+  fixed number of workers that share the items, and can stream from the
+  producer to them, but not the accounting per item that tasks give: status
+  and attempts per task, the resources of the scheduler per item, a task
+  subdirectory, `aftercorr` downstream. The engine could run such a program
+  in waves. The `_define_opts`, or `_generate_opts_size`, of the array would
+  say that it waits for the producer, through a library function that fails
+  with a code of its own while the producer is not `FINISHED`; the
+  preparation would mark the array as deferred, a process status of its own
+  (see "Process status"), and with it everything downstream of it and every
+  process that asks for its number of tasks with `get_process_num_tasks`,
+  and define and launch the rest as today; and once the producers of a
+  deferred process have finished, `debasher_exec` would enter the same
+  output directory again, as a rerun does (see "Reruns"), find them
+  finished, size the array and launch it and what follows it, deferring
+  again what still waits. The built-in scheduler, whose loop watches the end
+  of every process, would do so in place; the Slurm scheduler would submit a
+  job that depends on the producers with `afterok` and runs `debasher_exec`.
+  The processes and their connections do not change, and the schedulers see
+  only jobs submitted later. What changes with it: the inference of the
+  dependencies and `program.procspec`, built from the option lists (see
+  "Architecture") and so completed wave by wave, since a deferred process
+  has no option list before its wave; the lock, which the second entry takes
+  from the first, and the refusal of a `debasher_exec` while a process of the
+  run is in progress, which the second entry has to pass; `program.opts`,
+  written whole at preparation today and wave by wave then, and compared
+  process by process; `debasher_stop`, which has to cancel a pending
+  continuation; the tools that read a run and the web UI, which show the
+  deferred status; and a fanout family of the web UI whose count source is
+  the number of tasks of a deferred process (see "Option definitions" in
+  `doc/design_doc_webui.md`), which waits with it. A FIFO whose ends fall in
+  different waves cannot be launched: the built-in scheduler runs both ends
+  together (see "Running both ends together"), so the end in the earlier
+  wave is deferred with the other, as a rerun mark spreads from one end to
+  the other, and the Slurm scheduler refuses FIFOs in any case. What is
+  lost: the streaming between the producer and the array, which is not
+  launched until the producer has ended, where the pool of workers streams.
