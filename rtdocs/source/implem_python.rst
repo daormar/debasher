@@ -76,16 +76,16 @@ Building and running
 
 ``debasher_build`` loads the file, finds the program it defines and
 writes it beside the file: the program as the web interface saves it,
-the topology file ``program.yaml``, which names the file of each process
-where the description has it, and the module ``sdk_hello_world_py.sh``,
-exactly what the "Save" button of the editor writes (``-o <dir>`` writes
-them elsewhere, with a copy of each process file). The file is named
-after its program, as a module is, and defines one program; anything
-else is an error that says so. From here the program is one more: it
-runs with ``debasher_exec``, its state is followed with
-``debasher_status``, and its directory opens in the web interface with
-"Load program", where it shows on the canvas with its processes laid out
-as those of an imported module are.
+the topology file ``program.yaml`` (see the :ref:`program-yaml`
+Section), which names the file of each process where the description has
+it, and the module ``sdk_hello_world_py.sh``, exactly what the "Save"
+button of the editor writes (``-o <dir>`` writes them elsewhere, with a
+copy of each process file). The file is named after its program, as a
+module is, and defines one program; anything else is an error that says
+so. From here the program is one more: it runs with ``debasher_exec``,
+its state is followed with ``debasher_status``, and its directory opens
+in the web interface with "Load program", where it shows on the canvas
+with its processes laid out as those of an imported module are.
 
 ::
 
@@ -115,7 +115,8 @@ counts.
    :language: python
    :start-at: from debasher
 
-The pieces, in the order a process is written:
+The pieces, in the order a process is written (the :ref:`sdk-api`
+Section lists every class and method):
 
 * **Where the code is.** ``code=`` names the file of the process, which
   the topology file names in turn, where the description has it: the
@@ -211,13 +212,13 @@ process that reads a sum when the sum is odd:
    :language: python
 
 ``task.value`` (``task.value(label, default)`` for a default) reads an
-option of the task as ``read_opt_value_from_func_args`` does, so the value that a value
-descriptor holds comes back as it is. The function runs inside the
-task, with the options of the task, before anything of its process
-output directory is touched; an error in it (an exception, a value that
-is not ``True`` or ``False``) fails the task instead of running it.
-Only ``skip`` takes a Python file: any other method given one is an
-error.
+option of the task as ``read_opt_value_from_func_args`` does, so the
+value that a value descriptor holds comes back as it is. The function
+runs inside the task, with the options of the task, before anything of
+its process output directory is touched; an error in it (an exception, a
+value that is not ``True`` or ``False``) fails the task instead of
+running it. Only ``skip`` takes a Python file: any other method given
+one is an error.
 
 The Conda environments and the Docker images of a process are data:
 ``conda_envs=`` takes the name of each environment and its yml file,

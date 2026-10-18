@@ -1,7 +1,8 @@
 """
 The Python SDK of DeBasher: a program is described in Python and written
-as the program metadata and the generated module that the web UI saves,
-which `debasher_exec` runs as any other program.
+as the web UI saves it, the topology file `program.yaml` with the files
+of its processes, and the generated module, which `debasher_exec` runs as
+any other program.
 
 A file of the user defines processes, with their options and their
 connections, and one Program that adds them with the specifications of

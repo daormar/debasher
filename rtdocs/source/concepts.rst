@@ -30,11 +30,11 @@ A **module** is the Bash file that DeBasher runs: the processes, their
 options and the connections between them. A module is written by hand,
 or generated, by the web interface from a drawing or by
 ``debasher_build`` from a program described in Python. A generated
-module comes from the saved program: a topology file,
-``program.yaml``, and one file per process with its code, which are
-what you read and change, in the editor or by hand. Either way, the
-module is what DeBasher runs, and a program built one way can be read
-the other.
+module comes from the saved program: a topology file, ``program.yaml``
+(see the :ref:`program-yaml` Section), and one file per process with its
+code, which are what you read and change, in the editor or by hand.
+Either way, the module is what DeBasher runs, and a program built one
+way can be read the other.
 
 Options: the interface of a process
 -----------------------------------

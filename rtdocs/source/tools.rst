@@ -37,13 +37,13 @@ module again from the program saved there, whoever saved it, so that a
 program kept in a repository as its ``program.yaml`` and the files of
 its processes is built without the web interface (``-o`` goes with a
 Python file only); ``--schema`` prints the JSON Schema of
-``program.yaml``, which editors use to check the file as it is written.
-The tool runs with the Python that ``DEBASHER_WEBUI_PYTHON`` names, else
-with ``python3`` on the ``PATH`` (that of an activated virtual
-environment), else with the Python found when DeBasher was configured.
-That Python has to have the dependencies of the web interface installed
-(see the :ref:`webui` Section); when it does not, the tool says what to
-install.
+``program.yaml`` (see the :ref:`program-yaml` Section), which editors
+use to check the file as it is written. The tool runs with the Python
+that ``DEBASHER_WEBUI_PYTHON`` names, else with ``python3`` on the
+``PATH`` (that of an activated virtual environment), else with the
+Python found when DeBasher was configured. That Python has to have the
+dependencies of the web interface installed (see the :ref:`webui`
+Section); when it does not, the tool says what to install.
 
 Program Execution
 ------------------

@@ -152,8 +152,9 @@ installed with the following steps:
    it runs the example programs with the installed tools. The examples
    described with the Python SDK are skipped unless ``debasher_build``
    finds a Python with pydantic 2, the one of an activated virtual
-   environment or the one that ``DEBASHER_WEBUI_PYTHON`` names, and the
-   Conda examples are skipped without Conda.
+   environment, the one that ``DEBASHER_WEBUI_PYTHON`` names or the one
+   found when DeBasher was configured, and the Conda and Docker examples
+   are skipped without Conda or Docker.
 
 #. You can remove the program binaries and object files from the
    source code directory by typing ``make clean``.

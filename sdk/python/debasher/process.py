@@ -143,6 +143,14 @@ class Option:
     One option of a process, with the fields of the program model that
     script generation reads. Created through the methods of Process, never
     directly.
+
+    Its attributes are the process it belongs to (`process`), its label
+    (`label`), its data type (`data_type`), its description
+    (`description`), its value (`value`), its option channel (`channel`)
+    and its direction (`direction`, "input" or "output", from its label),
+    and the other fields that `Process.opt` takes, under the same names
+    (`sources` for `source`), with their defaults when the method that
+    created it gives none.
     """
 
     def __init__(self, process: Process, label: str, data_type: str, description: str, **fields):
@@ -203,11 +211,12 @@ class Process:
     wanted, its description, and where its code is, as one of:
 
     - `code`, a file in the language of the process, told by its
-      extension (.sh, .py, .pl, .r, .groovy): a Bash function named as
-      the process, with its helper functions, or the whole script of
-      another language. The file is read when the program is written and
-      its text goes into the program metadata and into the module, as the
-      code box of the editor does.
+      extension (.sh, .py, .pl, .r or .R, .groovy) or by `language`: a Bash
+      function named as the process, with its helper functions, or the
+      whole script of another language. The topology file names the
+      file, which the editor shows and edits as the code of the process;
+      the module embeds it when it is Bash, and runs it as it is (an
+      external alias of the file) in any other language.
     - `script`, a file that the module runs as it is, with the interpreter
       of its extension (the external alias of the engine): the file stays
       outside the module, copied beside it when the program is written
@@ -216,6 +225,13 @@ class Process:
       its own name and options.
     - none of them: the code of a process of that name that a module
       loaded by the preamble of the program provides.
+
+    `language` (bash, python, perl, r or groovy) gives the language of
+    the process when the extension of its file does not tell it. A
+    `script` or an `alias` may rename the options that the process
+    passes on with `alias_opt_map`, the name of each option of this
+    process to the one that the code expects (`{"-x": "-y"}`), as the
+    alias option map of a module does.
 
     The additional methods of the process are given as files too, each
     with the body that the editor takes: `skip` (whether a task is
@@ -325,6 +341,9 @@ class Process:
     # --- options -------------------------------------------------------------
 
     def __getitem__(self, label: str) -> Option:
+        """The option of the process with the label `label`, such as
+        `generate["-outf"]`, to give as the source of an input; KeyError
+        when the process has none."""
         for option in self.options:
             if option.label == label:
                 return option
@@ -508,7 +527,7 @@ class Array(_TaskedProcess):
     returns the elements (`range(int(run.value("-w")))`); every option is
     defined once per element, with `${task_idx}` and `${array[$task_idx]}`
     at hand in its value. It is the array mode of the options handler of
-    the editor.
+    the editor. It takes the arguments of a Process, and `tasks`.
     """
 
     mode = "array"
@@ -521,7 +540,8 @@ class Generator(_TaskedProcess):
     tasks, from the command line and the files of the run, or a Python
     file whose `tasks(run)` returns it; the options of each task are
     defined from its index, `${task_idx}`, in their values. It is the
-    generator mode of the options handler of the editor.
+    generator mode of the options handler of the editor. It takes the
+    arguments of a Process, and `tasks`.
     """
 
     mode = "generator"

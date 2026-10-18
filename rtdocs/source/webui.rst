@@ -75,10 +75,10 @@ A program built with the web interface uses two directories:
 * Its **home directory**, where the web interface saves it. The
   topology file, ``program.yaml``, holds the processes, their options,
   their connections and their specifications, and is readable and
-  reviewable as it is. Its first line names the JSON Schema of the
-  file, published with this documentation, which an editor with YAML
-  support uses to check and complete it (``debasher_build --schema``
-  prints it).
+  reviewable as it is (see the :ref:`program-yaml` Section). Its first
+  line names the JSON Schema of the file, published with this
+  documentation, which an editor with YAML support uses to check and
+  complete it (``debasher_build --schema`` prints it).
 
   Next to it, one file per process holds its code, in its own
   language, and the topology file names it: ``count.sh`` for a Bash

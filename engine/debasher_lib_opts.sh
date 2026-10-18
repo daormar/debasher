@@ -695,8 +695,8 @@ define_shared_dir() { debasher::define_shared_dir "$@"; }
 #
 #   local n=$(debasher::get_cmdline_opt "${cmdline}" "-n")
 #
-# The function prints the value of the option to the standard output, or
-# nothing if the command line does not give it.
+# The function prints the value of the option if it was given, or the
+# DEBASHER_OPT_NOT_FOUND constant otherwise.
 debasher::get_cmdline_opt()
 {
     local cmdline=$1
@@ -722,8 +722,8 @@ debasher::get_cmdline_opt()
 #
 #   local n=$(get_cmdline_opt "${cmdline}" "-n")
 #
-# The function prints the value of the option to the standard output, or
-# nothing if the command line does not give it.
+# The function prints the value of the option if it was given, or the
+# DEBASHER_OPT_NOT_FOUND constant otherwise.
 get_cmdline_opt() { debasher::get_cmdline_opt "$@"; }
 
 ########

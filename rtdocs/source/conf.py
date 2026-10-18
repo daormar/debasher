@@ -8,6 +8,11 @@ import sys
 # modules import only the standard library.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'engine')))
 
+# The Python SDK, whose reference is built the same way. Importing it
+# makes the package `api` of the repository importable, which needs the
+# packages of requirements.txt that the API needs too (pydantic, PyYAML).
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'sdk', 'python')))
+
 # -- Project information
 
 project = 'DeBasher'
@@ -33,6 +38,10 @@ intersphinx_mapping = {
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
 }
 intersphinx_disabled_domains = ['std']
+
+# The signatures of the SDK reference name its classes as the package
+# exports them, without the module that defines each.
+python_use_unqualified_type_names = True
 
 templates_path = ['_templates']
 

@@ -73,6 +73,7 @@ class Options:
     A list of options as the engine gives them to a method: a label
     followed by its value, or a flag alone. It reads them as the engine
     does (read_opt_value_from_func_args and read_flag_from_func_args).
+    The list itself is `args`.
     """
 
     def __init__(self, args):
@@ -94,8 +95,9 @@ class Options:
 
 
 class Run(Options):
-    """What tasks(run) receives: the command line of the run, the name of
-    the process and its process output directory."""
+    """What tasks(run) receives: the command line of the run (`args`), the
+    name of the process (`process`) and its process output directory
+    (`outdir`)."""
 
     def __init__(self, args, process, outdir):
         super().__init__(args)
@@ -104,8 +106,8 @@ class Run(Options):
 
 
 class Task(Options):
-    """What skip(task) receives: the options of the task, and the name of
-    its process."""
+    """What skip(task) receives: the options of the task (`args`), and the
+    name of its process (`process`)."""
 
     def __init__(self, args, process):
         super().__init__(args)

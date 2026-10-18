@@ -72,8 +72,9 @@ class Program:
     command line that a run is given (`program_options`, label to value,
     what "Set program options" of the editor holds), and what a module
     holds beside its processes: the `preamble` (Bash before the functions,
-    such as `load_debasher_module` lines), the environment variables of
-    the runs and the shared directories. The execution options of the
+    such as `load_debasher_module` lines), the environment variables
+    (`env_vars`, of which only `DEBASHER_MOD_DIR` is read) and the
+    shared directories. The execution options of the
     editor are given by name: scheduler, builtin_sched_cpus,
     builtin_sched_mem, dflt_nodes, dflt_throttle, rerun_outdated_procs,
     conda_support, docker_support. A resident program (`resident=True`)
@@ -126,6 +127,8 @@ class Program:
 
     @property
     def processes(self) -> list[Process]:
+        """The processes added to the program, in the order they were
+        added."""
         return [member.process for member in self._members]
 
     def add(
