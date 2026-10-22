@@ -107,8 +107,8 @@ const MENU_ACTION_LABEL: Record<ProcessMenuAction, string> = {
 };
 
 // Above this many indices, listing the family inline stops being
-// reasonable, past it, the family gets a "Pick index" row (backed by
-// ProcessTaskPicker, see fanoutIndexPicker) instead.
+// reasonable, past it, the family gets a single row in ProcessIOModal
+// that shows one index at a time instead.
 const MAX_FANOUT_INLINE = 10;
 
 // The run indicators sit at the bottom right, just left of the
@@ -160,10 +160,8 @@ function countIndexedOptions(base: string, resolvedValues: Record<string, string
 // as the task received (see countIndexedOptions). Splits each template into either its
 // expanded indexed rows (looked up in resolvedValues the same way as
 // any other option) when there are few enough, or a FanoutFamily for
-// ProcessIOModal to render as a "Pick index" row instead, which,
-// like an array/generator process's own stdout/scheduler-output/
-// options, falls back on ProcessTaskPicker's own first/last-N sampling
-// for a family with many indices.
+// ProcessIOModal to render as a single row that shows one index at a
+// time.
 function expandFanoutOptions(
   options: ProgramOption[],
   resolvedValues: Record<string, string>
@@ -500,15 +498,6 @@ export default function ProgramCanvas() {
     deliveryChannels: Map<string, OptionChannel>;
   } | null>(null);
 
-  // A ProcessIOModal fanout family's own "Pick index" button, reuses
-  // ProcessTaskPicker (as ProcessTaskPicker's own doc comment puts it,
-  // the same "could be huge" concern an array/generator process's own
-  // tasks already have). Resolving a picked index needs no network
-  // request: resolvedValues (already fetched for the whole process)
-  // already has every index's value.
-  const [fanoutIndexPicker, setFanoutIndexPicker] =
-    useState<FanoutFamily | null>(null);
-
   // The second-level "View" modal a ProcessIOModal option's path
   // button opens (a file's content, or a directory's listing), kept
   // separate from processCommandOutput so it stacks on top of
@@ -623,43 +612,6 @@ export default function ProgramCanvas() {
       families,
       deliveryChannels,
     };
-
-  }
-
-  // Adds the picked index's concrete option (e.g. "-outf" family +
-  // index 7 -> "-outf7") to the open ProcessIOModal's option list;
-  // the family's own "Pick index" row stays put so more indices can
-  // still be picked.
-  function handleFanoutIndexPickerConfirm(index: number) {
-
-    if (!fanoutIndexPicker) {
-      return;
-    }
-
-    const { option, baseLabel } = fanoutIndexPicker;
-    const label = `${baseLabel}${index}`;
-
-    setProcessIO(current => {
-
-      if (!current) {
-        return current;
-      }
-
-      const withoutThisIndex = current.options.filter(
-        o => !(o.label === label && o.id.startsWith(`${option.id}:`))
-      );
-
-      return {
-        ...current,
-        options: [
-          ...withoutThisIndex,
-          { ...option, id: `${option.id}:${index}`, label },
-        ],
-      };
-
-    });
-
-    setFanoutIndexPicker(null);
 
   }
 
@@ -1132,21 +1084,7 @@ export default function ProgramCanvas() {
           deliveryChannels={processIO.deliveryChannels}
           isViewPending={isPathViewPending}
           onViewPath={handleViewPath}
-          onPickFanoutIndex={setFanoutIndexPicker}
           onClose={() => setProcessIO(null)}
-        />
-      )}
-
-      {fanoutIndexPicker && (
-        <ProcessTaskPicker
-          processName={processIO?.processName ?? ""}
-          kindLabel={fanoutIndexPicker.option.label}
-          itemLabel="option"
-          taskIndices={Array.from({ length: fanoutIndexPicker.count }, (_, i) => i)}
-          isPending={false}
-          error={null}
-          onConfirm={handleFanoutIndexPickerConfirm}
-          onCancel={() => setFanoutIndexPicker(null)}
         />
       )}
 

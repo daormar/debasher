@@ -1,8 +1,8 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createOption } from "../models/option";
-import type { OptionChannel, ProgramOption } from "../models/option";
+import type { FanoutFamily, OptionChannel, ProgramOption } from "../models/option";
 import ProcessIOModal from "./ProcessIOModal";
 
 afterEach(cleanup);
@@ -23,7 +23,6 @@ function renderModal(options: ProgramOption[], deliveryChannels: Map<string, Opt
       deliveryChannels={deliveryChannels}
       isViewPending={false}
       onViewPath={vi.fn()}
-      onPickFanoutIndex={vi.fn()}
       onClose={vi.fn()}
     />,
   );
@@ -69,5 +68,39 @@ describe("ProcessIOModal", () => {
     for (const label of ["-data", "-outd"]) {
       expect(within(row(label)).queryByRole("button", { name: "View" })).not.toBeNull();
     }
+  });
+
+  it("shows a large family one index at a time, in its own row", () => {
+    const report = createOption("report", "-report-ith", { dataType: "dir" });
+    const family: FanoutFamily = { option: report, baseLabel: "-report", count: 42 };
+    const onViewPath = vi.fn();
+    render(
+      <ProcessIOModal
+        processName="aggregate"
+        options={[]}
+        resolvedValues={{ "-report0": "/out/r0", "-report1": "/out/r1", "-report41": "/out/r41" }}
+        families={[family]}
+        deliveryChannels={new Map<string, OptionChannel>([["report", "none"]])}
+        isViewPending={false}
+        onViewPath={onViewPath}
+        onClose={vi.fn()}
+      />,
+    );
+    const familyRow = row("-report-ith");
+    expect(within(familyRow).getByText("-report0: /out/r0")).not.toBeNull();
+
+    fireEvent.click(within(familyRow).getByRole("button", { name: "Next index" }));
+    expect(within(familyRow).getByText("-report1: /out/r1")).not.toBeNull();
+
+    fireEvent.change(within(familyRow).getByLabelText("-report-ith index"), { target: { value: "41" } });
+    expect(within(familyRow).getByText("-report41: /out/r41")).not.toBeNull();
+    expect(within(familyRow).getByRole("button", { name: "Next index" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(within(familyRow).getByRole("button", { name: "View" }));
+    expect(onViewPath).toHaveBeenCalledWith(expect.objectContaining({ id: "report:41", label: "-report41" }), "/out/r41");
+
+    fireEvent.change(within(familyRow).getByLabelText("-report-ith index"), { target: { value: "42" } });
+    expect(within(familyRow).getByText("(no such index)")).not.toBeNull();
+    expect(within(familyRow).queryByRole("button", { name: "View" })).toBeNull();
   });
 });

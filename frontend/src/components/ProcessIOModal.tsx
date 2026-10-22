@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { FanoutFamily, OptionChannel, ProgramOption } from "../models/option";
 
 interface Props {
@@ -14,8 +16,8 @@ interface Props {
   // shared-dir/fifo name rather than its real path) model value.
   resolvedValues: Record<string, string>;
   // Fanout/fanin option families too large to expand inline (see
-  // ProgramCanvas's expandFanoutOptions/MAX_FANOUT_INLINE) — shown as
-  // their own "Pick index" row instead.
+  // ProgramCanvas's expandFanoutOptions/MAX_FANOUT_INLINE), shown as
+  // their own row instead, which shows one index at a time.
   families: FanoutFamily[];
   // The option channel through which the data of each option gets to the
   // process (see deliveryChannel), by option id, as ProgramCanvas's
@@ -24,14 +26,13 @@ interface Props {
   deliveryChannels: Map<string, OptionChannel>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
-  onPickFanoutIndex: (family: FanoutFamily) => void;
   onClose: () => void;
 }
 
 // The option channel through which the data of a row arrives: that of its
 // option, or, for a row of a fanout family, whose id is "<family id>:<index>"
-// (see ProgramCanvas's expandFanoutOptions and
-// handleFanoutIndexPickerConfirm), that of its family.
+// (see ProgramCanvas's expandFanoutOptions and FanoutFamilyRow),
+// that of its family.
 function rowChannel(option: ProgramOption, deliveryChannels: Map<string, OptionChannel>): OptionChannel {
   return deliveryChannels.get(option.id)
     ?? deliveryChannels.get(option.id.replace(/:\d+$/, ""))
@@ -117,17 +118,40 @@ function OptionRow({
 
 }
 
-// A fanout/fanin family too large to expand inline — same layout as
-// OptionRow, but the value slot is a count plus a "Pick index" button
-// (opening a ProcessTaskPicker, see ProgramCanvas's fanoutIndexPicker)
-// instead of a resolved value.
+// A fanout/fanin family too large to expand inline: same layout as
+// OptionRow, with an index field (and buttons to step through the
+// indices) above the resolved value of the option of that index, so one
+// row shows the whole family one index at a time.
 function FanoutFamilyRow({
   family,
-  onPickFanoutIndex,
+  resolvedValues,
+  deliveryChannels,
+  isViewPending,
+  onViewPath,
 }: {
   family: FanoutFamily;
-  onPickFanoutIndex: (family: FanoutFamily) => void;
+  resolvedValues: Record<string, string>;
+  deliveryChannels: Map<string, OptionChannel>;
+  isViewPending: boolean;
+  onViewPath: (option: ProgramOption, resolvedValue: string) => void;
 }) {
+
+  const [draft, setDraft] = useState("0");
+
+  const draftIndex = Number(draft);
+  const isValidIndex = draft.trim() !== "" && Number.isInteger(draftIndex) &&
+    draftIndex >= 0 && draftIndex < family.count;
+
+  // The row of the index, with the id "<family id>:<index>" that rowChannel
+  // maps back to its family
+  const label = `${family.baseLabel}${draftIndex}`;
+  const option = { ...family.option, id: `${family.option.id}:${draftIndex}`, label };
+  const resolvedValue = isValidIndex ? resolvedValues[label] ?? "" : "";
+
+  function step(delta: number) {
+    const from = isValidIndex ? draftIndex : 0;
+    setDraft(String(Math.min(family.count - 1, Math.max(0, from + delta))));
+  }
 
   return (
 
@@ -137,15 +161,66 @@ function FanoutFamilyRow({
         {family.option.label}
       </label>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13 }}>
 
-        <span style={{ flex: 1, fontSize: 13, color: "#888" }}>
-          {family.count.toLocaleString()} options ("{family.baseLabel}0" to "{family.baseLabel}{family.count - 1}")
+        <span style={{ color: "#555" }}>
+          Index
         </span>
 
-        <button onClick={() => onPickFanoutIndex(family)}>
-          Pick index
+        <input
+          type="number"
+          min={0}
+          max={family.count - 1}
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+          aria-label={`${family.option.label} index`}
+          style={{ width: 72 }}
+        />
+
+        <button
+          onClick={() => step(-1)}
+          disabled={isValidIndex && draftIndex === 0}
+          aria-label="Previous index"
+        >
+          ‹
         </button>
+
+        <button
+          onClick={() => step(1)}
+          disabled={isValidIndex && draftIndex === family.count - 1}
+          aria-label="Next index"
+        >
+          ›
+        </button>
+
+        <span style={{ color: "#888" }}>
+          of 0 to {(family.count - 1).toLocaleString()}
+        </span>
+
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+
+        <span
+          style={{
+            flex: 1,
+            fontFamily: isValidIndex ? "ui-monospace, Consolas, monospace" : "inherit",
+            fontSize: 13,
+            overflowWrap: "anywhere",
+            color: resolvedValue ? "inherit" : "#888",
+          }}
+        >
+          {isValidIndex ? `${label}: ${resolvedValue || "(no value)"}` : "(no such index)"}
+        </span>
+
+        {optionHasPathButton(option, deliveryChannels) && resolvedValue && (
+          <button
+            onClick={() => onViewPath(option, resolvedValue)}
+            disabled={isViewPending}
+          >
+            View
+          </button>
+        )}
 
       </div>
 
@@ -169,7 +244,6 @@ function OptionSection({
   deliveryChannels,
   isViewPending,
   onViewPath,
-  onPickFanoutIndex,
 }: {
   title: string;
   options: ProgramOption[];
@@ -178,7 +252,6 @@ function OptionSection({
   deliveryChannels: Map<string, OptionChannel>;
   isViewPending: boolean;
   onViewPath: (option: ProgramOption, resolvedValue: string) => void;
-  onPickFanoutIndex: (family: FanoutFamily) => void;
 }) {
 
   if (options.length === 0 && families.length === 0) {
@@ -208,7 +281,10 @@ function OptionSection({
         <FanoutFamilyRow
           key={family.option.id}
           family={family}
-          onPickFanoutIndex={onPickFanoutIndex}
+          resolvedValues={resolvedValues}
+          deliveryChannels={deliveryChannels}
+          isViewPending={isViewPending}
+          onViewPath={onViewPath}
         />
       ))}
 
@@ -226,7 +302,6 @@ export default function ProcessIOModal({
   deliveryChannels,
   isViewPending,
   onViewPath,
-  onPickFanoutIndex,
   onClose,
 }: Props) {
 
@@ -252,8 +327,8 @@ export default function ProcessIOModal({
 
       <div
         style={{
-          width: "60%",
-          maxWidth: 480,
+          width: "80%",
+          maxWidth: 800,
           background: "#fff",
           borderRadius: 4,
           padding: 16,
@@ -296,7 +371,6 @@ export default function ProcessIOModal({
                 deliveryChannels={deliveryChannels}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
-                onPickFanoutIndex={onPickFanoutIndex}
               />
 
               <OptionSection
@@ -307,7 +381,6 @@ export default function ProcessIOModal({
                 deliveryChannels={deliveryChannels}
                 isViewPending={isViewPending}
                 onViewPath={onViewPath}
-                onPickFanoutIndex={onPickFanoutIndex}
               />
 
             </>

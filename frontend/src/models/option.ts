@@ -140,9 +140,8 @@ export function isFanoutOption(label: string): boolean {
 }
 
 // A fanout/fanin option family too large to list inline, so
-// ProcessIOModal shows a "Pick index" row for it (backed by
-// ProcessTaskPicker) instead — see ProgramCanvas's
-// expandFanoutOptions/MAX_FANOUT_INLINE.
+// ProcessIOModal shows it as a single row with one index at a time
+// instead, see ProgramCanvas's expandFanoutOptions/MAX_FANOUT_INLINE.
 export interface FanoutFamily {
   option: ProgramOption;
   baseLabel: string;

@@ -16,13 +16,6 @@ interface Props {
   error: string | null;
   onConfirm: (taskIndex: number) => void;
   onCancel: () => void;
-  // What each index names — "task" for an array/generator process's
-  // stdout/scheduler-output/options (the default), "option" for one
-  // index of a fanout/fanin option family (see ProgramCanvas's
-  // fanoutIndexPicker). Only changes wording ("Select <itemLabel>",
-  // "<N> <itemLabel>s available", "<ItemLabel> index") — the
-  // picking/sampling behavior is identical either way.
-  itemLabel?: string;
 }
 
 function sampleChips(taskIndices: number[]): number[] {
@@ -47,13 +40,10 @@ export default function ProcessTaskPicker({
   error,
   onConfirm,
   onCancel,
-  itemLabel = "task",
 }: Props) {
 
   const [draft, setDraft] =
     useState(taskIndices.length > 0 ? String(taskIndices[0]) : "");
-
-  const capitalizedItemLabel = itemLabel.charAt(0).toUpperCase() + itemLabel.slice(1);
 
   const chips = sampleChips(taskIndices);
   const isSampled = chips.length < taskIndices.length;
@@ -95,11 +85,11 @@ export default function ProcessTaskPicker({
       >
 
         <h3 style={{ margin: 0 }}>
-          Select {itemLabel}: {processName} ({kindLabel})
+          Select task: {processName} ({kindLabel})
         </h3>
 
         <p style={{ margin: 0, fontSize: 13, color: "#555" }}>
-          {taskIndices.length.toLocaleString()} {itemLabel}{taskIndices.length === 1 ? "" : "s"} available
+          {taskIndices.length.toLocaleString()} task{taskIndices.length === 1 ? "" : "s"} available
           {taskIndices.length > 0 &&
             ` (${taskIndices[0]}-${taskIndices[taskIndices.length - 1]})`}
           .
@@ -148,7 +138,7 @@ export default function ProcessTaskPicker({
         )}
 
         <label style={{ fontSize: 14 }}>
-          {capitalizedItemLabel} index
+          Task index
         </label>
 
         <input
