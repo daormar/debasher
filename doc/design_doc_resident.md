@@ -3542,7 +3542,7 @@ Design ideas from Future work move here once they are actually built.
   (`debasher::_actual_opt_is_ith_instance`). The topology stays fixed and is
   known before the run starts: every process and every connection is defined
   up front, and only how many there are comes from the option, unlike
-  "Dynamic process launching" in Future work. Nothing in the engine is
+  "A dynamic number of nodes" in Future work. Nothing in the engine is
   specific to it:
   - Ports. Each node gets the ports of the family from its options, and the
     `Supervisor` a heartbeat channel for each task, so that it watches as
@@ -3727,14 +3727,43 @@ Design ideas from Future work move here once they are actually built.
   `--conda-support`, `--docker-support` and `--dflt-nodes`, as `batch_sched`
   gives them their scheduler: the `opts` of a request are the options of the
   general program, pairs of an option and its value.
-- **Dynamic process launching**: the architecture described in this document
-  does not, from the outset, support dynamically launching processes. "General"
-  programs already sketch a mechanism for this (see
-  `data/programs/debasher_dynamic_fanout_stepdone.sh`), but it would need to be
-  studied how to combine it with checkpointing, and for Python processes the
-  mechanism could be entirely different. Noted here so it is not forgotten and
-  can be tackled later, so that `resident` programs have as much expressiveness
-  as possible.
+- **A dynamic number of nodes.** The topology of a resident program is fixed
+  before the run starts: every node and every channel is defined up front,
+  and only how many there are comes from the command line (see "Fan-out and
+  fan-in sized from the command line" in "Extensions"). A node created
+  during the run, one per open conversation, per issue or per connected
+  user, with a state, a checkpoint and a life of its own, the `spawn` of
+  Erlang, is not supported, and nothing in the engine launches a process
+  during a run: combining such nodes with the snapshot rounds and the
+  `Supervisor` (channels, checkpoints and ports per such node, created and
+  retired while a round may be open) would need to be studied, and for
+  Python nodes the mechanism could be entirely different. Two forms that
+  need nothing new answer most of the cases, and are what a program of
+  agents should use first:
+  - one node whose node state is a dictionary indexed by a key that travels
+    in each message (the conversation), so that the node serves many
+    independent conversations: `FBPProcess` allows it, since the node state
+    is whatever `capture_node_state()` returns, `restore_node_state()`
+    takes it back and the replay brings it up to date. The conversations
+    are served one at a time, the checkpoint grows with the open ones, and
+    a crash of the node takes every conversation down until the
+    `Supervisor` relaunches it. The runtime library could offer it as a
+    subclass that extracts the key, keeps the dictionary and hands
+    `process_data` the state of that key alone, under the same determinism
+    obligation; a checkpoint per key would then be an optimization inside
+    that subclass;
+  - several such nodes, as the tasks of an array process, behind a node
+    that sends each message to the task chosen by a stable hash of its key
+    modulo K (`zlib.crc32`, not Python's `hash`, which is salted per
+    process), so that a conversation always reaches the same task, in a
+    replay too: parallelism across K conversations and a crash bounded to
+    the conversations of one task, with K fixed when the program starts
+    (see "Array processes" and "Fan-out and fan-in sized from the command
+    line" in "Extensions").
+
+  What neither gives is a node per conversation, a process of its own with
+  its own checkpoint and environment, whose crash touches nobody else. It
+  stays here until a program asks for it.
 - **Global (coordinated) rollback, as a fallback to localized recovery**: noted
   here, not designed and not built. Localized recovery (see "Recovery from a
   node failure") remains the policy for the ordinary crash of a node. A
