@@ -3357,3 +3357,50 @@ What is known to be missing from the design, or left open by it:
   the other, and the Slurm scheduler refuses FIFOs in any case. What is
   lost: the streaming between the producer and the array, which is not
   launched until the producer has ended, where the pool of workers streams.
+- **Any option of the upstream task.** A task of an array process that reads
+  the task of the same index of another array, with
+  `define_opt_from_proc_task_out`, can take from it only an output option.
+  What describes that task, such as the sample and the lane that its options
+  hold when the array was built from a sample sheet, has to be read again
+  from the sheet, repeating the rule by which the producer numbered its
+  tasks, parsed from a path, or declared as an output option that it is not.
+  A sister function that reads any option of a task of the producer, given
+  its index, would resolve it while the run is prepared, as the output
+  descriptors are resolved (see "Connections between processes"), from the
+  option list of that task, and add no dependency of its own: a value that
+  is not produced orders nothing, and one that is already makes the
+  dependency that any such value makes (see "Inferring dependencies from
+  options"). In the web UI it is an edge from an input option to an input
+  option, which the editor does not draw today.
+- **Dependencies on the tasks that a task reads.** When a task of an array
+  reads a task of another array that is not its counterpart, such as a task
+  per sample reading the tasks of one lane each of that sample, the merge of
+  the dependencies gives `afterok` on the whole producer (see "Inferring
+  dependencies from options"), and the first sample waits for the last
+  lane. The preparation knows which tasks of the producer each task
+  reads, from the per-task connections of its option list, so the inference
+  could keep that set of indices per task instead of degrading, and the
+  built-in scheduler, which judges an `aftercorr` dependency task by task by
+  asking whether the counterpart has finished (see "The built-in
+  scheduler"), would ask the same of every task of the set. Under the Slurm
+  scheduler the set would still give `afterok`: Slurm relates the tasks of
+  two arrays only one to one, and a dependency on single tasks of an array
+  is one of the job, so holding it would split the dependent array into a
+  job per task; the price of `afterok` there is waiting, and the design of
+  submitting every job at once with its dependencies, with no process of
+  DeBasher polling the queue, is worth more. On top of the sets, the
+  matching could be declared by a key that each task of the producer gives
+  (the sample, the lane) and the consumer names, in place of indices
+  computed from the same sheet twice; a key with no partner would then be
+  refused while the run is prepared, as an option with two values is.
+- **A third kind of environment.** Apptainer (Singularity) beside Conda and
+  Docker (see "Conda and Docker environments"), since it is the norm on
+  academic clusters, where Docker is seldom allowed.
+- **More schedulers.** Batch services (AWS Batch, Google Batch, the jobs of
+  Kubernetes) behind the scheduler abstraction (see "The scheduler
+  abstraction"), each a library beside the built-in and Slurm ones.
+- **Helpers for sample sheets.** Functions, in the library of the engine
+  and for Python tasks files, for what the `_define_opts` method of an array
+  does with a sample sheet (split it, group by a column, take the product
+  of two columns, filter), so that these are a call rather than an `awk`
+  written anew in every module.
