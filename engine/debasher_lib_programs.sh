@@ -333,12 +333,6 @@ debasher::get_prg_graphs_dir_given_basedir()
 }
 
 ########
-debasher::_get_prg_graphs_dir()
-{
-    debasher::get_prg_graphs_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
-}
-
-########
 debasher::_processname_contains_invalid_characters()
 {
     local processname="$1"

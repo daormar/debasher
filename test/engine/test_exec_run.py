@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from resident_run import DEBASHER_EXEC, REPO_ROOT, real_run
+from resident_run import DEBASHER_EXEC, REPO_ROOT, real_run, wait_until
 
 pytestmark = real_run
 
@@ -729,6 +729,63 @@ def test_validate_launches_nothing_and_leaves_a_finished_run_as_it_was(tmp_path)
     assert "PROCESS: hello_world ; STATUS: FINISHED" in result.stderr
     assert (execdir / "hello_world.finished").stat().st_mtime_ns == before
     assert (execdir / "hello_world.stdout").read_text() == "first\n"
+
+
+# The files with which a run describes itself to its tasks and to the tools
+RUN_FILES = [
+    ".sched_opts/sched_opts_file_writer",
+    ".sched_opts/sched_opts_file_reader",
+    "program.opts",
+    "program.fifos",
+    "program.procspec",
+    "command_line.sh",
+    ".exec_context.sh",
+    "__graphs__/dependency_graph.dot",
+]
+
+
+def read_run_files(outdir):
+    return {name: (outdir / name).read_text() for name in RUN_FILES}
+
+
+def test_validate_leaves_the_files_of_a_finished_run_as_they_were(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "first")
+    assert result.returncode == 0, result.stderr
+    before = read_run_files(outdir)
+    assert "first" in before[".sched_opts/sched_opts_file_writer"]
+
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "second", "--validate")
+
+    assert result.returncode == 0, result.stderr
+    assert "second" in result.stderr
+    assert read_run_files(outdir) == before
+    assert not list(outdir.glob(".prep*"))
+
+
+DEBASHER_LAUNCH_PROCESS = REPO_ROOT / "libexec" / "debasher_launch_process"
+
+
+def test_a_preparation_that_fails_leaves_a_finished_run_that_can_be_launched_again(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "first")
+    assert result.returncode == 0, result.stderr
+    before = read_run_files(outdir)
+
+    # Without -s the options of file_writer cannot be built
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir))
+
+    assert result.returncode != 0
+    assert "option not found for process file_writer" in result.stderr
+    assert read_run_files(outdir) == before
+    assert not list(outdir.glob(".prep*"))
+
+    # A task of the earlier run still finds its options
+    stdout = outdir / "__exec__" / "file_reader" / "file_reader.stdout"
+    stdout.unlink()
+    launch = run_tool(DEBASHER_LAUNCH_PROCESS, "-d", str(outdir), "-p", "file_reader")
+    assert launch.returncode == 0, launch.stdout + launch.stderr
+    assert wait_until(lambda: stdout.exists() and stdout.read_text() == "first\n")
 
 
 def test_validate_refuses_a_process_above_the_limits_of_the_scheduler(tmp_path):

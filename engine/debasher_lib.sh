@@ -361,6 +361,9 @@ DEBASHER_EXEC_DIRNAME="__exec__"
 DEBASHER_GRAPHS_DIRNAME="__graphs__"
 DEBASHER_FIFOS_DIRNAME="__fifos__"
 DEBASHER_CONDA_DIRNAME=".conda"
+# The start of the name of the directory where debasher_exec prepares a
+# run, within the output directory, before moving what it wrote there
+DEBASHER_PREP_DIRNAME_PREFIX=".prep"
 
 # LOGGING CONSTANTS
 DEBASHER_LOG_ERROR_MSG_START="Error:"
@@ -430,7 +433,8 @@ declare -A DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED
 declare DEBASHER_PROGRAM_OUTDIR
 
 # Declare variable that, when set, replaces the .sched_opts directory of
-# the output directory (see debasher::_get_sched_opts_dir)
+# the output directory, as debasher_exec does while it prepares a run (see
+# debasher::_get_sched_opts_dir)
 declare DEBASHER_SCHED_OPTS_DIR
 
 # Declare variable that, when set, replaces the .conda directory of the

@@ -366,13 +366,32 @@ relative to the output directory of the run.
   scheduler. A program that passes it is not refused for its options or for what
   a single process asks for; a first round of the built-in scheduler that can
   choose no task, or, with `--builtinsched-oneshot`, that cannot launch every
-  process at once, is still refused when the run starts. The validation leaves
-  the process options of the output directory as they were, and the contents of
-  its shared directories too: it creates no shared subdirectory and removes
-  nothing (see "Shared subdirectories"). It never prepares a process either, so
-  it creates no task subdirectory, removes nothing from a process output
-  directory, and does not find a task subdirectory whose subpath goes through a
-  symbolic link (see "Task subdirectories").
+  process at once, is still refused when the run starts. Its preparation
+  directory is a temporary one, outside the output directory, and is never moved
+  into it: the validation leaves the files with which an earlier run in the
+  output directory describes itself as they were (see "Architecture"), and the
+  contents of the shared directories of the output directory too: it creates no
+  shared subdirectory and removes nothing (see "Shared subdirectories"). It
+  never prepares a process either, so it creates no task subdirectory, removes
+  nothing from a process output directory, and does not find a task subdirectory
+  whose subpath goes through a symbolic link (see "Task subdirectories").
+- **option check**: `debasher_exec --check-proc-opts`, which loads the program,
+  builds and checks the options of every task as a run does, and prints them.
+  It takes no lock, refuses neither a process of an earlier run still in
+  progress nor a process whose interpreter is missing, and goes no further.
+  Its preparation directory is a temporary one, outside the output directory,
+  which receives only the option lists of the tasks (see "Architecture").
+- **preparation directory**: the directory where `debasher_exec` writes, while
+  it prepares a run, the files with which the run describes itself to its
+  tasks and to the tools: `.sched_opts`, `program.opts`, `program.opts_exh`,
+  `program.fifos`, the final process specification, `__graphs__`, the command
+  line file and the execution context. For a run it is a `.prep.<suffix>`
+  directory of the output directory, whose files replace those of the earlier
+  run in the last stage of the preparation (see "Architecture"); for any use
+  of `debasher_exec` that launches nothing, a validation or an option check
+  among them, it is a temporary directory elsewhere, and nothing is moved out
+  of it. It is removed once its files are moved, or when `debasher_exec`
+  exits before that.
 - **scheduler**: what launches the tasks of a process once its dependencies
   hold: the built-in scheduler or the Slurm scheduler.
 - **built-in scheduler**: the scheduler that runs tasks on the local machine
@@ -486,7 +505,9 @@ fails, before any process is launched:
    Conda environments and the Docker images of the processes (see "Conda and
    Docker environments").
 8. It marks the processes to rerun (see "Reruns").
-9. It writes the command line file and the execution context.
+9. It writes the command line file and the execution context, and moves every
+   file that it wrote since stage 5 from the preparation directory into the
+   output directory, replacing those of the earlier run.
 10. It hands the processes to the scheduler. Before a process is launched, its
     exec directory is prepared, its FIFOs and its task subdirectories are
     created, and, when its process output directory is subdivided, what no
@@ -495,8 +516,31 @@ fails, before any process is launched:
     once the dependencies of the task hold (see "Scheduling" and "Running a
     process").
 
+Until stage 9, the files with which the run describes itself, the option
+lists of stage 5 among them, go into the preparation directory, not into the
+output directory. A preparation that stops at any stage before that leaves
+those of the earlier run in the output directory as they were, so that a task
+of that run launched again with `debasher_launch_process` still finds its
+option list, and the tools still read that run. What goes straight into the
+output directory stays even if a later stage fails: the lock, the empty
+directories of the engine, and, from stage 7, the shared subdirectories that
+it creates, what it removes from a subdivided shared directory and the logs of
+the Conda environments.
+
+Two other uses of `debasher_exec` go through some of these stages and launch
+nothing. A validation (`--validate`) goes through stages 1 to 8 and writes the
+files of stage 9, but into a temporary preparation directory that it never
+moves, and with the built-in scheduler it checks the resources of every process
+against the budget of the scheduler. An option check (`--check-proc-opts`) goes
+through stage 1 without taking the lock, so that it can check the options while
+a run is in progress, or refusing a moved output directory, through stages 2 and
+3 without the check of the interpreters, and through stage 5, writing the option
+lists into a temporary preparation directory too; it prints the options and ends
+there.
+
 The diagram below shows the files that each stage leaves in the output
-directory, and what the process script of a process takes from them.
+directory once a run moves them there, and what the process script of a
+process takes from them.
 
 ```
 debasher_exec, one shell                output directory
@@ -571,19 +615,19 @@ The tools that follow or stop a run, such as `debasher_status`, `debasher_stop`
 and `debasher_stats`, therefore read it from the output directory alone. They
 take the processes of the run from `program.procspec` and its scheduler from the
 command line file, and the state, ids and times of each process from its exec
-directory. `debasher_exec` writes those two files whole to a temporary file that
-it then renames, so that a tool that reads them while a run or a validation
-starts finds either the old file or the new one, never one half written (a final
-process specification half written would give a run with no processes). The
-tools neither load a module nor need the program file, so a module edited or
-removed after the run does not change what they report (see "Tools that read a
-run"). Running the processes of a run is different: the option lists, the
-process scripts and the execution context hold absolute paths into the output
-directory where the run was prepared. A moved output directory can be read
-anywhere, but `debasher_exec` and `debasher_launch_process` refuse to run
-processes in it. They compare the directory with the one that the command line
-file records by device and inode, so that a path through a symbolic link or `..`
-is not taken for a move.
+directory. `debasher_exec` writes those two files whole in the preparation
+directory and then renames them into the output directory, so that a tool that
+reads them while a run starts finds either the old file or the new one, never
+one half written (a final process specification half written would give a run
+with no processes). The tools neither load a module nor need the program file,
+so a module edited or removed after the run does not change what they report
+(see "Tools that read a run"). Running the processes of a run is different: the
+option lists, the process scripts and the execution context hold absolute paths
+into the output directory where the run was prepared. A moved output directory
+can be read anywhere, but `debasher_exec` and `debasher_launch_process` refuse
+to run processes in it. They compare the directory with the one that the command
+line file records by device and inode, so that a path through a symbolic link or
+`..` is not taken for a move.
 
 # Modules and programs
 
@@ -2412,6 +2456,7 @@ fixed:
 
 | Path | Written by | Holds |
 |---|---|---|
+| `.prep.<suffix>/` | `debasher_exec`, while it prepares a run | the preparation directory, removed once its files are moved, or when `debasher_exec` exits before that |
 | `lock` | `debasher_exec`, when it starts | the lock of the directory, the process id of the `debasher_exec` that holds it and, on a second line, `validate` when it only validates the program |
 | `command_line.sh` | `debasher_exec` | the directory it ran from and its command line, with the program file resolved and the scheduler recorded |
 | `.exec_context.sh` | `debasher_exec` | the execution context |
@@ -3062,7 +3107,8 @@ leaves, by design, to the program or to whoever runs it.
    loaded, the options built, the dependencies inferred or the specifications
    checked, or a process whose interpreter is missing (see "Processes in other
    languages, and aliases"), stops `debasher_exec` before any process is
-   launched (see "Architecture").
+   launched, and leaves the files with which an earlier run in the output
+   directory describes itself as they were (see "Architecture").
 2. Only one `debasher_exec` prepares or runs a program in an output directory
    at a time, and it refuses to start while a process of the program is still
    running from an earlier run in that directory (see "Architecture").

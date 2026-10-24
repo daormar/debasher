@@ -213,7 +213,7 @@ read_pars()
             # and a script that still asks for the dry run of --debug would
             # launch the program instead
             "--debug") echo "Error! --debug was renamed --validate" >&2
-                       exit 1
+                       return 1
                        ;;
             "--wait") wait=1
                        ;;
@@ -229,16 +229,16 @@ check_pars()
 {
     if [ ${pfile_given} -eq 0 ]; then
         echo "Error! --pfile parameter not given!" >&2
-        exit 1
+        return 1
     else
         # Resolve the program file to an absolute path (it may be found
         # through DEBASHER_MOD_DIR)
-        pfile=$(debasher::_resolve_pfile "${pfile}") || exit 1
+        pfile=$(debasher::_resolve_pfile "${pfile}") || return 1
     fi
 
     if [ ${outdir_given} -eq 0 ]; then
         echo "Error! --outdir parameter not given!" >&2
-        exit 1
+        return 1
     else
         if [ -d "${outd}" ]; then
             echo "Warning! output directory does exist" >&2
@@ -247,17 +247,17 @@ check_pars()
 
     if [ ${show_cmdline_opts_given} -eq 1 -a ${check_proc_opts_given} -eq 1 ]; then
         echo "Error! --show-cmdline-opts and --check-proc-opts options cannot be given simultaneously"
-        exit 1
+        return 1
     fi
 
     if [ ${show_cmdline_opts_given} -eq 1 -a ${validate} -eq 1 ]; then
         echo "Error! --show-cmdline-opts and --validate options cannot be given simultaneously"
-        exit 1
+        return 1
     fi
 
     if [ ${check_proc_opts_given} -eq 1 -a ${validate} -eq 1 ]; then
         echo "Error! --check-proc-opts and --validate options cannot be given simultaneously"
-        exit 1
+        return 1
     fi
 }
 
@@ -272,7 +272,7 @@ load_module()
     local pfile=$1
 
     # Load debasher module containing the program to be executed
-    debasher::load_debasher_module "${pfile}" || exit 1
+    debasher::load_debasher_module "${pfile}" || return 1
 
     echo "" >&2
 }
@@ -282,9 +282,9 @@ write_exec_context()
 {
     echo "# Writing the context of the process scripts..." >&2
 
-    local outd=$1
+    local dirname=$1
 
-    debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${outd}")" || { echo "Error: the context of the process scripts could not be written" >&2; return 1; }
+    debasher::_write_exec_context "$(debasher::_get_exec_context_fname "${dirname}")" || { echo "Error: the context of the process scripts could not be written" >&2; return 1; }
 
     echo "" >&2
 }
@@ -322,7 +322,7 @@ ensure_program_not_being_executed()
 {
     if there_are_in_progress_processes "${outd}"; then
         echo "Error: this program has processes being executed. Please use debasher_status or debasher_stop tools to interact with the program. The execution of debasher_exec will be aborted" >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -333,9 +333,9 @@ initialize_procspec()
 
     local pfile=$1
 
-    debasher::_resolve_program_type "${pfile}" || exit 1
+    debasher::_resolve_program_type "${pfile}" || return 1
 
-    debasher::_exec_program_func_for_module "${pfile}" || exit 1
+    debasher::_exec_program_func_for_module "${pfile}" || return 1
 
     echo "Initialization complete" >&2
 
@@ -403,9 +403,9 @@ gen_final_procspec()
 
     local command_line=$1
 
-    debasher::_gen_final_procspec "${command_line}" || exit 1
+    debasher::_gen_final_procspec "${command_line}" || return 1
 
-    debasher::_print_final_procspec "${command_line}" || exit 1
+    debasher::_print_final_procspec "${command_line}" || return 1
 
     echo "Generation complete" >&2
 
@@ -509,8 +509,8 @@ check_oneshot_precondition()
 
     local processname
     for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
-        check_process_oneshot_deps "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
-        check_process_oneshot_throttle "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || exit 1
+        check_process_oneshot_deps "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || return 1
+        check_process_oneshot_throttle "${processname}" "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}" || return 1
     done
 
     echo "Check complete" >&2
@@ -623,13 +623,13 @@ show_cmdline_opts()
                 fi
             fi
         fi
-        ${opts_funcname} || exit 1
+        ${opts_funcname} || return 1
         if [ -n "${identify_cmdline_opt_funcname}" ]; then
-            ${identify_cmdline_opt_funcname} || exit 1
+            ${identify_cmdline_opt_funcname} || return 1
         fi
         local task_shaping_opts_funcname=$(debasher::_get_explain_task_shaping_opts_funcname "${processname}")
         if [ "${task_shaping_opts_funcname}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-            ${task_shaping_opts_funcname} || exit 1
+            ${task_shaping_opts_funcname} || return 1
         fi
     done
 
@@ -732,10 +732,6 @@ check_process_opts()
     local program_opts_exh_file=$4
     local program_fifos_file=$5
 
-    # Clear scheduler options directory
-    local sched_opts_dir=$(debasher::_get_sched_opts_dir)
-    "${RM}" -f "${sched_opts_dir}"/*
-
     # Initialize option information
     init_option_info "${cmdline}" || return 1
 
@@ -789,24 +785,24 @@ register_all_rerun_processes()
     local rerun_outdated_processes=$4
 
     if [ -f "${old_program_opts_file}" ]; then
-        debasher::_define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || exit 1
+        debasher::_define_rerun_processes_due_to_input_changes "${program_opts_file}" "${old_program_opts_file}" || return 1
     fi
 
-    debasher::_define_forced_rerun_processes || exit 1
+    debasher::_define_forced_rerun_processes || return 1
 
     if [ ${rerun_outdated_processes} -eq 1 ]; then
-        debasher::_define_rerun_processes_due_to_code_update "${dirname}" || exit 1
+        debasher::_define_rerun_processes_due_to_code_update "${dirname}" || return 1
     fi
 
     if debasher::_program_uses_fifos ; then
-        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${dirname}" || exit 1
+        debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${dirname}" || return 1
     fi
 
-    debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || exit 1
+    debasher::_define_rerun_processes_due_to_resident_resume "${dirname}" || return 1
 
-    debasher::_define_rerun_processes_due_to_unfinished_producers "${dirname}" || exit 1
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${dirname}" || return 1
 
-    debasher::_propagate_rerun_processes "${dirname}" || exit 1
+    debasher::_propagate_rerun_processes "${dirname}" || return 1
 
     echo "Registering complete" >&2
 
@@ -846,7 +842,21 @@ prepare_lock()
     local file=$2
 
     exec {fd_ref}>>"$file" || return 1   # Bash assigns free fd, stores it in fd_ref
-    trap "release_lock $fd_ref" EXIT
+    trap clean_up_on_exit EXIT
+}
+
+########
+# Releases the lock, when debasher_exec took it, and removes the
+# preparation directory, when there is one.
+clean_up_on_exit()
+{
+    if [ -n "${LOCKFD}" ]; then
+        release_lock "${LOCKFD}"
+    fi
+
+    if [ -n "${prepd}" ]; then
+        "${RM}" -rf "${prepd}"
+    fi
 }
 
 ########
@@ -904,14 +914,58 @@ set_debasher_output_dir()
 }
 
 ########
-# debasher_exec --check-proc-opts computes the options of every task as a
-# run would, but writes them into a temporary directory removed on exit
-# instead of the .sched_opts directory of the output directory, which the
-# tasks of a run in progress read.
-use_temporary_sched_opts_dir()
+# What debasher_exec writes to describe a run (the option lists of the
+# tasks, the summaries of the options and of the fifos, the final process
+# specification, the graphs, the command line file and the execution
+# context) goes first into the preparation directory, prepd. A run moves
+# it into the output directory once every check has passed (see
+# publish_prep_files), so that a preparation that fails leaves the files
+# of the earlier run as they were, which its tasks, relaunched with
+# debasher_launch_process, and the tools that read the run go on using.
+# Showing or checking the options and validating the program never move
+# anything: their preparation directory is a temporary one, outside the
+# output directory. The directory is removed when debasher_exec exits.
+create_prep_dir()
 {
-    DEBASHER_SCHED_OPTS_DIR=$("${MKTEMP}" -d) || { echo "Error! cannot create temporary directory" >&2; return 1; }
-    trap '"${RM}" -rf "${DEBASHER_SCHED_OPTS_DIR}"' EXIT
+    if [ "${show_cmdline_opts_given}" -eq 0 ] && [ "${check_proc_opts_given}" -eq 0 ] && [ "${validate}" -eq 0 ]; then
+        # Within the output directory, so that each move is a rename
+        prepd=$("${MKTEMP}" -d "${outd}/${DEBASHER_PREP_DIRNAME_PREFIX}.XXXXXX") || { echo "Error! cannot create preparation directory" >&2; return 1; }
+    else
+        prepd=$("${MKTEMP}" -d) || { echo "Error! cannot create temporary directory" >&2; return 1; }
+    fi
+    trap clean_up_on_exit EXIT
+
+    DEBASHER_SCHED_OPTS_DIR="${prepd}/${DEBASHER_SCHED_OPTS_DIRNAME}"
+}
+
+########
+# Moves what the preparation directory holds into the output directory,
+# replacing what the earlier run left there. Each file is renamed, so that
+# debasher_status, which reads the final process specification and the
+# command line file without the lock, finds either the old file or the
+# new one, never one half written.
+publish_prep_files()
+{
+    local prepd=$1
+    local outd=$2
+
+    local prg_pref="${DEBASHER_PRG_PREF}"
+    local entry
+    for entry in "${DEBASHER_SCHED_OPTS_DIRNAME}" "${DEBASHER_GRAPHS_DIRNAME}" \
+                 "${prg_pref}.${DEBASHER_PRGOPTS_FEXT}" "${prg_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}" \
+                 "${prg_pref}.${DEBASHER_FIFOS_FEXT}" "${prg_pref}.${DEBASHER_PROCSPEC_FEXT}" \
+                 "${DEBASHER_EXEC_CONTEXT_BASENAME}" "${DEBASHER_PRG_COMMAND_LINE_BASENAME}"; do
+        # The exhaustive option list is only written with --gen-proc-graph
+        [ -e "${prepd}/${entry}" ] || continue
+
+        # mv would move a directory into the one of the earlier run
+        if [ -d "${prepd}/${entry}" ]; then
+            "${RM}" -rf "${outd:?}/${entry}" || return 1
+        fi
+        "${MV}" -f "${prepd}/${entry}" "${outd}/${entry}" || return 1
+    done
+
+    "${RM}" -rf "${prepd}"
 }
 
 ########
@@ -925,7 +979,7 @@ create_basic_dirs()
     local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
-    local graphsdir=$(debasher::_get_prg_graphs_dir)
+    local graphsdir=$(debasher::get_prg_graphs_dir_given_basedir "${prepd}")
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
     local fifodir=$(debasher::_get_absolute_fifodir)
@@ -979,19 +1033,16 @@ check_task_subdirs()
 ########
 print_command_line()
 {
-    local outd=$1
+    local dirname=$1
     local command_line=$2
 
-    local file="${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    local file="${dirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Written whole and then renamed, as the process specification, since
-    # debasher_status reads the scheduler from it
     {
         printf 'cd %q\n' "${PWD}"
         debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${command_line}"
         echo ""
-    } > "${file}.tmp" || return 1
-    "${MV}" -f "${file}.tmp" "${file}"
+    } > "${file}"
 }
 
 ########
@@ -1310,17 +1361,6 @@ print_post_exec_nowait_help()
 }
 
 ########
-restore_old_process_options()
-{
-    local old_program_opts_file=$1
-    local program_opts_file=$2
-
-    if [ -f "${old_program_opts_file}" ]; then
-        "${CP}" "${old_program_opts_file}" "${program_opts_file}"
-    fi
-}
-
-########
 store_old_process_options()
 {
     local old_program_opts_file=$1
@@ -1362,9 +1402,7 @@ if [ ${show_cmdline_opts_given} -eq 0 ] && [ ${check_proc_opts_given} -eq 0 ]; t
     debasher::_check_outdir_not_moved "${outd}" || exit 1
 fi
 
-if [ ${check_proc_opts_given} -eq 1 ]; then
-    use_temporary_sched_opts_dir || exit 1
-fi
+create_prep_dir || exit 1
 
 create_basic_dirs || exit 1
 
@@ -1400,15 +1438,17 @@ fi
 debasher::_check_process_interpreters || exit 1
 
 # Check if there are running processes and abort execution if true
-ensure_program_not_being_executed
+ensure_program_not_being_executed || exit 1
 
-# Define basic file variables
-prg_file_pref="${outd}/${DEBASHER_PRG_PREF}"
+# Define basic file variables: what describes the run is written into the
+# preparation directory, and the options of the earlier run are read from
+# the output directory
+prg_file_pref="${prepd}/${DEBASHER_PRG_PREF}"
 program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
-old_program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_OLD_FEXT}"
+old_program_opts_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PRGOPTS_OLD_FEXT}"
 program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
 program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
-prg_graphs_dir=$(debasher::_get_prg_graphs_dir)
+prg_graphs_dir=$(debasher::get_prg_graphs_dir_given_basedir "${prepd}")
 procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 
@@ -1420,10 +1460,7 @@ ensure_scheduler_supports_fifos || exit 1
 ensure_srun_for_slurm_seq_processes || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
-# Written whole and then renamed, so that debasher_status, which reads the
-# processes of the program from it, never finds it half written
-gen_final_procspec "${command_line}" > "${procspec_file}.tmp" || exit 1
-"${MV}" -f "${procspec_file}.tmp" "${procspec_file}" || exit 1
+gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
 
 topologically_sort_processes || exit 1
 
@@ -1451,15 +1488,19 @@ if [ ${docker_support_given} -eq 1 ]; then
 fi
 
 # Register all processes to rerun
-register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opts_file}" "${rerun_outdated_processes_given}"
+register_all_rerun_processes "${outd}" "${program_opts_file}" "${old_program_opts_file}" "${rerun_outdated_processes_given}" || exit 1
 
 print_rerun_processes || exit 1
 
-print_command_line "${outd}" "${command_line}" || exit 1
+print_command_line "${prepd}" "${command_line}" || exit 1
+
+# The tasks read their options from the .sched_opts directory of the output
+# directory, where a run moves them, and not from the preparation directory
+unset DEBASHER_SCHED_OPTS_DIR
 
 # Write the context that the script of every process starts with, now
 # that the program is fully defined and before anything is launched
-write_exec_context "${outd}" || exit 1
+write_exec_context "${prepd}" || exit 1
 
 # Launch processes
 if [ ${validate} -eq 1 ]; then
@@ -1474,9 +1515,6 @@ if [ ${validate} -eq 1 ]; then
         debasher_builtin_sched::check_program_comp_res "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || comp_res_ok=0
     fi
 
-    # Restore old process options (if they exist)
-    restore_old_process_options "${old_program_opts_file}" "${program_opts_file}"
-
     [ ${comp_res_ok} -eq 1 ] || exit 1
 else
     sched=$(debasher::_get_scheduler)
@@ -1484,6 +1522,12 @@ else
         echo "Error! --builtinsched-oneshot can only be used with the built-in scheduler" >&2
         exit 1
     fi
+
+    # The preparation has passed every check: what describes the run
+    # replaces what the earlier run left in the output directory
+    publish_prep_files "${prepd}" "${outd}" || { echo "Error! cannot move the files of the run into the output directory" >&2; exit 1; }
+    procspec_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PROCSPEC_FEXT}"
+    program_opts_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PRGOPTS_FEXT}"
     if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then

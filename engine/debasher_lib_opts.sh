@@ -2292,8 +2292,9 @@ debasher::_read_value_from_desc()
 ########
 # The directory with the options of every task of the processes: the
 # .sched_opts directory of the output directory, or
-# DEBASHER_SCHED_OPTS_DIR when set, as debasher_exec --check-proc-opts
-# does so as to leave the output directory of a run untouched.
+# DEBASHER_SCHED_OPTS_DIR when set, as debasher_exec does while it
+# prepares a run, so as to leave the options of the earlier run untouched
+# until the preparation succeeds.
 debasher::_get_sched_opts_dir()
 {
     if [ -n "${DEBASHER_SCHED_OPTS_DIR}" ]; then
