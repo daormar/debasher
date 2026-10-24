@@ -102,7 +102,7 @@ debasher::_show_proc_opts()
 
 ########
 # processname's short method name for method suffix $2 (an entry of
-# DEBASHER_PROCESS_METHODS, e.g. "_reset_outfiles") -- just that suffix
+# DEBASHER_PROCESS_METHODS, e.g. "_reset_outfiles"): just that suffix
 # with its leading DEBASHER_PROCESS_METHOD_SEP stripped, except "exec"
 # itself, whose suffix is the empty string.
 debasher::_proc_method_label()
@@ -125,7 +125,7 @@ debasher::_show_proc_methods()
 
     local i
     for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
-        if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
+        if debasher::_process_method_exists "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}"; then
             local proc_func=$(debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}")
             echo "- \`${proc_func}\`"
         fi
@@ -133,7 +133,7 @@ debasher::_show_proc_methods()
 
     if [ "${show_code}" = 1 ]; then
         for i in "${!DEBASHER_PROCESS_METHODS[@]}"; do
-            if debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}" >/dev/null; then
+            if debasher::_process_method_exists "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}"; then
                 local proc_func=$(debasher::_get_process_funcname "${processname}" "${DEBASHER_PROCESS_METHODS[$i]}")
                 echo ""
                 echo "#### $(debasher::_proc_method_label "${DEBASHER_PROCESS_METHODS[$i]}")"
@@ -184,7 +184,7 @@ debasher::_show_proc_opt_handler()
     local func_found=0
     for method in $DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS $DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPT_DEPS \
                   $DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE $DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS; do
-        if debasher::_search_process_func "${processname}" "${method}" >/dev/null; then
+        if debasher::_process_method_exists "${processname}" "${method}"; then
             local funcname=$(debasher::_search_process_func "${processname}" "${method}")
             echo '```'bash
             declare -f "${funcname}"
@@ -253,7 +253,7 @@ debasher::_show_proc_specs()
 # debasher::_collect_func_deps helper: blanks out string-literal text
 # that bash's own grammar guarantees can never contain a command
 # invocation, so a later plain word-grep over the result doesn't
-# mistake prose (or another language's syntax) for a call -- e.g.
+# mistake prose (or another language's syntax) for a call, e.g.
 # debasher_dynamic_fanout.sh's aggregate(), whose `echo "Warning: no
 # count files found..."` would otherwise pull the unrelated "count"
 # process in as a bogus dependency purely because that English word
@@ -262,18 +262,18 @@ debasher::_show_proc_specs()
 # otherwise do the same to count_chars's own dependents (worker, via
 # worker_task) despite the process "count" never actually being called.
 #
-# Handles two shapes: a single-quoted span (`'...'`, wholesale -- bash
+# Handles two shapes: a single-quoted span (`'...'`, wholesale: bash
 # never expands anything inside single quotes, so its content is never
 # code) and a double-quoted span with no "$" in it at all (a
 # `$(...)`/`${...}` substitution can genuinely contain a real call, so
 # any double-quoted span containing one is left untouched rather than
 # risk dropping a real dependency). Processes the whole input as one
-# blob rather than line by line -- declare -f reprints a function's
+# blob rather than line by line: declare -f reprints a function's
 # body with real embedded newlines wherever the original source had
 # them (e.g. inside a multi-line single-quoted awk/perl script), so a
 # quoted span's opening and closing quote routinely land on different
 # lines. Doesn't attempt to handle escaped quotes inside a string
-# (`\"`, `$'...'`) -- not a style this package's own scripts use.
+# (`\"`, `$'...'`), not a style this package's own scripts use.
 debasher::_blank_string_literals()
 {
     awk -v sq="'" -v dq='"' '
@@ -308,7 +308,7 @@ debasher::_blank_string_literals()
 
 ########
 # debasher::_collect_func_deps helper: prints, one per line, every name
-# $1's body declares as a local/declare/typeset variable -- i.e. names
+# $1's body declares as a local/declare/typeset variable, i.e. names
 # that appear in that role purely as identifiers, never as an actual
 # command word, even though a plain word-grep of the body can't tell
 # the two apart (see debasher::_collect_func_deps for why that
@@ -331,23 +331,23 @@ debasher::_declared_func_vars()
 ########
 # Recursively collects, into the "seen" associative array (passed by
 # name in $3), every function reachable from $1's body that is itself
-# defined in the same script file ($2) as $1 -- i.e. a helper the
+# defined in the same script file ($2) as $1, i.e. a helper the
 # process author wrote, as opposed to a function belonging to the
 # DeBasher framework itself (defined in a different file) or an
 # external command. Relies on "shopt -s extdebug" already being active
 # in the caller, since that is what makes "declare -F" report a
 # function's defining file instead of just its name.
 #
-# Candidate names are every identifier-shaped word in $1's body -- a
+# Candidate names are every identifier-shaped word in $1's body (a
 # plain grep, blind to whether a given occurrence is actually a command
-# word or just an argument/variable name -- other than ones
+# word or just an argument/variable name) other than ones
 # debasher::_declared_func_vars finds declared as a local variable
 # somewhere in that same body (e.g. debasher_dynamic_fanout.sh's
 # fragment(), which has "local ... count ..." and later "count=$((...
 # ))" purely as a loop counter that happens to collide with an
 # unrelated sibling process named "count": without this exclusion, the
-# mere presence of that identifier would pull "count" -- and
-# transitively whatever it calls -- in as a bogus dependency of
+# mere presence of that identifier would pull "count" (and
+# transitively whatever it calls) in as a bogus dependency of
 # fragment. This can still be fooled the other way (a local variable
 # deliberately shadowing a function of the same name that the body
 # really does go on to call), but that isn't a style this package, or
@@ -358,7 +358,7 @@ debasher::_collect_func_deps()
     local scriptfile=$2
     # Kept as a plain string, and passed through unchanged on the
     # recursive call below, rather than re-using the nameref alias
-    # itself -- a nameref that recursively aliases a variable of its
+    # itself: a nameref that recursively aliases a variable of its
     # own name triggers bash's "circular name reference" and silently
     # stops propagating writes to the caller's array.
     local collected_name=$3
@@ -391,7 +391,7 @@ debasher::_collect_func_deps()
 # debasher::_show_proc_implem helper: prints the real implementation
 # behind an alias/ext_alias process instead of the synthesized
 # dispatcher function debasher::_create_process_func_alias/_ext_alias
-# creates for it (see engine/debasher_lib_programs.sh) -- recursing into
+# creates for it (see engine/debasher_lib_programs.sh), recursing into
 # the alias target's own implementation (chaining through further
 # aliases, if any), or reading the ext_alias's external file directly.
 # Only known once add_debasher_process has actually run for this
@@ -456,20 +456,20 @@ debasher::_show_proc_implem_heredoc()
 ########
 # debasher::_show_proc_implem helper: prints processname's bash-function
 # implementation (its exec function, plus any same-file helper functions
-# it calls -- see debasher::_collect_func_deps) as a fenced ```bash
+# it calls, see debasher::_collect_func_deps) as a fenced ```bash
 # block. Returns 1 if no such function exists.
 debasher::_show_proc_implem_bash_func()
 {
     local processname=$1
 
-    if ! debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}" >/dev/null; then
+    if ! debasher::_process_method_exists "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"; then
         return 1
     fi
 
     local funcname=$(debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}")
 
     # Pull in any helper functions the process author defined alongside
-    # it in the same script file -- otherwise the implementation
+    # it in the same script file: otherwise the implementation
     # captured here would call functions that don't exist anywhere else
     # in what gets shown/imported.
     shopt -s extdebug
@@ -497,7 +497,7 @@ debasher::_show_proc_implem_bash_func()
 # Prints processname's implementation as a fenced Markdown code block.
 # Tries, in order, debasher::_show_proc_implem_delegate (an alias/
 # ext_alias process), _heredoc (a heredoc-variable process), then
-# _bash_func (a plain bash function) -- the same precedence
+# _bash_func (a plain bash function), the same precedence
 # debasher::add_debasher_process itself gives them when registering a
 # process. Returns 1 if none of them find anything.
 debasher::_show_proc_implem()

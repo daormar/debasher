@@ -230,8 +230,9 @@ DEBASHER_MODULE_METHODS=(
 #
 # "general" (default, when a module declares no `_program_type` method)
 # is today's one-shot, DAG-scheduled program. "resident" is the new
-# long-running, stateful kind (see to_do_fbp.md): its processes must be
-# Python classes deriving from FBPProcess or Supervisor.
+# long-running, stateful kind (see doc/design_doc_resident.md): its
+# processes must be Python classes deriving from FBPProcess or
+# Supervisor.
 DEBASHER_PROGRAM_TYPE_GENERAL="general"
 DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
 
@@ -329,7 +330,7 @@ DEBASHER_R_FEXT="R"
 DEBASHER_GROOVY_FEXT="groovy"
 
 # File extensions for DEBASHER_HEREDOC_LANGUAGES/_INTERPRETERS, aligned
-# with them by index (python/r/perl/groovy) -- lets an external file's
+# with them by index (python/r/perl/groovy). Lets an external file's
 # language/interpreter (debasher::_get_doc_language_for_file/
 # _get_interpreter_for_file in engine/debasher_lib_programs.sh) be
 # looked up the same way, instead of its own separate case statement.
@@ -465,14 +466,14 @@ declare -a DEBASHER_REJECTED_MOD_CANDIDATES
 # Declare variable used by debasher::_search_mod_in_immediate_subdirs to
 # hand its match back to debasher::_search_mod_in_dirs. A plain "echo
 # and capture via $(...)" would run the function in a subshell, losing
-# the DEBASHER_REJECTED_MOD_CANDIDATES entries it appends along the way
-# -- so the match travels via this global instead.
+# the DEBASHER_REJECTED_MOD_CANDIDATES entries it appends along the way,
+# so the match travels via this global instead.
 declare DEBASHER_SUBDIR_MOD_MATCH
 
 # Declare variable used by debasher::_search_mod_in_dirs and
 # debasher::_determine_full_module_name to hand their resolved module
 # path back to their callers (debasher::load_debasher_module and
-# debasher::add_debasher_program) -- for the same reason as
+# debasher::add_debasher_program), for the same reason as
 # DEBASHER_SUBDIR_MOD_MATCH above: those callers need
 # DEBASHER_REJECTED_MOD_CANDIDATES populated in their own shell, not a
 # subshell's copy of it, so the whole chain is called directly instead
@@ -506,8 +507,8 @@ declare -A DEBASHER_SEQ_PROCESS_SPEC
 declare DEBASHER_RESOLVED_PROCESS_TYPE
 
 # Declare associative arrays to recover, for an alias/ext_alias process,
-# what it actually delegates to -- the alias's target process name, or
-# the ext_alias's resolved external file -- so debasher::_show_proc_implem
+# what it actually delegates to (the alias's target process name, or
+# the ext_alias's resolved external file), so debasher::_show_proc_implem
 # (engine/debasher_lib_proc_doc.sh) can document the real implementation
 # instead of the synthesized wrapper function
 # debasher::_create_process_func_alias/_ext_alias creates for it (see
@@ -527,11 +528,11 @@ declare -A DEBASHER_PROCESS_MISSING_INTERPRETER
 # Declare associative array recording, for every process, the directory
 # of the .sh that added it (dirname of
 # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK's top at the time
-# add_debasher_process ran) -- populated in
+# add_debasher_process ran), populated in
 # debasher::add_debasher_process (engine/debasher_lib_programs.sh),
 # since that stack only holds this while the program/module function
 # adding the process is still running, but a process's own
-# _define_opts function (where debasher::define_infile_opt needs it --
+# _define_opts function (where debasher::define_infile_opt needs it,
 # see engine/debasher_lib_opts.sh) runs later, once that stack entry
 # has already been popped.
 declare -A DEBASHER_PROCESS_PFILE_DIR

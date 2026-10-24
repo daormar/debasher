@@ -90,3 +90,23 @@ register_processes() {
     [ "${DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED[b]}" = "a" ]
     [ "${DEBASHER_FINAL_PROCESS_SPEC[b]}" = "${DEBASHER_INITIAL_PROCESS_SPEC[b]}" ]
 }
+
+@test "debasher::_gen_final_procspec gives a single error for a process without cpus" {
+    register_processes "p|mem=32;time=00:01:00|processdeps=none"
+
+    run debasher::_gen_final_procspec ""
+    [ "${status}" -eq 1 ]
+    [ "${#lines[@]}" -eq 1 ]
+}
+
+# --- the attributes of a specification ------------------------------------
+
+@test "an attribute is read as written, with no glob expanded and its blanks kept" {
+    cd "${BATS_TEST_TMPDIR}"
+    touch afile
+
+    [ "$(debasher::extract_attr_from_process_additional_specs "alias_opt_map=*;x=a  b" "alias_opt_map")" = "*" ]
+    [ "$(debasher::extract_attr_from_process_additional_specs "alias_opt_map=*;x=a  b" "x")" = "a  b" ]
+    [ "$(debasher::extract_attr_from_process_additional_specs "x=1" "y")" = "${DEBASHER_ATTR_NOT_FOUND}" ]
+    [ "$(debasher::_extract_processname_from_process_spec "ns.proc cpus=1 ||| ")" = "ns.proc" ]
+}

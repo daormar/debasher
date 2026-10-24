@@ -28,6 +28,7 @@ debasher::_program_process_spec_is_ok()
     local process_spec=$1
 
     if [[ "${process_spec}" != *"${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"* ]]; then
+        echo "Error: process specification (\"${process_spec}\") is not correct: it lacks the separator of the additional specifications" >&2
         return 1
     fi
 
@@ -131,20 +132,18 @@ debasher::_extract_attr_from_list_given_sep()
     local attrname=$2
     local sep=$3
 
+    local -a fields
     IFS="${sep}" read -r -a fields <<< "${attr_list}"
     local field
     for field in "${fields[@]}"; do
         field=$(debasher::_str_trim "${field}")
         if [[ "${field}" = "${attrname}="* ]]; then
-            local attrname_len=${#attrname}
-            local start=$((attrname_len + 1))
-            local attr_val=${field:${start}}
-            echo ${attr_val}
+            echo "${field#"${attrname}="}"
             return 0
         fi
     done
 
-    echo ${DEBASHER_ATTR_NOT_FOUND}
+    echo "${DEBASHER_ATTR_NOT_FOUND}"
 }
 
 ########
@@ -173,8 +172,10 @@ debasher::extract_attr_from_process_additional_specs()
 debasher::_extract_processname_from_process_spec()
 {
     local process_spec=$1
-    local fields=( $process_spec )
-    echo ${fields[0]}
+
+    local processname rest
+    read -r processname rest <<< "${process_spec}"
+    echo "${processname}"
 }
 
 ########
@@ -359,10 +360,8 @@ debasher::_gen_final_procspec()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         local process_spec="${DEBASHER_INITIAL_PROCESS_SPEC[${processname}]}"
-        if ! debasher::_program_process_spec_is_ok "$process_spec"; then
-            echo "Error: process specification (\"${process_spec}\") is not correct" >&2
-            exit 1
-        fi
+        # The check says what is wrong
+        debasher::_program_process_spec_is_ok "$process_spec" || exit 1
 
         # Extract dependencies from process specification
         local procdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")

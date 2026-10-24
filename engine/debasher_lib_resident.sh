@@ -34,12 +34,13 @@ debasher::_get_python_heredoc_provider()
 
 ########
 # Echoes the raw Python source of a process's Python heredoc (function
-# or legacy variable provider). A "resident" program (see to_do_fbp.md)
-# requires every one of its processes to provide its code this way, so
-# its source can be located and analyzed without ever running it or
-# needing a real file on disk. Returns 1, with no output, if the
-# process has no Python heredoc provider at all (a regular/alias/
-# ext_alias process, or a heredoc in a different language).
+# or legacy variable provider). A "resident" program (see
+# doc/design_doc_resident.md) requires every one of its processes to
+# provide its code this way, so its source can be located and analyzed
+# without ever running it or needing a real file on disk. Returns 1,
+# with no output, if the process has no Python heredoc provider at all
+# (a regular/alias/ext_alias process, or a heredoc in a different
+# language).
 debasher::_get_resident_process_source()
 {
     local processname=$1
@@ -62,15 +63,15 @@ debasher::_get_resident_process_source()
 # classifies a resident process's role from its source, read from
 # stdin: prints exactly one of "supervisor", "fbpprocess" or "unknown"
 # to stdout. It looks for a top-level class definition whose bases
-# resolve -- following plain "import"/"from ... import ... as ..."
-# aliasing -- to the literal names "Supervisor" or "FBPProcess" (the
-# two base classes to_do_fbp.md defines for resident processes), or
+# resolve (following plain "import"/"from ... import ... as ..."
+# aliasing) to the literal names "Supervisor" or "FBPProcess" (the
+# two base classes of the engine for resident processes), or
 # "ProgramLauncher" or "DirectoryWatcher", nodes of the runtime library
 # that derive from FBPProcess (one launches a general program for each
 # request, the other sends a request for each file that arrives). This
 # is a static check: ast.parse never imports or executes the given
-# source, unlike a real "issubclass" check, which was deliberately
-# ruled out for this (see to_do_fbp.md) since it would need to run
+# source, unlike a real "issubclass" check, which is not used here
+# since it would need to run
 # inside each process's own conda/docker environment just to answer a
 # type question, before the program has even been launched.
 debasher::_resident_role_classifier_src()
@@ -311,14 +312,15 @@ debasher::_check_resident_class_name()
 }
 
 ########
-# Validates every process of a "resident" program (see to_do_fbp.md):
-# each one must classify (via debasher::_classify_resident_process_role)
-# as either "supervisor" or "fbpprocess", with its class named as
+# Validates every process of a "resident" program (see
+# doc/design_doc_resident.md): each one must classify (via
+# debasher::_classify_resident_process_role) as either "supervisor" or
+# "fbpprocess", with its class named as
 # debasher::_check_resident_class_name requires, and at most one process
 # may be a "supervisor" (a supervisor is optional, like ext2/3/4
 # journaling, but never more than one). A no-op, returning 0
-# immediately, when DEBASHER_PROGRAM_TYPE is not "resident". Exits
-# with an error message on the first violation found.
+# immediately, when DEBASHER_PROGRAM_TYPE is not "resident". Exits with
+# an error message on the first violation found.
 debasher::_validate_resident_program_processes()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then

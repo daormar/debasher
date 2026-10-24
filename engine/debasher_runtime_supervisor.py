@@ -39,7 +39,7 @@ from debasher_runtime_transport import _PortWorker, _STOP
 # barrier/checkpoint/input-log logic. Watches a fixed set of nodes
 # (NODE_PORTS) for heartbeat/checkpoint_saved INTERACT traffic, detects
 # failure (heartbeat timeout, or a dead PID as a faster, certain
-# shortcut -- a live PID is never, by itself, evidence of health),
+# shortcut; a live PID is never, by itself, evidence of health),
 # relaunches a downed node up to a bounded number of times, and can
 # trigger snapshot/shutdown on one or more configured initiators,
 # including an escalation to a hard kill of the whole program if a
@@ -47,7 +47,7 @@ from debasher_runtime_transport import _PortWorker, _STOP
 # ordinary ordered shutdown.
 
 # Tag for the (optional) external manual-trigger input port in the
-# shared inbound queue -- distinct from any real node name in NODE_PORTS
+# shared inbound queue, distinct from any real node name in NODE_PORTS
 # by construction (Python identifiers can't contain spaces).
 _MANUAL_TRIGGER_TAG = "manual trigger"
 
@@ -194,7 +194,7 @@ class Supervisor(_PortWorker):
         self._checker_thread = None
         self._checker_stop = threading.Event()
         # Set once every node is resolved (done, or given up on) and no
-        # shutdown escalation is still in flight -- watched by run(),
+        # shutdown escalation is still in flight. Watched by run(),
         # not acted on by the checker thread itself (which would deadlock
         # joining its own thread from inside stop_threads()). Also set
         # directly by a SIGTERM handler (see run() and _on_stop_signal):
@@ -267,7 +267,7 @@ class Supervisor(_PortWorker):
 
     def run(self):
         """
-        Supervisor carries no state of its own to restore -- it always
+        Supervisor carries no state of its own to restore: it always
         starts fresh, and the first thing it does is hold the fifos of the
         business channels (see _open_held_fifos), before it can relaunch any
         node. Runs until every supervised node is resolved
@@ -432,7 +432,7 @@ class Supervisor(_PortWorker):
             self._down.discard(node_name)
             self._starting.discard(node_name)
             # A real heartbeat is proof of actual recovery (unlike a
-            # merely-live PID, see _node_pid_alive) -- this is what
+            # merely-live PID, see _node_pid_alive). This is what
             # distinguishes a node crash-looping right after every
             # relaunch (never reaches here, budget keeps draining) from
             # one that fails rarely over a long run and always recovers.
@@ -601,7 +601,7 @@ class Supervisor(_PortWorker):
 
     def _program_outdir(self):
         # debasher_stop -d wants the program's own base output
-        # directory, i.e. the parent of __exec__ itself -- confirmed
+        # directory, i.e. the parent of __exec__ itself, confirmed
         # against debasher::get_prg_exec_dir_given_basedir
         # (<dirname>/__exec__/<processname>), no new engine export
         # needed.
@@ -668,7 +668,7 @@ class Supervisor(_PortWorker):
     def _node_pid_alive(self, node_name):
         """
         True unless the node's own .id file unambiguously shows its PID
-        is gone -- the fast path for "definitely gone" (see
+        is gone: the fast path for "definitely gone" (see
         _check_node), never evidence of health by itself. Deliberately
         conservative: no .id file yet (not launched yet) or an
         unreadable one does NOT count as dead here, only an existing,

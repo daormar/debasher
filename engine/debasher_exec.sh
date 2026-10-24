@@ -344,7 +344,7 @@ initialize_procspec()
 
 ########
 # A "resident" program (long-running, stateful processes, see
-# to_do_fbp.md) only ever runs under the built-in scheduler, in
+# doc/design_doc_resident.md) only ever runs under the built-in scheduler, in
 # oneshot mode: debasher_exec launches every process and returns
 # immediately rather than waiting for them to finish, since they are
 # not expected to ever finish on their own. This is forced here,

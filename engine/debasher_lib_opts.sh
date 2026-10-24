@@ -1663,7 +1663,7 @@ define_opt() { debasher::define_opt "$@"; }
 # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK directly: unlike
 # ext_alias resolution (which runs synchronously inside
 # add_debasher_process, while that stack still holds the right entry),
-# a process's _define_opts function -- where this is called from --
+# a process's _define_opts function (where this is called from)
 # runs later, once the program/module function that registered the
 # process has already returned and popped its stack entry. See
 # DEBASHER_PROCESS_PFILE_DIR's declaration in debasher_lib.sh.

@@ -427,8 +427,9 @@ relative to the output directory of the run.
 
 ## Business tests
 
-Terms of resident programs used in this group and in "Business tests of a
-program" (node, packet, node state, envelope) have the meaning that
+Terms of resident programs used in this group, in "Business tests of a
+program" and in "Process specifications" (node, launcher node, `Supervisor`,
+limits of a node, packet, node state, envelope) have the meaning that
 `doc/design_doc_resident.md` gives them.
 
 - **business test**: a test of the business logic of one process: what the
@@ -878,14 +879,19 @@ needs it.
 
 The computational specifications are the resources that a process asks for.
 `cpus`, `mem` (in megabytes, or with a `K`, `M`, `G` or `T` suffix) and `time`
-have to be given for every process; `nodes`, `account` and `partition` matter
-to the Slurm scheduler only, and `throttle` limits how many tasks of an array
+have to be given for every process; `nodes`, `account` and `partition` matter to
+the Slurm scheduler only, and `throttle` limits how many tasks of an array
 process run at once. Under the Slurm scheduler, `mem` and `time` may be lists
 separated by commas, one value for each attempt; the built-in scheduler takes
-the first value. How each scheduler uses them is described in "Scheduling". A
-process can also pass one of its specifications to its tasks as an option
-(see "Defining the options of a task"). The additional specifications change
-how the engine treats the process:
+the first value. How each scheduler uses them is described in "Scheduling". The
+nodes of a resident program take settings of their own as computational
+specifications: the limits of a node, the timeouts that the `Supervisor` reads
+and, for a launcher node, `max_concurrent_runs` and the scheduler of its batch
+runs (`batch_sched`). The engine checks them along with the others, and
+`doc/design_doc_resident.md` describes them (see "Limits of a node" and
+"Launching from the queue on disk" there). A process can also pass one of its
+specifications to its tasks as an option (see "Defining the options of a task").
+The additional specifications change how the engine treats the process:
 `processdeps` gives its explicit dependencies, `force=yes` marks it to rerun on
 every run, and `alias`, `ext_alias` and `alias_opt_map` are described above.
 `sched`, which only a sequential process has, is described in "Sequential
@@ -894,12 +900,14 @@ processes", and a process that gives it is refused when it is added.
 The name, the process function and the aliases are checked when the process is
 added, since an error there leaves the program without a process. The rest of
 the specification is checked when the final process specification is built
-(stage 6 of "Architecture"): a process without `cpus`, `mem` or `time`, and a
-dependency on a process that is not part of the program, stop the preparation
-of the run. The final process specification is the specification of each
-process with its dependencies added as a `processdeps` attribute, the inferred
-ones, or `none` when there are none, unless explicit dependencies were given.
-`program.procspec` holds it, one line per process, in no particular order:
+(stage 6 of "Architecture"): a process without `cpus`, `mem` or `time`, a
+setting of a resident node that is not a positive number, a `batch_sched` other
+than `BUILTIN` or `SLURM`, and a dependency on a process that is not part of the
+program stop the preparation of the run. The final process specification is the
+specification of each process with its dependencies added as a `processdeps`
+attribute, the inferred ones, or `none` when there are none, unless explicit
+dependencies were given. `program.procspec` holds it, one line per process, in
+no particular order:
 
 ```
 file_writer cpus=1 mem=32 time=00:01:00 |||  ; processdeps=none

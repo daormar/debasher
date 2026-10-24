@@ -385,14 +385,14 @@ debasher::_is_valid_processname()
 
     # Check characters
     if debasher::_processname_contains_invalid_characters "${processname}"; then
-        echo "Process name ${processname} contains invalid characters. The name should be one or more dot-separated parts, each made of letters, digits or the underscore character and not starting with a digit" >&2
+        echo "Error: process name ${processname} is not valid: it contains invalid characters. The name should be one or more dot-separated parts, each made of letters, digits or the underscore character and not starting with a digit" >&2
         return 1
     fi
 
     # Check suffixes
     local reserved_suffix
     if debasher::_processname_contains_reserved_suffixes "${processname}" reserved_suffix; then
-        echo "Process name '${processname}' collides with method '${reserved_suffix}'" >&2
+        echo "Error: process name ${processname} is not valid: it collides with method '${reserved_suffix}'" >&2
         return 1
     fi
 
@@ -402,7 +402,7 @@ debasher::_is_valid_processname()
     # verbatim could collide with a namespaced process name once
     # mangled.
     if [[ "${processname}" == *"${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}"* ]]; then
-        echo "Process name '${processname}' is not valid: it contains the reserved marker '${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}'" >&2
+        echo "Error: process name ${processname} is not valid: it contains the reserved marker '${DEBASHER_PROCESSNAME_NS_SEP_MANGLED}'" >&2
         return 1
     fi
 
@@ -429,7 +429,7 @@ debasher::_is_heredoc_process()
 ########
 # Python heredoc processes only: source prepended ahead of the
 # heredoc's own text so it can "import debasher_runtime_lib" (and
-# anything else installed alongside it) -- mirrors the
+# anything else installed alongside it). It mirrors the
 # sys.path.append(...) lines the ".py:" suffix rule in
 # engine/Makefile.am already adds for standalone installed Python
 # tools, which a "python -c ..." heredoc invocation would otherwise
@@ -458,7 +458,7 @@ debasher::_create_heredoc_func_body()
 
             # $(...) strips trailing newlines, so debasher::_python_heredoc_sys_path_prelude's
             # own trailing newline (if any) can't be relied on to separate it from the heredoc
-            # text that follows -- prelude_sep supplies that separator explicitly instead,
+            # text that follows: prelude_sep supplies that separator explicitly instead,
             # and stays empty (no stray blank line) for every other heredoc language.
             local prelude="" prelude_sep=""
             if [ "${DEBASHER_HEREDOC_LANGUAGES[$i]}" = "python" ]; then
@@ -571,7 +571,7 @@ debasher::_add_debasher_regular_process()
     local processname=$1
 
     # Check if function for process exists
-    if ! debasher::_get_exec_funcname "${processname}" >/dev/null; then
+    if ! debasher::_process_method_exists "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"; then
         echo "Error: process ${processname} has not a function implementing it. Aborting execution..." >&2
         return 1
     fi
@@ -583,7 +583,7 @@ debasher::_add_debasher_regular_process()
 # Renames elements of "$@" according to an "OLD:NEW[,OLD:NEW...]" map
 # (a process spec's "alias_opt_map" attribute, see
 # debasher::_create_process_func_alias) before delegating to an
-# alias's implementation function -- lets an alias process declare its
+# alias's implementation function. Lets an alias process declare its
 # own option names (in its _explain_opts/_identify_cmdline_opts/
 # _define_opts, unrelated to this function) while the process it
 # aliases expects different ones. An argument matching no "OLD" is
@@ -674,7 +674,7 @@ debasher::_add_debasher_alias_process()
     fi
 
     # Check if exec function for alias exists
-    if ! debasher::_get_exec_funcname "${process_alias}" >/dev/null; then
+    if ! debasher::_process_method_exists "${process_alias}" "${DEBASHER_PROCESS_METHOD_NAME_EXEC}"; then
         echo "Error: alias ${process_alias} for process ${processname} has not a function implementing it (an alias of a heredoc process or of another alias has to be added after its target). Aborting execution..." >&2
         return 1
     fi
@@ -698,7 +698,7 @@ debasher::_add_debasher_alias_process()
 }
 
 ########
-# Index into DEBASHER_HEREDOC_FEXTS matching `extension` -- also an
+# Index into DEBASHER_HEREDOC_FEXTS matching `extension`, also an
 # index into DEBASHER_HEREDOC_LANGUAGES/_INTERPRETERS, since all three
 # are synchronized by position. Returns 1 if `extension` isn't one of
 # python/r/perl/groovy (bash is handled separately by this function's
@@ -804,7 +804,7 @@ debasher::_create_process_func_ext_alias()
 # still required to exist and still gets canonicalized the same way.
 #
 # $1 - Path to resolve (relative or absolute).
-# $2 - Directory to resolve a relative `value` against -- typically
+# $2 - Directory to resolve a relative `value` against: typically
 #      the directory of the .sh that's relying on this resolution
 #      (e.g. dirname of DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK's
 #      top, or a looked-up DEBASHER_PROCESS_PFILE_DIR entry, depending
@@ -845,10 +845,10 @@ debasher::_add_debasher_ext_alias_process()
 
     # Resolve alias to an external file, relative to the .sh that
     # declares it. DEBASHER_PROCESS_PFILE_DIR[processname] is already
-    # populated at this point -- add_debasher_process (which dispatches
+    # populated at this point: add_debasher_process (which dispatches
     # here) sets it before doing so, from the same
     # DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK entry this would
-    # otherwise recompute -- so this reads that one recorded value
+    # otherwise recompute. So this reads that one recorded value
     # instead of re-deriving it, the same way debasher::define_infile_opt
     # does later, from a point where the stack itself is no longer valid.
     local external_file
@@ -898,11 +898,8 @@ debasher::_resolve_process()
     local processname=$1
     local process_additional_specs=$2
 
-    # Check correctness of process name
-    if ! debasher::_is_valid_processname "${processname}"; then
-        echo "Error: process name ${processname} not valid. Aborting execution..." >&2
-        return 1
-    fi
+    # Check correctness of process name (the check says why it is not)
+    debasher::_is_valid_processname "${processname}" || return 1
 
     # Check if the name has already been taken by a process or a
     # sequential process

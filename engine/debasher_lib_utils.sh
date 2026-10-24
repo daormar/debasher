@@ -755,36 +755,49 @@ debasher::_get_process_varname()
 }
 
 ########
+# Succeeds when the process has the given method, printing nothing: the
+# way to ask whether a method exists, while debasher::_search_process_func
+# gives the name of the function to call.
+debasher::_process_method_exists()
+{
+    local processname=$1
+    local method_name=$2
+
+    debasher::_func_exists "$(debasher::_get_process_funcname "${processname}" "${method_name}")"
+}
+
+########
+# Prints the name of the function of the given method of a process, or
+# DEBASHER_FUNCT_NOT_FOUND when the process has no such method, which is
+# what the callers compare with. It always succeeds; to ask whether the
+# method exists, debasher::_process_method_exists does.
 debasher::_search_process_func()
 {
     local processname=$1
     local method_name=$2
 
-    # Check if function exists
     local process_function=$(debasher::_get_process_funcname "${processname}" "${method_name}")
     if debasher::_func_exists "${process_function}"; then
         echo "${process_function}"
-        return 0
     else
         echo "${DEBASHER_FUNCT_NOT_FOUND}"
-        return 1
     fi
 }
 
 ########
+# Prints the name of the given variable of a process, or
+# DEBASHER_VAR_NOT_FOUND when the process has no such variable, as
+# debasher::_search_process_func does for a method.
 debasher::_search_process_var()
 {
     local processname=$1
     local var_name=$2
 
-    # Check if function exists
     local process_var=$(debasher::_get_process_varname "${processname}" "${var_name}")
     if debasher::_var_exists "${process_var}"; then
         echo "${process_var}"
-        return 0
     else
         echo "${DEBASHER_VAR_NOT_FOUND}"
-        return 1
     fi
 }
 
@@ -826,25 +839,22 @@ debasher::_search_process_func_nameref()
     local method_name=$2
     local -n var_ref=$3
 
-    # Check if function exists
     local process_function=$(debasher::_get_process_funcname "${processname}" "${method_name}")
     if debasher::_func_exists "${process_function}"; then
         var_ref="${process_function}"
-        return 0
     else
         var_ref="${DEBASHER_FUNCT_NOT_FOUND}"
-        return 1
     fi
 }
 
 ########
-# Prints funcname's exact original source text -- from its header line
-# through its own matching closing brace/closing token -- byte for byte
+# Prints funcname's exact original source text (from its header line
+# through its own matching closing brace/closing token) byte for byte
 # as written in the file that defines it, comments and indentation
 # intact. Unlike "declare -f funcname" (used throughout
 # debasher_lib_proc_doc.sh's debasher::_show_proc_* family), which
 # reprints a reparsed, comment-stripped, re-indented reconstruction of
-# the function -- bash discards comments in its lexer before it ever
+# the function: bash discards comments in its lexer before it ever
 # builds the parsed function object, so no introspection of the
 # function itself, declare -f included, can recover them; only the
 # original file on disk can.
@@ -852,7 +862,7 @@ debasher::_search_process_func_nameref()
 # Requires "shopt -s extdebug" to already be in effect (as callers of
 # debasher::_collect_func_deps already arrange) so that "declare -F"
 # reports the (file, line) where funcname's definition begins, instead
-# of just its name -- this is also what correctly finds funcname's real
+# of just its name. This is also what correctly finds funcname's real
 # defining file even when it lives in a different file than the one the
 # caller sourced directly (e.g. a process function pulled in via
 # load_debasher_module).
@@ -863,27 +873,27 @@ debasher::_search_process_func_nameref()
 # whether the slice is already a complete, syntactically valid script on
 # its own. funcname's own outermost compound command stays unbalanced at
 # every shorter slice, so the first slice "bash -n" accepts is
-# necessarily exactly funcname's own definition -- growing it further
+# necessarily exactly funcname's own definition. Growing it further
 # could go on to *also* validate later (e.g. once it swallows whatever
 # follows funcname whole), so this deliberately scans from the shortest
 # candidate upward one line at a time rather than bisecting for "the
 # first valid slice": the valid/invalid sequence isn't monotonic past
 # funcname's own end, so only a linear scan is guaranteed to land on the
 # first one. The one shape this can't isolate is two function
-# definitions sharing one physical line -- since the scan works at line
-# granularity, both come back as that whole shared line -- but that
+# definitions sharing one physical line (since the scan works at line
+# granularity, both come back as that whole shared line), but that
 # isn't a style this package, or the frontend's own code editor, ever
 # produces.
 #
 # Also includes any "# ..." comment block immediately preceding the
-# function -- a doc-comment for it, if the author wrote one -- by
+# function (a doc-comment for it, if the author wrote one) by
 # walking backward from the start line while lines keep matching that
 # shape, stopping at the first one that doesn't.
 #
 # Prints nothing and returns 1 if funcname isn't a real function,
 # extdebug can't place it in a real file on disk (e.g. it was defined
 # via eval rather than sourced from a file), or the scan reaches the end
-# of the file without ever finding a balanced slice -- which "declare
+# of the file without ever finding a balanced slice, which "declare
 # -f" itself never fails to do for a real function, so this is only a
 # defensive fallback for debasher_get_verbatim_func_source's caller to
 # fall back to plain "declare -f" on.

@@ -92,14 +92,14 @@ debasher::_check_fifo_mirror_allowed()
 # Background loop bridging a mirrored fifo's shim fifo to both its real
 # fifo and its mirror log file, one line at a time. The real fifo and
 # the mirror file are each opened once, before the loop, and kept open
-# for the tap's entire lifetime -- never closed between messages -- so
+# for the tap's entire lifetime (never closed between messages), so
 # every line is forwarded with two builtin printfs, no external process
 # forked per line (previously a piped tee per line).
 #
 # This is safe for every known reader of a mirrored real fifo: a reader
 # that reopens the real fifo per line (this codebase's own
 # data/programs/debasher_echo.sh's stream_echo idiom) tolerates a
-# persistent writer fine, verified with a real fifo -- it only needs a
+# persistent writer fine, verified with a real fifo: it only needs a
 # writer present at the moment it opens, not a close between messages.
 # A reader with its own single persistent open (e.g. FBPProcess's
 # reader thread) requires exactly this shape and cannot recover from an
@@ -109,12 +109,12 @@ debasher::_check_fifo_mirror_allowed()
 #
 # A reader that reopens the real fifo per line is, by construction,
 # fully detached (zero readers) during the gap between one close and
-# the next open -- and unlike a fresh open() (which blocks until a
+# the next open, and unlike a fresh open() (which blocks until a
 # reader appears), a write on this tap's own already-open fd during
 # that exact gap raises SIGPIPE, verified with a real fifo: killing the
 # tap outright the moment its timing loses that race. SIGPIPE is
 # ignored for this reason, and each forwarded write is retried (on the
-# very same fd, no close/reopen needed -- also verified: an existing
+# very same fd, no close/reopen needed; also verified: an existing
 # writer fd starts working again as soon as a new reader attaches) until
 # it succeeds, rather than treated as fatal.
 #
@@ -146,7 +146,7 @@ debasher::_run_fifo_mirror_tap()
     # for test status reporting, and this tap's own bats tests run it
     # as a real background job under bats, so clobbering fd 3 here
     # would corrupt the test harness's own channel, not just this
-    # process's -- avoided by staying well clear of low fd numbers
+    # process's. That is avoided by staying well clear of low fd numbers
     # any shell/test tooling might already be using.
     exec 7<>"${shimfifo}"
     exec 8>"${realfifo}"

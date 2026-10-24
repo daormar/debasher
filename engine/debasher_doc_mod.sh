@@ -165,8 +165,8 @@ obtain_info_for_module()
     # Load debasher module
     debasher::load_debasher_module "$module_fname" || return 1
 
-    # Snapshot right after loading (sourcing) the module — where a real
-    # module's own variables are actually defined — rather than after
+    # Snapshot right after loading (sourcing) the module (where a real
+    # module's own variables are actually defined) rather than after
     # the next step below, which only registers processes and, in
     # doing so, leaks a few of the engine's own loop variables (see
     # debasher::_show_all_program_envvars).
@@ -185,7 +185,7 @@ obtain_info_for_module()
     debasher::_show_module_documentation "${module_fname}" "${showshdirs_given}"
 
     # Show every shared directory reachable from the program (own,
-    # plus every module it loads transitively) — distinct from
+    # plus every module it loads transitively), distinct from
     # --show-shdirs, which is scoped to the module named after -m
     if [ "${showallshdirs_given}" -eq 1 ]; then
         echo "## All Shared Directories"
@@ -194,7 +194,7 @@ obtain_info_for_module()
         echo ""
     fi
 
-    # Show every variable newly bound by loading the module — distinct
+    # Show every variable newly bound by loading the module, distinct
     # from --resolve-var, which requires already knowing the name to
     # look up
     if [ "${showallenvvars_given}" -eq 1 ]; then

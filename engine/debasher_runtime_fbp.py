@@ -1109,7 +1109,7 @@ class FBPProcess(_PortWorker):
             healthy = self._all_threads_alive()
             self.log.debug("heartbeat tick, healthy=%s", healthy)
             # Only ever reports "alive" if every thread still is (passive
-            # health reporting, see _all_threads_alive) -- a supervisor
+            # health reporting, see _all_threads_alive). A supervisor
             # is optional (SUPERVISOR_PORT is None if there is none), and
             # an unhealthy process simply stops sending, rather than
             # actively announcing its own bad health.

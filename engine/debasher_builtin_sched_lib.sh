@@ -1850,7 +1850,7 @@ debasher_builtin_sched::_execute_funct_plus_postfunct()
     debasher_builtin_sched::_reset_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}" || return 1
 
     # Start mirror taps (if any) for fifos this process owns and writes
-    # to (see debasher::_start_fifo_mirror_taps_for_process) — must run
+    # to (see debasher::_start_fifo_mirror_taps_for_process): must run
     # after the ".opts" dump above so that inspector keeps showing the
     # real fifo path, and before the process function below so it gets
     # each mirrored option's shim path instead.

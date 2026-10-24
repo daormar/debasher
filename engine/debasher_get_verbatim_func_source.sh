@@ -29,8 +29,8 @@ funcname=$2
 
 # extdebug must already be active *before* sourcing "$file" so that
 # every function it defines (not just ones defined afterwards) is
-# recorded with its (file, line) origin -- see
-# debasher::_get_verbatim_func_source in engine/debasher_lib_utils.sh.
+# recorded with its (file, line) origin (see
+# debasher::_get_verbatim_func_source in engine/debasher_lib_utils.sh).
 shopt -s extdebug
 source "$file" || exit 1
 

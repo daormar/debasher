@@ -776,7 +776,7 @@ debasher::_check_task_shaping_opts_given()
 # itself an option, in which case the first is treated as a flag) to
 # recover the options. This extra call is made inside a subshell so it
 # is side-effect free (no stray FIFO registration, etc.) on the
-# program's real scheduling state -- only the resulting options are
+# program's real scheduling state: only the resulting options are
 # read back, as NUL-separated name/value pairs, so that a value may
 # hold any character.
 #
@@ -1258,7 +1258,7 @@ debasher::_get_process_outdir_given_process_spec()
     local outd=${DEBASHER_PROGRAM_OUTDIR}
 
     # Obtain output directory for process
-    local processname=$(debasher::_extract_processname_from_process_spec ${process_spec})
+    local processname=$(debasher::_extract_processname_from_process_spec "${process_spec}")
     local process_outd=$(debasher::_get_process_outdir_given_dirname ${outd} "${processname}")
 
     echo ${process_outd}

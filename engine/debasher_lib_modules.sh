@@ -199,7 +199,7 @@ debasher::_search_mod_in_immediate_subdirs()
     # the UI always writes alongside it.
     #
     # Leaves the resolved path in DEBASHER_SUBDIR_MOD_MATCH on success
-    # (empty otherwise) -- not echoed, since this is called directly
+    # (empty otherwise), not echoed, since this is called directly
     # rather than via $(...): a command substitution would run it in a
     # subshell, losing the DEBASHER_REJECTED_MOD_CANDIDATES entries it
     # appends below. Every same-named candidate that fails the
@@ -441,7 +441,7 @@ debasher::load_debasher_module()
     local module=$1
 
     # Determine full module name (called directly, not via $(...), so
-    # that a rejected-candidates report below reflects this search --
+    # that a rejected-candidates report below reflects this search;
     # see DEBASHER_RESOLVED_MODNAME's declaration in debasher_lib.sh)
     debasher::_determine_full_module_name "$module"
     local fullmodname="${DEBASHER_RESOLVED_MODNAME}"
@@ -519,7 +519,7 @@ debasher::_show_all_program_envvars()
     #      this function's own locals, which would then wrongly show up
     #      as "new".
     #
-    # Anything in $2 but not $1 was bound while loading — a
+    # Anything in $2 but not $1 was bound while loading. A
     # caller-supplied name like DEBASHER_MOD_DIR is excluded because it
     # was already set beforehand, and the engine's own bookkeeping
     # (DEBASHER_*, plus plain bash/shell state a "cd" or subshell
