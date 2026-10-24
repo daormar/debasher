@@ -513,6 +513,61 @@ PYEOF
     [[ "${output}" == *"cannot be added to a 'resident' program"* ]]
 }
 
+@test "add_debasher_process refuses a name that holds the mangled namespace separator" {
+    prepare_add_process
+    a__NSSEP__b() { :; }
+    a__NSSEP__b_explain_opts() { :; }
+
+    run add_debasher_process "a__NSSEP__b" "cpus=1;mem=32;time=00:01:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"contains the reserved marker '__NSSEP__'"* ]]
+}
+
+@test "add_debasher_process refuses a process beyond the maximum number of processes" {
+    prepare_add_process
+    DEBASHER_MAX_NUM_PROCESSES=2
+    local name
+    for name in p1 p2 p3; do
+        eval "${name}() { :; }; ${name}_explain_opts() { :; }"
+    done
+
+    add_debasher_process p1 "cpus=1;mem=32;time=00:01:00"
+    add_debasher_process p2 "cpus=1;mem=32;time=00:01:00"
+    run add_debasher_process p3 "cpus=1;mem=32;time=00:01:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Maximum number of processes (2) exceeded"* ]]
+}
+
+@test "add_debasher_process refuses an option map that is malformed, maps a name twice or has no alias" {
+    prepare_add_process
+    target() { :; }
+    myalias_explain_opts() { :; }
+    plain() { :; }
+    plain_explain_opts() { :; }
+
+    run add_debasher_process myalias "cpus=1;mem=32;time=00:01:00" "alias=target;alias_opt_map=-a"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"entry '-a' for process myalias is not of the form OLD:NEW"* ]]
+
+    run add_debasher_process myalias "cpus=1;mem=32;time=00:01:00" "alias=target;alias_opt_map=-a:-b,-a:-c"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"maps '-a' more than once"* ]]
+
+    run add_debasher_process plain "cpus=1;mem=32;time=00:01:00" "alias_opt_map=-a:-b"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"alias_opt_map given for process plain without an alias or ext_alias attribute"* ]]
+}
+
+@test "add_debasher_process warns of an external alias given by an absolute path" {
+    prepare_add_process
+    printf 'echo "external $1"\n' > "${BATS_TEST_TMPDIR}/ext.sh"
+    extabs_explain_opts() { :; }
+
+    run add_debasher_process extabs "cpus=1;mem=32;time=00:01:00" "ext_alias=${BATS_TEST_TMPDIR}/ext.sh"
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"uses an absolute path (${BATS_TEST_TMPDIR}/ext.sh)"* ]]
+}
+
 # --- debasher::_is_valid_processname -------------------------------------
 
 @test "debasher::_is_valid_processname names the method a process name collides with" {

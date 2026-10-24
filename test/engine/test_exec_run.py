@@ -324,6 +324,142 @@ def test_a_process_sees_what_its_module_computed_when_debasher_exec_loaded_it(tm
     assert (outdir / ".exec_context.sh").exists()
 
 
+# A process that waits until the file given with -gate exists, and one that
+# runs once it finishes; both print what the function message of the module
+# prints
+GATED_MODULE = """\
+message()
+{
+    echo "before"
+}
+
+gated_explain_opts()
+{
+    explain_opt "-gate" "<file>" "File whose creation lets the process end"
+}
+
+gated_identify_cmdline_opts()
+{
+    opt_is_cmdline "-gate"
+}
+
+gated_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${cmdline}" "-gate" optlist || return 1
+    save_opt_list optlist
+}
+
+gated()
+{
+    local gate=$(read_opt_value_from_func_args "-gate" "$@")
+    while [ ! -f "${gate}" ]; do
+        sleep 0.1
+    done
+    message
+}
+
+later_explain_opts()
+{
+    explain_opt "-x" "<int>" "Unused value"
+}
+
+later_define_opts()
+{
+    local optlist=""
+    define_opt "-x" "1" optlist || return 1
+    save_opt_list optlist
+}
+
+later()
+{
+    message
+}
+
+debasher_gated_program()
+{
+    add_debasher_process "gated" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "later" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:gated"
+}
+"""
+
+
+# The gated process alone, which the oneshot mode accepts
+GATED_ONLY_MODULE = GATED_MODULE.replace(
+    '    add_debasher_process "later" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:gated"\n', ""
+)
+
+
+def test_a_run_is_refused_while_a_process_of_an_earlier_run_is_in_progress(tmp_path):
+    pfile = tmp_path / "debasher_gated.sh"
+    pfile.write_text(GATED_ONLY_MODULE)
+    gate = tmp_path / "gate"
+    outdir = tmp_path / "out"
+    args = ["--pfile", str(pfile), "--outdir", str(outdir), "-gate", str(gate)]
+    gated_finished = outdir / "__exec__" / "gated" / "gated.finished"
+
+    # In oneshot mode debasher_exec ends, and releases the lock, while the
+    # gated process is still running; its output goes to a file, since the
+    # process keeps a pipe open until it ends
+    log = tmp_path / "oneshot.log"
+    with open(log, "w") as log_file:
+        result = subprocess.run(
+            [str(DEBASHER_EXEC), *args, "--sched", "BUILTIN", "--builtinsched-oneshot"],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+        )
+    try:
+        assert result.returncode == 0, log.read_text()
+        before = read_files(outdir, ["command_line.sh", "program.procspec", ".exec_context.sh"])
+
+        again = run_exec(*args)
+
+        assert again.returncode != 0
+        assert "this program has processes being executed" in again.stderr
+        assert read_files(outdir, ["command_line.sh", "program.procspec", ".exec_context.sh"]) == before
+        assert not list(outdir.glob(".prep*"))
+        assert not gated_finished.exists()
+    finally:
+        gate.write_text("")
+    assert wait_until(gated_finished.exists)
+
+
+def test_a_task_runs_the_code_of_the_module_as_it_was_when_the_run_was_prepared(tmp_path):
+    pfile = tmp_path / "debasher_gated.sh"
+    pfile.write_text(GATED_MODULE)
+    gate = tmp_path / "gate"
+    outdir = tmp_path / "out"
+    execdir = outdir / "__exec__"
+
+    # debasher_exec is the scheduler of the run, and launches later, whose
+    # process script it writes then, only after gated finishes
+    run = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN",
+         "-gate", str(gate)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert wait_until((execdir / "gated" / "gated.id").exists)
+
+        # The module is edited while the run goes on
+        pfile.write_text(GATED_MODULE.replace('echo "before"', 'echo "after"'))
+        gate.write_text("")
+
+        _, stderr = run.communicate(timeout=60)
+    finally:
+        if run.poll() is None:
+            run.kill()
+            gate.write_text("")
+    assert run.returncode == 0, stderr
+
+    assert (execdir / "gated" / "gated.stdout").read_text() == "before\n"
+    assert (execdir / "later" / "later.stdout").read_text() == "before\n"
+
+
 # A process that is always skipped, and one that depends on its output
 # file; the output of the skipped one exists from before
 SKIP_CHAIN_MODULE = """\
@@ -744,8 +880,12 @@ RUN_FILES = [
 ]
 
 
+def read_files(outdir, names):
+    return {name: (outdir / name).read_text() for name in names}
+
+
 def read_run_files(outdir):
-    return {name: (outdir / name).read_text() for name in RUN_FILES}
+    return read_files(outdir, RUN_FILES)
 
 
 def test_validate_leaves_the_files_of_a_finished_run_as_they_were(tmp_path):
