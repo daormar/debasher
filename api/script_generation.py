@@ -1126,6 +1126,34 @@ def _intact_group_ids(program):
     }
 
 
+def _intact_group_program_names(program) -> list[str]:
+    """
+    The name of the program of each intact group, in the order in which
+    the first member of each group comes, as _add_program_function adds
+    the groups.
+    """
+    intact_group_ids = _intact_group_ids(program)
+    names = []
+    seen_group_ids = set()
+    for member in [*program.processes, *program.seqProcesses]:
+        group = member.groupSource
+        if group is not None and group.groupId in intact_group_ids and group.groupId not in seen_group_ids:
+            seen_group_ids.add(group.groupId)
+            names.append(group.programName)
+    return names
+
+
+def _add_group_module_loads(program):
+    """
+    A load_debasher_module line for the module of each intact group: the
+    engine runs the _program method of a module given to
+    add_debasher_program only when the module is loaded, and the program
+    finds it through DEBASHER_MOD_DIR, where "Add program" puts its
+    directory.
+    """
+    return [f'load_debasher_module "{name}"' for name in _intact_group_program_names(program)]
+
+
 def _add_program_function(program):
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
     intact_group_ids = _intact_group_ids(program)
@@ -1239,6 +1267,13 @@ def _build_script(
     preamble_lines = _add_preamble(program.preamble)
     if preamble_lines:
         lines.extend(preamble_lines)
+        lines.extend(["", ""])
+
+    # Load the modules of the intact groups, which the program function
+    # adds with add_debasher_program
+    group_load_lines = _add_group_module_loads(program)
+    if group_load_lines:
+        lines.extend(group_load_lines)
         lines.extend(["", ""])
 
     # Add program description

@@ -879,20 +879,22 @@ process, and a `standard` process has only one.
 
 ## Groups
 
-"Add program" brings every process of another program saved with the web UI
-into the current one, in one operation. It reads that program's metadata from
-its home directory, like loading does, not its module, and marks each of its
+"Add program" brings every process of another program saved with the web UI into
+the current one, in one operation. It reads that program's metadata from its
+home directory, like loading does, not its module, and marks each of its
 processes with the same `groupSource`: the other program's name, a `groupId`
-shared by all of them, the `groupSize`, and the other program's home
-directory, which it also adds to `DEBASHER_MOD_DIR` so that the engine finds
-its generated script. While all the processes of a group are still present and
-none has been edited, script generation declares them with a single
-`add_debasher_program` of the other program's module, and that module stays
-the one place where they are defined. The engine cannot express a module minus
-one process, or with one process changed, so editing the content of any
-process of the group, removing one, or connecting an input of one to something
-new or disconnecting it first asks the user, and then dissolves the whole
-group: its processes are then generated one by one, like any other.
+shared by all of them, the `groupSize`, and the other program's home directory,
+which it also adds to `DEBASHER_MOD_DIR` so that the engine finds its generated
+script. While all the processes of a group are still present and none has been
+edited, script generation declares them with a single `add_debasher_program` of
+the other program's module, which the generated module loads with
+`load_debasher_module` right after the preamble, since `add_debasher_program`
+adds only the program of a module already loaded; that module stays the one
+place where they are defined. The engine cannot express a module minus one
+process, or with one process changed, so editing the content of any process of
+the group, removing one, or connecting an input of one to something new or
+disconnecting it first asks the user, and then dissolves the whole group: its
+processes are then generated one by one, like any other.
 
 # From the model to a module: script generation
 
@@ -909,7 +911,8 @@ change into the program is to import the script.
 
 The generated module holds, in this order:
 
-1. The header line, then the preamble, as it is.
+1. The header line, then the preamble, as it is, and one
+   `load_debasher_module` for the module of each group that is still whole.
 2. `<name>_document`, with the program's description, and
    `<name>_shared_dirs`, with one `define_shared_dir` per shared directory.
 3. For each process, in the order of the model: `_document`, `_explain_opts`

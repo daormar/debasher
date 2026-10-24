@@ -1,3 +1,6 @@
+import os
+import subprocess
+
 import pytest
 
 from api.models import (
@@ -240,6 +243,7 @@ from api.models import (  # noqa: E402
     SeqProcess,
 )
 from api.script_generation import _stub_processes_missing_code, generate_script  # noqa: E402
+from api import paths  # noqa: E402
 
 
 def _seq_program(seq_processes, processes=(), **fields):
@@ -350,6 +354,53 @@ def test_an_intact_group_adds_its_sequential_processes_with_its_add_debasher_pro
     assert script.count('add_debasher_program "other"') == 1
     assert "add_debasher_seq_process" not in script
     assert 'add_debasher_process "count"' not in script
+
+
+def test_an_intact_group_loads_its_module_before_the_program_function_adds_it():
+    group = GroupSource(programName="other", groupId="g", groupSize=2, sourceDir="/other")
+    process = _make_process([]).model_copy(update={"groupSource": group})
+    step = SeqProcess(id="s", name="step", code="step()\n{\n    :\n}", groupSource=group)
+    script = generate_script(_seq_program([step], [process]), skip_redundant_check=True)
+
+    assert script.count('load_debasher_module "other"') == 1
+    assert script.index('load_debasher_module "other"') < script.index("prog_program()")
+
+
+def test_a_dissolved_group_loads_no_module():
+    group = GroupSource(programName="other", groupId="g", groupSize=2, sourceDir="/other")
+    process = _make_process([]).model_copy(update={"groupSource": group})
+    script = generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+    assert "load_debasher_module" not in script
+
+
+_DEBASHER_EXEC = paths.find_bin_tool("debasher_exec")
+
+
+@pytest.mark.skipif(_DEBASHER_EXEC is None, reason="debasher_exec not installed: run make install")
+def test_the_engine_runs_the_program_of_an_intact_group(tmp_path):
+    counter = _make_process([]).model_copy(update={"code": "count()\n{\n    echo counted\n}"})
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    other = _seq_program([], [counter], id="other", name="other")
+    (other_dir / "other.sh").write_text(generate_script(other, skip_redundant_check=True))
+
+    group = GroupSource(programName="other", groupId="g", groupSize=1, sourceDir=str(other_dir))
+    prog = _seq_program([], [counter.model_copy(update={"groupSource": group})])
+    pfile = tmp_path / "prog.sh"
+    pfile.write_text(generate_script(prog, skip_redundant_check=True))
+
+    result = subprocess.run(
+        [str(_DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(tmp_path / "out"),
+         "--sched", "BUILTIN", "--validate"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "DEBASHER_MOD_DIR": str(other_dir)},
+    )
+
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "PROCESS: count ; STATUS: TO-DO" in result.stderr
 
 
 def test_a_group_missing_its_sequential_process_is_generated_member_by_member():
