@@ -125,5 +125,7 @@ def test_a_batch_run_outlives_a_crash_of_its_launcher_and_is_announced_once(outd
     finally:
         tailer.stop_and_join()
 
-    assert _done_messages(tailer) == [{"run": "slow", "status": "finished", "exit_code": 0}]
+    assert _done_messages(tailer) == [
+        {"run": "slow", "run_dir": str(run_dir), "status": "finished", "exit_code": 0}
+    ]
     assert (run_dir / "step" / "result.txt").read_text() == "late\n"
