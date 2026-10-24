@@ -99,7 +99,8 @@ relative to the output directory of the run.
   exchange data through connections defined outside them, so that the flow of
   data decides the order in which they run.
 - **module**: a Bash file that defines processes and module methods, loaded with
-  `load_debasher_module`. A module that several others load is loaded only once.
+  `load_debasher_module`. A module that several others load is loaded only once,
+  and the modules of a program have different names.
 - **module search path**: where a module given by a relative name is looked for:
   the current directory, then each directory of `DEBASHER_MOD_DIR`, then the
   directory where DeBasher is installed.
@@ -674,7 +675,13 @@ the canonical path of its file, so that a module reached through a symbolic link
 same module, and it is loaded only once: loading it again, as two modules that
 build on a third one do, has no effect. A module that is asked for while it is
 still loading, because modules load each other in a cycle, is refused, and the
-error names the whole cycle. The engine keeps the loaded modules in the order in
+error names the whole cycle. Since the methods of a module are found by its
+name, the modules of a program have different names: a module whose name is that
+of another one loaded, or still loading, from another file is refused, and the
+error names both files. A module ends with the status of its last command at the
+top level, which has to succeed: one that ends with any other status may have
+defined only part of what it should, and stops the tool with an error that names
+the module and the status. The engine keeps the loaded modules in the order in
 which they finish loading, so that every module comes after the modules it
 loads.
 
@@ -767,19 +774,23 @@ heredoc process, whatever other attributes it has.
 **Aliases.** A process with the additional specification `alias=<process>` has a
 process function that calls the process function of the named process with the
 same arguments. The named process only has to have a valid name and a process
-function; it need not be part of the program. An alias borrows only the process
-function: its options, its dependencies and every other method are its own, so
-the same code can run under two names with two sets of options. A process with
-`ext_alias=<file>` runs an external script instead, with the interpreter that
-the extension of the file names (`.sh`, `.py`, `.R`, `.pl` or `.groovy`); a file
-whose extension names no known language is refused when the process is added. A
-relative path is resolved against the directory of the module whose `_program`
-method adds the process, so that a program and the scripts that ship with it can
-be moved together; an absolute path is accepted with a warning that the program
-is not portable. The file has to exist when the process is added, and the
-process function runs it from its path, so the script is read when the task
-runs: it is the one piece of the code of a run that editing a file after the run
-was prepared can still change.
+function when the alias is added. A target written in Bash need not be part of
+the program, since its process function exists once its module is loaded; the
+process function of a heredoc process or of another alias is built only when
+that process is added, so an alias of one is refused unless its target was added
+before it, as a process or as a sequential process. An alias borrows only the
+process function: its options, its dependencies and every other method are its
+own, so the same code can run under two names with two sets of options. A
+process with `ext_alias=<file>` runs an external script instead, with the
+interpreter that the extension of the file names (`.sh`, `.py`, `.R`, `.pl` or
+`.groovy`); a file whose extension names no known language is refused when the
+process is added. A relative path is resolved against the directory of the
+module whose `_program` method adds the process, so that a program and the
+scripts that ship with it can be moved together; an absolute path is accepted
+with a warning that the program is not portable. The file has to exist when the
+process is added, and the process function runs it from its path, so the script
+is read when the task runs: it is the one piece of the code of a run that
+editing a file after the run was prepared can still change.
 
 **A missing interpreter.** The interpreter of a language is the one that
 `configure` found, in `PYTHON`, `RSCRIPT`, `PERL` and `GROOVY`, and a machine
@@ -816,10 +827,16 @@ module in the same shell. A subprogram is therefore not a separate program: its
 processes join the one program being defined, with no scope of their own, and
 connect to the other processes through their options like any other process.
 Their names have to be unique across the whole program, which is what qualified
-names are for. `add_debasher_program` takes the module from the file from
-which it was loaded, and so expects the calling module to have loaded it; the
-module is not searched for again from the current directory, which is no
-longer the directory of the module that loaded it.
+names are for. `add_debasher_program` takes the module from the file from which
+it was loaded, and so expects the calling module to have loaded it; the module
+is not searched for again from the current directory, which is no longer the
+directory of the module that loaded it. A module given to `add_debasher_program`
+that is not loaded, a module without a `_program` method and a `_program` method
+that fails stop the preparation, as an error of `add_debasher_process` does; the
+program file given to `debasher_exec` without a `_program` method is refused in
+the same way. The order of the calls in a `_program` method matters only for an
+alias, which comes after its target (see "Processes in other languages, and
+aliases").
 
 Only the processes that some `_program` method adds with `add_debasher_process`
 are part of the program. A module can define processes that no program adds;

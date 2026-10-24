@@ -568,6 +568,50 @@ PYEOF
     [[ "${output}" == *"uses an absolute path (${BATS_TEST_TMPDIR}/ext.sh)"* ]]
 }
 
+@test "an alias of a heredoc process is refused until its target is added" {
+    prepare_add_process
+    pytarget_heredoc_py() { echo 'print("hi")'; }
+    pytarget_explain_opts() { :; }
+    pyalias_explain_opts() { :; }
+
+    run add_debasher_process pyalias "cpus=1;mem=32;time=00:01:00" "alias=pytarget"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"alias pytarget for process pyalias has not a function implementing it"* ]]
+
+    add_debasher_process pytarget "cpus=1;mem=32;time=00:01:00"
+    add_debasher_process pyalias "cpus=1;mem=32;time=00:01:00" "alias=pytarget"
+    [ "${DEBASHER_PROCESS_ALIAS_TARGETS[pyalias]}" = "pytarget" ]
+}
+
+@test "add_debasher_program refuses a module that is not loaded" {
+    prepare_add_process
+    declare -ga DEBASHER_PROGRAM_MODULES=()
+
+    run add_debasher_program "debasher_nosuch"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"module debasher_nosuch, which is not loaded; load it first with load_debasher_module"* ]]
+}
+
+@test "add_debasher_program refuses a loaded module without a program method" {
+    prepare_add_process
+    declare -ga DEBASHER_PROGRAM_MODULES=("${BATS_TEST_TMPDIR}/debasher_noprog.sh")
+
+    run add_debasher_program "debasher_noprog"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has no debasher_noprog_program method defining its program"* ]]
+}
+
+@test "debasher::_exec_program_func_for_module pops its module from the stack when the method fails" {
+    prepare_add_process
+    debasher_failing_program() { return 3; }
+
+    run debasher::_exec_program_func_for_module "${BATS_TEST_TMPDIR}/debasher_failing.sh"
+    [ "${status}" -eq 3 ]
+
+    debasher::_exec_program_func_for_module "${BATS_TEST_TMPDIR}/debasher_failing.sh" || true
+    [ "${DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[*]}" = "${BATS_TEST_TMPDIR}/mod.sh" ]
+}
+
 # --- debasher::_is_valid_processname -------------------------------------
 
 @test "debasher::_is_valid_processname names the method a process name collides with" {

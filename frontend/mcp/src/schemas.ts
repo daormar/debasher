@@ -92,7 +92,7 @@ export const processChanges = z.object({
   additionalSpecs: z.object({
     force: z.boolean().optional(),
     processdeps: z.string().optional(),
-    alias: z.string().optional(),
+    alias: z.string().optional().describe("The process whose code this one runs: a Bash process, or one in another language or another alias that comes before this one (every process comes before the sequential processes)."),
     aliasOptMap: aliasOptMap.optional(),
     externalAlias: z.string().optional(),
   }).strict().optional(),
@@ -134,7 +134,7 @@ export const seqProcessChanges = z.object({
   }).strict().optional()
     .describe('Options of srun for its steps, used only when a step goes to Slurm (sched "SLURM", or a call of seq_execute_slurm); ignored in the shell of the task.'),
   additionalSpecs: z.object({
-    alias: z.string().optional(),
+    alias: z.string().optional().describe("The process whose code this one runs: a Bash process, or one in another language or another alias that comes before this one (every process comes before the sequential processes)."),
     aliasOptMap: aliasOptMap.optional(),
     externalAlias: z.string().optional(),
     sched: z.enum(["BUILTIN", "SLURM"]).nullable().optional()

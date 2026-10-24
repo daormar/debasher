@@ -387,6 +387,27 @@ debasher::_get_loaded_module_fname()
 }
 
 ########
+# Fails, with an error, if a module with the same name as the given one,
+# but from another file, is loaded or being loaded: the engine finds the
+# methods of a module by its name, so the methods of two such modules
+# would overwrite each other.
+debasher::_check_module_name_is_unique()
+{
+    local fullmodname=$1
+
+    local modname=$(debasher::_get_modname_from_absmodname "${fullmodname}")
+
+    local absmodname
+    for absmodname in "${DEBASHER_PROGRAM_MODULES[@]}" "${DEBASHER_MODULE_LOAD_STACK[@]}"; do
+        if [ "${absmodname}" != "${fullmodname}" ] \
+               && [ "$(debasher::_get_modname_from_absmodname "${absmodname}")" = "${modname}" ]; then
+            echo "Error: module ${modname} is loaded from ${fullmodname}, but a module with the same name is already loaded from ${absmodname}; the modules of a program must have different names" >&2
+            return 1
+        fi
+    done
+}
+
+########
 debasher::_check_module_not_being_loaded()
 {
     local fullmodname=$1
@@ -441,15 +462,24 @@ debasher::load_debasher_module()
         if debasher::_module_is_loaded "${fullmodname}"; then
             :
         else
+            debasher::_check_module_name_is_unique "${fullmodname}" || exit 1
+
             # Obtain directory for module
             local dirname=$("${DIRNAME}" "${fullmodname}")
 
             # Change to module dir
             pushd "${dirname}" > /dev/null
 
-            # Load file
+            # Load file. A module ends with the status of its last top-level
+            # command, which has to succeed: a module that fails while it
+            # loads may have defined only part of what it should
             DEBASHER_MODULE_LOAD_STACK+=("${fullmodname}")
-            . "${fullmodname}" || exit 1
+            local load_status=0
+            . "${fullmodname}" || load_status=$?
+            if [ "${load_status}" -ne 0 ]; then
+                echo "Error: loading module ${module} (${fullmodname}) ended with status ${load_status}; the last command at the top level of a module has to succeed" >&2
+                exit 1
+            fi
             unset 'DEBASHER_MODULE_LOAD_STACK[-1]'
 
             # Restore previous dir

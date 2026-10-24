@@ -90,7 +90,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   other modules define: the library (`search_library`, `get_library_process`;
   `add_process` with a library name brings its options and code). Modules are
   looked for in the directories of the `DEBASHER_MOD_DIR` environment
-  variable, set among the environment variables of the program.
+  variable, set among the environment variables of the program. The modules
+  a program loads have names (file names without `.sh`) different from each
+  other and from the name of the program, since the generated script
+  `<name>.sh` is loaded as a module too.
 - **Program fields** (`set_program_settings`, or the `setProgramFields` edit):
   `name`, `description`, `preamble`, `sharedDirs`, `outputDir`,
   `executionOptions` and `programOptions`; the environment variables, such
@@ -192,7 +195,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `?` when one is enough; the types are `after`, `afterok`, `afternotok`,
   `afterany` and `aftercorr`, the last one task by task between two
   processes of several tasks), and aliases (`alias`, `externalAlias`,
-  `aliasOptMap`), which take the code of the process from another one.
+  `aliasOptMap`), which take the code of the process from another one. The
+  target of `alias` needs a process function when the alias is added: a
+  Bash process (of the program or of a module of the preamble) always has
+  one, but a process in another language, or another alias, has one only
+  once it is added, so such a target has to come before the alias in the
+  program (every process comes before the sequential processes).
 - **Additional methods** (general programs only), bodies of optional
   functions: `skipCode` (return 0 to skip a task, 1 to run it, any other
   status fails it; never on a process at either end of a FIFO),

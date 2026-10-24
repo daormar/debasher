@@ -261,3 +261,33 @@ EOM
     [ "${status}" -ne 124 ]
     [[ "${output}" == *"modules load each other in a cycle (mod_a.sh -> mod_b.sh -> mod_a.sh)"* ]]
 }
+
+@test "load_debasher_module names a module whose last top-level command fails" {
+    printf 'f() { :; }\nfalse\n' > "${mod_dir}/mod_fail.sh"
+    DEBASHER_MOD_DIR="${mod_dir}"
+
+    run load_debasher_module mod_fail
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"loading module mod_fail (${mod_dir}/mod_fail.sh) ended with status 1"* ]]
+}
+
+@test "load_debasher_module refuses a second module with the name of one already loaded" {
+    mkdir -p "${mod_dir}/other"
+    : > "${mod_dir}/dup.sh"
+    : > "${mod_dir}/other/dup.sh"
+
+    load_debasher_module "${mod_dir}/dup.sh" 2> /dev/null
+    run load_debasher_module "${mod_dir}/other/dup.sh"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"module dup is loaded from ${mod_dir}/other/dup.sh, but a module with the same name is already loaded from ${mod_dir}/dup.sh"* ]]
+}
+
+@test "load_debasher_module refuses a module with the name of one still loading" {
+    mkdir -p "${mod_dir}/other"
+    echo 'load_debasher_module other/dup' > "${mod_dir}/dup.sh"
+    : > "${mod_dir}/other/dup.sh"
+
+    run load_debasher_module "${mod_dir}/dup.sh"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"a module with the same name is already loaded from ${mod_dir}/dup.sh"* ]]
+}

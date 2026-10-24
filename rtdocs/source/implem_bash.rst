@@ -1090,8 +1090,11 @@ resources that the process requires. In the given example, both the
 
 When defining a program, it is also possible to add another
 programs. This can be achieved by means of the ``add_debasher_program``
-API function. An example of this is provided in the :ref:`Examples`
-Section.
+API function. The module whose program is added has to be loaded first
+with ``load_debasher_module``; ``add_debasher_program`` on a module that
+is not loaded, or on one without a ``program`` method, stops the
+preparation with an error. An example of this is provided in the
+:ref:`Examples` Section.
 
 Further Process, Program and Module Characterization
 ----------------------------------------------------
@@ -1114,7 +1117,10 @@ DeBasher module can define its own methods, similarly to a process (see
 * ``program``: incorporates processes into the program, using
   ``add_debasher_process`` (see `Program Definition`_ above), and/or
   whole programs defined by other modules, using ``add_debasher_program``
-  (see `Reusing Processes and Programs`_ below).
+  (see `Reusing Processes and Programs`_ below). A module run with
+  ``debasher_exec`` or added with ``add_debasher_program`` must define
+  it (named ``<module>_program``); one without it is refused, and the
+  error names the missing function.
 * ``shared_dirs``: not shown so far, declares one or more directories
   shared by several processes, using ``define_shared_dir``:
 
@@ -1452,7 +1458,11 @@ third argument):
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one
   directly. See the ``hello_world_alias``/``hello_world_ext_alias``
-  examples.
+  examples. A Bash target only has to be defined by a loaded module,
+  but the code of a process written in another language (a heredoc) or
+  of another alias exists only once that process is added, so an alias
+  of one is refused unless its target is added before it in the
+  ``program`` method, as a process or as a sequential process.
 * ``alias_opt_map``: only valid alongside ``alias``/``ext_alias``: a
   comma-separated list of ``OLD:NEW`` option-label pairs, renaming this
   process's own option names into the ones the aliased implementation
@@ -1657,6 +1667,15 @@ exist. Otherwise, they are searched in the directories indicated in the
 ``DEBASHER_MOD_DIR`` environment variable (using the ``:`` symbol as
 separator). The program file given to ``debasher_exec`` is looked for in
 the same way.
+
+The methods of a module are found by its name, so the modules of a
+program must have different names: loading a module whose name is that
+of another one already loaded (or still loading) from a different file
+stops the tool with an error naming both files. A module also ends with
+the status of its last command at the top level, which has to succeed:
+a module whose last command fails (for instance a final ``[ ... ] &&
+...`` that is false) stops the tool with an error naming the module and
+the status.
 
 After loading the required modules, the option related code can be
 modified just by redefining the corresponding functions.

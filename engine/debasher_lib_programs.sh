@@ -245,13 +245,21 @@ debasher::_exec_program_func_for_module()
     local program_funcname
     program_funcname=$(debasher::_get_program_funcname "${pfile}")
 
+    if ! debasher::_func_exists "${program_funcname}"; then
+        echo "Error: module ${pfile} has no ${program_funcname} method defining its program" >&2
+        return 1
+    fi
+
     # Add program file to stack
     DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK+=("${pfile}")
 
-    ${program_funcname} || return 1
+    local status=0
+    ${program_funcname} || status=$?
 
-    # Remove program file from stack
+    # Remove program file from stack, whether the method succeeded or not
     unset 'DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK[-1]'
+
+    return "${status}"
 }
 
 ########
@@ -667,7 +675,7 @@ debasher::_add_debasher_alias_process()
 
     # Check if exec function for alias exists
     if ! debasher::_get_exec_funcname "${process_alias}" >/dev/null; then
-        echo "Error: alias ${process_alias} for process ${processname} has not a function implementing it. Aborting execution..." >&2
+        echo "Error: alias ${process_alias} for process ${processname} has not a function implementing it (an alias of a heredoc process or of another alias has to be added after its target). Aborting execution..." >&2
         return 1
     fi
 
@@ -1199,13 +1207,14 @@ debasher::add_debasher_program()
     # different file
     local pfile
     if ! pfile=$(debasher::_get_loaded_module_fname "${modname}"); then
-        debasher::_determine_full_module_name "${modname}"
-        pfile="${DEBASHER_RESOLVED_MODNAME}"
+        echo "Error: add_debasher_program was given module ${modname}, which is not loaded; load it first with load_debasher_module. Aborting execution..." >&2
+        exit 1
     fi
 
     # Execute the program function of the module in this shell, so that
-    # the processes it adds are registered in the same program
-    debasher::_exec_program_func_for_module "${pfile}"
+    # the processes it adds are registered in the same program; a failure
+    # stops the preparation, as one of add_debasher_process does
+    debasher::_exec_program_func_for_module "${pfile}" || exit 1
 }
 
 ########
@@ -1226,7 +1235,9 @@ debasher::add_debasher_program()
 # The function executes the ``program`` method of the given module,
 # so that all of the processes added by that method become part of the
 # program currently being defined. The module must have been previously
-# loaded by means of the ``load_debasher_module`` API function.
+# loaded by means of the ``load_debasher_module`` API function; otherwise,
+# or when the module has no ``program`` method or the method fails, the
+# function aborts the execution.
 add_debasher_program() { debasher::add_debasher_program "$@"; }
 
 ########
