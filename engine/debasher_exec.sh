@@ -679,7 +679,7 @@ check_process_opts()
         # Iterate over the processes to be executed
         local processname
         for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            debasher::_show_curr_opt_list "${cmdline}" "${processname}"
+            debasher::_show_curr_opt_list "${cmdline}" "${processname}" || return 1
         done
     }
 
@@ -700,7 +700,8 @@ check_process_opts()
         for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
             # Store process options in an array for visualization
             local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
-            local serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}")
+            local serial_process_opts
+            serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}") || return 1
 
             # Print info about options
             local line="PROCESS: ${processname} ; NUM_TASKS: ${num_tasks} ; OPTIONS: ${serial_process_opts}"

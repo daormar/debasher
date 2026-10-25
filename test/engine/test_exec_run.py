@@ -1359,3 +1359,204 @@ def test_a_task_whose_options_cannot_be_generated_fails_instead_of_running(tmp_p
     log = "".join(p.read_text() for p in execdir.glob("slgen_*.sched_out"))
     for i in range(2):
         assert f"the options of slgen (task {i}) could not be generated" in log
+
+
+# An option generator that gives an option two different values
+TWO_VALUES_GEN_MODULE = """\
+twoval_explain_opts()
+{
+    explain_opt "-c" "<string>" "A value"
+}
+
+twoval_generate_opts_size()
+{
+    echo 2
+}
+
+twoval_generate_opts()
+{
+    local optlist=""
+    define_opt "-c" "x" optlist || return 1
+    define_opt "-c" "y" optlist || return 1
+    save_opt_list optlist
+}
+
+twoval()
+{
+    echo "c=$(read_opt_value_from_func_args "-c" "$@")"
+}
+
+debasher_twoval_program()
+{
+    add_debasher_process "twoval" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize("validate", [False, True])
+def test_an_option_generator_that_gives_an_option_two_values_stops_the_preparation(tmp_path, validate):
+    pfile = tmp_path / "debasher_twoval.sh"
+    pfile.write_text(TWO_VALUES_GEN_MODULE)
+    outdir = tmp_path / "out"
+
+    extra = ["--validate"] if validate else []
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), *extra)
+    assert result.returncode != 0
+    error = "Error: option -c for process twoval was given multiple, conflicting values (x y)"
+    assert result.stderr.count(error) == 1, result.stderr
+    assert not (outdir / "__exec__" / "twoval").exists()
+
+
+# A producer and three consumers, each connected to something that does not
+# exist: an option generator with no such output option, read by a process
+# with option lists; and, read by an option generator, a process that does
+# not exist and an output option that the producer does not have
+MISSING_CONNECTION_MODULE = """\
+genprod_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+}
+
+genprod_generate_opts_size()
+{
+    echo 1
+}
+
+genprod_generate_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/out.txt" optlist || return 1
+    save_opt_list optlist
+}
+
+genprod()
+{
+    echo produced > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+listcons_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Input file"
+}
+
+listcons_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "genprod" "-outmissing" optlist || return 1
+    save_opt_list optlist
+}
+
+listcons()
+{
+    echo "inf=$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+gencons_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Input file"
+}
+
+gencons_generate_opts_size()
+{
+    echo 1
+}
+
+gencons_generate_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "__CONNECTED_PROCESS__" "__CONNECTED_OPT__" optlist || return 1
+    save_opt_list optlist
+}
+
+gencons()
+{
+    echo "inf=$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_missconn_program()
+{
+    add_debasher_process "genprod" "cpus=1 mem=32 time=00:01:00"
+    __CONSUMER__
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "consumer, connected_process, connected_opt",
+    [
+        ("listcons", "genprod", "-outf"),
+        ("gencons", "nosuchproc", "-outf"),
+        ("gencons", "genprod", "-outmissing"),
+    ],
+)
+def test_a_connection_that_does_not_resolve_stops_the_preparation(
+    tmp_path, consumer, connected_process, connected_opt
+):
+    module = (
+        MISSING_CONNECTION_MODULE.replace("__CONNECTED_PROCESS__", connected_process)
+        .replace("__CONNECTED_OPT__", connected_opt)
+        .replace("__CONSUMER__", f'add_debasher_process "{consumer}" "cpus=1 mem=32 time=00:01:00"')
+    )
+    pfile = tmp_path / "debasher_missconn.sh"
+    pfile.write_text(module)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode != 0
+    assert f"Error: value of option -inf for process {consumer} could not be determined" in result.stderr
+    assert not (outdir / "__exec__").exists() or not any((outdir / "__exec__").iterdir())
+
+
+# An option generator with one task per line of a file given on the command
+# line
+LINES_GEN_MODULE = """\
+lines_explain_opts()
+{
+    explain_opt "-f" "<string>" "A line"
+}
+
+lines_explain_task_shaping_opts()
+{
+    explain_task_shaping_opt "-in" "<file>" "One task per line"
+}
+
+lines_generate_opts_size()
+{
+    wc -l < "$(get_cmdline_opt "$1" -in)"
+}
+
+lines_generate_opts()
+{
+    local task_idx=$5
+    local line
+    line=$(sed -n "$(( task_idx + 1 ))p" "$(get_cmdline_opt "$1" -in)")
+    [ -n "${line}" ] || return 1
+    local optlist=""
+    define_opt "-f" "${line}" optlist || return 1
+    save_opt_list optlist
+}
+
+lines()
+{
+    echo "f=$(read_opt_value_from_func_args "-f" "$@")"
+}
+
+debasher_lines_program()
+{
+    add_debasher_process "lines" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_an_option_generator_with_no_task_is_prepared_and_runs_nothing(tmp_path):
+    pfile = tmp_path / "debasher_lines.sh"
+    pfile.write_text(LINES_GEN_MODULE)
+    empty = tmp_path / "empty.txt"
+    empty.write_text("")
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-in", str(empty))
+    assert result.returncode == 0, result.stderr
+    assert "PROCESS: lines ; NUM_TASKS: 0" in (outdir / "program.opts").read_text()
+    assert not list((outdir / "__exec__").glob("lines/*.finished"))

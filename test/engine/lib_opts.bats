@@ -749,6 +749,38 @@ define_asking_array_program() {
     [ -n "${optlist}" ]
 }
 
+# --- one value per option, and connections that resolve -----------------
+
+@test "debasher::_get_single_opt_value counts a repeated value once and refuses two different ones" {
+    run debasher::_get_single_opt_value proc "-c" "x" "x"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "x" ]
+
+    run debasher::_get_single_opt_value proc "-c" ""
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "" ]
+
+    run debasher::_get_single_opt_value proc "-c" "x" "y" "x"
+    [ "${status}" -eq 1 ]
+    [ "${output}" = "Error: option -c for process proc was given multiple, conflicting values (x y)" ]
+}
+
+@test "debasher::_check_connection_resolved refuses an empty value and the marker of an option not found" {
+    local desc="${DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX}prod${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0${DEBASHER_ASSOC_ARRAY_ELEM_SEP}-outf"
+    DEBASHER_DESERIALIZED_ARGS=("kept")
+
+    run debasher::_check_connection_resolved cons "-inf" "${desc}" "/out/prod/f.txt"
+    [ "${status}" -eq 0 ]
+
+    local value
+    for value in "" "${DEBASHER_OPT_NOT_FOUND}"; do
+        run debasher::_check_connection_resolved cons "-inf" "${desc}" "${value}"
+        [ "${status}" -eq 1 ]
+        [ "${output}" = "Error: value of option -inf for process cons could not be determined. Check that connected process prod exists and has the output option -outf" ]
+    done
+    [ "${DEBASHER_DESERIALIZED_ARGS[*]}" = "kept" ]
+}
+
 # --- value descriptors --------------------------------------------------
 
 @test "debasher::write_value_to_desc keeps a value that echo would take for its flags" {

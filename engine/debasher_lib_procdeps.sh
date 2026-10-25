@@ -195,7 +195,7 @@ debasher::_get_procdeps_for_process()
         declare -A depdict
 
         local opts
-        opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
+        opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || return 1
         debasher::_deserialize_args "${opts}"
 
         local i
@@ -396,7 +396,7 @@ debasher::_register_fifos_read_by_process()
         local task_idx=$4
 
         local opts
-        opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}")
+        opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || return 1
         debasher::_deserialize_args "${opts}"
 
         local i

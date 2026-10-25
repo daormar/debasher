@@ -694,7 +694,11 @@ function. The three new functions are:
   ``-out`` option of ``previous_process`` and uses it to define the
   ``-i`` option for ``processname``. As a result, the output of
   ``previous_process`` will be connected to the input of
-  ``processname``.
+  ``processname``. If the connected process does not exist, or has no
+  task with that index or no such output option, the preparation of the
+  run stops with an error that names the option, the process and the
+  connected process and option; this holds for ``define_opts`` and
+  ``generate_opts`` alike.
 
 * ``define_opt``: this function takes as input the name of the option to
   be defined, its value and the name of the option list variable to
@@ -712,7 +716,8 @@ by another one called ``generate_opts_size``. The ``generate_opts_size``
 method should return a string representing the number of tasks that
 compose the array, and the ``generate_opts`` method will be similar to
 the ``define_opts`` one, but will define the options for the
-:math:`i`-th task within the array.
+:math:`i`-th task within the array. It may print 0: the process then
+has no task, and its ``generate_opts`` is never called.
 
 **NOTE**: task indices start at zero.
 
@@ -809,7 +814,13 @@ the same option list every time for the same command line and task
 index. The engine does not check it. If ``generate_opts`` fails when a
 task asks for its options, the task fails with an error that names the
 process and the task, under the built-in scheduler and under Slurm
-alike; it never runs without them. A generator that reads a file or
+alike; it never runs without them. The engine also calls
+``generate_opts`` for every task while the run is prepared (and for
+``--validate`` and ``--check-proc-opts``): if it fails for a task, or
+gives an option two different values, the preparation stops with exit
+status 1 and an error that names the option and the process, and no
+task runs. An option given twice with the same value counts once, with
+``define_opts`` too. A generator that reads a file or
 a directory, such as one given on the command line to say how many
 tasks there are, relies on it staying unchanged while the run lasts
 (while the program runs, in a resident program): do not modify the

@@ -1514,19 +1514,23 @@ arguments as `_define_opts`, prints the number of tasks, and its
 `_generate_opts` method, called with those arguments and a task index, builds
 the option list of that one task and hands it to `save_opt_list`, which returns
 it instead of registering it. A `_generate_opts_size` method that fails, or that
-prints anything but a number, stops the preparation of the run. The engine calls
-the generator whenever it needs the options of a task: while the run is
-prepared, to record the values that the task produces, to find its FIFOs, to
-infer its dependencies and to resolve the connections of other processes to it,
-and again inside the task itself (see "How option values reach a task"). A
-generator is therefore called several times for each task, in different shells,
-and has to give the same option list every time for the same command line and
-task index. The engine does not check it: a file or a directory that the
-generator reads, such as one named by a task shaping option, has to stay
-unchanged while the run lasts, and a process whose option lists have to be fixed
-when the run is prepared builds them in `_define_opts`, which runs, in a run,
-only while the run is prepared. A generator declares a FIFO with
-`define_fifo_opt`, as `_define_opts` does (see "Declaring and owning a FIFO").
+prints anything but a number, stops the preparation of the run. One that prints
+0 gives a process with no task, as a `_define_opts` method that never calls
+`save_opt_list` does, and its `_generate_opts` method is never called. A call of
+the generator that fails while the run is prepared, or whose option list gives
+an option two different values, stops the preparation too. The engine calls the
+generator whenever it needs the options of a task: while the run is prepared, to
+record the values that the task produces, to find its FIFOs, to infer its
+dependencies and to resolve the connections of other processes to it, and again
+inside the task itself (see "How option values reach a task"). A generator is
+therefore called several times for each task, in different shells, and has to
+give the same option list every time for the same command line and task index.
+The engine does not check it: a file or a directory that the generator reads,
+such as one named by a task shaping option, has to stay unchanged while the run
+lasts, and a process whose option lists have to be fixed when the run is
+prepared builds them in `_define_opts`, which runs, in a run, only while the run
+is prepared. A generator declares a FIFO with `define_fifo_opt`, as
+`_define_opts` does (see "Declaring and owning a FIFO").
 
 **The number of tasks of another process.** A process whose tasks match, one by
 one, those of another process, or whose task reads every task of another

@@ -282,25 +282,32 @@ debasher::_gen_opts_for_process_and_task()
         local connected_proc_task_idx=${DEBASHER_DESERIALIZED_ARGS[1]}
         local connected_proc_opt=${DEBASHER_DESERIALIZED_ARGS[2]}
 
-        # Resolve descriptor
-        sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${connected_proc}" "${connected_proc_task_idx}")
+        # Resolve descriptor; a process that does not exist has neither
+        # an option generator nor a line of options
+        local sargs
+        sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${connected_proc}" "${connected_proc_task_idx}") || return 1
         debasher::_deserialize_args "${sargs}"
         value=$(debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}")
 
-        echo "${value}"
+        printf '%s\n' "${value}"
     }
 
     debasher::_resolve_proc_out_descriptors()
     {
         local cmdline=$1
+        local processname=$2
 
         # Iterate over DEBASHER_DESERIALIZED_ARGS array
-        i=0
+        local i=0
         while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
-            # Resolve process output descriptor if necessary
+            # Resolve process output descriptor if necessary, refusing a
+            # connection that does not resolve
             local elem=${DEBASHER_DESERIALIZED_ARGS[$i]}
             if ! debasher::_str_is_option "${elem}" && debasher::_str_is_proc_out_opt_descriptor "${elem}"; then
-                value=$(debasher::_resolve_proc_out_descriptor "${cmdline}" "${elem}")
+                local opt=${DEBASHER_DESERIALIZED_ARGS[$((i-1))]}
+                local value
+                value=$(debasher::_resolve_proc_out_descriptor "${cmdline}" "${elem}") || return 1
+                debasher::_check_connection_resolved "${processname}" "${opt}" "${elem}" "${value}" || return 1
                 DEBASHER_DESERIALIZED_ARGS[$i]=${value}
             fi
             i=$((i+1))
@@ -350,15 +357,11 @@ debasher::_gen_opts_for_process_and_task()
         local opt
         for opt in "${opt_order[@]}"; do
             debasher::_split_opt_multival "${opt_list[${opt}]}"
-            local -a candidates=("${DEBASHER_DESERIALIZED_ARGS[@]}")
-
-            if [ "${#candidates[@]}" -gt 1 ]; then
-                echo "Error: option ${opt} for process ${processname} was given multiple, conflicting values (${candidates[*]})" >&2
-                return 1
-            fi
+            local value
+            value=$(debasher::_get_single_opt_value "${processname}" "${opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}") || return 1
 
             result+=("${opt}")
-            [ "${candidates[0]}" != "${DEBASHER_VOID_VALUE}" ] && result+=("${candidates[0]}")
+            [ "${value}" != "${DEBASHER_VOID_VALUE}" ] && result+=("${value}")
         done
 
         unset DEBASHER_DESERIALIZED_ARGS
@@ -377,7 +380,7 @@ debasher::_gen_opts_for_process_and_task()
     debasher::_call_generate_opts "${generate_opts_funcname}" "${cmdline}" "${proc_spec}" "${processname}" "${proc_outdir}" "${task_idx}" || return 1
 
     # Resolve descriptors for connected processes
-    debasher::_resolve_proc_out_descriptors "${cmdline}"
+    debasher::_resolve_proc_out_descriptors "${cmdline}" "${processname}" || return 1
 
     # Ensure no option received conflicting values
     debasher::_dedup_resolved_opts "${processname}" || return 1
@@ -770,7 +773,8 @@ debasher::_check_task_shaping_opts_given()
 # leaves the raw, still-serialized option tokens in
 # DEBASHER_DESERIALIZED_ARGS (it never populates DEBASHER_OPT_LIST_*
 # for a *_generate_opts caller), so its generate_opts method is
-# invoked once here, for task_idx 0 only, and the resulting tokens are
+# invoked once here, for task_idx 0 only (not at all for a process with
+# no task, which has no options to compare), and the resulting tokens are
 # walked the same way debasher::_generate_opt_list does (odd tokens
 # are option names, the following token is their value unless it is
 # itself an option, in which case the first is treated as a flag) to
@@ -789,6 +793,11 @@ debasher::_get_actual_opt_names_for_first_task()
     local cmdline=$1
     local processname=$2
     local -n actual_opt_names_ref=$3
+
+    # A process with no task has no options to compare
+    if [ "$(debasher::_get_numtasks_for_process "${processname}")" = 0 ]; then
+        return 0
+    fi
 
     if debasher::_uses_option_generator "${processname}"; then
         local generate_opts_funcname=$(debasher::_get_generate_opts_funcname "${processname}")
