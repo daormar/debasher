@@ -2108,7 +2108,7 @@ debasher::_load_curr_opt_list_loop()
             value=$(debasher::_get_opt_value_from_func_args "${connected_proc_opt}" "${DEBASHER_DESERIALIZED_ARGS[@]}")
 
             # Obtain value from list
-            echo ${value}
+            printf '%s\n' "${value}"
         else
             # Obtain reference to option list of connected process
             local connected_proc_opt_list_name=$(debasher::_get_opt_list_name ${connected_proc} ${connected_proc_task_idx})
@@ -2116,7 +2116,7 @@ debasher::_load_curr_opt_list_loop()
 
             # Obtain value from list
             value=${connected_proc_opt_list[$connected_proc_opt]}
-            echo ${value}
+            printf '%s\n' "${value}"
         fi
     }
 
@@ -2143,9 +2143,9 @@ debasher::_load_curr_opt_list_loop()
                 echo "Error: value of option ${opt} for process ${processname} could not be determined. Check if connected process ${conn_proc} does exist" >&2
                 return 1
             fi
-            echo "${resolved}"
+            printf '%s\n' "${resolved}"
         else
-            echo "${candidate}"
+            printf '%s\n' "${candidate}"
         fi
     }
 
@@ -2264,7 +2264,7 @@ debasher::write_value_to_desc()
     local value=$1
     local value_descriptor=$2
 
-    echo "${value}" > "${value_descriptor}"
+    printf '%s\n' "${value}" > "${value_descriptor}"
 }
 
 ########

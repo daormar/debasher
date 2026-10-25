@@ -115,14 +115,17 @@ debasher::_print_opt_code_slurm_sched()
         local task_id=0
     fi
 
+    # A task whose options cannot be obtained fails instead of running
+    # without them, as with the built-in scheduler
+    local opts_error="{ echo \"Error: the options of ${processname} (task ${task_id}) could not be generated\" >&2; exit 1; }"
     if debasher::_uses_option_generator "${processname}"; then
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
         local proc_outdir=$(debasher::_get_process_outdir "${processname}")
         local generate_opts_funcname=$(debasher::_get_generate_opts_funcname ${processname})
-        echo "sargs=\$(debasher::_gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\")"
+        echo "sargs=\$(debasher::_gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\") || ${opts_error}"
     else
         local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
-        echo "sargs=\$(debasher::_get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\")"
+        echo "sargs=\$(debasher::_get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\") || ${opts_error}"
     fi
     echo "debasher::_deserialize_args \"\${sargs}\""
 }

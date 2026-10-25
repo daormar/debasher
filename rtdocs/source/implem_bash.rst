@@ -806,7 +806,10 @@ keeps the option list of every task until the task runs. A generator
 keeps nothing: the engine calls ``generate_opts`` again whenever it
 needs the options of a task, inside the task too, so it has to give
 the same option list every time for the same command line and task
-index. The engine does not check it. A generator that reads a file or
+index. The engine does not check it. If ``generate_opts`` fails when a
+task asks for its options, the task fails with an error that names the
+process and the task, under the built-in scheduler and under Slurm
+alike; it never runs without them. A generator that reads a file or
 a directory, such as one given on the command line to say how many
 tasks there are, relies on it staying unchanged while the run lasts
 (while the program runs, in a resident program): do not modify the

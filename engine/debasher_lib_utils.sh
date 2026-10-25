@@ -964,9 +964,10 @@ debasher::_print_array_elems()
     local arr_name=$1
     local arr_size=$2
 
+    local i
     for ((i=0; i<$arr_size; i++)); do
         local element="${arr_name}[$i]"
-        echo "${!element}"
+        printf '%s\n' "${!element}"
     done
 }
 

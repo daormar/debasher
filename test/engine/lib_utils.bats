@@ -140,6 +140,25 @@ setup() {
     done
 }
 
+# --- debasher::_print_array_elems ---------------------------------------
+
+@test "debasher::_print_array_elems prints one line per element, an element that echo would take for its flags too" {
+    local -a elems=("-n" "-e" "-x 1")
+    run debasher::_print_array_elems elems 3
+    [ "${status}" -eq 0 ]
+    [ "${#lines[@]}" -eq 3 ]
+    [ "${lines[0]}" = "-n" ]
+    [ "${lines[1]}" = "-e" ]
+    [ "${lines[2]}" = "-x 1" ]
+}
+
+@test "debasher::_print_array_elems leaves the variables of its caller as they were" {
+    local -a elems=("a" "b")
+    local i=keep
+    debasher::_print_array_elems elems 2 > /dev/null
+    [ "${i}" = "keep" ]
+}
+
 # --- debasher::_get_processname_from_caller ------------------------------
 
 @test "debasher::_get_processname_from_caller prefers a registered process over a helper named like a method" {

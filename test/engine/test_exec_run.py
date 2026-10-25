@@ -1182,3 +1182,180 @@ def test_a_process_whose_interpreter_was_not_found_is_documented_but_not_run(tmp
         assert f"process {process} needs the interpreter of R (RSCRIPT)" in result.stderr
     assert not (outdir / "__exec__" / "rheredoc").exists()
     assert not (outdir / "__exec__" / "rext").exists()
+
+
+# An array whose first task has a flag as its only option, a word that echo
+# would take for one of its own flags
+ECHO_FLAG_MODULE = """\
+echoflag_explain_opts()
+{
+    explain_flag "-n" "A flag"
+    explain_opt "-x" "<int>" "A number"
+}
+
+echoflag_define_opts()
+{
+    local optlist=""
+    define_flag "-n" optlist || return 1
+    save_opt_list optlist
+    optlist=""
+    define_opt "-x" "1" optlist || return 1
+    save_opt_list optlist
+    optlist=""
+    define_opt "-x" "2" optlist || return 1
+    save_opt_list optlist
+}
+
+echoflag()
+{
+    local n=no
+    read_flag_from_func_args "-n" "$@" && n=yes
+    echo "n=${n} x=$(read_opt_value_from_func_args "-x" "$@")"
+}
+
+debasher_echoflag_program()
+{
+    add_debasher_process "echoflag" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_each_task_of_an_array_receives_its_own_options_when_the_first_one_is_only_a_flag(tmp_path):
+    pfile = tmp_path / "debasher_echoflag.sh"
+    pfile.write_text(ECHO_FLAG_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    execdir = outdir / "__exec__" / "echoflag"
+    stdouts = [(execdir / f"echoflag_{i}.stdout").read_text() for i in range(3)]
+    assert stdouts == ["n=yes x=_OPT_NOT_FOUND_\n", "n=no x=1\n", "n=no x=2\n"]
+
+
+# A consumer with option lists connected to an output of its producer whose
+# path holds two blanks in a row and a "*"
+BLANKS_PATH_MODULE = """\
+prod_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+}
+
+prod_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/a  b*.txt" optlist || return 1
+    save_opt_list optlist
+}
+
+prod()
+{
+    echo produced > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+cons_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Input file"
+}
+
+cons_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "prod" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+cons()
+{
+    local inf=$(read_opt_value_from_func_args "-inf" "$@")
+    echo "inf=[${inf}]"
+    cat "${inf}"
+}
+
+debasher_blanks_program()
+{
+    add_debasher_process "prod" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "cons" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_connected_path_with_blanks_reaches_the_consumer_as_it_is_and_keeps_its_dependency(tmp_path):
+    pfile = tmp_path / "debasher_blanks.sh"
+    pfile.write_text(BLANKS_PATH_MODULE)
+    # A file that the "*" of the path would match if it were expanded
+    (tmp_path / "a").mkdir()
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+
+    procspec = (outdir / "program.procspec").read_text().splitlines()
+    cons_line = next(line for line in procspec if line.startswith("cons "))
+    assert "processdeps=afterok:prod" in cons_line
+    stdout = (outdir / "__exec__" / "cons" / "cons.stdout").read_text()
+    assert stdout == f"inf=[{outdir}/prod/a  b*.txt]\nproduced\n"
+
+
+# An option generator whose options can be generated while the run is
+# prepared but not when a task of it runs, once the exec directory of its
+# process exists
+GEN_FAILS_AT_LAUNCH_MODULE = """\
+slgen_explain_opts()
+{
+    explain_opt "-c" "<string>" "A value"
+}
+
+slgen_generate_opts_size()
+{
+    echo 2
+}
+
+slgen_generate_opts()
+{
+    local process_outdir=$4
+    [ ! -d "${process_outdir%/*}/__exec__/slgen" ] || return 1
+    local optlist=""
+    define_opt "-c" "x" optlist || return 1
+    save_opt_list optlist
+}
+
+slgen()
+{
+    echo "c=$(read_opt_value_from_func_args "-c" "$@")"
+}
+
+debasher_slgen_program()
+{
+    add_debasher_process "slgen" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_task_whose_options_cannot_be_generated_fails_instead_of_running(tmp_path, sched):
+    pfile = tmp_path / "debasher_slgen.sh"
+    pfile.write_text(GEN_FAILS_AT_LAUNCH_MODULE)
+    outdir = tmp_path / "out"
+
+    extra = ["--wait"] if sched == "SLURM" else []
+    run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), *extra)
+
+    execdir = outdir / "__exec__" / "slgen"
+    for i in range(2):
+        assert not (execdir / f"slgen_{i}.finished").exists()
+        stdout = execdir / f"slgen_{i}.stdout"
+        assert not stdout.exists() or "c=" not in stdout.read_text()
+    log = "".join(p.read_text() for p in execdir.glob("slgen_*.sched_out"))
+    for i in range(2):
+        assert f"the options of slgen (task {i}) could not be generated" in log

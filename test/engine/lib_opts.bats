@@ -749,6 +749,17 @@ define_asking_array_program() {
     [ -n "${optlist}" ]
 }
 
+# --- value descriptors --------------------------------------------------
+
+@test "debasher::write_value_to_desc keeps a value that echo would take for its flags" {
+    local desc="${BATS_TEST_TMPDIR}/value_desc"
+    local value
+    for value in -n -e -E -ne "-n -e"; do
+        debasher::write_value_to_desc "${value}" "${desc}"
+        [ "$(debasher::_read_value_from_desc "${desc}")" = "${value}" ] || { echo "lost: ${value}"; return 1; }
+    done
+}
+
 # --- Python files of a process: tasks and skip -------------------------------
 
 # Writes the Python files of a process "proc" into a directory "mod" below

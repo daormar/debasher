@@ -2369,7 +2369,10 @@ A task does the same, in this order, under both schedulers:
 
 1. It gets its option list, from its line of `.sched_opts` or from the option
    generator of its process (see "How option values reach a task"), and
-   writes it to its `.opts` file.
+   writes it to its `.opts` file. A task whose option list cannot be
+   obtained, such as one whose `_generate_opts` method fails, fails at
+   this step, before its `_skip` method, its process function or its
+   `_post` method is called.
 2. It logs the time it started.
 3. If the process has a `_skip` method, the task calls it with its options.
    When the method returns 0, the task writes its completion marker, logs the
