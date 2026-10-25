@@ -123,10 +123,13 @@ describe("validateEdits", () => {
       { op: "addOption", processId: "id-a", option: createOption("y", "-ind", { channel: "process_outdir" }) },
       { op: "addOption", processId: "id-a", option: createOption("z", "-outs", { direction: "output", subpath: "${task_idx}" }) },
       { op: "addOption", processId: "id-a", option: createOption("w", "-outd", { direction: "output", channel: "process_outdir", subpath: "${task_idx}" }) },
+      { op: "addOption", processId: "id-a", option: createOption("v", "-inv", { channel: "value_desc" }) },
+      { op: "addOption", processId: "id-a", option: createOption("u", "-outv", { direction: "output", channel: "value_desc" }) },
     ])).toEqual([
       'Option "-outn" of process "a" is an output, which cannot take its value from the process specifications.',
       'Option "-ind" of process "a" uses the channel "process_outdir", which only an output can use.',
       'Option "-outs" of process "a" has a subpath, which only the channels "shared_dir" and "process_outdir" take.',
+      'Option "-inv" of process "a" uses the channel "value_desc", which only an output, labeled -out* or --out*, can use.',
     ]);
   });
 

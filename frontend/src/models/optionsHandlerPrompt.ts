@@ -106,7 +106,8 @@ function rulesSection(program: Program, process: ProgramProcess, mode: PromptedH
     ...HEADER.map(line => `  ${line}`),
     "  ```",
     "",
-    "- Read the value of a command line option of the program with `get_cmdline_opt \"$cmdline\" \"<label>\"`. `$process_outdir` is the output directory of the process.",
+    "- Read the value of a command line option of the program with `get_cmdline_opt \"$cmdline\" \"<label>\"`, which prints its value, empty when it is given with an empty value, or `_OPT_NOT_FOUND_` when it is not given. `$process_outdir` is the output directory of the process.",
+    "- A value that goes into an option, such as an element of the array, cannot start with `-` or `--` followed by a letter or `_` (a negative number can), nor hold a newline: the engine refuses it, naming the option, and the preparation of the run stops.",
     "- The code runs while `debasher_exec` prepares the run, before any process of the program does. It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO. It cannot read what a process of the program produces either: a file left by an earlier run would hold old data. It may read what exists before the run, such as a file or a directory given on the command line; the number of tasks usually comes from a command line option.",
     ...numTasksRules(program, process, mode),
   ];
@@ -128,6 +129,9 @@ function pythonRulesSection(program: Program, process: ProgramProcess, mode: Pro
     "- The function runs while `debasher_exec` prepares the run, before any process of the program does. It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO. It cannot read what a process of the program produces either: a file left by an earlier run would hold old data. It may read what exists before the run, such as a file or a directory given on the command line; the number of tasks usually comes from a command line option.",
     "- The file runs with the Python that DeBasher was configured with, not in the Conda environment or the Docker image of the process, so it imports only what that Python has; its own directory is first on `sys.path`, so it can import files beside it. A relative path is taken from the directory where `debasher_exec` runs. What it prints goes to the standard error. An exception, or a value of the wrong kind (a string or a dictionary for the elements, a negative number or a boolean for the number of tasks), stops the preparation of the run with the traceback.",
     "- Python cannot ask another process for its number of tasks (`get_process_num_tasks` is a Bash function of the engine): when the tasks of this process follow those of another one, the code of the options handler is better written in Bash.",
+    ...(mode === "array"
+      ? ["- The text of an element that goes into an option cannot start with `-` or `--` followed by a letter or `_` (a negative number can), nor hold a newline: the engine refuses it, naming the option, and the preparation of the run stops."]
+      : []),
     ...taskByTaskSourcesLine(program, process),
   ];
 }

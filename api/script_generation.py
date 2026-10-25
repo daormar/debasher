@@ -665,6 +665,13 @@ def _check_option_sources(process, option) -> None:
             f'Option "{option.label}" on "{process.name}" uses channel "process_outdir", '
             "which only an output can use."
         )
+    # The task writes the value of a value descriptor, and the engine
+    # records it as produced only for an output, which it tells by the label
+    if option.channel == "value_desc" and not option.label.startswith(("-out", "--out")):
+        raise ValueError(
+            f'Option "{option.label}" on "{process.name}" uses channel "value_desc", '
+            'which only an output, labeled -out* or --out*, can use.'
+        )
     if option.subpath and option.channel not in ("shared_dir", "process_outdir"):
         raise ValueError(
             f'Option "{option.label}" on "{process.name}" has a subpath, which only '

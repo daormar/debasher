@@ -18,7 +18,7 @@ setup() {
     # the ones these tests use are made global here. Their values are set
     # by init_program, from the test itself, since the local ones still
     # hide the global ones until setup() returns
-    declare -gA DEBASHER_PROGRAM_SHDIRS DEBASHER_PROGRAM_SHSUBDIRS
+    declare -gA DEBASHER_PROGRAM_SHDIRS DEBASHER_PROGRAM_SHSUBDIRS DEBASHER_PROGRAM_SHDIR_USES
     declare -gA DEBASHER_PROGRAM_PROCESSES DEBASHER_PROCESS_OPT_LIST_LEN
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES DEBASHER_PROCESS_TASK_SUBDIRS
     declare -g DEBASHER_PROGRAM_OUTDIR

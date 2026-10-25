@@ -202,6 +202,9 @@ function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): st
   if (option.direction !== "output" && option.channel === "process_outdir") {
     return `${where} uses the channel "process_outdir", which only an output can use.`;
   }
+  if (option.channel === "value_desc" && !/^--?out/.test(option.label)) {
+    return `${where} uses the channel "value_desc", which only an output, labeled -out* or --out*, can use.`;
+  }
   if (option.dataType === "None" && option.channel !== "none") {
     return `${where} is a flag, which carries no data, and so no channel but "none".`;
   }

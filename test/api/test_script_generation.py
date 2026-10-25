@@ -502,6 +502,12 @@ def test_a_process_output_directory_on_an_input_is_refused():
         _option_definition_line(_make_process([option]), option, {}, {})
 
 
+def test_a_value_descriptor_on_an_option_not_labeled_as_an_output_is_refused():
+    option = _make_dir_option("input", "-inv", "value_desc")
+    with pytest.raises(ValueError, match='uses channel "value_desc", which only an output'):
+        _option_definition_line(_make_process([option]), option, {}, {})
+
+
 def test_a_subpath_on_an_option_of_another_channel_is_refused():
     option = _make_dir_option("output", "-outf", "none", value="x", subpath="${task_idx}")
     with pytest.raises(ValueError, match="has a subpath"):

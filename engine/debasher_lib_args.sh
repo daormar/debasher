@@ -152,6 +152,9 @@ debasher::_memoize_opts()
 {
     local cmdline=$1
 
+    # Forget the options of the line memoized before
+    DEBASHER_MEMOIZED_OPTS=()
+
     debasher::_deserialize_args "${cmdline}"
 
     # memoize_opts receives the full command line, so
@@ -186,39 +189,12 @@ debasher::_memoize_opts()
 }
 
 ########
-debasher::_check_opt_given()
-{
-    local cmdline=$1
-    local opt=$2
-
-    # Convert string to array (result is placed into the
-    # DEBASHER_DESERIALIZED_ARGS variable)
-    debasher::_deserialize_args "${cmdline}"
-
-    # Scan DEBASHER_DESERIALIZED_ARGS
-    i=0
-    while [ $i -lt ${#DEBASHER_DESERIALIZED_ARGS[@]} ]; do
-        if [ ${DEBASHER_DESERIALIZED_ARGS[$i]} = "${opt}" ]; then
-            return 0
-        fi
-        i=$((i+1))
-    done
-
-    # Option not given
-    return 1
-}
-
-########
 debasher::_check_memoized_opt()
 {
     local opt=$1
 
-    # Check if option was not given
-    if [ -z "${DEBASHER_MEMOIZED_OPTS[$opt]}" ]; then
-        return 1
-    else
-        return 0
-    fi
+    # An option given with the empty string as its value is given
+    [[ -v DEBASHER_MEMOIZED_OPTS["${opt}"] ]]
 }
 
 ########
@@ -229,7 +205,7 @@ debasher::_check_opt_given_memoiz()
 
     if [ "${DEBASHER_LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
-        debasher::_check_memoized_opt $opt || return 1
+        debasher::_check_memoized_opt "${opt}" || return 1
     else
         # Process not memoized line
         debasher::_memoize_opts "$cmdline"
@@ -238,7 +214,7 @@ debasher::_check_opt_given_memoiz()
         DEBASHER_LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
-        debasher::_check_memoized_opt $opt || return 1
+        debasher::_check_memoized_opt "${opt}" || return 1
     fi
 }
 
@@ -477,12 +453,14 @@ debasher::_read_memoized_opt_value()
 {
     local opt=$1
 
-    # Check if option was not given or it had void value
-    if [ -z "${DEBASHER_MEMOIZED_OPTS[$opt]}" -o "${DEBASHER_MEMOIZED_OPTS[$opt]}" = ${DEBASHER_VOID_VALUE} ]; then
-        echo ${DEBASHER_OPT_NOT_FOUND}
+    # Check if option was not given or it had void value; an option
+    # given with the empty string as its value has that value, as in a
+    # task
+    if [[ ! -v DEBASHER_MEMOIZED_OPTS["${opt}"] ]] || [ "${DEBASHER_MEMOIZED_OPTS["${opt}"]}" = "${DEBASHER_VOID_VALUE}" ]; then
+        echo "${DEBASHER_OPT_NOT_FOUND}"
         return 1
     else
-        echo "${DEBASHER_MEMOIZED_OPTS[$opt]}"
+        printf '%s\n' "${DEBASHER_MEMOIZED_OPTS["${opt}"]}"
         return 0
     fi
 }
@@ -495,7 +473,7 @@ debasher::_read_opt_value_from_line_memoiz()
 
     if [ "${DEBASHER_LAST_PROC_LINE_MEMOPTS}" = "$cmdline" ]; then
         # Given line was previously processed, return memoized result
-        _OPT_VALUE_=$(debasher::_read_memoized_opt_value $opt) || return 1
+        _OPT_VALUE_=$(debasher::_read_memoized_opt_value "${opt}") || return 1
     else
         # Process not memoized line
         debasher::_memoize_opts "$cmdline"
@@ -504,6 +482,39 @@ debasher::_read_opt_value_from_line_memoiz()
         DEBASHER_LAST_PROC_LINE_MEMOPTS="$cmdline"
 
         # Return result
-        _OPT_VALUE_=$(debasher::_read_memoized_opt_value $opt) || return 1
+        _OPT_VALUE_=$(debasher::_read_memoized_opt_value "${opt}") || return 1
     fi
+}
+
+########
+# Reads into _OPT_VALUE_ the value of an option of the command line that
+# takes one, as debasher::_read_opt_value_from_line_memoiz does. Returns
+# 1, with no message, when the option was not given, and 2, with an
+# error that names the option and the word that follows it, when it was
+# given without a value: a value cannot start with "-" followed by a
+# letter or an underscore, which is read as an option.
+#
+# $1 - Command line.
+# $2 - Option name.
+debasher::_read_cmdline_opt_value()
+{
+    local cmdline=$1
+    local opt=$2
+
+    debasher::_read_opt_value_from_line_memoiz "${cmdline}" "${opt}" && return 0
+    debasher::_check_opt_given_memoiz "${cmdline}" "${opt}" || return 1
+
+    local next_word
+    next_word=$(
+        debasher::_deserialize_args "${cmdline}"
+        set -- "${DEBASHER_DESERIALIZED_ARGS[@]}"
+        while [ $# -gt 1 ] && [ "$1" != "${opt}" ]; do shift; done
+        [ $# -gt 1 ] && printf '%s\n' "$2"
+    )
+    if [ -n "${next_word}" ]; then
+        echo "Error: option ${opt} takes a value, but on the command line it is followed by ${next_word}, which is read as an option: a value cannot start with '-' followed by a letter or an underscore" >&2
+    else
+        echo "Error: option ${opt} takes a value, but none was given on the command line" >&2
+    fi
+    return 2
 }

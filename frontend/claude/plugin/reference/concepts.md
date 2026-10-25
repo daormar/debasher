@@ -107,7 +107,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   finished before the last change of the generated script (see "Running and
   following").
 - **Program options.** The values of the command-line options for the next
-  run, by label; setting them replaces them all.
+  run, by label; setting them replaces them all. An empty value leaves the
+  option out, as not given. A value cannot start with `-` or `--` followed by
+  a letter or `_` (a negative number can): the engine refuses it and the run
+  does not start.
 - **Shared directories.** Named directories created once before any process
   runs, which processes reach without a connection.
 - **Sequential processes** (general programs only): code that a process runs
@@ -234,7 +237,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **channel**, how the data gets to the process: `none` (a value or a
   connection; the process receives the data itself), `fifo` (`value` is the
   name of the FIFO), `value_desc` (an output into which the task writes a
-  value), `shared_dir` (`value` names a shared directory), `process_outdir`
+  value), `shared_dir` (`value` names a shared directory that the program
+  or a module of its preamble declares; any other name stops the preparation
+  of the run), `process_outdir`
   (an output: the output directory of the process, `value` empty). Through a
   FIFO or a value descriptor the process receives a path, and the data type
   is that of each line of the FIFO, or of the value held (a FIFO of `int`
@@ -253,10 +258,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   directory and give the dependency in `processdeps`, since the engine infers
   none from a whole shared directory.
 - **Where an input's value comes from**: a connection; a literal `value` (a
-  Bash word, such as `10` or `${task_idx}`); `commandLine` (from the program
-  options); or `fromProcessSpec` (on a `standard` process, never on an output:
-  `value` names a specification, `cpus`, `mem`, `time`, ...). The last two
-  take no connection.
+  Bash word, such as `10` or `${task_idx}`, which once expanded cannot start
+  with `-` or `--` followed by a letter or `_`, nor hold a newline: the engine
+  refuses it and the preparation of the run stops); `commandLine` (from the
+  program options); or `fromProcessSpec` (on a `standard` process, never on an
+  output: `value` names a specification, `cpus`, `mem`, `time`, ...). The last
+  two take no connection.
 - `taskShaping`: a mandatory command-line input with a value that only the
   options handler reads (the code that builds the array or counts the tasks),
   to decide the tasks; no task receives it, so the code of the process cannot

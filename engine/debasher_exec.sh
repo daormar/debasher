@@ -1011,6 +1011,9 @@ create_mod_shared_dirs()
 
     debasher::_show_program_shdirs >&2
 
+    # Refuse an option that names a shared directory no module declares
+    debasher::_check_shared_dirs_declared || return 1
+
     # Create the shared subdirectories that the options ask for, and
     # remove from their shared directories what no option asks for (a
     # validation only names it)

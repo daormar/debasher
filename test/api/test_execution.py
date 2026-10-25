@@ -246,6 +246,17 @@ def test_the_flag_of_the_supervisor_is_left_out_when_not_set(tmp_path):
     assert _flags(command) == ["--sched", "BUILTIN"]
 
 
+def test_an_option_left_blank_is_not_given(tmp_path):
+    # The engine takes an option given with the empty string as given with
+    # that value, so a blank field has to leave the option out
+    program = _general(tmp_path, programOptions={"-n": "", "-m": "2"})
+
+    command = _command(program)
+
+    assert "-n" not in command
+    assert command[-2:] == ["-m", "2"]
+
+
 # --- the session and the output of a tool -------------------------------------
 
 _REPORT_SESSION_AND_OUTPUT = (

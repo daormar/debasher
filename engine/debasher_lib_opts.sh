@@ -745,7 +745,10 @@ debasher::define_cmdline_opt()
     local varname=$3
 
     # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    local status=0
+    debasher::_read_cmdline_opt_value "$cmdline" "$opt" || status=$?
+    [ "${status}" -eq 1 ] && debasher::errmsg "$opt option not found"
+    [ "${status}" -eq 0 ] || return 1
     local value="${_OPT_VALUE_}"
 
     # Add option
@@ -849,10 +852,12 @@ debasher::define_cmdline_opt_if_given()
     local varname=$3
 
     # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    local status=0
+    debasher::_read_cmdline_opt_value "$cmdline" "$opt" || status=$?
+    [ "${status}" -eq 2 ] && return 1
     local value=${_OPT_VALUE_}
 
-    if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
+    if [ "${status}" -eq 0 ]; then
         # Add option
         debasher::define_opt "$opt" "$value" "$varname"
     fi
@@ -889,7 +894,10 @@ debasher::_define_cmdline_path_opt()
     local kind=$4
 
     # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt" || { debasher::errmsg "$opt option not found" ; return 1; }
+    local status=0
+    debasher::_read_cmdline_opt_value "$cmdline" "$opt" || status=$?
+    [ "${status}" -eq 1 ] && debasher::errmsg "$opt option not found"
+    [ "${status}" -eq 0 ] || return 1
     local value="${_OPT_VALUE_}"
 
     # Verify the path exists and normalize it to an absolute path
@@ -918,10 +926,12 @@ debasher::_define_cmdline_path_opt_if_given()
     local kind=$4
 
     # Get value for option
-    debasher::_read_opt_value_from_line_memoiz "$cmdline" "$opt"
+    local status=0
+    debasher::_read_cmdline_opt_value "$cmdline" "$opt" || status=$?
+    [ "${status}" -eq 2 ] && return 1
     local value=${_OPT_VALUE_}
 
-    if [ "$value" != ${DEBASHER_OPT_NOT_FOUND} ]; then
+    if [ "${status}" -eq 0 ]; then
         debasher::_define_cmdline_path_opt "$cmdline" "$opt" "$varname" "$kind"
     fi
 }
@@ -1089,7 +1099,7 @@ debasher::define_cmdline_flag_if_given()
     local varname=$3
 
     # Get value for option
-    if debasher::_check_opt_given "$cmdline" "$opt"; then
+    if debasher::_check_opt_given_memoiz "$cmdline" "$opt"; then
         # Add option
         debasher::define_flag "$opt" "$varname"
     fi
@@ -1547,6 +1557,33 @@ debasher::_optname_is_correct()
 }
 
 ########
+# Fails when a value cannot reach a task as it is: one that would be read
+# as an option, since it starts with "-" followed by a letter or an
+# underscore, and one that holds a newline or the separator of the
+# words of an option list, which would split it.
+debasher::_optvalue_is_correct()
+{
+    local funcname=$1
+    local opt=$2
+    local value=$3
+
+    if debasher::_str_is_option "${value}"; then
+        debasher::errmsg "$funcname: option ${opt} is given the value ${value}, which would be read as an option: a value cannot start with '-' followed by a letter or an underscore"
+        return 1
+    fi
+    if [[ "${value}" == *$'\n'* ]]; then
+        debasher::errmsg "$funcname: value of option ${opt} holds a newline"
+        return 1
+    fi
+    if [[ "${value}" == *"${DEBASHER_ARG_SEP}"* ]]; then
+        debasher::errmsg "$funcname: value of option ${opt} holds ${DEBASHER_ARG_SEP}, the separator of the words of an option list"
+        return 1
+    fi
+
+    return 0
+}
+
+########
 debasher::_optlist_varname_is_correct()
 {
     local funcname=$1
@@ -1627,6 +1664,7 @@ debasher::define_opt()
 
     # Check parameters
     debasher::_optname_is_correct "${FUNCNAME}" "$opt" || return 1
+    debasher::_optvalue_is_correct "${FUNCNAME}" "$opt" "$value" || return 1
     debasher::_optlist_varname_is_correct "${FUNCNAME}" "$varname" || return 1
 
     if [ -z "${var_ref}" ]; then
@@ -1803,6 +1841,13 @@ debasher::define_value_desc_opt()
 {
     local opt=$1
     local varname=$2
+
+    # The task writes the value, and the path of the descriptor is
+    # recorded as produced only for an output option
+    if ! debasher::_str_is_output_option "${opt}"; then
+        debasher::errmsg "${FUNCNAME}: option ${opt} is not an output option (-out* or --out*)"
+        return 1
+    fi
 
     # Get the process and the task whose options are being defined
     local proc_name task_idx

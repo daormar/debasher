@@ -21,7 +21,7 @@ setup() {
     # the ones these tests use are made global here. Their values are set
     # by init_program, from the test itself, since the local ones still
     # hide the global ones until setup() returns
-    declare -gA DEBASHER_PROGRAM_SHDIRS DEBASHER_PROGRAM_SHSUBDIRS
+    declare -gA DEBASHER_PROGRAM_SHDIRS DEBASHER_PROGRAM_SHSUBDIRS DEBASHER_PROGRAM_SHDIR_USES
     declare -gA DEBASHER_PROGRAM_PROCESSES DEBASHER_PROCESS_OPT_LIST_LEN
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES DEBASHER_PROCESS_TASK_SUBDIRS
     declare -gA DEBASHER_PROGRAM_OPT_DESC DEBASHER_PROGRAM_OPT_TYPE
@@ -220,6 +220,123 @@ init_paths() {
     [ "$(debasher::read_opt_value_from_func_args -e "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "" ]
     [ "$(debasher::read_opt_value_from_func_args -f "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "${DEBASHER_VOID_VALUE}" ]
     [ "$(debasher::read_opt_value_from_func_args -n "${DEBASHER_DESERIALIZED_ARGS[@]}")" = "-5" ]
+}
+
+@test "debasher::define_opt refuses a value that would be read as an option, naming the option and the value" {
+    local optlist=""
+    run debasher::define_opt "-b" "-verbose" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-b"*"-verbose"* ]]
+
+    run debasher::define_opt "-b" "--out" optlist
+    [ "${status}" -ne 0 ]
+
+    # A negative number, a lone dash and an empty value are values
+    local value
+    for value in -5 -0.5 - ""; do
+        optlist=""
+        debasher::define_opt "-b" "${value}" optlist || { echo "refused: ${value}"; return 1; }
+    done
+}
+
+@test "debasher::define_opt refuses a value that holds a newline or the separator of the words of an option list" {
+    local optlist=""
+    run debasher::define_opt "-a" $'line1\nline2' optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-a"*"newline"* ]]
+
+    run debasher::define_opt "-a" "x${DEBASHER_ARG_SEP}y" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-a"*"${DEBASHER_ARG_SEP}"* ]]
+    [ -z "${optlist}" ]
+}
+
+@test "define_value_desc_opt refuses an option that is not an output option" {
+    init_program
+    vdin_define_opts()
+    {
+        local optlist=""
+        define_value_desc_opt "-inv" optlist || return 1
+        save_opt_list optlist
+    }
+    run vdin_define_opts
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-inv"*"output option"* ]]
+}
+
+# --- options of the command line -----------------------------------------
+
+@test "an option given on the command line with an empty value is given, with that value, to every lookup" {
+    local cmdline
+    cmdline=$(debasher::_serialize_args prog -s "" -f)
+
+    [ "$(debasher::get_cmdline_opt "${cmdline}" -s)" = "" ]
+
+    local optlist=""
+    debasher::define_cmdline_opt "${cmdline}" "-s" optlist
+    [ "${optlist}" = "-s${DEBASHER_ARG_SEP}" ]
+
+    optlist=""
+    debasher::define_cmdline_opt_if_given "${cmdline}" "-s" optlist
+    [ "${optlist}" = "-s${DEBASHER_ARG_SEP}" ]
+
+    # A flag still has no value, and an option not given is not found
+    [ "$(debasher::get_cmdline_opt "${cmdline}" -f)" = "${DEBASHER_OPT_NOT_FOUND}" ]
+    [ "$(debasher::get_cmdline_opt "${cmdline}" -x)" = "${DEBASHER_OPT_NOT_FOUND}" ]
+}
+
+@test "an option that takes a value and is followed on the command line by an option is refused, naming both" {
+    local cmdline
+    cmdline=$(debasher::_serialize_args prog -s -verbose)
+    local optlist=""
+
+    run debasher::define_cmdline_opt "${cmdline}" "-s" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-s"*"-verbose"* ]]
+
+    run debasher::define_cmdline_opt_if_given "${cmdline}" "-s" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-s"*"-verbose"* ]]
+}
+
+@test "the options of one command line are not seen in the lookups of another" {
+    local first second
+    first=$(debasher::_serialize_args prog -s a)
+    second=$(debasher::_serialize_args prog -t b)
+    # In the same shell, so that the memo of the first line is still there
+    debasher::_read_opt_value_from_line_memoiz "${first}" -s
+    [ "${_OPT_VALUE_}" = "a" ]
+    ! debasher::_read_opt_value_from_line_memoiz "${second}" -s
+    ! debasher::_check_opt_given_memoiz "${second}" -s
+}
+
+@test "define_cmdline_flag_if_given finds a flag next to values with blanks, and prints nothing" {
+    local cmdline
+    cmdline=$(debasher::_serialize_args prog -s "a  b" -e "" -f)
+    local optlist=""
+    run debasher::define_cmdline_flag_if_given "${cmdline}" "-f" optlist
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+
+    debasher::define_cmdline_flag_if_given "${cmdline}" "-f" optlist
+    [ "${optlist}" = "-f" ]
+    optlist=""
+    debasher::define_cmdline_flag_if_given "${cmdline}" "-g" optlist
+    [ -z "${optlist}" ]
+}
+
+# --- shared directories ---------------------------------------------------
+
+@test "an option that names a shared directory that no module declares is refused when the shared directories are checked" {
+    init_program
+    local optlist=""
+    debasher::define_opt_from_shared_dir "-datadir" "data" optlist
+    debasher::_check_shared_dirs_declared
+
+    debasher::define_opt_from_shared_dir "-datadir" "dta" optlist
+    run debasher::_check_shared_dirs_declared
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"-datadir"*"dta"* ]]
 }
 
 @test "debasher::_print_program_opts shows the type of each option" {

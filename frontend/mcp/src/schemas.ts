@@ -43,7 +43,7 @@ export const optionFields = z.object({
     .describe("In a resident program, on a FIFO input: an external input, written from outside the program."),
   description: z.string().optional(),
   value: z.string().optional()
-    .describe("A Bash word; a connected input takes its value from its connection."),
+    .describe("A Bash word, which once expanded cannot start with - or -- followed by a letter or _ (a negative number can) nor hold a newline: the engine refuses it. With channel \"shared_dir\", the name of a shared directory that the program (sharedDirs) or a module of its preamble declares. A connected input takes its value from its connection."),
   commandLine: z.boolean().optional().describe("The value comes from the command line of the program."),
   mandatory: z.boolean().optional(),
   taskShaping: z.boolean().optional()
@@ -158,11 +158,12 @@ export const programFields = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
   preamble: z.string().optional().describe("Bash code run before the program, which loads the modules it uses."),
-  sharedDirs: z.array(z.string()).optional(),
+  sharedDirs: z.array(z.string()).optional()
+    .describe("The shared directories that the program declares, by name; an option with channel \"shared_dir\" names one of them or one that a module of the preamble declares."),
   outputDir: z.string().optional().describe("The directory where a run writes its results."),
   executionOptions: executionOptions.optional(),
   programOptions: z.record(z.string(), z.string()).optional()
-    .describe("The values of the command line options of the program, by label; replaces all of them."),
+    .describe("The values of the command line options of the program, by label; replaces all of them. An empty value leaves the option out, as not given. A value cannot start with - or -- followed by a letter or _ (a negative number can)."),
 }).strict();
 
 export const addProcessFields = {

@@ -262,6 +262,9 @@ debasher::define_opt_from_shared_dir()
 
     local abs_shdirname=$(debasher::get_absolute_shdirname "${shdirname}")
     if [ -z "${subpath}" ]; then
+        # Record the use, checked once the shared directories are known
+        # (see debasher::_check_shared_dirs_declared)
+        DEBASHER_PROGRAM_SHDIR_USES["${shdirname}"]=${opt}
         debasher::define_opt "${opt}" "${abs_shdirname}" "${varname}"
         return
     fi
@@ -291,6 +294,25 @@ debasher::define_opt_from_shared_dir()
 #
 # The function does not return any value
 define_opt_from_shared_dir() { debasher::define_opt_from_shared_dir "$@"; }
+
+########
+# Fails when an option names, with define_opt_from_shared_dir and without
+# a shared subdirectory, a shared directory that no module declares,
+# whose path would never be created. A shared subdirectory is checked
+# alike by debasher::_prepare_shared_subdirs.
+#
+# Must be called once the shared directories of the modules are
+# registered.
+debasher::_check_shared_dirs_declared()
+{
+    local shdirname
+    for shdirname in "${!DEBASHER_PROGRAM_SHDIR_USES[@]}"; do
+        if [[ ! -v DEBASHER_PROGRAM_SHDIRS["${shdirname}"] ]]; then
+            echo "Error: option ${DEBASHER_PROGRAM_SHDIR_USES["${shdirname}"]} asks for the shared directory ${shdirname}, which no module declares as a shared directory" >&2
+            return 1
+        fi
+    done
+}
 
 ########
 # Fails when an output option of some task holds the path of a

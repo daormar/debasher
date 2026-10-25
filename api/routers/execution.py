@@ -166,13 +166,17 @@ def _debasher_exec_command(
 def _program_option_args(program: Program) -> list[str]:
     """The program options as debasher_exec is given them: each label
     followed by its value, except a flag, which is given alone when its value
-    is not empty and left out otherwise."""
+    is not empty. An option whose value is empty, a flag or not, is left out:
+    a field left blank means the option is not given, whereas the engine
+    takes an option given on the command line with the empty string as given
+    with that value."""
     args: list[str] = []
     option_types = _command_line_option_types(program)
     for label, value in program.programOptions.items():
+        if not value:
+            continue
         if option_types.get(label) == "None":
-            if value:
-                args.append(label)
+            args.append(label)
         else:
             args += [label, value]
     return args

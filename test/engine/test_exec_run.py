@@ -1560,3 +1560,118 @@ def test_an_option_generator_with_no_task_is_prepared_and_runs_nothing(tmp_path)
     assert result.returncode == 0, result.stderr
     assert "PROCESS: lines ; NUM_TASKS: 0" in (outdir / "program.opts").read_text()
     assert not list((outdir / "__exec__").glob("lines/*.finished"))
+
+
+# A process with a command line option that takes a value and a flag that
+# may be left out
+CMDLINE_MODULE = """\
+cl_explain_opts()
+{
+    explain_opt "-s" "<string>" "A string"
+    explain_flag "-f" "A flag"
+}
+
+cl_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+    opt_is_non_mandatory_cmdline "-f"
+}
+
+cl_define_opts()
+{
+    local optlist=""
+    define_cmdline_opt "$1" "-s" optlist || return 1
+    define_cmdline_flag_if_given "$1" "-f" optlist
+    save_opt_list optlist
+}
+
+cl()
+{
+    local s=$(read_opt_value_from_func_args "-s" "$@")
+    local f=no
+    read_flag_from_func_args "-f" "$@" && f=yes
+    printf 's=[%s] f=[%s]\\n' "${s}" "${f}"
+}
+
+debasher_cl_program()
+{
+    add_debasher_process "cl" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "args, expected",
+    [
+        (["-s", ""], "s=[] f=[no]\n"),
+        (["-s", "a  b", "-f"], "s=[a  b] f=[yes]\n"),
+    ],
+)
+def test_a_command_line_option_reaches_the_task_empty_or_with_blanks(tmp_path, args, expected):
+    pfile = tmp_path / "debasher_cl.sh"
+    pfile.write_text(CMDLINE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), *args)
+    assert result.returncode == 0, result.stderr
+    assert "too many arguments" not in result.stderr
+    assert "unary operator expected" not in result.stderr
+    assert (outdir / "__exec__" / "cl" / "cl.stdout").read_text() == expected
+
+
+def test_a_command_line_option_followed_by_an_option_instead_of_a_value_stops_the_preparation(tmp_path):
+    pfile = tmp_path / "debasher_cl.sh"
+    pfile.write_text(CMDLINE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "-verbose")
+    assert result.returncode != 0
+    assert "option -s takes a value, but on the command line it is followed by -verbose" in result.stderr
+    assert not (outdir / "__exec__" / "cl").exists()
+
+
+# A module that declares the shared directory "data" and a process whose
+# option names another one
+SHARED_DIR_MODULE = """\
+debasher_shdir_shared_dirs()
+{
+    define_shared_dir "data"
+}
+
+shd_explain_opts()
+{
+    explain_opt "-datadir" "<dir>" "A shared directory"
+}
+
+shd_define_opts()
+{
+    local optlist=""
+    define_opt_from_shared_dir "-datadir" "__SHDIR__" optlist || return 1
+    save_opt_list optlist
+}
+
+shd()
+{
+    ls "$(read_opt_value_from_func_args "-datadir" "$@")"
+}
+
+debasher_shdir_program()
+{
+    add_debasher_process "shd" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize("shdir, accepted", [("data", True), ("dta", False)])
+def test_an_option_that_names_a_shared_directory_no_module_declares_stops_the_preparation(tmp_path, shdir, accepted):
+    pfile = tmp_path / "debasher_shdir.sh"
+    pfile.write_text(SHARED_DIR_MODULE.replace("__SHDIR__", shdir))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    if accepted:
+        assert result.returncode == 0, result.stderr
+    else:
+        assert result.returncode != 0
+        assert "option -datadir asks for the shared directory dta, which no module declares" in result.stderr
+        assert not (outdir / "__exec__" / "shd").exists()

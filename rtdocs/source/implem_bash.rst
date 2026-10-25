@@ -703,7 +703,11 @@ function. The three new functions are:
 * ``define_opt``: this function takes as input the name of the option to
   be defined, its value and the name of the option list variable to
   store the result. In the example, it is used to define the option
-  ``-outf`` with a value determined by the ``filename`` variable.
+  ``-outf`` with a value determined by the ``filename`` variable. Every
+  ``define_*`` function refuses, with an error that names the option, a
+  value that starts with ``-`` or ``--`` followed by a letter or an
+  underscore (it would be read as an option; ``-1`` is a value), and a
+  value that holds a newline or ``<_ARG_SEP_>``.
 
 Alternative 2: Implement the ``generate_opts`` method
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -801,7 +805,9 @@ The ``define_*`` functions work the same in ``define_opts`` and in
 ``generate_opts``: the engine knows the task whose options are being
 defined, so a generator declares a FIFO with ``define_fifo_opt`` and a
 value descriptor with ``define_value_desc_opt``, as ``define_opts``
-does, and each task gets its own. The older
+does, and each task gets its own. ``define_value_desc_opt`` only
+accepts an output option (``-out*`` or ``--out*``), since the task
+writes the value. The older
 ``define_fifo_opt_generator``, which takes the task index as an
 argument, still works, and ignores that argument.
 
@@ -1154,7 +1160,9 @@ DeBasher module can define its own methods, similarly to a process (see
 
   A process can also get the path of a shared directory as an option,
   with ``define_opt_from_shared_dir`` (e.g.
-  ``define_opt_from_shared_dir "-datadir" "data" optlist``). With
+  ``define_opt_from_shared_dir "-datadir" "data" optlist``). A name
+  that no module declares as a shared directory stops the preparation
+  of the run with an error that names the option. With
   ``--subdir``, the option gets instead a subdirectory of its own, which
   ``debasher_exec`` creates before any process executes. The usual
   subpath is the index of the task, so that the tasks of an array do not

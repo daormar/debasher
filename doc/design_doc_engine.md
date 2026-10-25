@@ -1141,10 +1141,14 @@ and owning a FIFO").
 
 **Options and values.** A word of an option list is an option when it is `-` or
 `--` followed by a letter or an underscore, and a value otherwise, so `-5` is a
-value and `-v` is an option wherever it appears: no value can start with `-` and
-a letter. An option followed by another option, or by nothing, is a flag. The
-engine records a flag with a marker of its own, so that a flag and an option
-given the empty string as its value stay different all the way to the task.
+value and `-v` is an option wherever it appears: no value can start with `-` or
+`--` followed by a letter or an underscore. `define_opt`, through which every
+`define_*` function defines a value, refuses such a value, and one that holds a
+newline or the separator `<_ARG_SEP_>` (see "How option values reach a task"),
+with an error that names the option. An option followed by another option, or by
+nothing, is a flag. The engine records a flag with a marker of its own, so that
+a flag and an option given the empty string as its value stay different all the
+way to the task.
 
 **One value per option.** An option list holds each option once. An option
 defined twice with the same value counts once; defined twice with different
@@ -1178,10 +1182,11 @@ depend on.
 as a count or a name that another process needs as an option. An output option
 defined with `define_value_desc_opt` holds the path of a value descriptor,
 `.__VAL_DESCRIPTOR__<option>_<task index>` in the process output directory, into
-which the task writes the value with `write_value_to_desc`. The name carries the
-task index, so that the tasks of an array process, which share the process
-output directory, never share a value descriptor. A task connected to that
-option receives the path, and `read_opt_value_from_func_args` gives it the
+which the task writes the value with `write_value_to_desc`;
+`define_value_desc_opt` refuses an option that is not an output option. The name
+carries the task index, so that the tasks of an array process, which share the
+process output directory, never share a value descriptor. A task connected to
+that option receives the path, and `read_opt_value_from_func_args` gives it the
 content of the file instead, since the option through which it reads it is not
 an output option. The path is absolute, so the reading task depends on the
 writing one like on any file it produced, and reads the value only once it has
@@ -1193,15 +1198,16 @@ module that added the process (see "Programs and subprograms") and required to
 exist as a regular file; `define_indir_opt` does the same for a directory. A
 shared directory is declared by a module, with `define_shared_dir` in its
 `_shared_dirs` method and never from a process method, and created in the output
-directory before any process runs. The `_shared_dirs` method of every
-loaded module is called, whether or not the module adds processes to the
-program. `define_opt_from_shared_dir` gives an option its absolute path, or
-that of a shared subdirectory (see "Shared subdirectories"). A shared directory
-is not an output of any process. Its path makes a dependency only by the rule
-that holds for any path, when an output option of a task of one process and an
-input option of a task of another process hold it (see "Inferring dependencies
-from options"); otherwise, processes that share one coordinate through it by
-other means.
+directory before any process runs. The `_shared_dirs` method of every loaded
+module is called, whether or not the module adds processes to the program.
+`define_opt_from_shared_dir` gives an option its absolute path, or that of a
+shared subdirectory (see "Shared subdirectories"); a name that no module
+declares as a shared directory stops the preparation of the run. A shared
+directory is not an output of any process. Its path makes a dependency only by
+the rule that holds for any path, when an output option of a task of one process
+and an input option of a task of another process hold it (see "Inferring
+dependencies from options"); otherwise, processes that share one coordinate
+through it by other means.
 
 ## Shared subdirectories
 
@@ -1431,7 +1437,12 @@ preparation of the run otherwise; `define_cmdline_opt_if_given` and
 to name an existing regular file and make its path absolute, and
 `define_cmdline_indir_opt` and its `_if_given` variant do the same for an
 existing directory; and `get_cmdline_opt` returns the value for the method to
-compute with.
+compute with. An option given the empty string as its value counts as given, and
+each of them reads that empty value, as a task does. An option that takes a
+value but is followed on the command line by another option, or by nothing, was
+given without one: `define_cmdline_opt` and its variants stop the preparation,
+with an error that names the option and, when there is one, the option that
+follows it.
 
 The command line is a single set of names shared by every process of the
 program and by `debasher_exec`: every process that reads `-s` gets the same
@@ -1726,10 +1737,12 @@ its first ten tasks. It is what a run compares with the one of the previous run
 on the same output directory to find the processes whose input changed (see
 "Reruns").
 
-The serialization sets two limits on a value: it cannot contain a newline,
-since the option list of a task is a line, nor the separator `<_ARG_SEP_>`. And
-since the lines hold absolute paths into the output directory, the options of a
-run belong to the directory where the run was prepared (see "Architecture").
+The serialization sets two limits on a value: it cannot contain a newline, since
+the option list of a task is a line, nor the separator `<_ARG_SEP_>`;
+`define_opt` refuses a value that breaks them (see "Defining the options of a
+task"). And since the lines hold absolute paths into the output directory, the
+options of a run belong to the directory where the run was prepared (see
+"Architecture").
 
 # The dependency graph
 
@@ -3231,7 +3244,8 @@ leaves, by design, to the program or to whoever runs it.
 **Limits and non-goals.**
 
 - **Values.** A value of an option cannot contain a newline or the separator
-  `<_ARG_SEP_>`, nor start with `-` and a letter, and the order in which a
+  `<_ARG_SEP_>`, nor start with `-` or `--` followed by a letter or an
+  underscore, and `define_opt` refuses such a value; and the order in which a
   task receives its options is not kept (see "Defining the options of a
   task").
 - **What counts as a change.** A changed input is a changed option: a file
