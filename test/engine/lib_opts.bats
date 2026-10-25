@@ -898,6 +898,185 @@ define_asking_array_program() {
     [ "${DEBASHER_DESERIALIZED_ARGS[*]}" = "kept" ]
 }
 
+# --- one value per option: a process with option lists and a generator ---
+
+# Defines the options of the one task of process "dupproc", each given as
+# the words of a call of define_opt
+define_dupproc_opts() {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    declare -ga DUPPROC_VALUES=("$@")
+    dupproc_define_opts()
+    {
+        local optlist="" value
+        for value in "${DUPPROC_VALUES[@]}"; do
+            define_opt "-c" "${value}" optlist || return 1
+        done
+        save_opt_list optlist
+    }
+    set +e
+    dupproc_define_opts "" "" dupproc "${BATS_TEST_TMPDIR}"
+    set -e
+}
+
+@test "an option of a process with option lists defined twice with the same value counts once" {
+    define_dupproc_opts x x
+    set +e
+    debasher::_load_curr_opt_list_loop "" dupproc
+    set -e
+    [ "${DEBASHER_CURRENT_PROCESS_OPT_LIST[0]}" = "-c${DEBASHER_ARG_SEP}x" ]
+}
+
+@test "an option of a process with option lists defined with two different values is refused" {
+    define_dupproc_opts x y
+    run debasher::_load_curr_opt_list_loop "" dupproc
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Error: option -c for process dupproc was given multiple, conflicting values (x y)"* ]]
+}
+
+@test "two connections of an option that resolve to the same value are no conflict" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    declare -gA DEBASHER_OPT_LIST_prodone_0=(["-outf"]="/data/same.txt")
+    declare -gA DEBASHER_OPT_LIST_prodtwo_0=(["-outf"]="/data/same.txt")
+    twoconn_define_opts()
+    {
+        local optlist=""
+        define_opt_from_proc_out "-inf" "prodone" "-outf" optlist || return 1
+        define_opt_from_proc_out "-inf" "prodtwo" "-outf" optlist || return 1
+        save_opt_list optlist
+    }
+    set +e
+    twoconn_define_opts "" "" twoconn "${BATS_TEST_TMPDIR}"
+    debasher::_load_curr_opt_list_loop "" twoconn
+    set -e
+    [ "${DEBASHER_CURRENT_PROCESS_OPT_LIST[0]}" = "-inf${DEBASHER_ARG_SEP}/data/same.txt" ]
+}
+
+@test "the options of a task of an option generator count a value given twice once and refuse two different values" {
+    declare -gA DEBASHER_INITIAL_PROCESS_SPEC=(["dupgen"]="dupgen cpus=1")
+    declare -ga DUPGEN_VALUES=(x x)
+    dupgen_generate_opts()
+    {
+        local optlist="" value
+        for value in "${DUPGEN_VALUES[@]}"; do
+            define_opt "-c" "${value}" optlist || return 1
+        done
+        save_opt_list optlist
+    }
+
+    run debasher::_gen_opts_for_process_and_task "" dupgen "${BATS_TEST_TMPDIR}" dupgen_generate_opts 0
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "-c${DEBASHER_ARG_SEP}x" ]
+
+    DUPGEN_VALUES=(x y)
+    run debasher::_gen_opts_for_process_and_task "" dupgen "${BATS_TEST_TMPDIR}" dupgen_generate_opts 0
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Error: option -c for process dupgen was given multiple, conflicting values (x y)"* ]]
+}
+
+@test "define_opt refuses an option list variable whose name does not end in optlist" {
+    local mylist=""
+    run debasher::define_opt "-a" "1" mylist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"${DEBASHER_OPTLIST_VARNAME_SUFFIX}"* ]]
+}
+
+# --- outputs, input paths and shared directories --------------------------
+
+@test "an output option whose value is not an absolute path produces nothing" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    relout_define_opts()
+    {
+        local optlist=""
+        define_opt "-outrel" "rel.txt" optlist || return 1
+        define_opt "-outabs" "/data/abs.txt" optlist || return 1
+        save_opt_list optlist
+    }
+    set +e
+    relout_define_opts "" "" relout "${BATS_TEST_TMPDIR}"
+    set -e
+    [[ ! -v DEBASHER_OUT_VALUE_TO_PROCESSES["rel.txt"] ]]
+    [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["/data/abs.txt"] ]]
+}
+
+@test "define_shared_dir is refused from the methods that define the options of a process" {
+    declare -gA DEBASHER_PROGRAM_PROCESSES=(["shproc"]=1 ["shgen"]=1)
+    shproc_define_opts()
+    {
+        define_shared_dir "mine"
+    }
+    shgen_generate_opts()
+    {
+        define_shared_dir "mine"
+    }
+    run shproc_define_opts
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"only be called from a module's shared_dirs function"* ]]
+    run shgen_generate_opts
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"only be called from a module's shared_dirs function"* ]]
+}
+
+@test "define_infile_opt refuses a file that does not exist and a directory" {
+    init_paths
+    declare -gA DEBASHER_PROCESS_PFILE_DIR
+    DEBASHER_PROCESS_PFILE_DIR["proc"]="${BATS_TEST_TMPDIR}"
+    local optlist=""
+
+    run debasher::define_infile_opt "-data" "missing.txt" optlist proc
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"missing.txt does not exist (-data option)"* ]]
+
+    run debasher::define_infile_opt "-data" "ref" optlist proc
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"ref does not exist (-data option)"* ]]
+}
+
+@test "define_opt_from_proc_out refuses an output option as the option being defined" {
+    local optlist=""
+    run debasher::define_opt_from_proc_out "-outx" "prod" "-outf" optlist
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"it should not be an output option"* ]]
+}
+
+# --- the lines of .sched_opts --------------------------------------------
+
+@test "the options of each task are one line of .sched_opts, that of task i being line i plus one" {
+    RM="$(command -v rm)"; AWK="$(command -v awk)"
+    HEAD="$(command -v head)"; TAIL="$(command -v tail)"
+    local -a lists=("-x${DEBASHER_ARG_SEP}0" "-x${DEBASHER_ARG_SEP}1" "-x${DEBASHER_ARG_SEP}2")
+    local fname="${BATS_TEST_TMPDIR}/sched_opts_p"
+
+    debasher::_write_opt_array lists 3 "${fname}"
+    [ "$(wc -l < "${fname}")" -eq 3 ]
+    local i
+    for i in 0 1 2; do
+        [ "$(debasher::_get_file_opts_for_process_and_task "${fname}" "${i}")" = "${lists[i]}" ]
+    done
+}
+
+@test "the lines of .sched_opts are split into blocks when a process has more tasks than a block holds" {
+    RM="$(command -v rm)"; AWK="$(command -v awk)"
+    HEAD="$(command -v head)"; TAIL="$(command -v tail)"
+    DEBASHER_OPT_FILE_LINES_PER_BLOCK=2
+    local -a lists=()
+    local i
+    for i in 0 1 2 3 4; do
+        lists+=("-x${DEBASHER_ARG_SEP}${i}")
+    done
+    local fname="${BATS_TEST_TMPDIR}/sched_opts_p"
+
+    debasher::_write_opt_array lists 5 "${fname}"
+    [ ! -e "${fname}" ]
+    [ "$(cat "${fname}_0")" = "${lists[0]}"$'\n'"${lists[1]}" ]
+    [ "$(cat "${fname}_2")" = "${lists[4]}" ]
+    for i in 0 1 2 3 4; do
+        [ "$(debasher::_get_file_opts_for_process_and_task "${fname}" "${i}")" = "${lists[i]}" ]
+    done
+}
+
 # --- value descriptors --------------------------------------------------
 
 @test "debasher::write_value_to_desc keeps a value that echo would take for its flags" {

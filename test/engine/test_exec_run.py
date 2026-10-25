@@ -1675,3 +1675,142 @@ def test_an_option_that_names_a_shared_directory_no_module_declares_stops_the_pr
         assert result.returncode != 0
         assert "option -datadir asks for the shared directory dta, which no module declares" in result.stderr
         assert not (outdir / "__exec__" / "shd").exists()
+
+
+# A module that only declares a shared directory, loaded by a module that
+# adds a process
+EXTRA_SHDIR_MODULE = """\
+extra_shared_dirs()
+{
+    define_shared_dir "extradata"
+}
+"""
+
+LOADS_EXTRA_MODULE = """\
+load_debasher_module "extra"
+
+loader_explain_opts()
+{
+    :
+}
+
+loader_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+loader()
+{
+    echo done
+}
+
+debasher_loader_program()
+{
+    add_debasher_process "loader" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_the_shared_directories_of_a_loaded_module_that_adds_no_process_are_created(tmp_path):
+    (tmp_path / "extra.sh").write_text(EXTRA_SHDIR_MODULE)
+    pfile = tmp_path / "debasher_loader.sh"
+    pfile.write_text(LOADS_EXTRA_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (outdir / "extradata").is_dir()
+
+
+def test_debasher_exec_ignores_an_option_that_no_process_knows(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "hi", "-nosuchopt", "3")
+    assert result.returncode == 0, result.stderr
+    assert (outdir / "__exec__" / "hello_world" / "hello_world.stdout").read_text() == "hi\n"
+
+
+# An array of twelve tasks, and a process whose task asks for the number of
+# tasks of the array while it runs
+TWELVE_MODULE = """\
+twelve_explain_opts()
+{
+    explain_opt "-x" "<int>" "A number"
+    explain_opt "-s" "<string>" "A string"
+}
+
+twelve_define_opts()
+{
+    local i
+    for i in $(seq 0 11); do
+        local optlist=""
+        define_opt "-x" "${i}" optlist || return 1
+        define_opt "-s" "a b" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+twelve()
+{
+    :
+}
+
+asker_explain_opts()
+{
+    :
+}
+
+asker_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+asker()
+{
+    echo "tasks=$(get_process_num_tasks twelve)"
+}
+
+debasher_twelve_program()
+{
+    add_debasher_process "twelve" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "asker" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_the_options_of_an_array_reach_its_tasks_and_the_files_of_the_run(tmp_path):
+    pfile = tmp_path / "debasher_twelve.sh"
+    pfile.write_text(TWELVE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    # One line of .sched_opts per task, in the order of the tasks
+    lines = (outdir / ".sched_opts" / "sched_opts_twelve").read_text().splitlines()
+    assert len(lines) == 12
+    for i, line in enumerate(lines):
+        words = line.split("<_ARG_SEP_>")
+        opts_of_line = dict(zip(words[::2], words[1::2]))
+        assert opts_of_line == {"-x": str(i), "-s": "a b"}
+
+    # Each task writes the options it received, quoted, one per line
+    opts = (outdir / "__exec__" / "twelve" / "twelve_3.opts").read_text().splitlines()
+    assert sorted(opts) == ["-s a\\ b", "-x 3"]
+
+    # program.opts holds the number of tasks and the options of the first ten
+    line = next(l for l in (outdir / "program.opts").read_text().splitlines() if l.startswith("PROCESS: twelve "))
+    assert "NUM_TASKS: 12" in line
+    assert "-x 9" in line and "-x 10" not in line
+    assert line.rstrip().endswith("...")
+
+
+def test_a_task_reads_the_number_of_tasks_of_another_process_from_the_execution_context(tmp_path):
+    pfile = tmp_path / "debasher_twelve.sh"
+    pfile.write_text(TWELVE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    assert (outdir / "__exec__" / "asker" / "asker.stdout").read_text() == "tasks=12\n"
