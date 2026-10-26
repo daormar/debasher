@@ -1601,11 +1601,17 @@ reason for that absence. A task shaping option that the process also declares in
 `_explain_opts`, marks in `_identify_cmdline_opts`, or defines for its first
 task stops the preparation. So does an option that `_identify_cmdline_opts`
 marks but `_explain_opts` does not declare: it is usually a typo that leaves the
-intended option unmarked, or a leftover. Only the first task is checked, and the
-check assumes that the tasks of an array have the same option names. A process
-whose number of options depends on the run, such as `-outf0`, `-outf1`, and so
-on, declares the whole fanout family once, as `-outf-ith`, and any option made
-of the prefix and a number matches it.
+intended option unmarked, or a leftover. A command line option can only be
+defined from the command line, with one of the `define_cmdline_*` functions (see
+"Command line options"): a first task that defines it with a value other than
+the one given on the command line (or its absolute path, for a file or a
+directory), or that defines it when it was not given, stops the preparation too.
+A task that needs a value derived from a command line option receives it through
+another option. Only the first task is checked, and the check assumes that the
+tasks of an array have the same option names. A process whose number of options
+depends on the run, such as `-outf0`, `-outf1`, and so on, declares the whole
+fanout family once, as `-outf-ith`, and any option made of the prefix and a
+number matches it.
 
 ## Python function files
 

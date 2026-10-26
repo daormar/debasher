@@ -44,7 +44,7 @@ export const optionFields = z.object({
   description: z.string().optional(),
   value: z.string().optional()
     .describe("A Bash word, which once expanded cannot start with - or -- followed by a letter or _ (a negative number can) nor hold a newline: the engine refuses it. With channel \"shared_dir\", the name of a shared directory that the program (sharedDirs) or a module of its preamble declares. A connected input takes its value from its connection."),
-  commandLine: z.boolean().optional().describe("The value comes from the command line of the program."),
+  commandLine: z.boolean().optional().describe("The value comes from the command line of the program, as given (absolute for a file or a dir); value is ignored, and a value derived from it goes into another option."),
   mandatory: z.boolean().optional(),
   taskShaping: z.boolean().optional()
     .describe("A task shaping option: only the options handler reads it, to decide the tasks of the process, and no task receives it. It must be a mandatory command line option with a value, and cannot be the count source of a fanout family."),
@@ -85,7 +85,8 @@ export const processChanges = z.object({
     mode: z.enum(["standard", "array", "generator", "manual"]).optional(),
     generatorSizeCode: z.string().optional(),
     arrayCode: z.string().optional(),
-    manualCode: z.string().optional(),
+    manualCode: z.string().optional()
+      .describe("The body of the Bash function that defines the options of every task. Define each commandLine option with define_cmdline_opt (define_cmdline_infile_opt or define_cmdline_indir_opt for a file or a directory, the _if_given variant when not mandatory), never with a value of its own, or the preparation of the run stops; a value derived from it goes into another option."),
     language: funcLanguage.optional().describe("The language of arrayCode and generatorSizeCode: python makes them a tasks file that defines tasks(run). A manual handler is bash. Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
   }).strict().optional(),
   computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class."),

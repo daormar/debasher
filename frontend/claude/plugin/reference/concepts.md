@@ -166,7 +166,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   the objects `run` and `task`, member by member:
   https://debasher.readthedocs.io/en/latest/api_sdk.html#python-functions-of-a-process.
   `manual`: the whole option definition written by hand (general programs only),
-  always Bash. When both ends of a connection have several tasks, task i reads
+  always Bash. Define an option marked `commandLine` with `define_cmdline_opt`
+  (`define_cmdline_infile_opt` for a file, `define_cmdline_indir_opt` for a
+  directory, the `_if_given` variant for one that is not mandatory), never with
+  a value of its own, or the preparation of the run stops; for a value derived
+  from it, read it with `get_cmdline_opt` and define another option that is not
+  `commandLine`. When both ends of a connection have several tasks, task i reads
   task i.
 - **Number of tasks taken from another process.** When a process has as many
   tasks as another one (each task reads the task with the same index), its
@@ -261,7 +266,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   Bash word, such as `10` or `${task_idx}`, which once expanded cannot start
   with `-` or `--` followed by a letter or `_`, nor hold a newline: the engine
   refuses it and the preparation of the run stops); `commandLine` (from the
-  program options); or `fromProcessSpec` (on a `standard` process, never on an
+  program options: the task receives the value given, made absolute for a
+  `file` or a `dir`; for a value derived from one, the options handler of an
+  `array` or `manual` process computes it into another option that is not
+  `commandLine`); or `fromProcessSpec` (on a `standard` process, never on an
   output: `value` names a specification, `cpus`, `mem`, `time`, ...). The last
   two take no connection.
 - `taskShaping`: a mandatory command-line input with a value that only the
