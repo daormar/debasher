@@ -491,8 +491,8 @@ debasher::_read_opt_value_from_line_memoiz()
 # takes one, as debasher::_read_opt_value_from_line_memoiz does. Returns
 # 1, with no message, when the option was not given, and 2, with an
 # error that names the option and the word that follows it, when it was
-# given without a value: a value cannot start with "-" followed by a
-# letter or an underscore, which is read as an option.
+# given without a value: a value cannot start with "-" followed by an
+# ASCII letter or an underscore, which is read as an option.
 #
 # $1 - Command line.
 # $2 - Option name.
@@ -512,7 +512,7 @@ debasher::_read_cmdline_opt_value()
         [ $# -gt 1 ] && printf '%s\n' "$2"
     )
     if [ -n "${next_word}" ]; then
-        echo "Error: option ${opt} takes a value, but on the command line it is followed by ${next_word}, which is read as an option: a value cannot start with '-' followed by a letter or an underscore" >&2
+        echo "Error: option ${opt} takes a value, but on the command line it is followed by ${next_word}, which is read as an option: a value cannot start with '-' followed by an ASCII letter or an underscore" >&2
     else
         echo "Error: option ${opt} takes a value, but none was given on the command line" >&2
     fi

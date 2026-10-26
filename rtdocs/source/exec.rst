@@ -71,7 +71,7 @@ An option given with the empty string as its value (``-s ""``) is
 given, with that value. An option that takes a value cannot be
 followed by another option: ``-s -verbose`` stops the preparation of
 the run with an error that names both, since a value cannot start with
-``-`` or ``--`` followed by a letter or an underscore.
+``-`` or ``--`` followed by an ASCII letter or an underscore.
 
 Troubleshooting Process Options
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

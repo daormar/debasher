@@ -67,8 +67,8 @@ class OptsParseError(Exception):
 
 def is_option(token: str) -> bool:
     """Whether a token is an option name, by the engine's own rule (see
-    debasher::_str_is_option): a dash or two followed by a letter or an
-    underscore."""
+    debasher::_str_is_option): a dash or two followed by an ASCII letter
+    or an underscore."""
     return re.match(r"--?[A-Za-z_]", token) is not None
 
 

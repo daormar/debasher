@@ -109,8 +109,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Program options.** The values of the command-line options for the next
   run, by label; setting them replaces them all. An empty value leaves the
   option out, as not given. A value cannot start with `-` or `--` followed by
-  a letter or `_` (a negative number can): the engine refuses it and the run
-  does not start.
+  an ASCII letter or `_` (a negative number can): the engine refuses it and
+  the run does not start.
 - **Shared directories.** Named directories created once before any process
   runs, which processes reach without a connection.
 - **Sequential processes** (general programs only): code that a process runs
@@ -267,9 +267,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   none from a whole shared directory.
 - **Where an input's value comes from**: a connection; a literal `value` (a
   Bash word, such as `10` or `${task_idx}`, which once expanded cannot start
-  with `-` or `--` followed by a letter or `_`, nor hold a newline: the engine
-  refuses it and the preparation of the run stops); `commandLine` (from the
-  program options: the task receives the value given, made absolute for a
+  with `-` or `--` followed by an ASCII letter or `_`, nor hold a newline: the
+  engine refuses it and the preparation of the run stops); `commandLine` (from
+  the program options: the task receives the value given, made absolute for a
   `file` or a `dir`; for a value derived from one, the options handler of an
   `array` or `manual` process computes it into another option that is not
   `commandLine`); or `fromProcessSpec` (on a `standard` process, never on an

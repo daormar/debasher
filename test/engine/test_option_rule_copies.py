@@ -7,6 +7,7 @@ Bash one on the same words.
 """
 
 import importlib.util
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -30,7 +31,7 @@ prg_lib = _load("debasher_prg_lib")
 WORDS = [
     "-a", "--out", "-_x", "--b1", "-outf", "--outdir", "-out", "-o", "-in",
     "-5", "-0.5", "--1", "-", "--", "", "value", "a-b", "/abs/path", "-.x",
-    "- a",
+    "- a", "-é", "--ñx",
 ]
 
 
@@ -43,8 +44,10 @@ def _bash_answers(function):
         f'    if debasher::{function} "$word"; then echo 1; else echo 0; fi\n'
         "done\n"
     )
+    # A UTF-8 locale where a range of letters may match more than ASCII
+    env = dict(os.environ, LC_ALL="en_US.UTF-8")
     result = subprocess.run(
-        ["bash", "-c", script, "bash", *WORDS], capture_output=True, text=True, check=True
+        ["bash", "-c", script, "bash", *WORDS], capture_output=True, text=True, check=True, env=env
     )
     return [line == "1" for line in result.stdout.splitlines()]
 

@@ -1140,15 +1140,15 @@ shared directory (`define_opt_from_shared_dir`), the process output directory
 and owning a FIFO").
 
 **Options and values.** A word of an option list is an option when it is `-` or
-`--` followed by a letter or an underscore, and a value otherwise, so `-5` is a
-value and `-v` is an option wherever it appears: no value can start with `-` or
-`--` followed by a letter or an underscore. `define_opt`, through which every
-`define_*` function defines a value, refuses such a value, and one that holds a
-newline or the separator `<_ARG_SEP_>` (see "How option values reach a task"),
-with an error that names the option. An option followed by another option, or by
-nothing, is a flag. The engine records a flag with a marker of its own, so that
-a flag and an option given the empty string as its value stay different all the
-way to the task.
+`--` followed by an ASCII letter or an underscore, and a value otherwise, so
+`-5` is a value and `-v` is an option wherever it appears: no value can start
+with `-` or `--` followed by an ASCII letter or an underscore. `define_opt`,
+through which every `define_*` function defines a value, refuses such a value,
+and one that holds a newline or the separator `<_ARG_SEP_>` (see "How option
+values reach a task"), with an error that names the option. An option followed
+by another option, or by nothing, is a flag. The engine records a flag with a
+marker of its own, so that a flag and an option given the empty string as its
+value stay different all the way to the task.
 
 **One value per option.** An option list holds each option once. An option
 defined twice with the same value counts once; defined twice with different
@@ -3250,10 +3250,9 @@ leaves, by design, to the program or to whoever runs it.
 **Limits and non-goals.**
 
 - **Values.** A value of an option cannot contain a newline or the separator
-  `<_ARG_SEP_>`, nor start with `-` or `--` followed by a letter or an
+  `<_ARG_SEP_>`, nor start with `-` or `--` followed by an ASCII letter or an
   underscore, and `define_opt` refuses such a value; and the order in which a
-  task receives its options is not kept (see "Defining the options of a
-  task").
+  task receives its options is not kept (see "Defining the options of a task").
 - **What counts as a change.** A changed input is a changed option: a file
   changed in place under the same path is not one, and only the first ten tasks
   of an array are compared. Outdated code is found only on request, by the

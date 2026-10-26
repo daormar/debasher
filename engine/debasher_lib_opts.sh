@@ -1548,7 +1548,7 @@ debasher::_optname_is_correct()
         return 1
     else
         if ! debasher::_str_is_option "${opt}"; then
-            debasher::errmsg "$funcname: option name should be '-' or '--' followed by a letter or an underscore (${opt})"
+            debasher::errmsg "$funcname: option name should be '-' or '--' followed by an ASCII letter or an underscore (${opt})"
             return 1
         fi
     fi
@@ -1558,8 +1558,8 @@ debasher::_optname_is_correct()
 
 ########
 # Fails when a value cannot reach a task as it is: one that would be read
-# as an option, since it starts with "-" followed by a letter or an
-# underscore, and one that holds a newline or the separator of the
+# as an option, since it starts with "-" followed by an ASCII letter or
+# an underscore, and one that holds a newline or the separator of the
 # words of an option list, which would split it.
 debasher::_optvalue_is_correct()
 {
@@ -1568,7 +1568,7 @@ debasher::_optvalue_is_correct()
     local value=$3
 
     if debasher::_str_is_option "${value}"; then
-        debasher::errmsg "$funcname: option ${opt} is given the value ${value}, which would be read as an option: a value cannot start with '-' followed by a letter or an underscore"
+        debasher::errmsg "$funcname: option ${opt} is given the value ${value}, which would be read as an option: a value cannot start with '-' followed by an ASCII letter or an underscore"
         return 1
     fi
     if [[ "${value}" == *$'\n'* ]]; then

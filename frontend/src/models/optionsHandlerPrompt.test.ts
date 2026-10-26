@@ -56,7 +56,7 @@ describe("buildOptionsHandlerPrompt", () => {
     expect(prompt).toContain("whose values can use `${array[$task_idx]}`, the element of the task, `${task_idx}`, its index, and any variable that the code sets.");
     expect(prompt).toContain("  ```bash\n  local cmdline=$1\n  local process_spec=$2\n  local process_name=$3\n  local process_outdir=$4\n  ```");
     expect(prompt).toContain("`get_cmdline_opt \"$cmdline\" \"<label>\"`");
-    expect(prompt).toContain("cannot start with `-` or `--` followed by a letter or `_` (a negative number can), nor hold a newline");
+    expect(prompt).toContain("cannot start with `-` or `--` followed by an ASCII letter or `_` (a negative number can), nor hold a newline");
     expect(prompt).toContain("It must never open a FIFO: nothing writes it yet, so the read would block `debasher_exec`, and what it read would be taken from the reader of the FIFO.");
     expect(prompt).toContain("It cannot read what a process of the program produces either: a file left by an earlier run would hold old data.");
   });

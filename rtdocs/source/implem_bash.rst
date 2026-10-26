@@ -712,7 +712,7 @@ function. The three new functions are:
   store the result. In the example, it is used to define the option
   ``-outf`` with a value determined by the ``filename`` variable. Every
   ``define_*`` function refuses, with an error that names the option, a
-  value that starts with ``-`` or ``--`` followed by a letter or an
+  value that starts with ``-`` or ``--`` followed by an ASCII letter or an
   underscore (it would be read as an option; ``-1`` is a value), and a
   value that holds a newline or ``<_ARG_SEP_>``.
 

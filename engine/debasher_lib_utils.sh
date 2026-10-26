@@ -592,14 +592,18 @@ debasher::_str_is_positive_number()
 }
 
 ########
-# An option is "-" or "--" followed by a letter or an underscore, so that
-# a value that starts with a dash, such as a negative number, is not
-# taken for an option (see debasher::_optname_is_correct).
+# An option is "-" or "--" followed by an ASCII letter or an underscore,
+# so that a value that starts with a dash, such as a negative number, is
+# not taken for an option (see debasher::_optname_is_correct). The
+# letters are listed one by one: in a UTF-8 locale, the range A-Z of a
+# bracket expression may also match letters such as "é", and the Python
+# tools of the engine apply the same rule with ASCII letters only.
 debasher::_str_is_option()
 {
     local str=$1
+    local ascii_letters="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-    [[ "${str}" =~ ^--?[A-Za-z_] ]]
+    [[ "${str}" =~ ^--?[${ascii_letters}_] ]]
 }
 
 ########

@@ -140,6 +140,15 @@ setup() {
     done
 }
 
+@test "debasher::_str_is_option takes only an ASCII letter after the dash, whatever the locale" {
+    local locale
+    for locale in C C.UTF-8 en_US.UTF-8 es_ES.UTF-8; do
+        LC_ALL="${locale}" bash -c 'source "$1"; ! debasher::_str_is_option "-é" && ! debasher::_str_is_option "--ñx" && debasher::_str_is_option "-e"' \
+            bash "${ENGINE_BUILDDIR}/debasher_lib_utils" 2>/dev/null \
+            || { echo "differs under ${locale}"; return 1; }
+    done
+}
+
 # --- debasher::_print_array_elems ---------------------------------------
 
 @test "debasher::_print_array_elems prints one line per element, an element that echo would take for its flags too" {

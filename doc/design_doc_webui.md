@@ -5556,3 +5556,16 @@ address of the WebSocket and the answers of the request in
 - **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
   in the model. The second is needed by resident programs, and "Script
   generation and import of a resident program" designs it.
+- **Refusing at edit time what the engine refuses at run time.** Three mistakes
+  reach the engine and stop the preparation of the run, with an error that names
+  them, when `validateEdits` and script generation could refuse them as soon as
+  they are made (see "Screens and the store"): a literal value of an option that
+  starts with `-` or `--` followed by an ASCII letter or an underscore, which a
+  task would read as an option; an option on the option channel `shared_dir`
+  that names a shared directory that neither the program nor a module of its
+  preamble declares; and a `manual` options handler whose code defines neither
+  `<process>_define_opts` nor the pair `<process>_generate_opts_size` and
+  `<process>_generate_opts`. The first check would apply only when the value is
+  a plain word, since a Bash word is known only once it is expanded; the last
+  would keep an unfinished function from being saved, starting with the empty
+  code that the editor opens with.
