@@ -593,7 +593,10 @@ processes, can be seen as defining the program network**.
 There are two alternatives to specify the process options, using the
 ``define_opts`` method, or using the ``generate_opts`` method. The
 second one is more suited to those situations where we define a task
-array (see the :ref:`Examples` Section).
+array (see the :ref:`Examples` Section). Every process needs one of
+them: the engine stops the preparation of a run on a process that has
+neither a ``define_opts`` method nor the ``generate_opts_size`` and
+``generate_opts`` pair.
 
 Alternative 1: Implement the ``define_opts`` method
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

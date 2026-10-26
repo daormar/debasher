@@ -452,6 +452,22 @@ setup() {
     [ ! -e "${BATS_TEST_TMPDIR}/size_called" ]
 }
 
+@test "debasher::_define_opts_for_process stops, naming the missing methods, a process with neither _define_opts nor an option generator" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    nodefproc_explain_opts()
+    {
+        :
+    }
+
+    local spec="nodefproc cpus=1 mem=32 time=00:01:00"
+    DEBASHER_INITIAL_PROCESS_SPEC["nodefproc"]="${spec}"
+
+    run debasher::_define_opts_for_process "" "${spec}"
+    [ "${status}" -eq 1 ]
+    [ "${output}" = "Error: process nodefproc has neither a _define_opts method nor an option generator (_generate_opts_size and _generate_opts)" ]
+}
+
 @test "debasher::_define_opts_for_process takes the process name from the given process spec, not from a variable of its caller" {
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"

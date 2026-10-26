@@ -166,7 +166,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   the objects `run` and `task`, member by member:
   https://debasher.readthedocs.io/en/latest/api_sdk.html#python-functions-of-a-process.
   `manual`: the whole option definition written by hand (general programs only),
-  always Bash. Define an option marked `commandLine` with `define_cmdline_opt`
+  always Bash. The code defines the function `<process>_define_opts`, or the
+  pair `<process>_generate_opts_size` and `<process>_generate_opts` of an option
+  generator; a process with neither stops the preparation of the run. Define an
+  option marked `commandLine` with `define_cmdline_opt`
   (`define_cmdline_infile_opt` for a file, `define_cmdline_indir_opt` for a
   directory, the `_if_given` variant for one that is not mandatory), never with
   a value of its own, or the preparation of the run stops; for a value derived

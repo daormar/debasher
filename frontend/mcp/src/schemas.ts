@@ -86,7 +86,7 @@ export const processChanges = z.object({
     generatorSizeCode: z.string().optional(),
     arrayCode: z.string().optional(),
     manualCode: z.string().optional()
-      .describe("The body of the Bash function that defines the options of every task. Define each commandLine option with define_cmdline_opt (define_cmdline_infile_opt or define_cmdline_indir_opt for a file or a directory, the _if_given variant when not mandatory), never with a value of its own, or the preparation of the run stops; a value derived from it goes into another option."),
+      .describe("The whole Bash functions that define the options of every task: <process>_define_opts, or the option generator pair <process>_generate_opts_size and <process>_generate_opts; without one of them the preparation of the run stops. Define each commandLine option with define_cmdline_opt (define_cmdline_infile_opt or define_cmdline_indir_opt for a file or a directory, the _if_given variant when not mandatory), never with a value of its own, or the preparation of the run stops; a value derived from it goes into another option."),
     language: funcLanguage.optional().describe("The language of arrayCode and generatorSizeCode: python makes them a tasks file that defines tasks(run). A manual handler is bash. Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
   }).strict().optional(),
   computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class."),

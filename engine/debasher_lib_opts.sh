@@ -2009,6 +2009,54 @@ debasher::_check_connection_resolved()
 }
 
 ########
+# Records the output options of a task whose value is an absolute path in
+# DEBASHER_OUT_VALUE_TO_PROCESSES, each path with the tasks that produce
+# it, from which the dependencies of the tasks that read it are inferred.
+# save_opt_list calls it for a process with option lists, and
+# debasher::_define_opts_for_process for each task of an option generator.
+#
+# $1 - Process name.
+# $2 - Task index.
+# $3.. - Words of the option list of the task.
+debasher::_get_output_opts_info()
+{
+    local processname=$1
+    local task_idx=$2
+    shift 2
+
+    while [ $# -gt 0 ]; do
+        local opt="$1"
+
+        if ! debasher::_str_is_option "${opt}"; then
+            echo "Warning: unexpected value (${opt}), skipping..." >&2
+            shift
+            continue
+        fi
+
+        shift
+
+        # No token left after this option: nothing more to process
+        [ $# -eq 0 ] && continue
+
+        # If the next token is itself an option, this option has no value;
+        # don't shift, so it's picked up as a new option next iteration
+        debasher::_str_is_option "$1" && continue
+
+        local value="$1"
+        shift
+
+        if debasher::_is_absolute_path "${value}" && debasher::_str_is_output_option "${opt}"; then
+            local process_info="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
+            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+                DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]="${DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]}${DEBASHER_ASSOC_ARRAY_PROC_SEP}${process_info}"
+            else
+                DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]=${process_info}
+            fi
+        fi
+    done
+}
+
+########
 # Public: Saves option list for a given process.
 #
 # $1 - Name of variable storing the option list.
@@ -2061,44 +2109,6 @@ debasher::save_opt_list()
 
             debasher::_merge_opt_value "${opt_list_name}" "${opt}" "$1"
             shift
-        done
-    }
-
-    debasher::_get_output_opts_info()
-    {
-        local processname=$1
-        local task_idx=$2
-        shift 2
-
-        while [ $# -gt 0 ]; do
-            local opt="$1"
-
-            if ! debasher::_str_is_option "${opt}"; then
-                echo "Warning: unexpected value (${opt}), skipping..." >&2
-                shift
-                continue
-            fi
-
-            shift
-
-            # No token left after this option: nothing more to process
-            [ $# -eq 0 ] && continue
-
-            # If the next token is itself an option, this option has no value;
-            # don't shift, so it's picked up as a new option next iteration
-            debasher::_str_is_option "$1" && continue
-
-            local value="$1"
-            shift
-
-            if debasher::_is_absolute_path "${value}" && debasher::_str_is_output_option "${opt}"; then
-                local process_info="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-                if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
-                    DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]="${DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]}${DEBASHER_ASSOC_ARRAY_PROC_SEP}${process_info}"
-                else
-                    DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"]=${process_info}
-                fi
-            fi
         done
     }
 

@@ -452,8 +452,13 @@ debasher::_define_opts_for_process()
         # while the method runs (see debasher::_check_num_tasks_chain)
         local DEBASHER_COMPUTING_NUM_TASKS="${DEBASHER_COMPUTING_NUM_TASKS:-} ${processname}"
 
-        # Obtain define_opts function name and call it
+        # Obtain define_opts function name and call it; a process without
+        # an option generator needs the method
         local define_opts_funcname=$(debasher::_get_define_opts_funcname "${processname}")
+        if [ "${define_opts_funcname}" = "${DEBASHER_FUNCT_NOT_FOUND}" ]; then
+            echo "Error: process ${processname} has neither a ${DEBASHER_PROCESS_METHOD_NAME_DEFINE_OPTS} method nor an option generator (${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS_SIZE} and ${DEBASHER_PROCESS_METHOD_NAME_GENERATE_OPTS})" >&2
+            return 1
+        fi
         ${define_opts_funcname} "${cmdline}" "${process_spec}" "${processname}" "${process_outdir}" || return 1
 
         # A method that registered no task leaves zero tasks, so that a
@@ -850,52 +855,163 @@ debasher::_get_actual_opt_names_for_first_task()
 }
 
 ########
-# Sanity check: verifies that the option names a process actually
-# defines (for its first task) are declared in its explain_opts.
+# Fails when a task shaping option of the process is also declared in
+# explain_opts, marked in identify_cmdline_opts or defined for its first
+# task: a task shaping option is declared in explain_task_shaping_opts
+# alone (it is always a mandatory command-line option already), and no
+# task receives it.
 #
-# An option that is actually defined but was never declared is treated
-# as an error (typically a typo or a name that drifted out of sync
-# with explain_opts) and causes the function to fail. An option that
-# is declared but not found among the first task's options only
-# triggers a warning: some options are legitimately conditional (e.g.
-# defined through define_cmdline_opt_if_given and similar helpers, so
-# they are only present when given on the command line), so their
-# absence from a single sampled task is not necessarily an error.
+# $1 - Process name.
+# $2 - Name of the associative array of the options it declares.
+# $3 - Name of the associative array of its task shaping options.
+# $4 - Name of the associative array of the options of its first task.
+debasher::_check_task_shaping_opts_declared_alone()
+{
+    local processname=$1
+    local -n tsa_explained=$2
+    local -n tsa_shaping=$3
+    local -n tsa_actual=$4
+
+    local status=0
+    local opt
+    for opt in "${!tsa_shaping[@]}"; do
+        if [ -n "${tsa_explained[${opt}]+x}" ]; then
+            echo "Error: process ${processname} declares option ${opt} both in its explain_opts and in its explain_task_shaping_opts; an option that its tasks receive is declared only in explain_opts" >&2
+            status=1
+        elif debasher::_opt_is_cmdline_for_process "${processname}" "${opt}"; then
+            echo "Error: process ${processname} marks its task shaping option ${opt} in its identify_cmdline_opts; a task shaping option is always a mandatory command-line option, and is not marked" >&2
+            status=1
+        elif [ -n "${tsa_actual[${opt}]+x}" ]; then
+            echo "Error: process ${processname} defines its task shaping option ${opt} for its first task; a task shaping option is only read by the methods that define the options, and no task receives it" >&2
+            status=1
+        fi
+    done
+    return "${status}"
+}
+
+########
+# Fails when identify_cmdline_opts marks an option that explain_opts does
+# not declare: it only classifies declared options, so the mark is a
+# typo, which leaves the intended option unmarked, or a leftover. A
+# marked task shaping option is reported by
+# debasher::_check_task_shaping_opts_declared_alone.
 #
-# A command-line option (one its identify_cmdline_opts marks with
-# opt_is_cmdline or opt_is_non_mandatory_cmdline) takes its value from
-# the command line and nowhere else: a process that defines it with a
-# value of its own (define_opt, define_fifo_opt, ...) is an error (see
-# debasher::_cmdline_opt_value_is_from_cmdline). Its absence from the
-# first task is not warned about when the option is optional (it may
-# be defined only if given) or a flag, but it is for a mandatory one,
-# since the only legitimate reason for that absence is an option that
-# only the methods that define the options read: a task shaping
-# option, which the process declares in its explain_task_shaping_opts
-# method instead.
+# $1 - Process name.
+# $2 - Name of the associative array of the options it declares.
+# $3 - Name of the associative array of its task shaping options.
+debasher::_check_marked_cmdline_opts_declared()
+{
+    local processname=$1
+    local -n mcd_explained=$2
+    local -n mcd_shaping=$3
+
+    local status=0
+    local prefix="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local key opt
+    for key in "${!DEBASHER_PROGRAM_OPT_IS_CMDLINE[@]}"; do
+        case "${key}" in
+            "${prefix}"*) ;;
+            *) continue ;;
+        esac
+        opt="${key#"${prefix}"}"
+        [ -n "${mcd_shaping[${opt}]+x}" ] && continue
+        if [ -z "${mcd_explained[${opt}]+x}" ]; then
+            echo "Error: process ${processname} marks option ${opt} in its identify_cmdline_opts, but does not declare it in its explain_opts" >&2
+            status=1
+        fi
+    done
+    return "${status}"
+}
+
+########
+# Fails when the first task of the process defines an option that
+# explain_opts does not declare, typically a typo or a name that drifted
+# out of sync with explain_opts, or a command-line option with a value
+# that does not come from the command line (see
+# debasher::_cmdline_opt_value_is_from_cmdline): a command-line option
+# can only be defined from it. A process whose number of "-foo0",
+# "-foo1", ... options depends on a run-time value declares the whole
+# family once, as "-foo-ith" (see debasher::_actual_opt_is_ith_instance
+# and dispatch_define_opts in debasher_dynamic_fanout.sh). A defined
+# task shaping option is reported by
+# debasher::_check_task_shaping_opts_declared_alone.
 #
-# A task shaping option is declared in that method alone, never also in
-# explain_opts nor marked in identify_cmdline_opts (it is always a
-# mandatory command-line option already), and no task defines it:
-# each of these is an error.
+# $1 - Command line.
+# $2 - Process name.
+# $3 - Name of the associative array of the options it declares.
+# $4 - Name of the associative array of its task shaping options.
+# $5 - Name of the associative array of the options of its first task.
+debasher::_check_defined_opts_declared()
+{
+    local cmdline=$1
+    local processname=$2
+    local -n dod_explained=$3
+    local -n dod_shaping=$4
+    local -n dod_actual=$5
+
+    local status=0
+    local opt
+    for opt in "${!dod_actual[@]}"; do
+        [ -n "${dod_shaping[${opt}]+x}" ] && continue
+        if [ -z "${dod_explained[${opt}]+x}" ]; then
+            debasher::_actual_opt_is_ith_instance "${opt}" "$3" && continue
+            echo "Error: process ${processname} defines option ${opt}, which is not declared in its explain_opts" >&2
+            status=1
+            continue
+        fi
+        if debasher::_opt_is_cmdline_for_process "${processname}" "${opt}" \
+                && ! debasher::_cmdline_opt_value_is_from_cmdline "${cmdline}" "${opt}" "${dod_actual[${opt}]}"; then
+            echo "Error: process ${processname} defines command-line option ${opt} with a value that does not come from the command line; a command-line option can only be defined from it (define_cmdline_opt and similar)" >&2
+            status=1
+        fi
+    done
+    return "${status}"
+}
+
+########
+# Warns about the options that the process declares but its first task
+# does not define: some are legitimately conditional, defined only when
+# given on the command line, so their absence from one task is not an
+# error. No warning is given for a command-line option that is optional
+# or a flag; the one for a mandatory command-line option suggests a task
+# shaping option, the only legitimate reason for that absence.
 #
-# identify_cmdline_opts only classifies options that explain_opts
-# declares, so marking any other option is an error too: it is a typo,
-# which leaves the intended option unmarked, or a leftover.
-#
-# One more legitimate mismatch, handled separately by
-# debasher::_actual_opt_is_ith_instance below: a process whose number
-# of "-foo0", "-foo1", ... "-foo<N-1>" options depends on a run-time
-# value (N) cannot explain_opt each instance by its literal name, so
-# by convention it documents the whole family once, as "-foo-ith" (see
-# dispatch_define_opts/aggregate_define_opts in
-# debasher_dynamic_fanout.sh for the actual pattern this mirrors).
+# $1 - Process name.
+# $2 - Name of the associative array of the options it declares.
+# $3 - Name of the associative array of the options of its first task.
+debasher::_warn_declared_opts_not_defined()
+{
+    local processname=$1
+    local -n don_explained=$2
+    local -n don_actual=$3
+
+    local opt
+    for opt in "${!don_explained[@]}"; do
+        [ -n "${don_actual[${opt}]+x}" ] && continue
+        debasher::_ith_family_has_instance "${opt}" "$3" && continue
+        if debasher::_opt_is_cmdline_for_process "${processname}" "${opt}"; then
+            debasher::_opt_is_mandatory_valued_for_process "${processname}" "${opt}" || continue
+            echo "Warning: process ${processname} declares mandatory command-line option ${opt} in explain_opts, but it was not found among the options generated for its first task; an option that only the methods that define the options read is declared in ${processname}${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_TASK_SHAPING_OPTS} instead" >&2
+            continue
+        fi
+        echo "Warning: process ${processname} declares option ${opt} in explain_opts, but it was not found among the options generated for its first task" >&2
+    done
+}
+
+########
+# Sanity check: verifies, for every process, that the option names that
+# its first task defines agree with those it declares, one rule each:
+# its task shaping options are declared alone
+# (debasher::_check_task_shaping_opts_declared_alone), what
+# identify_cmdline_opts marks is declared
+# (debasher::_check_marked_cmdline_opts_declared), what the task defines
+# is declared and a command-line option comes from the command line
+# (debasher::_check_defined_opts_declared), and a declared option that
+# the task lacks gives a warning (debasher::_warn_declared_opts_not_defined).
 #
 # $1 - Command line.
 #
-# Returns 1 if some process defines an undeclared option, or a
-# command-line option with a value of its own, or declares a task
-# shaping option in a way that the rules above forbid.
+# Returns 1 if some process breaks one of the rules.
 debasher::_check_opt_names_vs_explain()
 {
     local cmdline=$1
@@ -912,63 +1028,10 @@ debasher::_check_opt_names_vs_explain()
         local -A actual_opt_names=()
         debasher::_get_actual_opt_names_for_first_task "${cmdline}" "${processname}" actual_opt_names || return 1
 
-        local opt
-        for opt in "${!task_shaping_opt_names[@]}"; do
-            if [ -n "${explained_opt_names[${opt}]+x}" ]; then
-                echo "Error: process ${processname} declares option ${opt} both in its explain_opts and in its explain_task_shaping_opts; an option that its tasks receive is declared only in explain_opts" >&2
-                had_undeclared_opt=1
-            elif debasher::_opt_is_cmdline_for_process "${processname}" "${opt}"; then
-                echo "Error: process ${processname} marks its task shaping option ${opt} in its identify_cmdline_opts; a task shaping option is always a mandatory command-line option, and is not marked" >&2
-                had_undeclared_opt=1
-            elif [ -n "${actual_opt_names[${opt}]+x}" ]; then
-                echo "Error: process ${processname} defines its task shaping option ${opt} for its first task; a task shaping option is only read by the methods that define the options, and no task receives it" >&2
-                had_undeclared_opt=1
-            fi
-        done
-
-        local prefix="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
-        local key
-        for key in "${!DEBASHER_PROGRAM_OPT_IS_CMDLINE[@]}"; do
-            case "${key}" in
-                "${prefix}"*) ;;
-                *) continue ;;
-            esac
-            opt="${key#"${prefix}"}"
-            # A marked task shaping option was reported above
-            [ -n "${task_shaping_opt_names[${opt}]+x}" ] && continue
-            if [ -z "${explained_opt_names[${opt}]+x}" ]; then
-                echo "Error: process ${processname} marks option ${opt} in its identify_cmdline_opts, but does not declare it in its explain_opts" >&2
-                had_undeclared_opt=1
-            fi
-        done
-
-        for opt in "${!actual_opt_names[@]}"; do
-            # A task shaping option defined for the task was reported above
-            [ -n "${task_shaping_opt_names[${opt}]+x}" ] && continue
-            if [ -z "${explained_opt_names[${opt}]+x}" ]; then
-                debasher::_actual_opt_is_ith_instance "${opt}" explained_opt_names && continue
-                echo "Error: process ${processname} defines option ${opt}, which is not declared in its explain_opts" >&2
-                had_undeclared_opt=1
-                continue
-            fi
-            if debasher::_opt_is_cmdline_for_process "${processname}" "${opt}" \
-                    && ! debasher::_cmdline_opt_value_is_from_cmdline "${cmdline}" "${opt}" "${actual_opt_names[${opt}]}"; then
-                echo "Error: process ${processname} defines command-line option ${opt} with a value that does not come from the command line; a command-line option can only be defined from it (define_cmdline_opt and similar)" >&2
-                had_undeclared_opt=1
-            fi
-        done
-
-        for opt in "${!explained_opt_names[@]}"; do
-            if [ -z "${actual_opt_names[${opt}]+x}" ]; then
-                debasher::_ith_family_has_instance "${opt}" actual_opt_names && continue
-                if debasher::_opt_is_cmdline_for_process "${processname}" "${opt}"; then
-                    debasher::_opt_is_mandatory_valued_for_process "${processname}" "${opt}" || continue
-                    echo "Warning: process ${processname} declares mandatory command-line option ${opt} in explain_opts, but it was not found among the options generated for its first task; an option that only the methods that define the options read is declared in ${processname}${DEBASHER_PROCESS_METHOD_NAME_EXPLAIN_TASK_SHAPING_OPTS} instead" >&2
-                    continue
-                fi
-                echo "Warning: process ${processname} declares option ${opt} in explain_opts, but it was not found among the options generated for its first task" >&2
-            fi
-        done
+        debasher::_check_task_shaping_opts_declared_alone "${processname}" explained_opt_names task_shaping_opt_names actual_opt_names || had_undeclared_opt=1
+        debasher::_check_marked_cmdline_opts_declared "${processname}" explained_opt_names task_shaping_opt_names || had_undeclared_opt=1
+        debasher::_check_defined_opts_declared "${cmdline}" "${processname}" explained_opt_names task_shaping_opt_names actual_opt_names || had_undeclared_opt=1
+        debasher::_warn_declared_opts_not_defined "${processname}" explained_opt_names actual_opt_names
     done
 
     [ "${had_undeclared_opt}" -eq 0 ]
