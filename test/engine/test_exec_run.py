@@ -2348,3 +2348,66 @@ def test_a_task_empties_its_task_subdirectories_and_a_skipped_one_finds_them_as_
     assert (outdir / "ts" / "0" / "out").read_text() == "b\n"
     assert sorted(p.name for p in (outdir / "ts" / "1").iterdir()) == ["out", "stale"]
     assert (outdir / "ts" / "1" / "out").read_text() == "a\n"
+
+
+# An array of two tasks that write the value of -x into the process
+# output directory
+OUTDIR_ARRAY_MODULE = """\
+oa_explain_opts()
+{
+    explain_opt "-x" "<string>" "The value that each task writes"
+    explain_opt "-outf" "<file>" "What the task writes"
+}
+
+oa_identify_cmdline_opts()
+{
+    opt_is_cmdline "-x"
+}
+
+oa_define_opts()
+{
+    local process_outdir=$4
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_cmdline_opt "$1" "-x" optlist || return 1
+        define_opt "-outf" "${process_outdir}/${i}.txt" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+oa()
+{
+    echo "$(read_opt_value_from_func_args "-x" "$@")" > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+debasher_outdarray_program()
+{
+    add_debasher_process "oa" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_process_output_directory_removed_after_a_run_is_created_again(tmp_path, sched):
+    pfile = tmp_path / "debasher_outdarray.sh"
+    pfile.write_text(OUTDIR_ARRAY_MODULE)
+    outdir = tmp_path / "out"
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-x", "a", *extra)
+    assert result.returncode == 0, result.stderr
+
+    shutil.rmtree(outdir / "oa")
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-x", "b", *extra)
+    assert result.returncode == 0, result.stderr
+    for i in range(2):
+        assert (outdir / "oa" / f"{i}.txt").read_text() == "b\n"

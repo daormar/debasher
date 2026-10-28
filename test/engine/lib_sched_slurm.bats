@@ -93,6 +93,18 @@ setup() {
     [ -e "${EXECDIR}/proc_0.sched_out" ]
 }
 
+@test "_clean_process_files_slurm removes the single id of an array, that of its job array" {
+    touch "${EXECDIR}/proc.id" "${EXECDIR}/proc_0.sched_out"
+    debasher::_get_list_of_pending_tasks_in_array() {
+        echo "1"
+    }
+
+    debasher::_clean_process_files_slurm "${OUTDIR}" proc 2
+
+    [ ! -e "${EXECDIR}/proc.id" ]
+    [ -e "${EXECDIR}/proc_0.sched_out" ]
+}
+
 # --- elapsed time -----------------------------------------------------------
 
 @test "_elapsed_time_to_ms converts seconds with milliseconds and refuses anything else" {

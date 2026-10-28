@@ -958,25 +958,13 @@ debasher::_get_task_last_attempt_logf_slurm()
 ########
 debasher::_clean_process_files_slurm()
 {
-    clean_process_id_files_non_array()
+    clean_process_id_file()
     {
         local dirname=$1
         local processname=$2
 
         local processid_file=$(debasher::_get_processid_filename "${dirname}" ${processname})
         "${RM}" -f "${processid_file}"
-    }
-
-    clean_process_id_files_array()
-    {
-        local dirname=$1
-        local processname=$2
-        local idx=$3
-
-        local array_taskid_file=$(debasher::_get_array_taskid_filename "${dirname}" ${processname} ${idx})
-        if [ -f "${array_taskid_file}" ]; then
-            "${RM}" "${array_taskid_file}"
-        fi
     }
 
     clean_process_log_files_non_array()
@@ -1007,9 +995,13 @@ debasher::_clean_process_files_slurm()
     local dirname=$1
     local processname=$2
     local array_size=$3
+
+    # The process has a single id, that of its job array for an array
+    # process, which names a job of an earlier run
+    clean_process_id_file "${dirname}" "${processname}"
+
     # Remove log files depending on array size
     if [ ${array_size} -eq 1 ]; then
-        clean_process_id_files_non_array "${dirname}" "${processname}"
         clean_process_log_files_non_array "${dirname}" "${processname}"
     else
         # If array size is greater than 1, remove only those log files
@@ -1023,7 +1015,6 @@ debasher::_clean_process_files_slurm()
             # Iterate over pending tasks
             local idx
             for idx in "${pending_tasks_array[@]}"; do
-                clean_process_id_files_array "${dirname}" "${processname}" "${idx}"
                 clean_process_log_files_array "${dirname}" "${processname}" "${idx}"
             done
         fi

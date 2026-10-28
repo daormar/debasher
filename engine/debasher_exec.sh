@@ -1077,17 +1077,21 @@ prepare_files_and_dirs_for_process()
 
         # The process script tells two cases apart.
         # - No script. No run has prepared the process yet, and it gets
-        #   its exec directory and its output directory.
+        #   its exec directory.
         # - A script. An earlier run prepared the process, which may be
-        #   TO-DO again after a rerun reset it. Its directories are kept,
-        #   and only the ids and logs of its unfinished tasks are removed.
+        #   TO-DO again after a rerun reset it. Its exec directory is kept,
+        #   and only its id and the logs of its unfinished tasks are
+        #   removed.
         if [ ! -f "$(debasher::_get_script_filename "${dirname}" "${processname}")" ]; then
             debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
-            debasher::_create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
         else
             debasher::_clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
         debasher::_prepare_fifos_owned_by_process "${processname}"
+
+        # Create output directory, again if an earlier run had it and it
+        # is gone
+        debasher::_create_outdir_for_process "${dirname}" "${processname}" || { echo "Error when creating output directory for process" >&2 ; return 1; }
 
         # Prepare the task subdirectories that its tasks ask for
         debasher::_prepare_task_subdirs_for_process "${dirname}" "${processname}" || return 1
