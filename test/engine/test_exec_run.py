@@ -2044,3 +2044,307 @@ def test_a_failure_to_prepare_one_process_launches_no_process(tmp_path):
     assert "the task subdirectory t of process lsecond" in result.stderr
     assert not (outdir / "__exec__" / "lfirst" / "lfirst.id").exists()
     assert not (outdir / "lfirst" / "out.txt").exists()
+
+
+# Two arrays that write, task by task, a shared subdirectory and a task
+# subdirectory, the arrays that read the one with their own index, and a
+# process that reads the whole shared directory
+SUBDEPS_MODULE = """\
+debasher_subdeps_shared_dirs()
+{
+    define_shared_dir "data"
+}
+
+ws_explain_opts()
+{
+    explain_opt "-outd" "<dir>" "Shared subdirectory of the task"
+}
+
+ws_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt_from_shared_dir "-outd" "data" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}
+
+ws()
+{
+    echo "ws" > "$(read_opt_value_from_func_args "-outd" "$@")/f"
+}
+
+rs_explain_opts()
+{
+    explain_opt "-ind" "<dir>" "Shared subdirectory that ws writes"
+}
+
+rs_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt "-ind" "$(get_absolute_shdirname data)/${i}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+rs()
+{
+    :
+}
+
+wt_explain_opts()
+{
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+wt_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}
+
+wt()
+{
+    :
+}
+
+rt_explain_opts()
+{
+    explain_opt "-ind" "<dir>" "Task subdirectory of wt"
+}
+
+rt_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt_from_proc_task_out "-ind" "wt" "${i}" "-outd" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+rt()
+{
+    :
+}
+
+whole_explain_opts()
+{
+    explain_opt "-dir" "<dir>" "The whole shared directory"
+}
+
+whole_define_opts()
+{
+    local optlist=""
+    define_opt_from_shared_dir "-dir" "data" optlist || return 1
+    save_opt_list optlist
+}
+
+whole()
+{
+    :
+}
+
+debasher_subdeps_program()
+{
+    add_debasher_process "ws" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "rs" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "wt" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "rt" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "whole" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_validation_infers_dependencies_through_subdirectories_and_leaves_only_empty_directories(tmp_path):
+    pfile = tmp_path / "debasher_subdeps.sh"
+    pfile.write_text(SUBDEPS_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 0, result.stderr
+    deps = dict(re.findall(r"^PROCESS: (\S+) ; STATUS: .* processdeps=(\S+)$", result.stderr, re.M))
+    assert deps == {"ws": "none", "rs": "aftercorr:ws", "wt": "none", "rt": "aftercorr:wt", "whole": "none"}
+
+    # A validation creates only empty directories that a run creates too,
+    # besides its lock, and no shared subdirectory
+    assert sorted(p.name for p in outdir.iterdir()) == ["__exec__", "__fifos__", "data", "lock"]
+    assert list((outdir / "data").iterdir()) == []
+
+
+# Two processes, each with a shared subdirectory of "data"
+SHARED_LEFT_MODULE = """\
+debasher_shleft_shared_dirs()
+{
+    define_shared_dir "data"
+}
+
+a_explain_opts()
+{
+    explain_opt "-outd" "<dir>" "Shared subdirectory"
+}
+
+a_define_opts()
+{
+    local optlist=""
+    define_opt_from_shared_dir "-outd" "data" optlist --subdir "a" || return 1
+    save_opt_list optlist
+}
+
+a()
+{
+    echo a > "$(read_opt_value_from_func_args "-outd" "$@")/f"
+}
+
+b_explain_opts()
+{
+    explain_opt "-outd" "<dir>" "Shared subdirectory"
+}
+
+b_define_opts()
+{
+    local optlist=""
+    define_opt_from_shared_dir "-outd" "data" optlist --subdir "b" || return 1
+    save_opt_list optlist
+}
+
+b()
+{
+    echo b > "$(read_opt_value_from_func_args "-outd" "$@")/f"
+}
+
+debasher_shleft_program()
+{
+    add_debasher_process "a" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "b" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_process_that_left_the_program_loses_its_shared_subdirectory_and_a_finished_one_keeps_its_own(tmp_path):
+    pfile = tmp_path / "debasher_shleft.sh"
+    pfile.write_text(SHARED_LEFT_MODULE)
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    kept = outdir / "data" / "a" / "f"
+    before = kept.stat().st_mtime_ns
+
+    pfile.write_text(SHARED_LEFT_MODULE.replace('    add_debasher_process "b" "cpus=1 mem=32 time=00:01:00"\n', ""))
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    assert not (outdir / "data" / "b").exists()
+    assert f"Removing {outdir}/data/b, which no option asks for" in result.stderr
+    assert kept.read_text() == "a\n"
+    assert kept.stat().st_mtime_ns == before
+
+
+# An array of two tasks, each with a task subdirectory where it writes the
+# value of -x; task 1 is skipped when -x is "b". The options come from
+# _define_opts, or from an option generator
+TASK_SUBDIR_MODULE = """\
+ts_explain_opts()
+{
+    explain_opt "-x" "<string>" "The value that each task writes"
+    explain_opt "-idx" "<int>" "Index of the task"
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+ts_identify_cmdline_opts()
+{
+    opt_is_cmdline "-x"
+}
+
+ts_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_cmdline_opt "$1" "-x" optlist || return 1
+        define_opt "-idx" "${i}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}
+
+ts_skip()
+{
+    [ "$(read_opt_value_from_func_args "-idx" "$@")" = "1" ] && [ "$(read_opt_value_from_func_args "-x" "$@")" = "b" ]
+}
+
+ts()
+{
+    echo "$(read_opt_value_from_func_args "-x" "$@")" > "$(read_opt_value_from_func_args "-outd" "$@")/out"
+}
+
+debasher_tsub_program()
+{
+    add_debasher_process "ts" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+TASK_SUBDIR_GEN_MODULE = TASK_SUBDIR_MODULE.replace(
+    """ts_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_cmdline_opt "$1" "-x" optlist || return 1
+        define_opt "-idx" "${i}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}""",
+    """ts_generate_opts_size()
+{
+    echo 2
+}
+
+ts_generate_opts()
+{
+    local i=$5
+    local optlist=""
+    define_cmdline_opt "$1" "-x" optlist || return 1
+    define_opt "-idx" "${i}" optlist || return 1
+    define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+    save_opt_list optlist
+}""",
+)
+
+
+@pytest.mark.parametrize("module", [TASK_SUBDIR_MODULE, TASK_SUBDIR_GEN_MODULE], ids=["define_opts", "generator"])
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_task_empties_its_task_subdirectories_and_a_skipped_one_finds_them_as_prepared(tmp_path, sched, module):
+    pfile = tmp_path / "debasher_tsub.sh"
+    pfile.write_text(module)
+    outdir = tmp_path / "out"
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-x", "a", *extra)
+    assert result.returncode == 0, result.stderr
+
+    # What a task left in its task subdirectory after the first run
+    for i in range(2):
+        (outdir / "ts" / str(i) / "stale").write_text("")
+
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-x", "b", *extra)
+    assert result.returncode == 0, result.stderr
+    assert sorted(p.name for p in (outdir / "ts" / "0").iterdir()) == ["out"]
+    assert (outdir / "ts" / "0" / "out").read_text() == "b\n"
+    assert sorted(p.name for p in (outdir / "ts" / "1").iterdir()) == ["out", "stale"]
+    assert (outdir / "ts" / "1" / "out").read_text() == "a\n"

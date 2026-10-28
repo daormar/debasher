@@ -1060,3 +1060,44 @@ write_procspec() {
     [ "$status" -eq 1 ]
     [[ "$output" == *"amount of memory for process big exceeds limit (mem: 64"* ]]
 }
+
+# --- preparing a process that an earlier run prepared ------------------------
+
+@test "_clean_process_files removes the ids and logs of the unfinished tasks of an array only, and every cancellation marker" {
+    setup_array_status
+    declare -g SEQ="$(command -v seq)"
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=(["arr"]=3)
+    # Task 0 finished, task 1 failed, task 2 was cancelled
+    local idx
+    for idx in 0 1; do
+        launch_arr_task "${idx}"
+        echo "log ${idx}" > "$(debasher::_get_task_log_filename "${OUTDIR}" arr "${idx}")"
+    done
+    debasher::_signal_process_completion "${OUTDIR}" arr 0 3
+    echo "Cancelled task idx: 2 ; Total: 3 ; Cause: test" > "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 2)"
+
+    debasher_builtin_sched::_clean_process_files "${OUTDIR}" arr
+
+    [ -f "$(debasher::_get_array_taskid_filename "${OUTDIR}" arr 0)" ]
+    [ -f "$(debasher::_get_task_log_filename "${OUTDIR}" arr 0)" ]
+    [ ! -e "$(debasher::_get_array_taskid_filename "${OUTDIR}" arr 1)" ]
+    [ ! -e "$(debasher::_get_task_log_filename "${OUTDIR}" arr 1)" ]
+    [ ! -e "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 2)" ]
+}
+
+@test "_reset_outdir empties the output directory of a process in a general program, and nothing in a resident one" {
+    declare -g FIND="$(command -v find)"
+    local outd="${OUTDIR}/proc"
+    local program_type
+    for program_type in "${DEBASHER_PROGRAM_TYPE_RESIDENT}" "general"; do
+        mkdir -p "${outd}"
+        touch "${outd}/state"
+        DEBASHER_PROGRAM_TYPE=${program_type}
+        debasher_builtin_sched::_reset_outdir "${OUTDIR}" proc 1 0
+        if [ "${program_type}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+            [ -f "${outd}/state" ]
+        else
+            [ ! -e "${outd}/state" ]
+        fi
+    done
+}

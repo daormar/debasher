@@ -467,6 +467,54 @@ define_worker_opts() {
     [ -d "${outd}/2" ]
 }
 
+@test "_prepare_task_subdirs_for_process removes nothing in a resident program, and creates the task subdirectories" {
+    init_program
+    local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
+    mkdir -p "${outd}/2"
+    touch "${outd}/state"
+    define_worker_opts 0
+    DEBASHER_PROGRAM_TYPE=${DEBASHER_PROGRAM_TYPE_RESIDENT}
+
+    debasher::_prepare_task_subdirs_for_process "${DEBASHER_PROGRAM_OUTDIR}" worker
+
+    [ -d "${outd}/0" ]
+    [ -d "${outd}/2" ]
+    [ -f "${outd}/state" ]
+}
+
+# --- debasher::_prepare_fifos_owned_by_process -----------------------------
+
+@test "_prepare_fifos_owned_by_process creates again, empty, the fifos of the process, their shim fifos and mirror logs" {
+    init_program
+    MKFIFO="$(command -v mkfifo)"; DIRNAME="$(command -v dirname)"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["own/f"]="owner${sep}0" ["other/g"]="other${sep}0")
+    declare -gA DEBASHER_FIFO_MIRRORED=(["own/f"]=1)
+
+    debasher::_prepare_fifos_owned_by_process owner
+    local fifodir=$(debasher::_get_absolute_fifodir)
+    local shimfifo=$(debasher::_get_fifo_shim_name "own/f")
+    local mirrorfile=$(debasher::_get_fifo_mirror_filename "own/f")
+    [ -p "${fifodir}/own/f" ] && [ -p "${shimfifo}" ] && [ -f "${mirrorfile}" ]
+    [ ! -e "${fifodir}/other/g" ]
+
+    # What an earlier run left: the same fifos, and a mirror log with lines
+    local inode_fifo=$(ls -i "${fifodir}/own/f" | cut -d' ' -f1)
+    local inode_shim=$(ls -i "${shimfifo}" | cut -d' ' -f1)
+    echo "old line" > "${mirrorfile}"
+    # Hard links that keep the old fifos alive, so that their inodes are
+    # not given to the new ones
+    ln "${fifodir}/own/f" "${BATS_TEST_TMPDIR}/old_fifo"
+    ln "${shimfifo}" "${BATS_TEST_TMPDIR}/old_shim"
+
+    debasher::_prepare_fifos_owned_by_process owner
+
+    [ -p "${fifodir}/own/f" ] && [ -p "${shimfifo}" ]
+    [ "$(ls -i "${fifodir}/own/f" | cut -d' ' -f1)" != "${inode_fifo}" ]
+    [ "$(ls -i "${shimfifo}" | cut -d' ' -f1)" != "${inode_shim}" ]
+    [ ! -s "${mirrorfile}" ]
+}
+
 @test "_prepare_task_subdirs_for_process refuses a task subdirectory whose subpath goes through a symbolic link" {
     init_program
     local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
