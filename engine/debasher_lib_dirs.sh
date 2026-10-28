@@ -469,6 +469,73 @@ debasher::_prune_subdivided_dir()
 }
 
 ########
+# Adds to the associative array named $1, as keys, the shared directories
+# for which some option of the run asks for a shared subdirectory: the
+# subdivided shared directories. Fails when one of them is not declared by
+# any module.
+debasher::_collect_subdivided_shdirs()
+{
+    local -n subdivided_ref=$1
+
+    local relpath
+    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
+        if [[ ! -v DEBASHER_PROGRAM_SHDIRS["${shdirname}"] ]]; then
+            echo "Error: an option asks for the shared subdirectory ${relpath} of ${shdirname}, which no module declares as a shared directory" >&2
+            return 1
+        fi
+        subdivided_ref["${shdirname}"]=1
+    done
+}
+
+########
+# Creates every shared subdirectory that the options of the run ask for,
+# refusing one whose subpath goes through a symbolic link. When $1 is 1,
+# the subpaths are only checked.
+debasher::_create_shared_subdirs()
+{
+    local only_report=$1
+
+    local relpath
+    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
+        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+        local subpath=${relpath#"${shdirname}/"}
+        debasher::_check_subpath_has_no_link "${absdir}" "${subpath}" "the shared subdirectory ${relpath}" || return 1
+        if [ "${only_report}" -ne 1 ]; then
+            "${MKDIR}" -p "${absdir}/${subpath}" || { echo "Error: cannot create the shared subdirectory ${relpath}" >&2; return 1; }
+        fi
+    done
+}
+
+########
+# Removes from the subdivided shared directory $2 each entry that is
+# neither one of its shared subdirectories, nor a path that an output
+# option of the run names, nor a directory on the way to one of them.
+# When $1 is 1, the entries are only named.
+debasher::_prune_subdivided_shdir()
+{
+    local only_report=$1
+    local shdirname=$2
+
+    local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
+    [ -d "${absdir}" ] || return 0
+
+    # What the shared directory keeps: its shared subdirectories and the
+    # paths that output options name, relative to it
+    local -A kept=()
+    local -A ways=()
+    local relpath
+    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
+        [ "${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}" = "${shdirname}" ] && kept["${relpath#"${shdirname}/"}"]=1
+    done
+    debasher::_add_output_named_paths "${absdir}" kept
+    debasher::_add_ways_to_paths kept ways
+
+    debasher::_prune_subdivided_dir "${only_report}" "the shared directory ${shdirname}" "" "${absdir}" kept ways
+}
+
+########
 # Prepares the shared subdirectories that the options of the run ask
 # for (see debasher::define_opt_from_shared_dir): refuses an output
 # option that holds a subdivided shared directory, checks that no process
@@ -487,50 +554,19 @@ debasher::_prepare_shared_subdirs()
 
     [ ${#DEBASHER_PROGRAM_SHSUBDIRS[@]} -eq 0 ] && return 0
 
-    # Collect the subdivided shared directories
-    local -A subdivided
-    local relpath
-    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
-        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
-        if [[ ! -v DEBASHER_PROGRAM_SHDIRS["${shdirname}"] ]]; then
-            echo "Error: an option asks for the shared subdirectory ${relpath} of ${shdirname}, which no module declares as a shared directory" >&2
-            return 1
-        fi
-        subdivided["${shdirname}"]=1
-    done
+    local -A subdivided=()
+    debasher::_collect_subdivided_shdirs subdivided || return 1
 
     debasher::_check_no_output_opt_holds_subdivided_shdir subdivided || return 1
-
     if [ "${only_report}" -ne 1 ]; then
         debasher::_check_left_processes_not_running || return 1
     fi
 
-    for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
-        local shdirname=${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}
-        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
-        local subpath=${relpath#"${shdirname}/"}
-        debasher::_check_subpath_has_no_link "${absdir}" "${subpath}" "the shared subdirectory ${relpath}" || return 1
-        if [ "${only_report}" -ne 1 ]; then
-            "${MKDIR}" -p "${absdir}/${subpath}" || { echo "Error: cannot create the shared subdirectory ${relpath}" >&2; return 1; }
-        fi
-    done
+    debasher::_create_shared_subdirs "${only_report}" || return 1
 
     local shdirname
     for shdirname in "${!subdivided[@]}"; do
-        local absdir=$(debasher::get_absolute_shdirname "${shdirname}")
-        [ -d "${absdir}" ] || continue
-
-        # What the shared directory keeps: its shared subdirectories and
-        # the paths that output options name, relative to it
-        local -A kept=()
-        local -A ways=()
-        for relpath in "${!DEBASHER_PROGRAM_SHSUBDIRS[@]}"; do
-            [ "${DEBASHER_PROGRAM_SHSUBDIRS["${relpath}"]}" = "${shdirname}" ] && kept["${relpath#"${shdirname}/"}"]=1
-        done
-        debasher::_add_output_named_paths "${absdir}" kept
-        debasher::_add_ways_to_paths kept ways
-
-        debasher::_prune_subdivided_dir "${only_report}" "the shared directory ${shdirname}" "" "${absdir}" kept ways || return 1
+        debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" || return 1
     done
 }
 
@@ -708,6 +744,9 @@ debasher::_prepare_task_subdirs_for_process()
     local dirname=$1
     local processname=$2
 
+    # The task subdirectories of every task, finished or not, since the
+    # options of a finished task still ask for its own; a process without
+    # any has nothing to prepare
     local -A kept=()
     local task_idx subpath
     while IFS=$'\t' read -r task_idx subpath; do
@@ -724,6 +763,11 @@ debasher::_prepare_task_subdirs_for_process()
         debasher::_check_subpath_has_no_link "${outd}" "${subpath}" "the task subdirectory ${subpath} of process ${processname}" || return 1
     done
 
+    # The directory is pruned unless a _reset_outfiles method decides
+    # itself what it holds, or the program is resident, whose nodes keep
+    # their state from one run to the next. What it keeps: the task
+    # subdirectories, the paths that output options name and the
+    # directories on the way to them
     local reset_funct=$(debasher::_get_reset_funcname "${processname}")
     if [ "${reset_funct}" = "${DEBASHER_FUNCT_NOT_FOUND}" ] && [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] && [ -d "${outd}" ]; then
         local -A ways=()
@@ -732,6 +776,8 @@ debasher::_prepare_task_subdirs_for_process()
         debasher::_prune_subdivided_dir 0 "the output directory of process ${processname}" "" "${outd}" kept ways || return 1
     fi
 
+    # The task subdirectories that do not exist yet, with any missing
+    # directory above them, the process output directory included
     for subpath in "${subpaths[@]}"; do
         "${MKDIR}" -p "${outd}/${subpath}" || { echo "Error: cannot create the task subdirectory ${subpath} of process ${processname}" >&2; return 1; }
     done
