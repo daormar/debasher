@@ -706,6 +706,65 @@ debasher::_list_task_subdirs_of_process()
 }
 
 ########
+# Fills the associative array named $2 with the task subdirectories of the
+# process $1, each with the index of the task that asks for it. Fails when
+# two tasks ask for the same one.
+debasher::_collect_task_subdir_owners()
+{
+    local processname=$1
+    local -n owner_ref=$2
+
+    local task_idx subpath
+    while IFS=$'\t' read -r task_idx subpath; do
+        if [[ -v owner_ref["${subpath}"] ]] && [ "${owner_ref["${subpath}"]}" != "${task_idx}" ]; then
+            echo "Error: tasks ${owner_ref["${subpath}"]} and ${task_idx} of process ${processname} ask for the same task subdirectory ${subpath}" >&2
+            return 1
+        fi
+        owner_ref["${subpath}"]=${task_idx}
+    done < <(debasher::_list_task_subdirs_of_process "${processname}")
+}
+
+########
+# Fails when a task subdirectory of the process $1, a key of the
+# associative array named $2, is below another one of them, since each one
+# is emptied on its own.
+debasher::_check_task_subdirs_not_nested()
+{
+    local processname=$1
+    local -n nested_owner_ref=$2
+
+    local subpath
+    for subpath in "${!nested_owner_ref[@]}"; do
+        local parent=${subpath}
+        while [[ "${parent}" == */* ]]; do
+            parent=${parent%/*}
+            if [[ -v nested_owner_ref["${parent}"] ]]; then
+                echo "Error: the task subdirectory ${subpath} of process ${processname} is below another one, ${parent}" >&2
+                return 1
+            fi
+        done
+    done
+}
+
+########
+# Fails when an output option holds the path of the output directory of
+# the process $1, which has task subdirectories, since it would name the
+# whole directory as something that a task produces.
+debasher::_check_no_output_opt_holds_process_outdir()
+{
+    local processname=$1
+
+    local outd=$(debasher::_get_process_outdir "${processname}")
+    local value
+    for value in "${outd}" "${outd}/"; do
+        if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
+            echo "Error: an output option holds the output directory of process ${processname}, which has task subdirectories; a task writes only into its own task subdirectories (define_opt_from_process_outdir --subdir)" >&2
+            return 1
+        fi
+    done
+}
+
+########
 # Checks the task subdirectories of the run, once the options of every
 # task are defined: two tasks may not ask for the same one, no task
 # subdirectory may be below another one of the same process, since each
@@ -726,34 +785,9 @@ debasher::_check_task_subdirs()
     local processname
     for processname in "${!processes[@]}"; do
         local -A owner=()
-        local task_idx subpath
-        while IFS=$'\t' read -r task_idx subpath; do
-            if [[ -v owner["${subpath}"] ]] && [ "${owner["${subpath}"]}" != "${task_idx}" ]; then
-                echo "Error: tasks ${owner["${subpath}"]} and ${task_idx} of process ${processname} ask for the same task subdirectory ${subpath}" >&2
-                return 1
-            fi
-            owner["${subpath}"]=${task_idx}
-        done < <(debasher::_list_task_subdirs_of_process "${processname}")
-
-        for subpath in "${!owner[@]}"; do
-            local parent=${subpath}
-            while [[ "${parent}" == */* ]]; do
-                parent=${parent%/*}
-                if [[ -v owner["${parent}"] ]]; then
-                    echo "Error: the task subdirectory ${subpath} of process ${processname} is below another one, ${parent}" >&2
-                    return 1
-                fi
-            done
-        done
-
-        local outd=$(debasher::_get_process_outdir "${processname}")
-        local value
-        for value in "${outd}" "${outd}/"; do
-            if [[ -v DEBASHER_OUT_VALUE_TO_PROCESSES["${value}"] ]]; then
-                echo "Error: an output option holds the output directory of process ${processname}, which has task subdirectories; a task writes only into its own task subdirectories (define_opt_from_process_outdir --subdir)" >&2
-                return 1
-            fi
-        done
+        debasher::_collect_task_subdir_owners "${processname}" owner || return 1
+        debasher::_check_task_subdirs_not_nested "${processname}" owner || return 1
+        debasher::_check_no_output_opt_holds_process_outdir "${processname}" || return 1
     done
 }
 

@@ -2220,9 +2220,13 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_process()
         # Obtain array size
         local array_size=$(debasher::_get_numtasks_for_process "${processname}")
 
-        # Prepare files and directories for process: those of a process
-        # that an earlier run prepared, which has its process script even
-        # when it is TO-DO again, are cleaned instead
+        # The process script tells two cases apart.
+        # - No script. No run has prepared the process yet, and it gets
+        #   its exec directory.
+        # - A script. An earlier run prepared the process, which may be
+        #   TO-DO again after a rerun reset it. Its exec directory is kept,
+        #   and only the ids and logs of its unfinished tasks, and its
+        #   cancellation markers, are removed.
         if [ ! -f "${script_filename}" ]; then
             debasher::_create_exec_dir_for_process "${dirname}" "${processname}" || { echo "Error when creating exec directory for process" >&2 ; return 1; }
         else
