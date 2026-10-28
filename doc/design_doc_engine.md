@@ -375,7 +375,8 @@ relative to the output directory of the run.
   shared subdirectory and removes nothing (see "Shared subdirectories"). It
   never prepares a process either, so it creates no task subdirectory, removes
   nothing from a process output directory, and does not find a task subdirectory
-  whose subpath goes through a symbolic link (see "Task subdirectories").
+  whose subpath goes through a symbolic link, nor a path that an output option
+  names in a process output directory through one (see "Task subdirectories").
 - **option check**: `debasher_exec --check-proc-opts`, which loads the program,
   builds and checks the options of every task as a run does, and prints them.
   It takes no lock, refuses neither a process of an earlier run still in
@@ -1261,8 +1262,13 @@ the whole subdivided shared directory, through an option that gives its path
 without `--subdir`, but writes only into its own shared subdirectory, or into a
 path that one of its output options names. An output option that holds the path
 of a subdivided shared directory stops the preparation, since it would name the
-whole directory as something that a task produces. The engine cannot check the
-rest: a task that writes into the subdivided shared directory through
+whole directory as something that a task produces. A path that an output option
+names in a subdivided shared directory with a symbolic link at any component on
+the way to it stops the preparation too: removal would take the link for an
+entry that no option asks for, leaving the task no directory to write into, and
+a link kept could take the task outside the shared directory. The path itself
+may be a link, which removal keeps as it is. The engine cannot check the rest:
+a task that writes into the subdivided shared directory through
 `get_absolute_shdirname`, or a file that the user leaves there, breaks that
 contract, and what it leaves is removed by the next run.
 
@@ -1366,10 +1372,14 @@ missing directory above it, the process output directory included. A task that
 the `_skip` method of its process skips thus finds its task subdirectory as
 preparation left it, just as a skipped task of a process with a single task
 finds its process output directory. A task subdirectory whose subpath has a
-symbolic link at any of its components stops the run. Every process that the run
-launches is prepared before any of them is launched, so such a failure, or one
-to create a task subdirectory or to remove from a subdivided process output
-directory, stops the run before any process is launched (see "Preparing a run").
+symbolic link at any of its components stops the run, and so does a path that an
+output option names in the process output directory with a symbolic link on the
+way to it, whether the process has a `_reset_outfiles` method or not, as in a
+subdivided shared directory (see "Shared subdirectories"). Every process that
+the run launches is prepared before any of them is launched, so such a failure,
+or one to create a task subdirectory or to remove from a subdivided process
+output directory, stops the run before any process is launched (see "Preparing
+a run").
 
 **Emptying.** Before each task that is not skipped, in the step that resets the
 process output directory (see "Executing a task"), the task removes each of its

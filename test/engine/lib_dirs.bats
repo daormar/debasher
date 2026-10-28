@@ -206,6 +206,56 @@ define_writer_opts() {
     [ ! -e "${outside}/bam" ]
 }
 
+# Defines the options of a process "reporter" with the output option
+# -outf, whose value is $1
+define_reporter_opts() {
+    reporter_define_opts()
+    {
+        local optlist=""
+        define_opt "-outf" "$1" optlist
+        save_opt_list optlist
+    }
+    set +e
+    reporter_define_opts "$1"
+    local status=$?
+    set -e
+    return "${status}"
+}
+
+@test "_prepare_shared_subdirs refuses a path that an output option names through a symbolic link, and removes nothing" {
+    init_program
+    local data="${DEBASHER_PROGRAM_OUTDIR}/data"
+    local outside="${BATS_TEST_TMPDIR}/outside"
+    mkdir -p "${outside}" "${data}/2"
+    ln -s "${outside}" "${data}/reports"
+    define_writer_opts 0
+    define_reporter_opts "${data}/reports/r.txt"
+
+    for only_report in 1 0; do
+        run debasher::_prepare_shared_subdirs "${only_report}"
+        [ "${status}" -ne 0 ]
+        [[ "${output}" == *"the path reports/r.txt that an output option names in the shared directory data goes through the symbolic link ${data}/reports"* ]]
+    done
+    [ -L "${data}/reports" ]
+    [ -d "${data}/2" ]
+    [ ! -e "${data}/0" ]
+}
+
+@test "_prepare_shared_subdirs keeps a path that an output option names when it is itself a symbolic link" {
+    init_program
+    local data="${DEBASHER_PROGRAM_OUTDIR}/data"
+    touch "${BATS_TEST_TMPDIR}/target.txt"
+    mkdir -p "${data}/reports"
+    ln -s "${BATS_TEST_TMPDIR}/target.txt" "${data}/reports/r.txt"
+    define_writer_opts 0
+    define_reporter_opts "${data}/reports/r.txt"
+
+    debasher::_prepare_shared_subdirs 0
+
+    [ -L "${data}/reports/r.txt" ]
+    [ -d "${data}/0" ]
+}
+
 @test "_prepare_shared_subdirs refuses a shared subdirectory of a shared directory that no module declares" {
     init_program
     local optlist=""
@@ -430,6 +480,32 @@ define_worker_opts() {
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"symbolic link"* ]]
     [ ! -e "${outside}/bam" ]
+}
+
+@test "_prepare_task_subdirs_for_process refuses a path that an output option names through a symbolic link, and removes nothing" {
+    init_program
+    local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
+    local outside="${BATS_TEST_TMPDIR}/outside"
+    mkdir -p "${outd}/2" "${outside}"
+    ln -s "${outside}" "${outd}/reports"
+    define_worker_opts 0
+    worker_define_opts()
+    {
+        local optlist=""
+        define_opt "-outf" "${DEBASHER_PROGRAM_OUTDIR}/worker/reports/r.txt" optlist
+        save_opt_list optlist
+    }
+    set +e
+    worker_define_opts
+    set -e
+
+    run debasher::_prepare_task_subdirs_for_process "${DEBASHER_PROGRAM_OUTDIR}" worker
+
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"the path reports/r.txt that an output option names in the output directory of process worker goes through the symbolic link ${outd}/reports"* ]]
+    [ -L "${outd}/reports" ]
+    [ -d "${outd}/2" ]
+    [ ! -e "${outd}/0" ]
 }
 
 @test "_reset_task_subdirs empties the task subdirectories of its task only, entries whose name starts with a dot included" {

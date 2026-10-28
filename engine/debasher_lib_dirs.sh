@@ -407,6 +407,27 @@ debasher::_add_output_named_paths()
 }
 
 ########
+# Fails when a path below the directory $1 that an output option of the
+# run names goes through a symbolic link on the way to it, so that the
+# pruning of $1, which takes such a link for an entry to remove, never
+# meets one. The path itself may be a link, which the pruning keeps whole.
+# $2 names the directory for the message.
+debasher::_check_output_named_paths_have_no_link()
+{
+    local absroot=$1
+    local what=$2
+
+    local -A named=()
+    debasher::_add_output_named_paths "${absroot}" named
+
+    local relpath
+    for relpath in "${!named[@]}"; do
+        [[ "${relpath}" == */* ]] || continue
+        debasher::_check_subpath_has_no_link "${absroot}" "${relpath%/*}" "the path ${relpath} that an output option names in ${what}" || return 1
+    done
+}
+
+########
 # Adds to the associative array named $2 every directory on the way to a
 # path of the associative array named $1 (all of them relative to the same
 # directory): "a" and "a/b" for "a/b/c".
@@ -539,12 +560,14 @@ debasher::_prune_subdivided_shdir()
 # Prepares the shared subdirectories that the options of the run ask
 # for (see debasher::define_opt_from_shared_dir): refuses an output
 # option that holds a subdivided shared directory, checks that no process
-# that the program no longer has is still running, creates every shared
-# subdirectory, and removes from every subdivided shared directory each
-# entry that is neither a shared subdirectory of the run, nor a path that
-# an output option of the run names, nor a directory on the way to one of
-# them. When $1 is 1, as in a validation, nothing is created or removed,
-# and the entries that a run would remove are only named.
+# that the program no longer has is still running, refuses a path that an
+# output option names in a subdivided shared directory through a symbolic
+# link on the way to it, creates every shared subdirectory, and removes
+# from every subdivided shared directory each entry that is neither a
+# shared subdirectory of the run, nor a path that an output option of the
+# run names, nor a directory on the way to one of them. When $1 is 1, as
+# in a validation, nothing is created or removed, and the entries that a
+# run would remove are only named.
 #
 # Must be called once the options of every process are defined and the
 # shared directories created.
@@ -562,9 +585,13 @@ debasher::_prepare_shared_subdirs()
         debasher::_check_left_processes_not_running || return 1
     fi
 
+    local shdirname
+    for shdirname in "${!subdivided[@]}"; do
+        debasher::_check_output_named_paths_have_no_link "$(debasher::get_absolute_shdirname "${shdirname}")" "the shared directory ${shdirname}" || return 1
+    done
+
     debasher::_create_shared_subdirs "${only_report}" || return 1
 
-    local shdirname
     for shdirname in "${!subdivided[@]}"; do
         debasher::_prune_subdivided_shdir "${only_report}" "${shdirname}" || return 1
     done
@@ -737,8 +764,9 @@ debasher::_check_task_subdirs()
 # its subdivided process output directory every entry that is neither a
 # task subdirectory of the run, nor a path that an output option of the
 # run names, nor a directory on the way to one of them; then creates the
-# task subdirectories that do not exist, refusing one whose subpath goes
-# through a symbolic link.
+# task subdirectories that do not exist. A task subdirectory whose subpath
+# goes through a symbolic link, or a path that an output option names in
+# the directory through one on the way to it, is refused first.
 debasher::_prepare_task_subdirs_for_process()
 {
     local dirname=$1
@@ -758,10 +786,12 @@ debasher::_prepare_task_subdirs_for_process()
     local -a subpaths=("${!kept[@]}")
 
     # A symbolic link is refused before anything is removed, since removal
-    # would take the link for an entry to remove
+    # would take the link for an entry to remove: one in the subpath of a
+    # task subdirectory, or on the way to a path that an output option names
     for subpath in "${subpaths[@]}"; do
         debasher::_check_subpath_has_no_link "${outd}" "${subpath}" "the task subdirectory ${subpath} of process ${processname}" || return 1
     done
+    debasher::_check_output_named_paths_have_no_link "${outd}" "the output directory of process ${processname}" || return 1
 
     # The directory is pruned unless a _reset_outfiles method decides
     # itself what it holds, or the program is resident, whose nodes keep
