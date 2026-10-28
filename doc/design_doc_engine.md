@@ -323,21 +323,21 @@ relative to the output directory of the run.
   holds it too, and says so on the second line of the lock file.
 - **process output directory**: the directory of a process under the output
   directory, named after the process unless its `_outdir_basename` method gives
-  another name. Before each task runs, the `_reset_outfiles` method of the
-  process resets it; without that method, the directory of a process with a
-  single task is emptied, and that of an array process, which its tasks share,
-  is left as it is.
-- **task subdirectory**: a directory below the process output directory that
-  an option of a task asks for, with `define_opt_from_process_outdir --subdir`,
-  which the engine creates when the process is prepared and empties before the
-  task runs, as it does with the process output directory of a process with a
-  single task (see "Task subdirectories").
-- **subdivided process output directory**: a process output directory for
-  which some task of the run asks for a task subdirectory. When its process is
-  prepared, and it has no `_reset_outfiles` method, the engine removes from it
-  every entry that is neither a task subdirectory of the run, nor a path that
-  an output option of the run names, nor a directory on the way to one of
-  them.
+  another name. Before each task of a general program runs, the
+  `_reset_outfiles` method of the process resets it; without that method, the
+  directory of a process with a single task is emptied, and that of an array
+  process, which its tasks share, is left as it is.
+- **task subdirectory**: a directory below the process output directory that an
+  option of a task asks for, with `define_opt_from_process_outdir --subdir`,
+  which the engine creates when the process is prepared and, in a general
+  program, empties before the task runs, as it does with the process output
+  directory of a process with a single task (see "Task subdirectories").
+- **subdivided process output directory**: a process output directory for which
+  some task of the run asks for a task subdirectory. When its process is
+  prepared, has no `_reset_outfiles` method and does not belong to a resident
+  program, the engine removes from it every entry that is neither a task
+  subdirectory of the run, nor a path that an output option of the run names,
+  nor a directory on the way to one of them.
 - **exec directory**: `__exec__/<process>`, where the engine keeps the process
   script, the logs, the ids, the completion markers and the cancellation markers
   of a process.
@@ -382,7 +382,9 @@ relative to the output directory of the run.
   It takes no lock, refuses neither a process of an earlier run still in
   progress nor a process whose interpreter is missing, and goes no further.
   Its preparation directory is a temporary one, outside the output directory,
-  which receives only the option lists of the tasks (see "Architecture").
+  which receives only the option lists of the tasks (see "Architecture"); in
+  the output directory it creates only empty directories that a run creates
+  too (see "The output directory").
 - **preparation directory**: the directory where `debasher_exec` writes, while
   it prepares a run, the files with which the run describes itself to its
   tasks and to the tools: `.sched_opts`, `program.opts`, `program.opts_exh`,
@@ -1349,15 +1351,15 @@ define_opt_from_process_outdir "-outd" optlist --subdir "${task_idx}" || return 
 ```
 
 The function of the process gets a directory that exists and is empty when it
-starts, unless its process has a `_reset_outfiles` method, whatever the number
-of tasks of its process, so the same function works with one task and with many
-(see "Introduction"). A subpath follows the same rules as that of a shared
-subdirectory (see "Shared subdirectories"). A task may ask for several task
-subdirectories. Two tasks may not ask for the same one, and no task subdirectory
-may be below another one of the same process, of the same task or of another,
-since each one is emptied on its own: each of the two stops the preparation once
-the options of every task are known, as for shared subdirectories, so that a
-validation finds it too.
+starts, unless its process has a `_reset_outfiles` method or its program is
+resident, whatever the number of tasks of its process, so the same function
+works with one task and with many (see "Introduction"). A subpath follows the
+same rules as that of a shared subdirectory (see "Shared subdirectories"). A
+task may ask for several task subdirectories. Two tasks may not ask for the same
+one, and no task subdirectory may be below another one of the same process, of
+the same task or of another, since each one is emptied on its own: each of the
+two stops the preparation once the options of every task are known, as for
+shared subdirectories, so that a validation finds it too.
 
 **Registering.** Defining the option creates nothing: it records the task
 subdirectory under the task whose options are being defined (see "Arrays and
@@ -1385,7 +1387,11 @@ a run").
 process output directory (see "Executing a task"), the task removes each of its
 task subdirectories with everything in it, and creates it again. A
 `_reset_outfiles` method replaces this, as it replaces the default reset, and a
-task of a resident program never empties them.
+task of a resident program never empties them: what a process of a resident
+program keeps in its process output directory is part of what it has done so
+far, and its next launch resumes from it (see `doc/design_doc_resident.md`). For
+the same reason, the engine removes nothing from the process output directory of
+a resident program when its process is prepared.
 
 **A subdivided process output directory.** A process output directory for which
 some task asks for a task subdirectory is a subdivided process output directory,
@@ -1393,17 +1399,17 @@ and holds the task subdirectories of the run, the paths in it that output
 options of the run name, such as value descriptors, the directories on the way
 to them, and nothing else. A task of its process writes only into its own task
 subdirectories, or into a path that one of its output options names. When such a
-process is prepared, and it has no `_reset_outfiles` method, the engine removes
-from its process output directory every other entry, as it removes from a
-subdivided shared directory, and within the same bounds (see "Shared
-subdirectories"). The task subdirectories of the tasks that the process no
-longer has are removed, while those of the finished tasks of an array that runs
-again in part are kept, since their options still ask for them; what a finished
-task wrote elsewhere in the directory, breaking that contract, is removed even
-though the task does not run again. An output option that holds the path of a
-subdivided process output directory stops the preparation once the options of
-every task are known, since it would name the whole directory as something that
-a task produces.
+process is prepared, has no `_reset_outfiles` method and does not belong to a
+resident program, the engine removes from its process output directory every
+other entry, as it removes from a subdivided shared directory, and within the
+same bounds (see "Shared subdirectories"). The task subdirectories of the tasks
+that the process no longer has are removed, while those of the finished tasks of
+an array that runs again in part are kept, since their options still ask for
+them; what a finished task wrote elsewhere in the directory, breaking that
+contract, is removed even though the task does not run again. An output option
+that holds the path of a subdivided process output directory stops the
+preparation once the options of every task are known, since it would name the
+whole directory as something that a task produces.
 
 **Dependencies.** The path of a task subdirectory is an ordinary absolute path,
 so the rule of "Inferring dependencies from options" applies to it, as to the
@@ -2345,22 +2351,24 @@ and completion markers. For a process that is prepared:
 - A process that an earlier run prepared, which has its process script, loses
   the ids and the logs of its previous run, for an array process only those of
   the tasks that have not finished, so that the finished tasks of an array are
-  not run again. Under the built-in scheduler it also loses all its cancellation
-  markers, so that its cancelled tasks wait to be launched again. A process
-  marked to rerun has already lost its ids and its completion markers (see
-  "Reruns"), so none of its tasks counts as finished.
+  not run again. Under the Slurm scheduler, the id of the job array of an array
+  process stays until the launch replaces it. Under the built-in scheduler it
+  also loses all its cancellation markers, so that its cancelled tasks wait to
+  be launched again. A process marked to rerun has already lost its ids and its
+  completion markers (see "Reruns"), so none of its tasks counts as finished.
 - The FIFOs that the process owns are created again, empty (see "Declaring
   and owning a FIFO").
 - Its process output directory is created if it does not exist; under the Slurm
   scheduler, only when the process has no process script yet. What it holds from
   an earlier run is not removed here, except, for a subdivided process output
-  directory of a process without a `_reset_outfiles` method, every entry that is
-  neither a task subdirectory of the run, nor a path that an output option of
-  the run names, nor a directory on the way to one of them; each task resets the
-  directory when it starts (see "Executing a task"). The task subdirectories
-  that do not exist are created (see "Task subdirectories"). Every process that
-  the run launches is prepared before any of them is launched, and a failure
-  here stops the run before any process is launched.
+  directory of a process without a `_reset_outfiles` method outside a resident
+  program, every entry that is neither a task subdirectory of the run, nor a
+  path that an output option of the run names, nor a directory on the way to one
+  of them; each task resets the directory when it starts (see "Executing a
+  task"). The task subdirectories that do not exist are created (see "Task
+  subdirectories"). Every process that the run launches is prepared before any
+  of them is launched, and a failure here stops the run before any process is
+  launched.
 
 ## The process script: how code travels
 
@@ -2542,14 +2550,28 @@ and its completion marker: `<process>.id`, `.opts`, `.stdout`, `.sched_out` and
 `.finished` for a process with a single task, and `<process>_<index>.id` and so
 on for the tasks of an array process. Under the built-in scheduler, a cancelled
 task has a cancellation marker, `.cancelled`, instead of all of these (see
-"Tasks that will not be launched"). Under the Slurm scheduler, the logs are
-those that Slurm writes, one for each attempt.
+"Tasks that will not be launched"). Under the Slurm scheduler, which submits an
+array process as one job array, the id is the exception: the exec directory of
+an array process holds a single `<process>.id`, with the id of its job array,
+and no id for each task. Under it, the logs are those that Slurm writes, one for
+each attempt.
 
 Everything else at the top of the directory belongs to the processes: the
 process output directory of each process, named after it or after what its
 `_outdir_basename` method gives, and the shared directories. They share the
 top of the directory with the files of the engine, and the engine refuses
 neither a process nor a shared directory whose name is one of those names.
+
+A use of `debasher_exec` that launches nothing writes into the output directory
+too, though less. An option check and `--show-cmdline-opts` create the output
+directory, `__exec__` and `__fifos__` when they are missing (and `.conda` with
+`--conda-support`), and take no lock. A validation creates the same, writes
+`lock`, and creates the shared directories that are missing, empty, but no
+shared subdirectory; with `--conda-support`, it also creates the Conda
+environments that are missing, with their logs in `.conda`, as a run does.
+Besides `lock`, which the validation rewrites, none of them changes a file that
+an earlier run left, nor what a directory holds, and a run would create what
+they create anyway.
 
 ## Run resources and their life cycle
 
@@ -2558,10 +2580,13 @@ every file of a task whose name the engine gives, is a run resource, with an
 owner and a life cycle. The files that a task writes under the names that its
 options give, its outputs, follow the directory that holds them, and have no row
 of their own; nor do the files that the engine keeps for itself at the top of
-the output directory (see "The output directory").
-The last column says whether a process with many tasks gets the same run
-resource as a process with a single task, as the principle stated in the
-"Introduction" requires.
+the output directory (see "The output directory"). The last column says whether
+a process with many tasks gets the same run resource as a process with a single
+task, as the principle stated in the "Introduction" requires. The table
+describes a general program: in a resident program, the engine neither empties a
+process output directory or a task subdirectory nor removes anything from them,
+so a value descriptor or a step marker there is removed by nothing either (see
+"Task subdirectories").
 
 | Run resource | Owner | Created | Emptied | Removed | One task and many |
 |---|---|---|---|---|---|
@@ -2572,7 +2597,7 @@ resource as a process with a single task, as the principle stated in the
 | FIFO, with its shim FIFO and mirror log | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO") | created again, empty, each time the process of its owner is prepared | never | alike: each task declares a FIFO of its own |
 | shared directory | the module that declares it | before any process is launched, if missing (see "Output options") | never, except a subdivided shared directory, from which every entry that is neither a shared subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them is removed before any process is launched (see "Shared subdirectories") | never | alike |
 | shared subdirectory | the tasks that ask for it | before any process is launched, if missing (see "Shared subdirectories") | never | before any process is launched, when no option asks for it while another asks for a shared subdirectory of the same shared directory (see "Shared subdirectories") | alike |
-| exec directory | the engine | when a process with no process script is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its ids and then its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id, log and completion marker, or, when cancelled, its own cancellation marker |
+| exec directory | the engine | when a process with no process script is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its ids and then its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id (under the Slurm scheduler, the tasks of an array share the id of its job array), log and completion marker, or, when cancelled, its own cancellation marker |
 
 **Where one task and many still differ.** The process output directory itself is
 the one run resource that one task and many do not get alike: the tasks of an
@@ -2582,11 +2607,11 @@ of an array a task subdirectory, which the engine creates and empties as it does
 the process output directory of a process with a single task, and which makes
 the process output directory subdivided: what a task writes there outside its
 task subdirectories and the paths that its output options name is then removed
-when the process is prepared again, unless it has a `_reset_outfiles` method. A
-process whose wiring gives its tasks the process output directory itself works
-with many tasks only if its own code divides the directory between them, and
-keeps there, between runs, the step markers that a process with a single task
-loses.
+when the process is prepared again, unless it has a `_reset_outfiles` method or
+belongs to a resident program. A process whose wiring gives its tasks the
+process output directory itself works with many tasks only if its own code
+divides the directory between them, and keeps there, between runs, the step
+markers that a process with a single task loses.
 
 ## Process status
 
@@ -3238,12 +3263,13 @@ leaves, by design, to the program or to whoever runs it.
     subdirectory of the run, the shared directory itself or anything outside
     it (see "Shared subdirectories").
 18. A task subdirectory exists when its process is launched, and is empty when
-    the process function of its task starts, unless the task is skipped or its
-    process has a `_reset_outfiles` method. When a process is prepared, the
-    engine removes from its subdivided process output directory only what is
-    neither a task subdirectory of the run, nor a path that an output option of
-    the run names, nor a directory on the way to one of them; never the process
-    output directory itself or anything outside it. The tasks of an array never
+    the process function of its task starts, unless the task is skipped, its
+    process has a `_reset_outfiles` method or its program is resident. When a
+    process is prepared, the engine removes from its subdivided process output
+    directory, unless its program is resident, only what is neither a task
+    subdirectory of the run, nor a path that an output option of the run names,
+    nor a directory on the way to one of them; never the process output
+    directory itself or anything outside it. The tasks of an array never
     share a value descriptor (see "Task subdirectories" and "Output options").
 19. While the run is prepared, `get_process_num_tasks` gives any process the
     number of tasks that any other process has in the run, or stops the
@@ -3314,8 +3340,8 @@ leaves, by design, to the program or to whoever runs it.
   gives a task subdirectory. And when the directory is subdivided, what a
   finished task wrote there outside its task subdirectories and the paths that
   its output options name is removed when the process is prepared again, unless
-  it has a `_reset_outfiles` method, though the task does not run again (see
-  "Run resources and their life cycle").
+  it has a `_reset_outfiles` method or belongs to a resident program, though the
+  task does not run again (see "Run resources and their life cycle").
 - **Option generators.** The engine does not check that an option generator
   gives the same option list every time. A file or a directory that it reads and
   that changes during a run (for a resident program, while it runs and
