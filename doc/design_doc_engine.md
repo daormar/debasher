@@ -388,11 +388,12 @@ relative to the output directory of the run.
   `program.fifos`, the final process specification, `__graphs__`, the command
   line file and the execution context. For a run it is a `.prep.<suffix>`
   directory of the output directory, whose files replace those of the earlier
-  run in the last stage of the preparation (see "Architecture"); for any use
-  of `debasher_exec` that launches nothing, a validation or an option check
-  among them, it is a temporary directory elsewhere, and nothing is moved out
-  of it. It is removed once its files are moved, or when `debasher_exec`
-  exits before that.
+  run in the last stage of the preparation, where one of these files that the
+  earlier run wrote and this run does not is removed (see "Architecture"); for
+  any use of `debasher_exec` that launches nothing, a validation or an option
+  check among them, it is a temporary directory elsewhere, and nothing is
+  moved out of it. It is removed once its files are moved, or when
+  `debasher_exec` exits before that.
 - **scheduler**: what launches the tasks of a process once its dependencies
   hold: the built-in scheduler or the Slurm scheduler.
 - **built-in scheduler**: the scheduler that runs tasks on the local machine
@@ -510,7 +511,9 @@ fails, before any process is launched:
 8. It marks the processes to rerun (see "Reruns").
 9. It writes the command line file and the execution context, and moves every
    file that it wrote since stage 5 from the preparation directory into the
-   output directory, replacing those of the earlier run.
+   output directory, replacing those of the earlier run. Such a file that the
+   earlier run wrote and this run does not (`program.opts_exh`, written only
+   with `--gen-proc-graph`) is removed.
 10. It hands the processes to the scheduler. Before a process is launched, its
     exec directory is prepared, its FIFOs and its task subdirectories are
     created, and, when its process output directory is subdivided, what no
@@ -2514,7 +2517,7 @@ fixed:
 | `.exec_context.sh` | `debasher_exec` | the execution context |
 | `program.procspec` | `debasher_exec` | the final process specification |
 | `program.opts`, `program.opts_old` | `debasher_exec` | the options of every process in this run and in the last run that ended normally |
-| `program.opts_exh` | `debasher_exec`, with `--gen-proc-graph` | the options of every task, for the process graph |
+| `program.opts_exh` | `debasher_exec`, with `--gen-proc-graph`; a run without it removes the one of the earlier run | the options of every task, for the process graph |
 | `program.fifos` | `debasher_exec` | the owner and the reader of every FIFO |
 | `.sched_opts/` | `debasher_exec` | the option list of every task of a process without an option generator |
 | `__graphs__/` | `debasher_exec` | the dependency graph, and the process graph when asked for |

@@ -1337,17 +1337,17 @@ debasher::_get_process_outdir_given_process_spec()
 }
 
 ########
+# Creates the output directory of a process if it does not exist. What an
+# earlier run left in it is not removed here: a task that is not skipped
+# resets it before it runs, with the _reset_outfiles method of its process
+# or the default reset (see debasher::_default_reset_outfiles_for_process)
 debasher::_create_outdir_for_process()
 {
     local dirname=$1
     local processname=$2
     local outd=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
 
-    if [ -d ${outd} ]; then
-        echo "Warning: ${processname} output directory already exists but program was not finished or will be re-executed, directory content will be removed">&2
-    else
-        "${MKDIR}" "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
-    fi
+    "${MKDIR}" -p "${outd}" || { echo "Error! cannot create output directory" >&2; return 1; }
 }
 
 ########

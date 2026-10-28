@@ -819,6 +819,50 @@ def test_a_program_runs_and_is_inspected_from_a_directory_with_spaces(tmp_path):
     assert status.returncode == 0, status.stdout + status.stderr
     assert "moved" not in status.stderr
 
+    # A changed option runs the process again, into the process output
+    # directory that the first run created
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", "out", "-s", "again", cwd=workdir)
+    assert result.returncode == 0, result.stderr
+    stdout = workdir / "out" / "__exec__" / "hello_world" / "hello_world.stdout"
+    assert stdout.read_text() == "again\n"
+
+
+def test_debasher_exec_writes_its_process_id_into_the_lock_file_and_marks_a_validation(tmp_path):
+    outdir = tmp_path / "out"
+    args = [str(DEBASHER_EXEC), "--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "--sched", "BUILTIN"]
+
+    validation = subprocess.Popen([*args, "--validate"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    _, err = validation.communicate()
+    assert validation.returncode == 0, err
+    assert (outdir / "lock").read_text() == f"{validation.pid}\nvalidate\n"
+
+    run = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    _, err = run.communicate()
+    assert run.returncode == 0, err
+    assert (outdir / "lock").read_text() == f"{run.pid}\n"
+
+
+def test_the_exhaustive_option_list_of_an_earlier_run_does_not_survive_a_run_without_it(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "--gen-proc-graph")
+    assert result.returncode == 0, result.stderr
+    assert (outdir / "program.opts_exh").exists()
+
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "again")
+    assert result.returncode == 0, result.stderr
+    assert not (outdir / "program.opts_exh").exists()
+
+
+def test_the_old_options_are_those_of_the_last_run(tmp_path):
+    outdir = tmp_path / "out"
+    for value in ("first", "second"):
+        result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", value)
+        assert result.returncode == 0, result.stderr
+
+    old = (outdir / "program.opts_old").read_text()
+    assert "second" in old
+    assert "first" not in old
+
 
 def test_a_moved_output_directory_can_be_inspected_but_not_run_again(tmp_path):
     outdir = tmp_path / "out"

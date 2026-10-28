@@ -941,7 +941,8 @@ create_prep_dir()
 
 ########
 # Moves what the preparation directory holds into the output directory,
-# replacing what the earlier run left there. Each file is renamed, so that
+# replacing what the earlier run left there, and removing what the earlier
+# run wrote and this one does not. Each file is renamed, so that
 # debasher_status, which reads the final process specification and the
 # command line file without the lock, finds either the old file or the
 # new one, never one half written.
@@ -956,8 +957,13 @@ publish_prep_files()
                  "${prg_pref}.${DEBASHER_PRGOPTS_FEXT}" "${prg_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}" \
                  "${prg_pref}.${DEBASHER_FIFOS_FEXT}" "${prg_pref}.${DEBASHER_PROCSPEC_FEXT}" \
                  "${DEBASHER_EXEC_CONTEXT_BASENAME}" "${DEBASHER_PRG_COMMAND_LINE_BASENAME}"; do
-        # The exhaustive option list is only written with --gen-proc-graph
-        [ -e "${prepd}/${entry}" ] || continue
+        # An entry that this run does not write (the exhaustive option
+        # list, written only with --gen-proc-graph) must not survive from
+        # the earlier run
+        if [ ! -e "${prepd}/${entry}" ]; then
+            "${RM}" -rf "${outd:?}/${entry}" || return 1
+            continue
+        fi
 
         # mv would move a directory into the one of the earlier run
         if [ -d "${prepd}/${entry}" ]; then
