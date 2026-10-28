@@ -423,7 +423,8 @@ relative to the output directory of the run.
   before, for a reason (forced, changed input, outdated code, the other end of
   one of its FIFOs runs again, a resident resume, a producer that has not
   finished), propagated to the processes that depend on it and to the other ends
-  of its FIFOs.
+  of its FIFOs. Every task of a marked process runs again, those that finished
+  included.
 
 ## Business tests
 
@@ -2637,8 +2638,8 @@ refuses the output directory, so that a check never makes a launch fail.
 ## Reruns
 
 A new run on an output directory launches the processes that are not finished,
-and runs again the finished processes that it marks to rerun, for one of these
-reasons:
+and runs again every task of the processes that it marks to rerun, finished or
+not, for one of these reasons:
 
 - **Forced.** The process has `force=yes` among its additional
   specifications.
@@ -2680,8 +2681,10 @@ that depends on it, and from one end of a FIFO to the other. A process marked to
 rerun loses its ids and then its completion markers before the run is launched.
 In that order, a finished process goes from `FINISHED` to `TO-DO` with no
 reading of its status in between that would take it for a process launched and
-failed. In a resident program, where every marked node that is not running is
-reset, a node with cancellation markers stays `UNFINISHED` until it is prepared.
+failed. A process that has not finished loses them too: the mark says that what
+its finished tasks did in an earlier run no longer stands, and keeping them
+would leave results mixed from two runs. Under the built-in scheduler, a marked
+process with cancellation markers stays `UNFINISHED` until it is prepared.
 Since the process keeps its process script, it is then prepared as any process
 that an earlier run prepared, with the logs of that earlier run cleaned, and
 every task of it runs again.
@@ -3202,11 +3205,12 @@ leaves, by design, to the program or to whoever runs it.
 13. The oneshot mode of the built-in scheduler refuses, before launching
     anything, a program that it could not run without waiting for something to
     end (see "The built-in scheduler").
-14. A new run on an output directory runs every process that has not finished,
-    and every finished process that is forced, whose options changed, whose FIFO
-    has an end that runs again, or that depends through `after`, `afterany` or
-    `afterok` on a process that has not finished, together with every process
-    that depends on them (see "Reruns").
+14. A new run on an output directory runs the tasks that have not finished of
+    every process that has not finished. It runs every task of a process that
+    is forced, whose options changed, whose FIFO has an end that runs again, or
+    that has finished and depends through `after`, `afterany` or `afterok` on a
+    process that has not finished, together with every process that depends on
+    them, whether that process has finished or not (see "Reruns").
 15. After `debasher_stop` on a whole program, no task of the run is running,
     nothing is left that could launch one, and nothing is left half launched
     (see "Tools that read a run").

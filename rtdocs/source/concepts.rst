@@ -142,7 +142,9 @@ That bookkeeping is the **status** of each process, which is one of
 ``unfinished_but_runnable`` (did not complete, is not running, and can
 be run again). A program run again into the same output directory
 **resumes**: it runs the processes, or the tasks of an array, that did
-not finish, and leaves alone those that did. A process may declare in
+not finish, and leaves alone those that did. A process that has to run
+again, because its options changed for instance, runs whole, every task
+of an array included. A process may declare in
 its own code that it can be **skipped** on a run, which counts as
 finished, or be marked to run on every run.
 

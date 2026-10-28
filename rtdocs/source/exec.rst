@@ -379,11 +379,14 @@ Running a Program Again
 Executing ``debasher_exec`` again on the same output directory resumes
 the program instead of starting it from scratch: it launches the
 processes that did not finish (for an array, only the tasks that did
-not finish), and leaves alone the ones that finished. A process skipped
+not finish, unless the array is one of the processes listed below), and
+leaves alone the ones that finished. A process skipped
 by its ``skip`` method counts as finished, and one whose ``skip`` method
 fails (exit status 2 or more) fails. The output of
 ``debasher_exec`` lists, after "Printing list of processes to rerun",
-the finished processes that it runs again, which are these:
+the processes that it runs again whole, finished or not: every task of
+such a process runs again, including the tasks of an unfinished array
+that had already finished. They are these:
 
 * a process with ``force=yes`` among its additional specifications
   (see the :ref:`implem_bash` Section), which runs in every execution;

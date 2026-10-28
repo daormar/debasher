@@ -126,8 +126,11 @@ not run again a process that finished, even when its code changed since:
 after fixing the code of such a process, say so, and offer to set
 `rerunOutdatedProcs` among the execution options or to empty the output
 directory (`reset_output_dir`, which deletes everything in it, so only when
-the user agrees). While a run or a validation is in progress, saving and
-running are refused: wait for it to end.
+the user agrees). An array that stopped partway runs only its tasks left on
+the next run; for every task of it to run with the fixed code, offer to set
+`force` on it for one run (and unset it after) or to empty the output
+directory. While a run or a validation is in progress, saving and running
+are refused: wait for it to end.
 
 If a tool refuses a save because the program changed on disk, the user (or
 another tab) saved it meanwhile, or a file of the program was edited: read

@@ -217,17 +217,17 @@ debasher_builtin_sched::_revise_rerun_proc_status()
     # Iterate over defined processes
     local processname
     for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
-        # If process is marked as rerun and it was finished, its process
-        # completion is reset. So it is for any process of a resident program
-        # that is not running, in particular an array with only some tasks
-        # finished: each task is a node, and every one of them resumes, not
-        # only those without a .finished
+        # A process marked to rerun loses its completion whether it
+        # finished or not: the tasks that finished ran on an input that no
+        # longer holds, and keeping them would mix the results of two runs.
+        # In a resident program, an array with only some tasks finished
+        # resumes every task, each one a node, not only those without a
+        # .finished. A process in progress has stopped the run before this
+        # point, and one that is TO-DO has nothing to lose
         if debasher::_process_marked_as_rerun ${processname}; then
             local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
-            if [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
-                   || { [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] \
-                            && [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
-                            && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; }; then
+            if [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+                   && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
                 debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
                 DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]=${DEBASHER_UNFINISHED_PROCESS_STATUS}
             fi

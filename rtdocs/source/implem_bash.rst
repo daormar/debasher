@@ -1459,7 +1459,9 @@ Additional specifications (``;``-separated ``attribute=value`` pairs,
 third argument):
 
 * ``force``: set to ``yes`` to force the process to always rerun, even
-  if DeBasher would otherwise consider it already completed.
+  if DeBasher would otherwise consider it already completed. For an
+  array, every task runs again, even those that finished in an earlier
+  run.
 * ``processdeps``: explicit dependencies on other processes (e.g.
   ``afterok:other_process``, ``aftercorr:other_process``, ``none``,
   ...), needed when a dependency is not already implied by an option

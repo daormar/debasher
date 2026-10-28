@@ -1117,8 +1117,14 @@ revise_rerun_proc_status()
         # Get process status
         local status=$(debasher::_get_process_status ${dirname} "${processname}")
 
-        # If process is marked as rerun and it was finished, its process completion is reset
-        if debasher::_process_marked_as_rerun ${processname} && [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+        # A process marked to rerun loses its completion whether it
+        # finished or not: the tasks that finished ran on an input that no
+        # longer holds, and keeping them would mix the results of two runs.
+        # A process in progress has stopped the run before this point, and
+        # one that is TO-DO has nothing to lose
+        if debasher::_process_marked_as_rerun ${processname} \
+               && [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+               && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
             debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
         fi
     done

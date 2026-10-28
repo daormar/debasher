@@ -435,13 +435,15 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   whose options changed, one at the other end of a FIFO from a process that
   runs again, and one that ran (under `after`, `afterany`, or `afterok`
   joined by `?`) after a process that did not finish; every process that
-  depends on one of them runs again too. A change to the code of a process
-  that finished does not make it run again, unless `rerunOutdatedProcs` is
-  set, which then runs again every process that finished before the
-  generated script was last written (every save writes it) or a module that
-  it loads changed. A task whose dependencies can no longer hold (`afterok`
-  on a process that failed) is cancelled and counts as failed. To start from
-  scratch, empty the output directory with `reset_output_dir`.
+  depends on one of them runs again too. Such a process runs whole: for an
+  array, every task, also those that finished. A change to the code of a
+  process that finished does not make it run again, unless
+  `rerunOutdatedProcs` is set, which then runs again every process that
+  finished before the generated script was last written (every save writes
+  it) or a module that it loads changed. A task whose dependencies can no
+  longer hold (`afterok` on a process that failed) is cancelled and counts
+  as failed. To start from scratch, empty the output directory with
+  `reset_output_dir`.
 - `get_process_output` reads what a process left (`stdout`, `scheduler`,
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a
   process of several tasks.

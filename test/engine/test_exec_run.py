@@ -1814,3 +1814,189 @@ def test_a_task_reads_the_number_of_tasks_of_another_process_from_the_execution_
     result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
     assert result.returncode == 0, result.stderr
     assert (outdir / "__exec__" / "asker" / "asker.stdout").read_text() == "tasks=12\n"
+
+
+# An array of three tasks that write the value of -x into their own task
+# subdirectory; task 2 fails while the file that -failf names exists
+PARTIAL_MODULE = """\
+part_explain_opts()
+{
+    explain_opt "-x" "<string>" "The value that each task writes"
+    explain_opt "-failf" "<file>" "File whose existence makes task 2 fail"
+    explain_opt "-idx" "<int>" "Index of the task"
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+part_identify_cmdline_opts()
+{
+    opt_is_cmdline "-x"
+    opt_is_cmdline "-failf"
+}
+
+part_define_opts()
+{
+    local cmdline=$1
+    local i
+    for i in 0 1 2; do
+        local optlist=""
+        define_cmdline_opt "${cmdline}" "-x" optlist || return 1
+        define_cmdline_opt "${cmdline}" "-failf" optlist || return 1
+        define_opt "-idx" "${i}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}
+
+part()
+{
+    local x=$(read_opt_value_from_func_args "-x" "$@")
+    local failf=$(read_opt_value_from_func_args "-failf" "$@")
+    local idx=$(read_opt_value_from_func_args "-idx" "$@")
+    local outd=$(read_opt_value_from_func_args "-outd" "$@")
+    if [ "${idx}" -eq 2 ] && [ -f "${failf}" ]; then
+        return 1
+    fi
+    echo "${x}" > "${outd}/out"
+}
+
+debasher_partial_program()
+{
+    add_debasher_process "part" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def run_partial(sched, pfile, outdir, failf, x):
+    extra = ["--wait"] if sched == "SLURM" else []
+    return run_exec_with_sched(
+        sched, "--pfile", str(pfile), "--outdir", str(outdir), "-x", x, "-failf", str(failf), *extra
+    )
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_an_unfinished_array_whose_options_changed_runs_every_task_again(tmp_path, sched):
+    pfile = tmp_path / "debasher_partial.sh"
+    pfile.write_text(PARTIAL_MODULE)
+    outdir = tmp_path / "out"
+    failf = tmp_path / "fail"
+
+    # Task 2 fails, tasks 0 and 1 finish with "a"
+    failf.write_text("")
+    run_partial(sched, pfile, outdir, failf, "a")
+    execdir = outdir / "__exec__" / "part"
+    assert (execdir / "part_0.finished").exists()
+    assert not (execdir / "part_2.finished").exists()
+
+    # The options change: the finished tasks ran on an input that no
+    # longer holds, and run again, so no result is left from the first run
+    failf.unlink()
+    result = run_partial(sched, pfile, outdir, failf, "b")
+    assert result.returncode == 0, result.stderr
+    for i in range(3):
+        assert (outdir / "part" / str(i) / "out").read_text() == "b\n"
+        assert (execdir / f"part_{i}.finished").exists()
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_an_unfinished_array_run_again_runs_only_its_unfinished_tasks(tmp_path, sched):
+    pfile = tmp_path / "debasher_partial.sh"
+    pfile.write_text(PARTIAL_MODULE)
+    outdir = tmp_path / "out"
+    failf = tmp_path / "fail"
+
+    failf.write_text("")
+    run_partial(sched, pfile, outdir, failf, "a")
+    execdir = outdir / "__exec__" / "part"
+    kept = [execdir / "part_0.finished", execdir / "part_1.finished",
+            outdir / "part" / "0" / "out", outdir / "part" / "1" / "out"]
+    before = [p.stat().st_mtime_ns for p in kept]
+    assert not (outdir / "part" / "2" / "out").exists()
+
+    # Nothing changes but the failure: only task 2 runs, and the finished
+    # tasks keep their completion markers and their task subdirectories
+    failf.unlink()
+    result = run_partial(sched, pfile, outdir, failf, "a")
+    assert result.returncode == 0, result.stderr
+    assert [p.stat().st_mtime_ns for p in kept] == before
+    for i in range(3):
+        assert (outdir / "part" / str(i) / "out").read_text() == "a\n"
+    assert (execdir / "part_2.finished").exists()
+
+
+# Two processes, the second with a task subdirectory
+LINKED_SUBDIR_MODULE = """\
+lfirst_explain_opts()
+{
+    explain_opt "-outf" "<file>" "What the process writes"
+}
+
+lfirst_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/out.txt" optlist || return 1
+    save_opt_list optlist
+}
+
+lfirst()
+{
+    echo done > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+lsecond_explain_opts()
+{
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+lsecond_define_opts()
+{
+    local optlist=""
+    define_opt_from_process_outdir "-outd" optlist --subdir "t" || return 1
+    save_opt_list optlist
+}
+
+lsecond()
+{
+    :
+}
+
+debasher_linkedsub_program()
+{
+    add_debasher_process "lfirst" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "lsecond" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_failure_to_prepare_one_process_launches_no_process(tmp_path):
+    pfile = tmp_path / "debasher_linkedsub.sh"
+    pfile.write_text(LINKED_SUBDIR_MODULE)
+    outdir = tmp_path / "out"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (outdir / "lsecond").mkdir(parents=True)
+    (outdir / "lsecond" / "t").symlink_to(elsewhere)
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode != 0
+    assert "the task subdirectory t of process lsecond" in result.stderr
+    assert not (outdir / "__exec__" / "lfirst" / "lfirst.id").exists()
+    assert not (outdir / "lfirst" / "out.txt").exists()
