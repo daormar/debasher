@@ -42,6 +42,29 @@ setup() {
     [[ "${output}" == *"use one of them"* ]]
 }
 
+@test "debasher::_check_explicit_processdeps refuses an empty element, also the last one" {
+    local procdeps
+    for procdeps in "afterok:a," ",afterok:a" "afterok:a,,after:b" "afterok:a?"; do
+        run debasher::_check_explicit_processdeps "p" "${procdeps}"
+        [ "${status}" -eq 1 ]
+        [[ "${output}" == *"Error: the dependencies of process p (${procdeps}) have an empty element"* ]]
+    done
+}
+
+@test "debasher::_check_explicit_processdeps refuses, with a comma, two dependencies on one process that no run satisfies, and keeps the others" {
+    run debasher::_check_explicit_processdeps "p" "afterok:a,afternotok:a"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the dependencies of process p on a (afterok and afternotok, which all have to hold) cannot both be satisfied by any run of a"* ]]
+    run debasher::_check_explicit_processdeps "p" "aftercorr:a,after:b,afternotok:a"
+    [ "${status}" -eq 1 ]
+
+    debasher::_check_explicit_processdeps "p" "afterok:a,afterok:a"
+    debasher::_check_explicit_processdeps "p" "afterany:a,afternotok:a"
+    debasher::_check_explicit_processdeps "p" "afterok:a,afternotok:b"
+    # With a question mark one of them is enough
+    debasher::_check_explicit_processdeps "p" "afterok:a?afternotok:a"
+}
+
 # --- debasher::_gen_final_procspec ---------------------------------------
 
 # Registers the processes given as "name|computational specs|additional

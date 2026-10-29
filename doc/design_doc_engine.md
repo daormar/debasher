@@ -1888,15 +1888,21 @@ add_debasher_process "r" "${specs}" "processdeps=afterok:w"
 add_debasher_process "c" "${specs}" "processdeps=afterok:a?after:b"
 ```
 
-The value is checked when the final process specification is built: every
-element has to be of that form, with a type from the table above and a process
-of the program, and a list may not use both separators. Like an inferred one,
-an explicit dependency between processes linked by FIFOs can only be `none` or
-`after` (see "Running both ends together"). Explicit dependencies serve what
-the options cannot say: a process that reads what another leaves in a shared
-directory, or an order between processes that exchange nothing. They also take
-the process out of the inference altogether, so a process that gives them has
-to give every dependency it needs.
+The value is checked when the final process specification is built, before any
+other step of the preparation reads it: every element has to be of that form,
+with a type from the table above and a process of the program, no element may be
+empty, and a list may not use both separators. In a list joined by `,`, two
+dependencies on the same process that no run of it satisfies together, `afterok`
+and `afternotok` for instance, stop the preparation as they do when inferred
+(see "Dependency types and how they merge"); the list is kept as written, so a
+repeated dependency is accepted and nothing is merged. In a list joined by `?`,
+dependencies on the same process are not compared, since one of them is enough.
+Like an inferred one, an explicit dependency between processes linked by FIFOs
+can only be `none` or `after` (see "Running both ends together"). Explicit
+dependencies serve what the options cannot say: a process that reads what
+another leaves in a shared directory, or an order between processes that
+exchange nothing. They also take the process out of the inference altogether, so
+a process that gives them has to give every dependency it needs.
 
 ## Topological order and cycles
 
@@ -3257,8 +3263,9 @@ leaves, by design, to the program or to whoever runs it.
    different values stop the preparation of the run (see "Defining the options
    of a task").
 6. The dependency graph has no cycle, and explicit dependencies are well
-   formed and name processes of the program; a program that breaks either is
-   refused (see "The dependency graph").
+   formed, name processes of the program, and do not ask, in a list joined by
+   `,`, for two things that no run of a process can give together; a program
+   that breaks any of them is refused (see "The dependency graph").
 7. A task is never launched before the dependencies of its process hold for
    it, with the meaning of "Dependency types and how they merge": a scheduler
    may make it wait longer, never less. A dependency on a process that finished

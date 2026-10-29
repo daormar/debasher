@@ -313,9 +313,12 @@ debasher::_get_processdeps_from_detailed_spec()
 # Checks the explicit dependencies of a process, the value of its
 # processdeps additional specification: none, or a list of
 # <type>:<process> separated by "," (every one has to hold) or by "?"
-# (one of them is enough), but not by both, with a known dependency type
-# in each. Whether each process exists is checked by the caller. Prints
-# an error and returns 1 on the first violation found.
+# (one of them is enough), but not by both, with no empty element and a
+# known dependency type in each. In a list joined by ",", the dependencies
+# on the same process have to be satisfiable together, as inferred ones
+# are (see debasher::_merge_deptypes); the list is kept as written. Whether
+# each process exists is checked by the caller. Prints an error and
+# returns 1 on the first violation found.
 debasher::_check_explicit_processdeps()
 {
     local processname=$1
@@ -334,10 +337,17 @@ debasher::_check_explicit_processdeps()
         deps_array=("${procdeps}")
     else
         IFS="${separator}" read -r -a deps_array <<< "${procdeps}"
+        # read drops an empty last element
+        [[ "${procdeps}" == *"${separator}" ]] && deps_array+=("")
     fi
 
+    local -A merged=()
     local dep
     for dep in "${deps_array[@]}"; do
+        if [ -z "${dep}" ]; then
+            echo "Error: the dependencies of process ${processname} (${procdeps}) have an empty element" >&2
+            return 1
+        fi
         local deptype="${dep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
         local depproc="${dep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"
         if [ "${dep}" = "${deptype}" ] || [ -z "${deptype}" ] || [ -z "${depproc}" ]; then
@@ -348,6 +358,13 @@ debasher::_check_explicit_processdeps()
             echo "Error: dependency \"${dep}\" of process ${processname} has an unknown type: ${deptype}" >&2
             return 1
         fi
+        [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ] && continue
+        local merged_deptype
+        if ! debasher::_merge_deptypes "${merged[${depproc}]:-}" "${deptype}" merged_deptype 2> /dev/null; then
+            echo "Error: the dependencies of process ${processname} on ${depproc} (${merged[${depproc}]} and ${deptype}, which all have to hold) cannot both be satisfied by any run of ${depproc}; keep one of them, or join them by \"${DEBASHER_PROCESSDEPS_SEP_INTERR}\" if one is enough" >&2
+            return 1
+        fi
+        merged["${depproc}"]=${merged_deptype}
     done
 }
 

@@ -345,12 +345,14 @@ only when the engine would:
   is refused; a cycle through a FIFO is allowed, since both ends of a
   FIFO run at the same time.
 
-One rule is checked only when the program runs: a process that reads
-both a FIFO and a file of the same process is accepted on the canvas,
-but the run is refused unless the ``define_opt_deps`` method of the
-reader gives ``after`` for the file, and so is a dependency other than
-``after`` written between processes linked by FIFOs (the two ends of a
-FIFO, or two processes of a chain of FIFOs).
+Some rules are checked only when the program runs: a process that
+reads both a FIFO and a file of the same process is accepted on the
+canvas, but the run is refused unless the ``define_opt_deps`` method of
+the reader gives ``after`` for the file, and so is a dependency other
+than ``after`` written between processes linked by FIFOs (the two ends
+of a FIFO, or two processes of a chain of FIFOs), or a list of process
+dependencies with an empty element or with two that cannot both hold
+(see ``processdeps`` in the :ref:`implem_bash` Section).
 
 Connections from a FIFO are dashed, and one from a fanout family to
 the tasks of an array widens into a wedge. The "Legend" in the corner

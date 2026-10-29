@@ -2257,6 +2257,96 @@ def test_a_dependency_stronger_than_after_between_the_two_ends_of_a_fifo_stops_t
     assert deps == {"w": "none", "r": "after:w"}
 
 
+# r reads a file of w, and its option dependency method answers with a
+# type that does not exist; @@SPECS@@ is the processdeps of r
+EXPLICIT_DEPS_MODULE = """\
+w_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+}
+
+w_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    save_opt_list optlist
+}
+
+w()
+{
+    echo f > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+r_explain_opts()
+{
+    explain_opt "-inf" "<file>" "File of w"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "w" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+r_define_opt_deps()
+{
+    echo afterbogus
+}
+
+r()
+{
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_explicitdeps_program()
+{
+    add_debasher_process "w" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "r" "cpus=1 mem=32 time=00:01:00" "@@SPECS@@"
+}
+"""
+
+
+def test_explicit_dependencies_take_a_process_out_of_the_inference(tmp_path):
+    pfile = tmp_path / "debasher_explicitdeps.sh"
+    outdir = tmp_path / "out"
+
+    # Inferred, the type of the option dependency method is refused
+    pfile.write_text(EXPLICIT_DEPS_MODULE.replace(' "@@SPECS@@"', ""))
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 1
+    assert "unknown process dependency type: afterbogus" in result.stderr
+
+    # With processdeps, the method is never called and nothing is inferred
+    pfile.write_text(EXPLICIT_DEPS_MODULE.replace("@@SPECS@@", "processdeps=none"))
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 0, result.stderr
+    deps = dict(re.findall(r"^PROCESS: (\S+) ; STATUS: .* processdeps=(\S+)$", result.stderr, re.M))
+    assert deps == {"w": "none", "r": "none"}
+
+
+@pytest.mark.parametrize(
+    "processdeps,error",
+    [
+        ("afterok:w,", "Error: the dependencies of process r (afterok:w,) have an empty element"),
+        (
+            "afterok:w,afternotok:w",
+            "Error: the dependencies of process r on w (afterok and afternotok, which all have to hold) cannot both be satisfied by any run of w",
+        ),
+    ],
+)
+def test_explicit_dependencies_are_refused_before_the_dependency_graph_is_drawn(tmp_path, processdeps, error):
+    pfile = tmp_path / "debasher_explicitdeps.sh"
+    pfile.write_text(EXPLICIT_DEPS_MODULE.replace("@@SPECS@@", f"processdeps={processdeps}"))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 1
+    assert error in result.stderr
+    assert "incorrect definition of process dependency" not in result.stderr
+
+
 # Two processes, each with a shared subdirectory of "data"
 SHARED_LEFT_MODULE = """\
 debasher_shleft_shared_dirs()

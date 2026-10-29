@@ -1479,19 +1479,24 @@ third argument):
   (it finished successfully), ``afternotok`` (it failed), ``afterany``
   (it finished either way) and ``aftercorr`` (between two arrays, each
   task waits for the task with the same index of the other process to
-  finish successfully). Between processes linked by FIFOs only
-  ``after`` (or ``none``) is allowed, as for an inferred dependency: any other
-  type is refused when the run is prepared, in a list joined by ``?``
-  too, since that alternative could never be the one that holds. Both
-  schedulers run ``aftercorr`` task by task:
-  a task starts as soon as its own counterpart has finished, while
-  other tasks of the other array still run or after some of them have
-  failed (see the ``aftercorr`` example). A task with no counterpart,
-  because one of the two processes is not an array or the other array
-  has fewer tasks, waits for every task of the other process. A task
-  whose dependencies can no longer hold in the run (for instance
-  ``afterok`` on a process that failed, or ``aftercorr`` on a task that
-  failed) is cancelled instead of left waiting: it counts as a failed
+  finish successfully). Several dependencies are joined by ``,`` when
+  every one has to hold, or by ``?`` when one of them is enough, never
+  by both. The run is refused when it is prepared if the list has an
+  empty element (``afterok:a,``), or if a list joined by ``,`` holds
+  two dependencies on the same process that no run of it satisfies
+  together (``afternotok`` with ``afterok`` or ``aftercorr``). Between
+  processes linked by FIFOs only ``after`` (or ``none``) is allowed, as
+  for an inferred dependency: any other type is refused when the run is
+  prepared, in a list joined by ``?`` too. Both
+  schedulers run ``aftercorr`` task by task: a task starts as soon as
+  its own counterpart has finished, while other tasks of the other
+  array still run or after some of them have failed (see the
+  ``aftercorr`` example). A task with no counterpart, because one of
+  the two processes is not an array or the other array has fewer
+  tasks, waits for every task of the other process. A task whose
+  dependencies can no longer hold in the run (for instance ``afterok``
+  on a process that failed, or ``aftercorr`` on a task that failed) is
+  cancelled instead of left waiting: it counts as a failed
   task, so that its process ends and ``afterany`` and ``afternotok`` on
   it hold, and the next run tries it again. Under the built-in scheduler,
   a ``.cancelled`` file in the exec directory of its process
