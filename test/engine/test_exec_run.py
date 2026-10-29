@@ -2257,6 +2257,398 @@ def test_a_dependency_stronger_than_after_between_the_two_ends_of_a_fifo_stops_t
     assert deps == {"w": "none", "r": "after:w"}
 
 
+# One process per rule of the inference: w reads what it writes itself and
+# a file of w2; w and w2 both write "common", which r reads; f owns two
+# fifos, one read by r and one by g, whose option dependency method gives
+# after; b, an array, reads in each task the other task of the array a,
+# and c, an option generator, the task of a of its own index
+INFERENCE_MODULE = """\
+w2_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-outcommon" "<file>" "File written by w too"
+}
+
+w2_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    define_opt "-outcommon" "$(dirname "${process_outdir}")/common" optlist || return 1
+    save_opt_list optlist
+}
+
+w2()
+{
+    :
+}
+
+w_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-self" "<file>" "Its own output file"
+    explain_opt "-inf" "<file>" "File of w2"
+    explain_opt "-outcommon" "<file>" "File written by w2 too"
+}
+
+w_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    define_opt "-self" "${process_outdir}/f" optlist || return 1
+    define_opt_from_proc_out "-inf" "w2" "-outf" optlist || return 1
+    define_opt "-outcommon" "$(dirname "${process_outdir}")/common" optlist || return 1
+    save_opt_list optlist
+}
+
+w()
+{
+    :
+}
+
+f_explain_opts()
+{
+    explain_opt "-outfifo1" "<fifo>" "Fifo read by r"
+    explain_opt "-outfifo2" "<fifo>" "Fifo read by g"
+}
+
+f_define_opts()
+{
+    local optlist=""
+    define_fifo_opt "-outfifo1" "fifo1" optlist || return 1
+    define_fifo_opt "-outfifo2" "fifo2" optlist || return 1
+    save_opt_list optlist
+}
+
+f()
+{
+    :
+}
+
+r_explain_opts()
+{
+    explain_opt "-incommon" "<file>" "File of w and w2"
+    explain_opt "-infifo" "<fifo>" "Fifo of f"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-incommon" "w" "-outcommon" optlist || return 1
+    define_opt_from_proc_out "-infifo" "f" "-outfifo1" optlist || return 1
+    save_opt_list optlist
+}
+
+r()
+{
+    :
+}
+
+g_explain_opts()
+{
+    explain_opt "-infifo" "<fifo>" "Fifo of f"
+}
+
+g_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-infifo" "f" "-outfifo2" optlist || return 1
+    save_opt_list optlist
+}
+
+g_define_opt_deps()
+{
+    echo after
+}
+
+g()
+{
+    :
+}
+
+a_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file of the task"
+}
+
+a_define_opts()
+{
+    local process_outdir=$4
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt "-outf" "${process_outdir}/${i}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+a()
+{
+    :
+}
+
+b_explain_opts()
+{
+    explain_opt "-inf" "<file>" "File of the other task of a"
+}
+
+b_define_opts()
+{
+    local i
+    for i in 0 1; do
+        local optlist=""
+        define_opt_from_proc_task_out "-inf" "a" "$((1 - i))" "-outf" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+b()
+{
+    :
+}
+
+c_explain_opts()
+{
+    explain_opt "-inf" "<file>" "File of the task of a of the same index"
+}
+
+c_generate_opts_size()
+{
+    echo 2
+}
+
+c_generate_opts()
+{
+    local task_idx=$5
+    local optlist=""
+    define_opt_from_proc_task_out "-inf" "a" "${task_idx}" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+c()
+{
+    :
+}
+
+debasher_inference_program()
+{
+    local p
+    for p in w2 w f r g a b c; do
+        add_debasher_process "${p}" "cpus=1 mem=32 time=00:01:00"
+    done
+}
+"""
+
+
+def test_a_validation_infers_one_dependency_for_each_rule_of_the_inference(tmp_path):
+    pfile = tmp_path / "debasher_inference.sh"
+    pfile.write_text(INFERENCE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 0, result.stderr
+    deps = dict(re.findall(r"^PROCESS: (\S+) ; STATUS: .* processdeps=(\S+)$", result.stderr, re.M))
+    deps = {proc: set(value.split(",")) for proc, value in deps.items()}
+    assert deps == {
+        # A process never depends on itself
+        "w2": {"none"},
+        "w": {"afterok:w2"},
+        # A path written by two processes gives a dependency on each, and a
+        # fifo none
+        "r": {"afterok:w", "afterok:w2"},
+        "f": {"none"},
+        # The option dependency method gives after on a fifo
+        "g": {"after:f"},
+        "a": {"none"},
+        # Another index of an array gives afterok, the same index of an
+        # option generator aftercorr
+        "b": {"afterok:a"},
+        "c": {"aftercorr:a"},
+    }
+
+
+def test_the_oneshot_mode_refuses_a_dependency_that_waits_for_a_process_to_end_and_launches_nothing(tmp_path):
+    outdir = tmp_path / "out"
+
+    result = run_exec(
+        "--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "hi", "--builtinsched-oneshot"
+    )
+    assert result.returncode == 1
+    assert 'process "file_reader" has a "afterok" dependency' in result.stderr
+    execdir = outdir / "__exec__"
+    assert not (execdir / "file_writer" / "file_writer").exists()
+    assert not (execdir / "file_reader" / "file_reader").exists()
+
+
+# Processes that exchange nothing, each with the exit status and the
+# processdeps given, as "<name>|<status>|<processdeps>"
+def explicit_chain_module(name, *processes):
+    lines = []
+    adds = []
+    for entry in processes:
+        proc, status, deps = entry.split("|")
+        lines.append(f"{proc}_explain_opts()\n{{\n    :\n}}\n")
+        lines.append(f"{proc}_define_opts()\n{{\n    local optlist=\"\"\n    save_opt_list optlist\n}}\n")
+        lines.append(f"{proc}()\n{{\n    return {status}\n}}\n")
+        specs = f' "processdeps={deps}"' if deps else ""
+        adds.append(f'    add_debasher_process "{proc}" "cpus=1 mem=32 time=00:01:00"{specs}')
+    return "\n".join(lines) + f"\n{name}_program()\n{{\n" + "\n".join(adds) + "\n}\n"
+
+
+def test_a_task_whose_dependency_can_no_longer_hold_is_cancelled_with_its_cause_and_afterany_on_it_holds(tmp_path):
+    pfile = tmp_path / "debasher_cancelchain.sh"
+    pfile.write_text(explicit_chain_module("debasher_cancelchain", "p|1|", "c|0|afterok:p", "d|0|afterany:c"))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert "PROCESS: c (TASK_IDX: 0) ; CANCELLED: afterok:p" in result.stderr, result.stderr
+
+    execdir = outdir / "__exec__"
+    assert (execdir / "c" / "c.cancelled").read_text().strip() == "Cancelled task idx: 0 ; Total: 1 ; Cause: afterok:p"
+    assert not (execdir / "c" / "c.id").exists()
+    assert (execdir / "d" / "d.finished").exists()
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: p ; STATUS: UNFINISHED" in status
+    assert "PROCESS: c ; STATUS: UNFINISHED" in status
+    assert "PROCESS: d ; STATUS: FINISHED" in status
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_under_slurm_a_process_whose_dependency_on_a_process_not_launched_can_no_longer_hold_is_not_submitted_nor_its_dependent(tmp_path):
+    pfile = tmp_path / "debasher_notsubmitted.sh"
+    outdir = tmp_path / "out"
+
+    # x finishes in a first run
+    pfile.write_text(explicit_chain_module("debasher_notsubmitted", "x|0|"))
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
+    assert result.returncode == 0, result.stderr
+
+    # In the second, x is not launched again, so afternotok on it can no
+    # longer hold, nor afterok on q
+    pfile.write_text(
+        explicit_chain_module("debasher_notsubmitted", "x|0|", "q|0|afternotok:x", "z|0|afterok:q")
+    )
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
+    assert "Process q is not launched: its dependencies (afternotok:x) cannot hold in this run" in result.stderr
+    assert "Process z is not launched: its dependencies (afterok:q) cannot hold in this run" in result.stderr
+    execdir = outdir / "__exec__"
+    assert not (execdir / "q" / "q.id").exists()
+    assert not (execdir / "z" / "z.id").exists()
+
+
+RESIDENT_EXAMPLE = REPO_ROOT / "data" / "webui_programs" / "webui_running_sum" / "webui_running_sum.sh"
+
+
+def test_a_resident_program_runs_on_the_built_in_scheduler_in_oneshot_mode(tmp_path):
+    result = run_exec("--pfile", str(RESIDENT_EXAMPLE), "--outdir", str(tmp_path / "out"), "--validate")
+    assert "forcing the built-in scheduler in oneshot mode" in result.stderr
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_a_resident_program_refuses_the_slurm_scheduler(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec_with_sched("SLURM", "--pfile", str(RESIDENT_EXAMPLE), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 1
+    assert "program only supports the built-in scheduler (requested: SLURM)" in result.stderr
+
+
+CYCLE_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_cycle.sh"
+
+# An option dependency method that gives after to the fifo that a process
+# of debasher_cycle.sh reads
+CYCLE_AFTER = """
+{proc}_define_opt_deps()
+{{
+    echo after
+}}
+"""
+
+
+@pytest.mark.parametrize(
+    "after_on,deps",
+    [
+        ((), {"process_a": "none", "process_b": "none"}),
+        (("process_b",), {"process_a": "none", "process_b": "after:process_a"}),
+        (("process_a", "process_b"), None),
+    ],
+    ids=["none", "after_on_one_link", "after_on_both_links"],
+)
+def test_a_loop_through_fifos_is_a_cycle_only_with_after_on_every_link(tmp_path, after_on, deps):
+    pfile = tmp_path / CYCLE_EXAMPLE.name
+    pfile.write_text(CYCLE_EXAMPLE.read_text() + "".join(CYCLE_AFTER.format(proc=p) for p in after_on))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-n", "3", "--validate")
+    if deps is None:
+        assert result.returncode == 1
+        assert re.search(r"circular dependency detected at 'process_[ab]'", result.stderr), result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        found = dict(re.findall(r"^PROCESS: (\S+) ; STATUS: .* processdeps=(\S+)$", result.stderr, re.M))
+        assert found == deps
+
+
+# x and y each read a file of the other
+FILE_CYCLE_MODULE = """\
+x_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-inf" "<file>" "File of y"
+}
+
+x_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    define_opt_from_proc_out "-inf" "y" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+x()
+{
+    :
+}
+
+y_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-inf" "<file>" "File of x"
+}
+
+y_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    define_opt_from_proc_out "-inf" "x" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+y()
+{
+    :
+}
+
+debasher_filecycle_program()
+{
+    add_debasher_process "x" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "y" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_cycle_of_files_is_refused_naming_a_process_of_it(tmp_path):
+    pfile = tmp_path / "debasher_filecycle.sh"
+    pfile.write_text(FILE_CYCLE_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 1
+    assert re.search(r"circular dependency detected at '[xy]'", result.stderr), result.stderr
+
+
 # r reads a file of w, and its option dependency method answers with a
 # type that does not exist; @@SPECS@@ is the processdeps of r
 EXPLICIT_DEPS_MODULE = """\

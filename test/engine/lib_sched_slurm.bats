@@ -167,3 +167,23 @@ setup() {
     [ "${status}" -eq 0 ]
     [ "${output}" = "array time of proc" ]
 }
+
+# --- the dependency types that a Slurm runs ----------------------------------
+
+@test "a Slurm older than 16.05 gets afterok in place of aftercorr, and a newer one aftercorr, the other types as they are" {
+    AWK="$(command -v awk)"
+    local version expected
+    for version in 15.08.13 16.05.0 23.02.7; do
+        printf '#!/bin/bash\necho "slurm %s"\n' "${version}" > "${SBATCH}"
+        debasher::_init_slurm_scheduler
+        case "${version}" in
+            15.*) expected=afterok ;;
+            *) expected=aftercorr ;;
+        esac
+        [ "$(debasher::_map_deptype_if_necessary_slurm aftercorr)" = "${expected}" ]
+        local deptype
+        for deptype in after afterok afternotok afterany; do
+            [ "$(debasher::_map_deptype_if_necessary_slurm "${deptype}")" = "${deptype}" ]
+        done
+    done
+}

@@ -446,3 +446,71 @@ hold_lock() {
     debasher::_deps_without_ids_can_hold "afternotok:done?afterok:done" "/o" ids
     ! debasher::_deps_without_ids_can_hold "afternotok:done?afterok:pending" "/o" ids || false
 }
+
+# --- the choice of the scheduler -------------------------------------------
+
+@test "_determine_scheduler keeps a scheduler already set, and else picks Slurm when sbatch is found and the built-in one otherwise" {
+    local fake_sbatch="${BATS_TEST_TMPDIR}/sbatch"
+    printf '#!/bin/bash\necho 1\n' > "${fake_sbatch}"
+    chmod +x "${fake_sbatch}"
+
+    DEBASHER_SCHEDULER=""
+    SBATCH="${BATS_TEST_TMPDIR}/missing/sbatch"
+    [ "$(debasher::_determine_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]
+    SBATCH="${fake_sbatch}"
+    [ "$(debasher::_determine_scheduler)" = "${DEBASHER_SLURM_SCHEDULER}" ]
+
+    DEBASHER_SCHEDULER="${DEBASHER_BUILTIN_SCHEDULER}"
+    [ "$(debasher::_determine_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]
+}
+
+@test "_set_debasher_scheduler refuses a scheduler it does not know, and Slurm when sbatch is not found" {
+    SBATCH="${BATS_TEST_TMPDIR}/missing/sbatch"
+    run debasher::_set_debasher_scheduler builtin
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"builtin is not a valid scheduler"* ]]
+    run debasher::_set_debasher_scheduler "${DEBASHER_SLURM_SCHEDULER}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"SLURM scheduler is not installed"* ]]
+    debasher::_set_debasher_scheduler "${DEBASHER_BUILTIN_SCHEDULER}"
+    [ "${DEBASHER_SCHEDULER}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]
+}
+
+# --- the topological order -------------------------------------------------
+
+# Whether $1 comes before $2 in the array named ORDER
+comes_before() {
+    local i pos_a=-1 pos_b=-1
+    for i in "${!ORDER[@]}"; do
+        [ "${ORDER[i]}" = "$1" ] && pos_a=$i
+        [ "${ORDER[i]}" = "$2" ] && pos_b=$i
+    done
+    [ "${pos_a}" -ge 0 ] && [ "${pos_b}" -ge 0 ] && [ "${pos_a}" -lt "${pos_b}" ]
+}
+
+@test "_topo_sort puts every process after the processes it depends on, in a chain and in a diamond" {
+    declare -A chain=([c]="b" [b]="a" [a]="none")
+    declare -ga ORDER=()
+    debasher::_topo_sort "," chain ORDER
+    [ "${#ORDER[@]}" -eq 3 ]
+    comes_before a b
+    comes_before b c
+
+    declare -A diamond=([d]="b,c" [b]="a" [c]="a" [a]="none" [e]="none")
+    ORDER=()
+    debasher::_topo_sort "," diamond ORDER
+    [ "${#ORDER[@]}" -eq 5 ]
+    comes_before a b
+    comes_before a c
+    comes_before b d
+    comes_before c d
+}
+
+@test "_topo_sort refuses a cycle, naming a process of it" {
+    declare -A cycle=([a]="c" [b]="a" [c]="b" [x]="none")
+    declare -a order=()
+    # The sort stops the tool with exit, which run keeps in its subshell
+    run debasher::_topo_sort "," cycle order
+    [ "${status}" -eq 1 ]
+    [[ "${output}" =~ "circular dependency detected at '"[abc]"'" ]]
+}
