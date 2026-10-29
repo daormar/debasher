@@ -48,7 +48,7 @@ debasher::_set_debasher_scheduler()
         ${DEBASHER_SLURM_SCHEDULER})
             # Verify SLURM availability
             if ! command -v "$SBATCH" >/dev/null 2>&1; then
-                echo "Error: SLURM scheduler is not installed in your system"
+                echo "Error: SLURM scheduler is not installed in your system" >&2
                 return 1
             fi
             DEBASHER_SCHEDULER=${DEBASHER_SLURM_SCHEDULER}
@@ -57,7 +57,7 @@ debasher::_set_debasher_scheduler()
         ${DEBASHER_BUILTIN_SCHEDULER})
             DEBASHER_SCHEDULER=${DEBASHER_BUILTIN_SCHEDULER}
             ;;
-        *)  echo "Error: ${sched} is not a valid scheduler"
+        *)  echo "Error: ${sched} is not a valid scheduler" >&2
             DEBASHER_SCHEDULER=""
             return 1
             ;;
@@ -105,6 +105,9 @@ debasher::_get_scheduler()
 }
 
 ########
+# Writes the process script of a process under the Slurm scheduler. The
+# built-in scheduler writes its own in its loop
+# (debasher_builtin_sched::_create_script), so this does nothing for it
 debasher::_create_script()
 {
     # Init variables
@@ -299,6 +302,9 @@ debasher::_get_time_attempt_value()
 }
 
 ########
+# Submits a process under the Slurm scheduler. The built-in scheduler
+# launches its tasks in its own loop (debasher_builtin_sched::_launch), so
+# this does nothing for it
 debasher::_launch()
 {
     # Initialize variables
@@ -440,13 +446,9 @@ debasher::_deps_without_ids_can_hold()
     [ -z "${processdeps_spec}" ] && return 0
     [ "${processdeps_spec}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
 
-    local separator=$(debasher::_get_processdeps_separator "${processdeps_spec}")
     local -a deps_array
-    if [ -z "${separator}" ]; then
-        deps_array=("${processdeps_spec}")
-    else
-        IFS="${separator}" read -r -a deps_array <<< "${processdeps_spec}"
-    fi
+    local separator
+    debasher::_split_processdeps "${processdeps_spec}" deps_array separator
 
     local dep any_can=0
     for dep in "${deps_array[@]}"; do

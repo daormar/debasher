@@ -500,3 +500,37 @@ add_final_spec() {
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
 }
+
+# --- splitting a list of dependencies --------------------------------------
+
+@test "debasher::_split_processdeps gives the elements and the separator of a list, an empty element included" {
+    local -a deps
+    local sep
+
+    debasher::_split_processdeps "afterok:a" deps sep
+    [ "${#deps[@]}" -eq 1 ] && [ "${deps[0]}" = "afterok:a" ] && [ -z "${sep}" ]
+
+    debasher::_split_processdeps "afterok:a,after:b" deps sep
+    [ "${deps[*]}" = "afterok:a after:b" ] && [ "${sep}" = "," ]
+
+    debasher::_split_processdeps "afterok:a?after:b" deps sep
+    [ "${deps[*]}" = "afterok:a after:b" ] && [ "${sep}" = "?" ]
+
+    debasher::_split_processdeps "afterok:a," deps sep
+    [ "${#deps[@]}" -eq 2 ] && [ -z "${deps[1]}" ]
+
+    debasher::_split_processdeps "none" deps sep
+    [ "${deps[*]}" = "none" ] && [ -z "${sep}" ]
+
+    debasher::_split_processdeps "" deps sep
+    [ "${#deps[@]}" -eq 0 ]
+}
+
+@test "debasher::_processdeps_have_deptype looks for a type in the elements, not in the names of the processes" {
+    debasher::_processdeps_have_deptype "after:a,aftercorr:b" aftercorr
+    debasher::_processdeps_have_deptype "after:a?afterok:b" afterok
+    run debasher::_processdeps_have_deptype "after:afterok" afterok
+    [ "${status}" -eq 1 ]
+    run debasher::_processdeps_have_deptype "afterany:a" after
+    [ "${status}" -eq 1 ]
+}

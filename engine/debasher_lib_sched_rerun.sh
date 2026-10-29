@@ -283,14 +283,12 @@ debasher::_define_rerun_processes_due_to_unfinished_producers()
         processdeps=$(debasher::_extract_processdeps_from_process_spec "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}")
         [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] || continue
 
-        local separator=$(debasher::_get_processdeps_separator "${processdeps}")
-        local processdeps_blanks=${processdeps}
-        if [ -n "${separator}" ]; then
-            processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" "${processdeps}")
-        fi
+        local -a deps_array
+        local separator
+        debasher::_split_processdeps "${processdeps}" deps_array separator
 
         local dep deptype depsname
-        for dep in ${processdeps_blanks}; do
+        for dep in "${deps_array[@]}"; do
             deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
             depsname=$(debasher::_get_processname_part_in_dep "${dep}")
             case ${deptype} in

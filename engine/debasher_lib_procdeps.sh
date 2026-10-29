@@ -19,18 +19,52 @@
 ########################################
 
 ########
-debasher::_get_processdeps_separator()
+# Splits a list of process dependencies, the value of processdeps, into
+# its elements and its separator, with no subshell: fills the
+# caller-provided array with the elements, an empty one included (also the
+# last, which read drops), and writes "," or "?" into the caller-provided
+# variable, or nothing for a list of one element. An empty list gives no
+# element, and none is an element like the others.
+debasher::_split_processdeps()
 {
     local processdeps=$1
+    local -n split_deps_ref=$2
+    local -n split_sep_ref=$3
+
+    split_deps_ref=()
+    split_sep_ref=""
+    [ -z "${processdeps}" ] && return 0
+
     if [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}"* ]]; then
-        echo "${DEBASHER_PROCESSDEPS_SEP_COMMA}"
-    else
-        if [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}"* ]]; then
-            echo "${DEBASHER_PROCESSDEPS_SEP_INTERR}"
-        else
-            echo ""
-        fi
+        split_sep_ref=${DEBASHER_PROCESSDEPS_SEP_COMMA}
+    elif [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}"* ]]; then
+        split_sep_ref=${DEBASHER_PROCESSDEPS_SEP_INTERR}
     fi
+
+    if [ -z "${split_sep_ref}" ]; then
+        split_deps_ref=("${processdeps}")
+    else
+        IFS="${split_sep_ref}" read -r -a split_deps_ref <<< "${processdeps}"
+        [[ "${processdeps}" == *"${split_sep_ref}" ]] && split_deps_ref+=("")
+    fi
+    return 0
+}
+
+########
+# Whether a list of process dependencies has an element of the given type
+debasher::_processdeps_have_deptype()
+{
+    local processdeps=$1
+    local wanted_deptype=$2
+
+    local -a have_deps
+    local have_sep
+    debasher::_split_processdeps "${processdeps}" have_deps have_sep
+    local dep
+    for dep in "${have_deps[@]}"; do
+        [ "${dep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}" = "${wanted_deptype}" ] && return 0
+    done
+    return 1
 }
 
 ########
@@ -602,13 +636,9 @@ debasher::_get_deptypes_that_wait_for_end()
         [ "${procdeps}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
         [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && continue
 
-        local separator=$(debasher::_get_processdeps_separator "${procdeps}")
         local -a deps_array
-        if [ -z "${separator}" ]; then
-            deps_array=("${procdeps}")
-        else
-            IFS="${separator}" read -r -a deps_array <<< "${procdeps}"
-        fi
+        local separator
+        debasher::_split_processdeps "${procdeps}" deps_array separator
         local dep
         for dep in "${deps_array[@]}"; do
             local deptype="${dep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"

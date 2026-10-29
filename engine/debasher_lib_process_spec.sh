@@ -290,14 +290,11 @@ debasher::_get_processdeps_from_detailed_spec()
     local result
 
     # Iterate over the elements of the process specification: type1:processname1,...,typen:processnamen or type1:processname1?...?typen:processnamen
-    local separator=$(debasher::_get_processdeps_separator ${processdeps_spec})
-    if [ "${separator}" = "" ]; then
-        local processdeps_spec_blanks=${processdeps_spec}
-    else
-        local processdeps_spec_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps_spec})
-    fi
+    local -a deps_array
+    local separator
+    debasher::_split_processdeps "${processdeps_spec}" deps_array separator
     local dep_spec
-    for dep_spec in ${processdeps_spec_blanks}; do
+    for dep_spec in "${deps_array[@]}"; do
         local processname=$(debasher::_get_processname_part_in_dep ${dep_spec})
         if [ -z "${result}" ]; then
             result="$processname"
@@ -331,15 +328,9 @@ debasher::_check_explicit_processdeps()
         return 1
     fi
 
-    local separator=$(debasher::_get_processdeps_separator "${procdeps}")
     local -a deps_array
-    if [ -z "${separator}" ]; then
-        deps_array=("${procdeps}")
-    else
-        IFS="${separator}" read -r -a deps_array <<< "${procdeps}"
-        # read drops an empty last element
-        [[ "${procdeps}" == *"${separator}" ]] && deps_array+=("")
-    fi
+    local separator
+    debasher::_split_processdeps "${procdeps}" deps_array separator
 
     local -A merged=()
     local dep

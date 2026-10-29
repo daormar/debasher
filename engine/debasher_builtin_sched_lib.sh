@@ -706,15 +706,12 @@ debasher_builtin_sched::_check_process_deps()
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
 
     # Iterate over dependencies
-    local separator=$(debasher::_get_processdeps_separator ${processdeps})
-    if [ "${separator}" = "" ]; then
-        local processdeps_blanks=${processdeps}
-    else
-        local processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
-    fi
+    local -a deps_array
+    local separator
+    debasher::_split_processdeps "${processdeps}" deps_array separator
 
     local dep
-    for dep in ${processdeps_blanks}; do
+    for dep in "${deps_array[@]}"; do
         # Extract information from dependency
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
@@ -780,11 +777,8 @@ debasher_builtin_sched::_has_aftercorr_dep()
 {
     local processname=$1
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
-    local aftercorr_dep="${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}"
 
-    [[ "${processdeps}" == "${aftercorr_dep}"* ]] \
-        || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}${aftercorr_dep}"* ]] \
-        || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}${aftercorr_dep}"* ]]
+    debasher::_processdeps_have_deptype "${processdeps}" "${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}"
 }
 
 ########
@@ -856,12 +850,7 @@ debasher_builtin_sched::_has_deps_that_can_be_ruled_out()
 
     local deptype
     for deptype in ${DEBASHER_AFTEROK_PROCESSDEP_TYPE} ${DEBASHER_AFTERCORR_PROCESSDEP_TYPE} ${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}; do
-        local dep="${deptype}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}"
-        if [[ "${processdeps}" == "${dep}"* ]] \
-               || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"* ]] \
-               || [[ "${processdeps}" == *"${DEBASHER_PROCESSDEPS_SEP_INTERR}${dep}"* ]]; then
-            return 0
-        fi
+        debasher::_processdeps_have_deptype "${processdeps}" "${deptype}" && return 0
     done
     return 1
 }
@@ -878,16 +867,12 @@ debasher_builtin_sched::_deps_can_no_longer_hold()
     local task_idx=$3
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
 
-    local separator=$(debasher::_get_processdeps_separator ${processdeps})
-    local processdeps_blanks
-    if [ "${separator}" = "" ]; then
-        processdeps_blanks=${processdeps}
-    else
-        processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
-    fi
+    local -a deps_array
+    local separator
+    debasher::_split_processdeps "${processdeps}" deps_array separator
 
     local dep cause="" num_deps=0 num_ruled_out=0
-    for dep in ${processdeps_blanks}; do
+    for dep in "${deps_array[@]}"; do
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
         num_deps=$((num_deps + 1))
@@ -1357,15 +1342,11 @@ debasher_builtin_sched::_task_can_start_soon()
 
     # Waits, at most, for processes that start in this round or run already
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
-    local separator=$(debasher::_get_processdeps_separator ${processdeps})
-    local processdeps_blanks
-    if [ "${separator}" = "" ]; then
-        processdeps_blanks=${processdeps}
-    else
-        processdeps_blanks=$(debasher::_replace_str_elem_sep_with_blank "${separator}" ${processdeps})
-    fi
+    local -a deps_array
+    local separator
+    debasher::_split_processdeps "${processdeps}" deps_array separator
     local dep any_ok=0
-    for dep in ${processdeps_blanks}; do
+    for dep in "${deps_array[@]}"; do
         local deptype=$(debasher::_get_deptype_part_in_dep ${dep})
         local depsname=$(debasher::_get_processname_part_in_dep ${dep})
         local dep_ok=0

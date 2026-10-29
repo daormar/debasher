@@ -290,6 +290,11 @@ debasher::_reset_process_completion_signal()
 }
 
 ########
+# Removes what an earlier run left in the exec directory of a process that
+# is about to be launched, under the Slurm scheduler. The built-in
+# scheduler does it in its own loop
+# (debasher_builtin_sched::_clean_process_files), so this does nothing for
+# it
 debasher::_clean_process_files()
 {
     local dirname=$1
