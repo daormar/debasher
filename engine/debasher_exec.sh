@@ -405,6 +405,10 @@ gen_final_procspec()
 
     debasher::_gen_final_procspec "${command_line}" || return 1
 
+    # The two ends of a fifo run together, so neither can wait for the
+    # other to end (see debasher::_check_deps_between_fifo_ends)
+    debasher::_check_deps_between_fifo_ends || return 1
+
     debasher::_print_final_procspec "${command_line}" || return 1
 
     echo "Generation complete" >&2

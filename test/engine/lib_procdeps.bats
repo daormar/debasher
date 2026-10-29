@@ -386,3 +386,100 @@ setup() {
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
 }
+
+# --- dependencies between the two ends of a fifo --------------------------
+
+# Registers a process whose final specification has the dependencies $2;
+# with $3 = explicit they are its processdeps, otherwise they were inferred
+add_final_spec() {
+    declare -gA DEBASHER_FINAL_PROCESS_SPEC
+    local comp="cpus=1;mem=32;time=00:01:00"
+    if [ "${3:-}" = "explicit" ]; then
+        DEBASHER_INITIAL_PROCESS_SPEC["$1"]=$(debasher::_print_process_entry "$1" "${comp}" "processdeps=$2")
+    else
+        DEBASHER_INITIAL_PROCESS_SPEC["$1"]=$(debasher::_print_process_entry "$1" "${comp}" "")
+    fi
+    DEBASHER_FINAL_PROCESS_SPEC["$1"]=$(debasher::_print_process_entry "$1" "${comp}" "processdeps=$2")
+}
+
+@test "debasher::_check_deps_between_fifo_ends accepts none and after between the two ends of a fifo, and any type on another process" {
+    set_up_registries
+    add_fifo w/f "$(end_of w)" "$(end_of r)"
+    add_final_spec x none
+    add_final_spec w afterok:x
+    add_final_spec r after:w,afterok:x
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_deps_between_fifo_ends refuses an inferred afterok of the reader on the owner, naming the fifo and saying where it comes from" {
+    set_up_registries
+    add_fifo w/f "$(end_of w)" "$(end_of r)"
+    add_final_spec w none
+    add_final_spec r afterok:w
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process r depends on w with type afterok, given by its options or its _define_opt_deps"* ]]
+    [[ "${output}" == *"they are the two ends of fifo w/f"* ]]
+}
+
+@test "debasher::_check_deps_between_fifo_ends refuses an explicit dependency of the owner on the reader, and one alternative of a question mark" {
+    set_up_registries
+    add_fifo w/f "$(end_of w)" "$(end_of r)"
+    add_final_spec w afterany:r explicit
+    add_final_spec r none
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process w depends on r with type afterany, given by its processdeps,"* ]]
+
+    add_final_spec w none
+    add_final_spec r "after:w?afternotok:w" explicit
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process r depends on w with type afternotok"* ]]
+}
+
+@test "debasher::_check_deps_between_fifo_ends leaves out a fifo fed from outside and one whose ends are tasks of the same process" {
+    set_up_registries
+    add_fifo w/f "$(end_of w)" outside
+    add_fifo a/f_0 "$(end_of a 0)" "$(end_of a 1)"
+    add_final_spec w none
+    add_final_spec a none
+    add_final_spec r afterok:w
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 0 ]
+}
+
+@test "debasher::_check_deps_between_fifo_ends refuses a dependency between the far ends of a chain of fifos" {
+    set_up_registries
+    add_fifo a/f "$(end_of a)" "$(end_of b)"
+    add_fifo b/f "$(end_of b)" "$(end_of c)"
+    add_final_spec a none
+    add_final_spec b none
+    add_final_spec c afterok:a
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process c depends on a with type afterok"* ]]
+    [[ "${output}" == *"they are linked by a chain of fifos"* ]]
+}
+
+@test "debasher::_check_deps_between_fifo_ends accepts any type between two separate chains, and after around a loop of fifos" {
+    set_up_registries
+    add_fifo a/f "$(end_of a)" "$(end_of b)"
+    add_fifo b/f "$(end_of b)" "$(end_of a)"
+    add_fifo c/f "$(end_of c)" "$(end_of d)"
+    add_final_spec a after:b
+    add_final_spec b none
+    add_final_spec c afterok:a,afterok:b
+    add_final_spec d afterany:b
+
+    run debasher::_check_deps_between_fifo_ends
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}

@@ -205,7 +205,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   (`afterok:<process>`, several joined by `,` when all have to hold or by
   `?` when one is enough; the types are `after`, `afterok`, `afternotok`,
   `afterany` and `aftercorr`, the last one task by task between two
-  processes of several tasks), and aliases (`alias`, `externalAlias`,
+  processes of several tasks; it replaces every inferred dependency, so it
+  lists every one the process needs, and between processes linked by FIFOs
+  only `after` is allowed, in a list joined by `,` or by `?` alike, or the
+  preparation of the run stops), and aliases (`alias`, `externalAlias`,
   `aliasOptMap`), which take the code of the process from another one. The
   target of `alias` needs a process function when the alias is added: a
   Bash process (of the program or of a module of the preamble) always has
@@ -314,7 +317,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **A FIFO connection** adds no wait: both processes run at once and the reader
   streams until the writer closes. Use it to stream, to run steps
   concurrently, or for a cycle, which needs at least one FIFO edge. A FIFO has
-  one reader, both ends on the same machine, and no Slurm.
+  one reader, both ends on the same machine, and no Slurm. Processes linked
+  by FIFOs (the two ends of a FIFO, or two processes of a chain of FIFOs,
+  which run together too) depend on each other only with `after` or not at
+  all, or the preparation of the run stops: a process never reads a file of a
+  process linked to it by FIFOs (that file gives `afterok`), so stream it
+  through a FIFO too, or let another process read the file.
 - **FIFOs between processes of several tasks.** The FIFOs that the tasks of
   a process declare through one option are read inside the program for every
   task or for none: a reader with fewer tasks than the writer would leave the
@@ -442,7 +450,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   finished before the generated script was last written (every save writes
   it) or a module that it loads changed. A task whose dependencies can no
   longer hold (`afterok` on a process that failed) is cancelled and counts
-  as failed. To start from scratch, empty the output directory with
+  as failed; under the built-in scheduler, so is a task that still waits when
+  the run can launch nothing else and nothing runs, whose marker says so.
+  To start from scratch, empty the output directory with
   `reset_output_dir`.
 - `get_process_output` reads what a process left (`stdout`, `scheduler`,
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a

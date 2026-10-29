@@ -345,6 +345,13 @@ only when the engine would:
   is refused; a cycle through a FIFO is allowed, since both ends of a
   FIFO run at the same time.
 
+One rule is checked only when the program runs: a process that reads
+both a FIFO and a file of the same process is accepted on the canvas,
+but the run is refused unless the ``define_opt_deps`` method of the
+reader gives ``after`` for the file, and so is a dependency other than
+``after`` written between processes linked by FIFOs (the two ends of a
+FIFO, or two processes of a chain of FIFOs).
+
 Connections from a FIFO are dashed, and one from a fanout family to
 the tasks of an array widens into a wedge. The "Legend" in the corner
 of the canvas explains every mark, color and kind of edge.

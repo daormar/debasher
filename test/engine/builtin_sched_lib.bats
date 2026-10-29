@@ -895,6 +895,41 @@ fail_task() {
     [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[c]}" = "${DEBASHER_TODO_PROCESS_STATUS}" ]
 }
 
+@test "_cancel_tasks_left_waiting cancels every task that still waits, with its cause, so that its process fails, and leaves alone the tasks and processes that ended" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    setup_cancellation
+    # The two ends of a fifo, the reader waiting for its owner to end
+    register_process w 1 "" "${DEBASHER_TODO_PROCESS_STATUS}"
+    register_process r 1 "afterok:w" "${DEBASHER_TODO_PROCESS_STATUS}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/f"]="w${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/f"]="r${sep}0")
+    # An array with a task that failed and two that wait
+    register_process a 3 "" "${DEBASHER_UNFINISHED_PROCESS_STATUS}"
+    fail_task a 0
+    register_process f 1 "" "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"
+    register_process done_already 1 "" "${DEBASHER_FINISHED_PROCESS_STATUS}"
+
+    # No dependency of theirs can be ruled out
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch "" "${OUTDIR}" 2> /dev/null
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[w]}" ]
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[r]}" ]
+
+    debasher_builtin_sched::_cancel_tasks_left_waiting "" "${OUTDIR}" 2> "${BATS_TEST_TMPDIR}/stderr"
+
+    local cause="the run can launch nothing else and nothing runs"
+    local proc
+    for proc in w r; do
+        [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${proc}]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+        [ "$(cat "$(debasher::_get_process_cancelled_filename "${OUTDIR}" "${proc}")")" = "Cancelled task idx: 0 ; Total: 1 ; Cause: ${cause}" ]
+    done
+    [ "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[a]}" = "1 2" ]
+    [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[a]}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+    [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" a 0)" != "${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS}" ]
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[f]}" ]
+    [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[done_already]}" ]
+    grep -q "PROCESS: r (TASK_IDX: 0) ; CANCELLED: ${cause}" "${BATS_TEST_TMPDIR}/stderr"
+}
+
 @test "_get_fixed_process_status takes as failed a process that ended without finishing after running or having tasks cancelled, and only then" {
     setup_cancellation
     local unf="${DEBASHER_UNFINISHED_PROCESS_STATUS}" failed="${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}"

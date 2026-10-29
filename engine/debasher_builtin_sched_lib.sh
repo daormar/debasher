@@ -1152,6 +1152,40 @@ debasher_builtin_sched::_cancel_tasks_that_cannot_launch()
 }
 
 ########
+# Cancels every task that still waits to be launched when nothing can be
+# launched and nothing runs, so that its process ends as failed instead of
+# being left to do: no round would ever launch it. The checks of the
+# preparation should leave no such task, so this is a safety net. Returns
+# 1 on error
+debasher_builtin_sched::_cancel_tasks_left_waiting()
+{
+    local cmdline=$1
+    local dirname=$2
+    local cause="the run can launch nothing else and nothing runs"
+
+    local processname
+    for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        local -a task_indices=()
+        if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+            debasher_builtin_sched::_task_waits "${dirname}" "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0" && task_indices=(0)
+        else
+            local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+            if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
+                   && [ "${status}" != "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]; then
+                task_indices=($(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}"))
+            fi
+        fi
+        [ ${#task_indices[@]} -eq 0 ] && continue
+
+        local task_idx
+        for task_idx in "${task_indices[@]}"; do
+            debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 1
+        done
+        debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
+    done
+}
+
+########
 debasher_builtin_sched::_get_max_num_tasks()
 {
     local dirname=$1
@@ -2412,7 +2446,13 @@ debasher_builtin_sched::execute_program_processes()
                 # Wait for in-progress processes to finish
                 debasher_builtin_sched::_sleep
             else
-                # Finish loop
+                # Finish loop, ending as failed the processes of the
+                # tasks that would wait for ever (see
+                # debasher_builtin_sched::_cancel_tasks_left_waiting)
+                if ! debasher_builtin_sched::_cancel_tasks_left_waiting "${cmdline}" "${dirname}"; then
+                    trap - TERM
+                    return 1
+                fi
                 end=1
             fi
         fi

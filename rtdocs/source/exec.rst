@@ -99,7 +99,10 @@ are useful for that purpose:
   refused for its options or for the resources of a single process. It
   also refuses a program with a process whose interpreter is not there
   (see the :ref:`implem_bash` Section), which ``--check-proc-opts`` and
-  ``--show-cmdline-opts`` still accept. The files that describe an
+  ``--show-cmdline-opts`` still accept, and a dependency other than
+  ``none`` or ``after`` between processes linked by FIFOs (see the
+  ``define_opt_deps`` method in the :ref:`implem_bash` Section). The
+  files that describe an
   execution (see :ref:`outdstruct`) go into a temporary directory, which
   it removes, so it leaves those of an earlier execution as they were,
   and it leaves no graph in ``__graphs__``.

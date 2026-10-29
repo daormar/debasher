@@ -1355,7 +1355,14 @@ missing.
   a file gives ``afterok`` (``aftercorr`` when both processes are arrays
   and the option reads the task with the same index), and an option
   connected to a FIFO gives no dependency, so that both ends of a FIFO
-  start together:
+  start together. Between processes linked by FIFOs (the two ends of a
+  FIFO, or two processes of a chain of FIFOs, which run together too)
+  only ``none`` and ``after`` are allowed, since one that waited for the
+  other to end would wait for ever, and ``debasher_exec`` refuses any
+  other type there when it prepares the run. A process that reads
+  a file and a FIFO of the same producer gets ``afterok`` from the file,
+  and so is refused unless its ``define_opt_deps`` gives ``after`` (or
+  ``none``) for that file:
 
   .. code-block:: bash
 
@@ -1472,7 +1479,11 @@ third argument):
   (it finished successfully), ``afternotok`` (it failed), ``afterany``
   (it finished either way) and ``aftercorr`` (between two arrays, each
   task waits for the task with the same index of the other process to
-  finish successfully). Both schedulers run ``aftercorr`` task by task:
+  finish successfully). Between processes linked by FIFOs only
+  ``after`` (or ``none``) is allowed, as for an inferred dependency: any other
+  type is refused when the run is prepared, in a list joined by ``?``
+  too, since that alternative could never be the one that holds. Both
+  schedulers run ``aftercorr`` task by task:
   a task starts as soon as its own counterpart has finished, while
   other tasks of the other array still run or after some of them have
   failed (see the ``aftercorr`` example). A task with no counterpart,
@@ -1484,7 +1495,11 @@ third argument):
   task, so that its process ends and ``afterany`` and ``afternotok`` on
   it hold, and the next run tries it again. Under the built-in scheduler,
   a ``.cancelled`` file in the exec directory of its process
-  (``__exec__/<process>``) says which dependency could not hold.
+  (``__exec__/<process>``) says which dependency could not hold. The
+  built-in scheduler also cancels a task still waiting when the run can
+  launch nothing else and nothing runs, with that cause in its
+  ``.cancelled`` file, so that its process ends as failed instead of
+  left to do.
 * ``alias``/``ext_alias``: reuse another process's implementation (one
   already defined in the same module tree, or an external script file,
   respectively) as this process's own, instead of providing one

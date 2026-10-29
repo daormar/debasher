@@ -584,3 +584,129 @@ debasher::_check_fifos_read_alike()
         return 1
     done
 }
+
+########
+# Fills an associative array, keyed by <process><sep><producer>, with the
+# dependency types of the final process specification other than none and
+# after, those that wait for the producer to end. With two elements on the
+# same producer, the last of them is kept.
+debasher::_get_deptypes_that_wait_for_end()
+{
+    local -n waiting_deptypes_ref=$1
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    local processname
+    for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
+        local procdeps
+        procdeps=$(debasher::_extract_processdeps_from_process_spec "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}")
+        [ "${procdeps}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
+        [ "${procdeps}" = "${DEBASHER_ATTR_NOT_FOUND}" ] && continue
+
+        local separator=$(debasher::_get_processdeps_separator "${procdeps}")
+        local -a deps_array
+        if [ -z "${separator}" ]; then
+            deps_array=("${procdeps}")
+        else
+            IFS="${separator}" read -r -a deps_array <<< "${procdeps}"
+        fi
+        local dep
+        for dep in "${deps_array[@]}"; do
+            local deptype="${dep%%${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}*}"
+            [ "${deptype}" = "${DEBASHER_AFTER_PROCESSDEP_TYPE}" ] && continue
+            waiting_deptypes_ref["${processname}${sep}${dep#*${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}}"]=${deptype}
+        done
+    done
+}
+
+########
+# Writes into the caller-provided variable the process that stands for the
+# chain of fifos of a process, given the associative array that links each
+# end of a fifo to another end of its chain
+debasher::_get_fifo_chain_root()
+{
+    local -n chain_links_ref=$1
+    local proc=$2
+    local -n chain_root_ref=$3
+
+    while [ "${chain_links_ref[${proc}]}" != "${proc}" ]; do
+        proc=${chain_links_ref[${proc}]}
+    done
+    chain_root_ref=${proc}
+}
+
+########
+# Groups the processes linked by fifos of the program into chains, the
+# processes that the built-in scheduler launches together: fills the
+# associative array chain_roots_ref with the process that stands for the
+# chain of each end of a fifo, and fifo_of_ends_ref, keyed by
+# <process><sep><process>, with a fifo between two ends, in both orders.
+# A fifo fed from outside and one read by its own owner link no processes.
+debasher::_get_fifo_chains()
+{
+    local -n chain_roots_ref=$1
+    local -n fifo_of_ends_ref=$2
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    local -A links=()
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]:-${DEBASHER_EXTERNAL_FIFO_END}}"
+        [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+        reader="${reader%%${sep}*}"
+        local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]%%${sep}*}"
+        [ "${owner}" = "${reader}" ] && continue
+
+        fifo_of_ends_ref["${owner}${sep}${reader}"]=${augm_fifoname}
+        fifo_of_ends_ref["${reader}${sep}${owner}"]=${augm_fifoname}
+        [[ -v links["${owner}"] ]] || links["${owner}"]=${owner}
+        [[ -v links["${reader}"] ]] || links["${reader}"]=${reader}
+        local owner_root reader_root
+        debasher::_get_fifo_chain_root links "${owner}" owner_root
+        debasher::_get_fifo_chain_root links "${reader}" reader_root
+        links["${owner_root}"]=${reader_root}
+    done
+
+    local proc root
+    for proc in "${!links[@]}"; do
+        debasher::_get_fifo_chain_root links "${proc}" root
+        chain_roots_ref["${proc}"]=${root}
+    done
+}
+
+########
+# Checks that no process depends with a type other than none or after on a
+# process linked to it by fifos, the two ends of a fifo or two processes of
+# a chain of fifos. The built-in scheduler launches a chain together, so a
+# process that waited for another of its chain to end would wait for ever,
+# and so would the whole chain. Inferred dependencies (a file of the same
+# producer read along with a fifo, or a type given by _define_opt_deps) and
+# explicit ones are checked alike, whether joined by "," or by "?" (as an
+# alternative of "?", it could hold only if the other process failed
+# without ever meeting this one). Run on the final process specification, once the
+# readers of the fifos are registered. Prints an error and returns 1 for
+# the first such dependency found.
+debasher::_check_deps_between_fifo_ends()
+{
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    local -A waiting_deptypes=() chain_roots=() fifo_of_ends=()
+    debasher::_get_deptypes_that_wait_for_end waiting_deptypes
+    debasher::_get_fifo_chains chain_roots fifo_of_ends
+
+    local key
+    for key in "${!waiting_deptypes[@]}"; do
+        local end="${key%%${sep}*}"
+        local peer="${key#*${sep}}"
+        [[ -v chain_roots["${end}"] ]] || continue
+        [ "${chain_roots[${end}]}" = "${chain_roots[${peer}]:-}" ] || continue
+
+        local link="the two ends of fifo ${fifo_of_ends[${key}]:-}"
+        [[ -v fifo_of_ends["${key}"] ]] || link="linked by a chain of fifos"
+        local origin="its processdeps"
+        if [ "$(debasher::_extract_processdeps_from_process_spec "${DEBASHER_INITIAL_PROCESS_SPEC[${end}]}")" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            origin="its options or its _define_opt_deps (a file of ${peer} that ${end} reads gives ${DEBASHER_AFTEROK_PROCESSDEP_TYPE}: stream it through a fifo too, let another process read it, or have _define_opt_deps turn it into ${DEBASHER_AFTER_PROCESSDEP_TYPE})"
+        fi
+        echo "Error: process ${end} depends on ${peer} with type ${waiting_deptypes[${key}]}, given by ${origin}, but they are ${link}, which run together, so ${end} would wait for ever: between processes linked by fifos only ${DEBASHER_NONE_PROCESSDEP_TYPE} and ${DEBASHER_AFTER_PROCESSDEP_TYPE} are allowed" >&2
+        return 1
+    done
+}

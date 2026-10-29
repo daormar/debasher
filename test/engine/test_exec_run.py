@@ -2179,6 +2179,84 @@ def test_a_validation_infers_dependencies_through_subdirectories_and_leaves_only
     assert list((outdir / "data").iterdir()) == []
 
 
+# w writes a file and a fifo, and r reads both: the file gives r afterok
+# on w, a dependency that the two ends of a fifo cannot have
+FIFO_AND_FILE_MODULE = """\
+w_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-outfifo" "<fifo>" "Output fifo"
+}
+
+w_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/f" optlist || return 1
+    define_fifo_opt "-outfifo" "fifo" optlist || return 1
+    save_opt_list optlist
+}
+
+w()
+{
+    echo f > "$(read_opt_value_from_func_args "-outf" "$@")"
+    echo line > "$(read_opt_value_from_func_args "-outfifo" "$@")"
+}
+
+r_explain_opts()
+{
+    explain_opt "-inf" "<file>" "File of w"
+    explain_opt "-infifo" "<fifo>" "Fifo of w"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "w" "-outf" optlist || return 1
+    define_opt_from_proc_out "-infifo" "w" "-outfifo" optlist || return 1
+    save_opt_list optlist
+}
+@@DEFINE_OPT_DEPS@@
+r()
+{
+    cat "$(read_opt_value_from_func_args "-infifo" "$@")"
+}
+
+debasher_fifofile_program()
+{
+    add_debasher_process "w" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "r" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+# Turns the afterok that the file gives into after
+FIFO_AND_FILE_AFTER = """
+r_define_opt_deps()
+{
+    echo after
+}
+"""
+
+
+def test_a_dependency_stronger_than_after_between_the_two_ends_of_a_fifo_stops_the_preparation(tmp_path):
+    pfile = tmp_path / "debasher_fifofile.sh"
+    pfile.write_text(FIFO_AND_FILE_MODULE.replace("@@DEFINE_OPT_DEPS@@", ""))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 1
+    assert "Error: process r depends on w with type afterok" in result.stderr
+    assert "they are the two ends of fifo w/fifo" in result.stderr
+    assert "processdeps=" not in result.stderr
+
+    # With after, the two ends are accepted, and run together
+    pfile.write_text(FIFO_AND_FILE_MODULE.replace("@@DEFINE_OPT_DEPS@@", FIFO_AND_FILE_AFTER))
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--validate")
+    assert result.returncode == 0, result.stderr
+    deps = dict(re.findall(r"^PROCESS: (\S+) ; STATUS: .* processdeps=(\S+)$", result.stderr, re.M))
+    assert deps == {"w": "none", "r": "after:w"}
+
+
 # Two processes, each with a shared subdirectory of "data"
 SHARED_LEFT_MODULE = """\
 debasher_shleft_shared_dirs()

@@ -307,7 +307,12 @@ The FIFOs that the tasks of a process declare through the same option
 are read inside the program for every task or for none. A consumer with
 fewer tasks than the producer would leave some producer tasks waiting
 for ever for a reader, so the engine refuses it when the run is
-prepared. A program with FIFOs runs under the built-in scheduler.
+prepared. A consumer that also reads a file of the producer would wait
+for the producer to end, which the FIFO between them forbids: the
+engine refuses it too, unless the ``define_opt_deps`` method of the
+consumer gives ``after`` for that file (see the
+``debasher_define_opt_deps_example`` example). A program with FIFOs
+runs under the built-in scheduler.
 
 In the web interface, the output of the producer is given the FIFO
 channel, and its connection to the consumer is drawn dashed.

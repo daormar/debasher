@@ -68,7 +68,11 @@ or change it before you edit anything:
   infers none from a whole shared directory;
 - each connection, and why it is a file or a FIFO: a file when the next
   process needs all of it, or the result has to stay; a FIFO to stream from
-  one process to the next while both run, or for a cycle;
+  one process to the next while both run, or for a cycle; a process never
+  reads a file of a process linked to it by FIFOs (the other end of one of
+  its FIFOs, or another process of the same chain of FIFOs), since they run
+  together and it cannot wait for that file: stream it, or move the file
+  reading to another process;
 - what the user has to give when running it (program options), and anything
   the program needs from outside (modules, environments);
 - for a resident program, the kind of each node (business node, directory

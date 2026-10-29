@@ -92,7 +92,8 @@ export const processChanges = z.object({
   computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class."),
   additionalSpecs: z.object({
     force: z.boolean().optional(),
-    processdeps: z.string().optional(),
+    processdeps: z.string().optional()
+      .describe("The dependencies of the process, replacing those inferred from its connections, so list every one it needs: <type>:<process>, joined by \",\" when all have to hold or by \"?\" when one is enough; the types are after, afterok, afternotok, afterany and aftercorr, or none for no dependency. Between processes linked by FIFOs (the two ends of a FIFO, or two processes of a chain of FIFOs) only after is allowed, or the preparation of the run stops."),
     alias: z.string().optional().describe("The process whose code this one runs: a Bash process, or one in another language or another alias that comes before this one (every process comes before the sequential processes)."),
     aliasOptMap: aliasOptMap.optional(),
     externalAlias: z.string().optional(),

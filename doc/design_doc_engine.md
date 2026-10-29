@@ -299,8 +299,12 @@ relative to the output directory of the run.
 - **external end**: the end of a FIFO that no task of the program holds: a
   reader outside when the owner writes the FIFO, a writer outside when the owner
   reads it (`DEBASHER_EXTERNAL_FIFO_END`).
+- **chain of FIFOs**: processes of the program linked by FIFOs, directly or
+  through other processes linked by FIFOs; the built-in scheduler launches the
+  processes of a chain together, or one once another has started.
 - **cycle through FIFOs**: processes that stream to one another in a loop, which
-  the engine allows because a FIFO adds no edge to the dependency graph.
+  the engine allows because the dependency through a FIFO adds no edge to the
+  dependency graph unless it is given the type `after`.
 - **mirror tap**: for a FIFO defined with `--mirror`, the helper that copies
   every line the owner writes both into the FIFO and into a mirror log.
 - **shim FIFO**: the FIFO that the owner of a mirrored FIFO actually writes, and
@@ -411,12 +415,15 @@ relative to the output directory of the run.
   directory when it ends successfully, or when the `_skip` method of its process
   skips it.
 - **cancelled task**: a task that will not be launched in a run, because its
-  dependencies can no longer hold in it, or because the task at the other end of
-  one of its FIFOs is cancelled. For the dependencies it counts as a task that
-  failed, and in a later run it waits to be launched again.
+  dependencies can no longer hold in it, because the task at the other end of
+  one of its FIFOs is cancelled, or, under the built-in scheduler, because it
+  still waits when nothing can be launched and nothing runs. For the
+  dependencies it counts as a task that failed, and in a later run it waits to
+  be launched again.
 - **cancellation marker**: the `.cancelled` file that the built-in scheduler
   writes in the exec directory for a cancelled task, with the dependency that
-  can no longer hold, or the cancelled task at the other end of its FIFO.
+  can no longer hold, the cancelled task at the other end of its FIFO, or that
+  nothing else could be launched.
 - **process status**: the state of a process that the engine derives from its
   exec directory: `TO-DO`, no task launched or cancelled yet; `IN-PROGRESS`, the
   scheduler still holds one of its ids; `FINISHED`, every task has a completion
@@ -1602,7 +1609,7 @@ by then, so the number is asked for from the methods that define the options.
 
 A number of tasks that depends on itself, through `get_process_num_tasks` and
 the `_define_opts` or `_generate_opts_size` methods of one or more processes,
-stops the preparation of the run, naming the chain of processes that leads back
+stops the preparation of the run, naming the path of processes that leads back
 to the first. The engine checks it before answering, since a `_define_opts`
 method that has registered some tasks already would otherwise answer with those.
 `get_process_num_tasks` prints the number on its standard output, so it is read
@@ -1805,6 +1812,16 @@ printing nothing keeps the inferred type, and printing `none` removes the
 dependency. A reader of a FIFO that should not start before its owner has
 started, for example, gets `after` this way.
 
+Between processes linked by FIFOs, the two ends of a FIFO or two processes of
+a chain of FIFOs, only `none` and `after` are allowed, since a dependency that
+waits for the other process to end would wait for ever. Once the dependencies
+of every process are known, a dependency of one such process on another with
+any other type, whether inferred, given by `_define_opt_deps` or explicit (see
+"Explicit dependencies"), stops the preparation, and the error names the FIFO,
+or says that a chain links them. A file read from the owner of a FIFO along
+with the FIFO gives such a dependency, `afterok` or `aftercorr`, which
+`_define_opt_deps` can turn into `after` (see "Running both ends together").
+
 A process never depends on itself: a value that it both produces and reads makes
 no dependency on it, so that a process can read what it writes. The dependencies
 of the tasks of a process are then merged into one dependency on each producer
@@ -1873,11 +1890,13 @@ add_debasher_process "c" "${specs}" "processdeps=afterok:a?after:b"
 
 The value is checked when the final process specification is built: every
 element has to be of that form, with a type from the table above and a process
-of the program, and a list may not use both separators. Explicit dependencies
-serve what the options cannot say: a process that reads what another leaves in
-a shared directory, or an order between processes that exchange nothing. They
-also take the process out of the inference altogether, so a process that
-gives them has to give every dependency it needs.
+of the program, and a list may not use both separators. Like an inferred one,
+an explicit dependency between processes linked by FIFOs can only be `none` or
+`after` (see "Running both ends together"). Explicit dependencies serve what
+the options cannot say: a process that reads what another leaves in a shared
+directory, or an order between processes that exchange nothing. They also take
+the process out of the inference altogether, so a process that gives them has
+to give every dependency it needs.
 
 ## Topological order and cycles
 
@@ -1901,8 +1920,9 @@ A cycle through FIFOs is not a cycle of the dependency graph. The type of a
 dependency through a FIFO is `none` unless the option dependency method says
 otherwise, so processes that stream to one another in a loop have no edge
 between them, run concurrently, and the loop lives only in the FIFOs (see
-"Cycles through FIFOs"). An option dependency method that gives such a
-dependency a type other than `none` turns the loop back into a cycle of the
+"Cycles through FIFOs"). Between the two ends of a FIFO only `after` can
+replace `none` (see "Running both ends together"); an option dependency method
+that gives `after` to every FIFO of the loop turns it back into a cycle of the
 graph, and the run is refused.
 
 Every run draws its dependency graph into `__graphs__/dependency_graph.dot`,
@@ -1978,7 +1998,12 @@ on opening the FIFO, or on writing into it, until the reader reads. This is
 why the dependency inferred through a FIFO has the type `none` (see
 "Inferring dependencies from options"): the two ends are independent tasks for
 the dependency graph, and it is the scheduler that has to run them at the same
-time.
+time. For the same reason, a dependency of one end on the other with a type
+other than `none` or `after` is refused when the run is prepared, also as one
+element of a list joined by `,` or by `?` (as an alternative of `?`, it could
+hold only if the other end failed without ever meeting this one). Since the
+built-in scheduler launches a chain of FIFOs together, the same holds between
+any two processes of a chain.
 
 The built-in scheduler keeps an end of a FIFO out of a round until its other end
 can start with it. In each round, a task at one end of a FIFO is launched only
@@ -2018,9 +2043,11 @@ connected to it through dependencies or FIFOs runs again with it.
 
 ## Cycles through FIFOs
 
-A dependency through a FIFO adds no edge to the dependency graph, so processes
-that stream to one another in a loop are a valid program: the loop lives in the
-FIFOs, and the graph that the scheduler sees has no cycle. In
+A dependency through a FIFO adds no edge to the dependency graph unless it is
+given the type `after`, so processes that stream to one another in a loop are a
+valid program: the loop lives in the FIFOs, and the graph that the scheduler
+sees has no cycle, as long as some FIFO of the loop keeps `none` (see
+"Topological order and cycles"). In
 `data/programs/debasher_cycle.sh`, `process_a` owns a FIFO that `process_b`
 reads, and `process_b` owns one that `process_a` reads:
 
@@ -2179,11 +2206,21 @@ block on opening the FIFO (see "Running both ends together"). An end that went
 first never sees its other end cancelled: it went first because that end waited
 only for processes to start, and `after` never makes a task cancelled.
 
+Under the built-in scheduler, a task that still waits when a round has
+nothing to launch and nothing runs is cancelled too, so that its process ends
+as failed: no later round would launch it. The checks made when the run is
+prepared leave no such task for a dependency between processes linked by FIFOs
+(see "Running both ends together"); one remains possible through a process
+outside a chain of FIFOs, which waits for a process of the chain to end and on
+which another process of the same chain waits. This is a safety net for such
+cases.
+
 Under the built-in scheduler, a cancelled task gets a cancellation marker,
 `<process>.cancelled` or `<process>_<index>.cancelled` in the exec directory,
 which records the dependency that can no longer hold, or the cancelled task at
 the other end of its FIFO, so that whoever reads it there is sent to the cause,
-the producer or the other end of the FIFO, and not to the task. A cancelled task
+the producer or the other end of the FIFO, and not to the task; the marker of a
+task cancelled because nothing else could be launched says so. A cancelled task
 is never launched in the run: it holds no CPUs or memory, and has no id,
 options, standard output, log or completion marker. When the first task of a
 process that has no process script yet is cancelled, the scheduler writes the
@@ -2232,6 +2269,10 @@ rounds until no task can be launched and none still runs. In each round it:
    before the next round, or five when the program has more than ten
    processes.
 
+When a round has nothing to launch and nothing runs, the scheduler cancels
+every task that still waits and ends the loop, outside the oneshot mode (see
+"Tasks that will not be launched").
+
 The budget is given with `--builtinsched-cpus` and `--builtinsched-mem`, and is
 unlimited by default. Every task of a process asks for the `cpus` and `mem` of
 its process specification, and the built-in scheduler takes the first value of
@@ -2272,9 +2313,10 @@ the producer still run, or after they have failed. A task with no counterpart
 waits for the producer to finish, as with `afterok`.
 
 A task whose dependencies can no longer hold is cancelled in the round, before
-the candidates are found, instead of waiting, so that no task is left waiting
-when the loop ends, and a process that does not finish ends in the run, as
-failed (see "Tasks that will not be launched").
+the candidates are found, instead of waiting, and one that still waits when
+the loop ends is cancelled then, so that no task is left waiting, and a process
+that does not finish ends in the run, as failed (see "Tasks that will not be
+launched").
 
 With `--builtinsched-oneshot`, `debasher_exec` goes through its rounds with no
 pause, launching whatever can start, and ends as soon as nothing more can start
@@ -3228,9 +3270,11 @@ leaves, by design, to the program or to whoever runs it.
    FIFO").
 9. Under the built-in scheduler, the two ends of a FIFO are launched in the same
    round, or one once the other runs, or once the other only waits for processes
-   to start or to have every task cancelled, or both are cancelled; a program
-   with FIFOs is refused under the Slurm scheduler (see "Running both ends
-   together" and "Tasks that will not be launched").
+   to start or to have every task cancelled, or both are cancelled; a
+   dependency other than `none` or `after` between them, or between two
+   processes of a chain of FIFOs, is refused when the run is prepared, and a
+   program with FIFOs is refused under the Slurm scheduler (see "Running both
+   ends together" and "Tasks that will not be launched").
 10. At the start of a run, the two ends of every FIFO are in the same state:
     no run launches an end whose other end has finished and will not run again
     (see "Running both ends together").
