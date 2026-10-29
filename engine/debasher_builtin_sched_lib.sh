@@ -993,6 +993,66 @@ debasher_builtin_sched::_refresh_status_after_cancellation()
 }
 
 ########
+# Cancels the only task of a process if it waits to be launched and the
+# dependencies of the process can no longer hold. Returns 0 when it
+# cancels it, 1 when it does not, and 2 on error
+debasher_builtin_sched::_cancel_single_task()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+
+    debasher_builtin_sched::_task_waits "${dirname}" "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0" || return 1
+
+    local cause
+    cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}") || return 1
+    debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" 0 "${cause}" || return 2
+}
+
+########
+# Cancels each task of an array with an aftercorr dependency that waits to
+# be launched and whose own dependencies can no longer hold, aftercorr
+# being judged on the counterpart of the task alone. Returns 0 when it
+# cancels some, 1 when it cancels none, and 2 on error
+debasher_builtin_sched::_cancel_array_tasks_one_by_one()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+
+    local cancelled=1 cause task_idx
+    for task_idx in $(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}"); do
+        if cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}" "${task_idx}"); then
+            debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+            cancelled=0
+        fi
+    done
+    return ${cancelled}
+}
+
+########
+# Cancels every task of an array without an aftercorr dependency that
+# waits to be launched once the dependencies of the process can no longer
+# hold: the dependencies on a whole producer hold or not for every task at
+# once. Returns 0 when it cancels some, 1 when it cancels none, and 2 on
+# error
+debasher_builtin_sched::_cancel_array_tasks_together()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+
+    local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}")
+    [ -z "${todo_task_indices}" ] && return 1
+
+    local cause task_idx
+    cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}") || return 1
+    for task_idx in ${todo_task_indices}; do
+        debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+    done
+}
+
+########
 # Cancels the tasks of a process that wait to be launched and whose
 # dependencies can no longer hold. Returns 0 when it cancels some, 1 when
 # it cancels none, and 2 on error
@@ -1007,36 +1067,17 @@ debasher_builtin_sched::_cancel_tasks_of_process()
     [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
     debasher_builtin_sched::_has_deps_that_can_be_ruled_out "${processname}" || return 1
 
-    local cancelled=1 cause
+    local ret=0
     if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
-        if debasher_builtin_sched::_task_waits "${dirname}" "${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0" \
-               && cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}"); then
-            debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" 0 "${cause}" || return 2
-            cancelled=0
-        fi
+        debasher_builtin_sched::_cancel_single_task "${cmdline}" "${dirname}" "${processname}" || ret=$?
+    elif debasher_builtin_sched::_has_aftercorr_dep "${processname}"; then
+        debasher_builtin_sched::_cancel_array_tasks_one_by_one "${cmdline}" "${dirname}" "${processname}" || ret=$?
     else
-        local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}")
-        [ -z "${todo_task_indices}" ] && return 1
-        local task_idx
-        if debasher_builtin_sched::_has_aftercorr_dep "${processname}"; then
-            # aftercorr is judged for each task on its own
-            for task_idx in ${todo_task_indices}; do
-                if cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}" "${task_idx}"); then
-                    debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
-                    cancelled=0
-                fi
-            done
-        elif cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}"); then
-            # The other types hold or not for every task at once
-            for task_idx in ${todo_task_indices}; do
-                debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
-            done
-            cancelled=0
-        fi
+        debasher_builtin_sched::_cancel_array_tasks_together "${cmdline}" "${dirname}" "${processname}" || ret=$?
     fi
 
-    [ ${cancelled} -eq 0 ] && debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
-    return ${cancelled}
+    [ ${ret} -eq 0 ] && debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
+    return ${ret}
 }
 
 ########

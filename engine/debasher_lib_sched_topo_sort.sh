@@ -29,7 +29,7 @@ debasher::_topo_sort()
     local -A _state        # 0=unvisited, 1=in progress, 2=done
     local _order=()
 
-    _visit() {
+    debasher::_topo_sort_visit() {
         local node=$1
         local st=${_state[$node]:-0}
 
@@ -54,7 +54,7 @@ debasher::_topo_sort()
                     echo "Error: '$dep' (dependency of '$node') is not defined" >&2
                     exit 1
                 fi
-                _visit "$dep"
+                debasher::_topo_sort_visit "$dep"
             done
         fi
 
@@ -64,7 +64,7 @@ debasher::_topo_sort()
 
     local key
     for key in "${!_deps[@]}"; do
-        _visit "$key"
+        debasher::_topo_sort_visit "$key"
     done
 
     _result=("${_order[@]}")

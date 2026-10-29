@@ -185,6 +185,106 @@ debasher::_get_procdeps_for_process()
         fi
     }
 
+    # Merges into the dependencies of a task, an associative array from
+    # producer to type, the dependency that its option opt gives through
+    # a fifo: none unless _define_opt_deps says otherwise, and none for
+    # the fifo of the process itself
+    debasher::_add_fifo_dep()
+    {
+        local define_opt_deps_funcname=$1
+        local processname=$2
+        local opt=$3
+        local augm_fifoname=$4
+        local -n fifo_depdict_ref=$5
+
+        local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
+        local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+
+        [ "${processowner}" = "${processname}" ] && return 0
+
+        local deptype
+        debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${processowner}" deptype
+        [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
+        [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
+
+        local merged_deptype
+        debasher::_merge_deptypes "${fifo_depdict_ref[$processowner]}" "${deptype}" merged_deptype || return 1
+        fifo_depdict_ref["${processowner}"]=${merged_deptype}
+    }
+
+    # Merges into the dependencies of a task, an associative array from
+    # producer to type, those that its option opt gives on each process
+    # that produces the file value: afterok, or aftercorr when both
+    # processes are arrays and the task reads the task of its own index,
+    # unless _define_opt_deps says otherwise; none for the process itself
+    debasher::_add_file_deps()
+    {
+        local define_opt_deps_funcname=$1
+        local processname=$2
+        local num_tasks=$3
+        local task_idx=$4
+        local opt=$5
+        local value=$6
+        local -n file_depdict_ref=$7
+        local processes="${DEBASHER_OUT_VALUE_TO_PROCESSES[${value}]}"
+
+        while [ -n "${processes}" ]; do
+            local proc_plus_idx="${processes%%${DEBASHER_ASSOC_ARRAY_PROC_SEP}*}"
+            local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+            local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+            # Advance to the next process in the list up-front, so any
+            # "continue" below doesn't risk an infinite loop
+            local processes_aux="${processes#"${proc_plus_idx}${DEBASHER_ASSOC_ARRAY_PROC_SEP}"}"
+            if [ "${processes}" = "${processes_aux}" ]; then
+                processes=""
+            else
+                processes=${processes_aux}
+            fi
+
+            [ "${processname}" = "${proc}" ] && continue
+
+            local deptype
+            debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
+            if [ -z "${deptype}" ]; then
+                # aftercorr pairs a task with the task of the same
+                # index of another array, so both have to be arrays
+                if [ "$num_tasks" -gt 1 ] && [ "${DEBASHER_PROCESS_OPT_LIST_LEN[${proc}]:-1}" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
+                    deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
+                else
+                    deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
+                fi
+            fi
+            # A none from the callback asks for no dependency at all,
+            # as it does for a fifo
+            [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
+
+            local merged_deptype
+            debasher::_merge_deptypes "${file_depdict_ref[$proc]}" "${deptype}" merged_deptype || return 1
+            file_depdict_ref["${proc}"]=${merged_deptype}
+        done
+    }
+
+    # Prints an associative array from producer to type in the format of
+    # processdeps: <type>:<process>,...
+    debasher::_serialize_depdict()
+    {
+        local -n serialized_depdict_ref=$1
+
+        local processdeps=""
+        local proc
+        for proc in "${!serialized_depdict_ref[@]}"; do
+            local dep="${serialized_depdict_ref[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
+            if [ -z "$processdeps" ]; then
+                processdeps=${dep}
+            else
+                processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
+            fi
+        done
+
+        echo "${processdeps}"
+    }
+
     debasher::_get_procdeps_for_process_task()
     {
         local cmdline=$1
@@ -208,79 +308,17 @@ debasher::_get_procdeps_for_process()
 
             local opt="${DEBASHER_DESERIALIZED_ARGS[j]}"
             local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
-            local processes="${DEBASHER_OUT_VALUE_TO_PROCESSES[${value}]}"
 
-            # Case 1: value is a FIFO
             local augm_fifoname
             augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
             if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
-                local proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}"
-                local processowner="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-                [ "${processowner}" = "${processname}" ] && continue
-
-                local deptype
-                debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${processowner}" deptype
-                [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
-                [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
-
-                local merged_deptype
-                debasher::_merge_deptypes "${depdict[$processowner]}" "${deptype}" merged_deptype || return 1
-                depdict["${processowner}"]=${merged_deptype}
-                continue
-            fi
-
-            # Case 2: value is a file, possibly owned by several processes
-            while [ -n "${processes}" ]; do
-                local proc_plus_idx="${processes%%${DEBASHER_ASSOC_ARRAY_PROC_SEP}*}"
-                local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-                local idx="${proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-
-                # Advance to the next process in the list up-front, so any
-                # "continue" below doesn't risk an infinite loop
-                local processes_aux="${processes#"${proc_plus_idx}${DEBASHER_ASSOC_ARRAY_PROC_SEP}"}"
-                if [ "${processes}" = "${processes_aux}" ]; then
-                    processes=""
-                else
-                    processes=${processes_aux}
-                fi
-
-                [ "${processname}" = "${proc}" ] && continue
-
-                local deptype
-                debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
-                if [ -z "${deptype}" ]; then
-                    # aftercorr pairs a task with the task of the same
-                    # index of another array, so both have to be arrays
-                    if [ "$num_tasks" -gt 1 ] && [ "${DEBASHER_PROCESS_OPT_LIST_LEN[${proc}]:-1}" -gt 1 ] && [ "$task_idx" = "$idx" ]; then
-                        deptype=${DEBASHER_AFTERCORR_PROCESSDEP_TYPE}
-                    else
-                        deptype=${DEBASHER_AFTEROK_PROCESSDEP_TYPE}
-                    fi
-                fi
-                # A none from the callback asks for no dependency at all,
-                # as it does for a fifo
-                [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && continue
-
-                local merged_deptype
-                debasher::_merge_deptypes "${depdict[$proc]}" "${deptype}" merged_deptype || return 1
-                depdict["${proc}"]=${merged_deptype}
-            done
-        done
-
-        # Serialize depdict into the final "dep,dep,..." format
-        local processdeps=""
-        local proc
-        for proc in "${!depdict[@]}"; do
-            local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
-            if [ -z "$processdeps" ]; then
-                processdeps=${dep}
+                debasher::_add_fifo_dep "${define_opt_deps_funcname}" "${processname}" "${opt}" "${augm_fifoname}" depdict || return 1
             else
-                processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
+                debasher::_add_file_deps "${define_opt_deps_funcname}" "${processname}" "${num_tasks}" "${task_idx}" "${opt}" "${value}" depdict || return 1
             fi
         done
 
-        echo "${processdeps}"
+        debasher::_serialize_depdict depdict
     }
 
     debasher::_get_procdeps_for_task_array()
@@ -314,20 +352,7 @@ debasher::_get_procdeps_for_process()
             done
         done
 
-        # Instantiate processdeps variable
-        local processdeps=""
-        local proc
-        for proc in "${!depdict[@]}"; do
-            local dep="${depdict[$proc]}${DEBASHER_PROCESS_PLUS_DEPTYPE_SEP}${proc}"
-            if [ -z "$processdeps" ]; then
-                processdeps=${dep}
-            else
-                processdeps="${processdeps}${DEBASHER_PROCESSDEPS_SEP_COMMA}${dep}"
-            fi
-        done
-
-        # Return dependencies
-        echo "${processdeps}"
+        debasher::_serialize_depdict depdict
     }
 
     local cmdline=$1
