@@ -284,25 +284,42 @@ setup() {
     [[ " ${deps[*]} " == *" afterok:single "* ]]
 }
 
-@test "debasher::_get_procdeps_for_process fails when the tasks of an array ask for contradictory types on one producer" {
+@test "debasher::_get_procdeps_for_process fails when two options of a task, or of two tasks of an array, ask for contradictory types on one producer" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
     DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/s"]="single${sep}0"
-    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
-    debasher::_get_opts_for_process_and_task() {
-        echo "-s${DEBASHER_ARG_SEP}/abs/s${DEBASHER_ARG_SEP}-i${DEBASHER_ARG_SEP}$3"
-    }
-    # Task 0 waits for single to succeed, task 1 for it to fail
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/t"]="single${sep}0"
+    # The method is called with the option and the producer alone, so it
+    # tells them apart by the option: -ok waits for single to succeed,
+    # -notok for it to fail
     cons_define_opt_deps() {
-        if [ "${DEBASHER_DESERIALIZED_ARGS[3]}" = "0" ]; then
+        if [ "$1" = "-ok" ]; then
             echo "afterok"
         else
             echo "afternotok"
         fi
     }
 
+    # One task reads both
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-ok${DEBASHER_ARG_SEP}/abs/s${DEBASHER_ARG_SEP}-notok${DEBASHER_ARG_SEP}/abs/t"
+    }
+    run debasher::_get_procdeps_for_process "" "cons"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"cannot both be satisfied"* ]]
+
+    # Task 0 of an array reads one and task 1 the other
+    DEBASHER_PROCESS_OPT_LIST_LEN["cons"]=2
+    debasher::_get_opts_for_process_and_task() {
+        if [ "$3" -eq 0 ]; then
+            echo "-ok${DEBASHER_ARG_SEP}/abs/s"
+        else
+            echo "-notok${DEBASHER_ARG_SEP}/abs/t"
+        fi
+    }
     run debasher::_get_procdeps_for_process "" "cons"
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"cannot both be satisfied"* ]]

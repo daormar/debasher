@@ -1806,11 +1806,15 @@ the value decides its type:
   the other to end (see "Running both ends together").
 
 The option dependency method of the process, `_define_opt_deps`, can change the
-type of any of them. The engine calls it with the name of the option and the
-name of the producer, and takes the type it prints instead of the one above;
-printing nothing keeps the inferred type, and printing `none` removes the
-dependency. A reader of a FIFO that should not start before its owner has
-started, for example, gets `after` this way.
+type of any of them. The engine calls it, in a subshell, once for each task of
+the process, each input option of the task that makes a dependency and each
+producer of its value, with the name of the option and the name of the producer
+only: it is not given the task index, so it cannot tell the tasks of an array
+apart, and its answer can depend only on the option and the producer. The engine
+takes the type it prints instead of the one above; printing nothing keeps the
+inferred type, and printing `none` removes the dependency. A reader of a FIFO
+that should not start before its owner has started, for example, gets `after`
+this way.
 
 Between processes linked by FIFOs, the two ends of a FIFO or two processes of
 a chain of FIFOs, only `none` and `after` are allowed, since a dependency that
@@ -2158,9 +2162,23 @@ resident program always runs on the built-in scheduler. A step that a task runs
 can use a scheduler other than that of the run, as "Sequential processes"
 describes.
 
-The rest of the engine does not depend on the scheduler, and asks it for a few
-things only: to write the process script of a process, to launch it, to give the
-ids of what it launched, to tell whether an id still runs, and to stop an id.
+The choice splits the run in two paths. Under the built-in scheduler,
+`debasher_exec` hands the rest of the run to the scheduler
+(`debasher_builtin_sched::execute_program_processes`), which resets the
+processes marked to rerun and prepares each process (see "Preparing a run"),
+then launches the tasks in its loop of rounds and waits for them, unless in
+oneshot mode (see "The built-in scheduler"). Under the Slurm scheduler,
+`debasher_exec` does those steps itself, waiting only with `--wait`, and asks
+the scheduler to clean what an earlier run left in the exec directory of a
+process, to write its process script, to map its dependency types and to submit
+it (see "The Slurm scheduler"). Apart from these steps, both schedulers answer
+the same questions, for the rest of the engine and for the tools that read a
+run: the ids of what they launched, whether an id still runs, how to stop an id,
+which logs a process has, and whether a process that has not finished can still
+be launched (`UNFINISHED_BUT_RUNNABLE`, which only the built-in scheduler gives,
+see "Process status"). Under the built-in scheduler, a validation also asks it
+whether the resources of each process fit its budget.
+
 The ids of a process are kept in its exec directory, in a `.id` file, and a
 process is `IN-PROGRESS` exactly when an id of it still runs, other than the id
 of a task that has its completion marker (see "Process status"). For the

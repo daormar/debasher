@@ -1349,20 +1349,22 @@ missing.
 
 * ``define_opt_deps``: changes the type of the dependency that DeBasher
   infers from one option on the process that produces its value. It
-  receives the name of the option and the name of that process, and
-  prints the type to use instead, ``none`` to have no dependency, or
-  nothing to keep the inferred one. By default, an option connected to
-  a file gives ``afterok`` (``aftercorr`` when both processes are arrays
-  and the option reads the task with the same index), and an option
-  connected to a FIFO gives no dependency, so that both ends of a FIFO
-  start together. Between processes linked by FIFOs (the two ends of a
-  FIFO, or two processes of a chain of FIFOs, which run together too)
-  only ``none`` and ``after`` are allowed, since one that waited for the
-  other to end would wait for ever, and ``debasher_exec`` refuses any
-  other type there when it prepares the run. A process that reads
-  a file and a FIFO of the same producer gets ``afterok`` from the file,
-  and so is refused unless its ``define_opt_deps`` gives ``after`` (or
-  ``none``) for that file:
+  receives the name of the option and the name of that process, and only
+  those: it is called for every task of the process without its task
+  index, so its answer can depend on the option and the producer but not
+  on the task. It prints the type to use instead, ``none`` to have no
+  dependency, or nothing to keep the inferred one. By default, an option
+  connected to a file gives ``afterok`` (``aftercorr`` when both
+  processes are arrays and the option reads the task with the same
+  index), and an option connected to a FIFO gives no dependency, so that
+  both ends of a FIFO start together. Between processes linked by FIFOs
+  (the two ends of a FIFO, or two processes of a chain of FIFOs, which
+  run together too) only ``none`` and ``after`` are allowed, since one
+  that waited for the other to end would wait for ever, and
+  ``debasher_exec`` refuses any other type there when it prepares the
+  run. A process that reads a file and a FIFO of the same producer gets
+  ``afterok`` from the file, and so is refused unless its
+  ``define_opt_deps`` gives ``after`` (or ``none``) for that file:
 
   .. code-block:: bash
 
