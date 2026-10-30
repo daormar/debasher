@@ -149,6 +149,31 @@ describe("buildCodePrompt", () => {
     expect(buildCodePrompt(p, reads, "", "")).toContain("This process runs once `writes` has finished.");
   });
 
+  it("says when a process with processdeps starts with respect to the one whose file it reads", () => {
+    const reads = (processdeps: string) => process("reads", [createOption("inf", "-inf")], { additionalSpecs: { processdeps } } as Partial<ProgramProcess>);
+    const writes = process("writes", [createOption("outf", "-outf", { direction: "output", dataType: "file" })]);
+    const prompt = (processdeps: string) => {
+      const p = { ...program, processes: [writes, reads(processdeps)], edges: [
+        { id: "e", sourceProcessId: "writes", sourceOptionId: "outf", targetProcessId: "reads", targetOptionId: "inf" },
+      ] } as Program;
+      return buildCodePrompt(p, p.processes[1], "", "");
+    };
+    const finished = "This process runs once `writes` has finished.";
+    const notWaiting = "The `processdeps` of this process do not wait for `writes` to finish, so the file may not be complete when it starts.";
+
+    expect(prompt("after:other,afterok:writes")).toContain(finished);
+    // afterany and aftercorr together ask for every task successful
+    expect(prompt("afterany:writes,aftercorr:writes")).toContain(finished);
+    expect(prompt("afterany:writes")).toContain("This process runs once `writes` has ended, whether it finished or failed, so the file may be incomplete or missing.");
+    expect(prompt("aftercorr:writes")).toContain("Each task of this process runs once the task of `writes` with the same index has finished");
+    expect(prompt("afternotok:writes")).toContain("This process runs once `writes` has failed, so the file may be incomplete or missing.");
+    // In a list joined by "," every element holds
+    expect(prompt("afterany:writes,afternotok:writes")).toContain("has failed");
+    expect(prompt("afterok:writes?afterok:other")).toContain("The `processdeps` of this process may let it start before `writes` finishes");
+    expect(prompt("after:writes")).toContain(notWaiting);
+    expect(prompt("none")).toContain(notWaiting);
+  });
+
   it("says that someone outside the program is at the other end of an unconnected FIFO", () => {
     const talk = process("talk", [
       createOption("inf", "-inf", { channel: "fifo" }),

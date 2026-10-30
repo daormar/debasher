@@ -244,6 +244,44 @@ function processOutdirNotes(process: ProgramProcess, option: ProgramOption): str
   return [`The absolute path of the output directory of the process: ${emptied}.`];
 }
 
+// The dependency types that make a process wait for another one to end.
+const END_DEPTYPES = ["afterok", "afterany", "afternotok", "aftercorr"];
+
+// When a process starts with respect to the process whose file an input
+// reads. With no processdeps, the inferred dependency waits for that
+// process to finish; processdeps replaces every inferred dependency, and
+// the elements on that process of a type that waits for its end say how
+// complete the file is. In a list joined by "," every element holds, so
+// they are taken together, as the engine merges them; in a list joined by
+// "?" another element may be enough, so none of them is sure to hold.
+function fileWaitNote(process: ProgramProcess, producer: string): string {
+  const processdeps = process.additionalSpecs?.processdeps?.trim();
+  if (!processdeps) {
+    return `This process runs once \`${producer}\` has finished.`;
+  }
+  const alternatives = processdeps.includes("?");
+  const types = new Set(processdeps.split(alternatives ? "?" : ",")
+    .map(dep => dep.split(":"))
+    .filter(([type, proc]) => proc === producer && END_DEPTYPES.includes(type))
+    .map(([type]) => type));
+  if (types.size === 0) {
+    return `The \`processdeps\` of this process do not wait for \`${producer}\` to finish, so the file may not be complete when it starts.`;
+  }
+  if (alternatives) {
+    return `The \`processdeps\` of this process may let it start before \`${producer}\` finishes (one dependency joined by "?" is enough), so the file may not be complete when it starts.`;
+  }
+  if (types.has("afternotok")) {
+    return `This process runs once \`${producer}\` has failed, so the file may be incomplete or missing.`;
+  }
+  if (types.has("afterok") || (types.has("afterany") && types.has("aftercorr"))) {
+    return `This process runs once \`${producer}\` has finished.`;
+  }
+  if (types.has("aftercorr")) {
+    return `Each task of this process runs once the task of \`${producer}\` with the same index has finished (a task with no such counterpart waits for every task of \`${producer}\`); other tasks of \`${producer}\` may still be running.`;
+  }
+  return `This process runs once \`${producer}\` has ended, whether it finished or failed, so the file may be incomplete or missing.`;
+}
+
 // What the option is connected to: the outputs that an input reads, the
 // inputs that read an output, or someone outside the program at the
 // other end of an unconnected FIFO.
@@ -266,7 +304,7 @@ function connectionNotes(program: Program, process: ProgramProcess, option: Prog
         ? "That output is a value descriptor: `read_opt_value_from_func_args` gives the value, not the path."
         : "That output is a value descriptor: the option gives the path of a file that holds the value.");
     } else if (end.option.channel !== "shared_dir") {
-      notes.push(`This process runs once \`${end.processName}\` has finished.`);
+      notes.push(fileWaitNote(process, end.processName));
     }
   }
 
