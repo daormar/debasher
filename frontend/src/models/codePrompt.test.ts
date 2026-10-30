@@ -149,6 +149,32 @@ describe("buildCodePrompt", () => {
     expect(buildCodePrompt(p, reads, "", "")).toContain("This process runs once `writes` has finished.");
   });
 
+  it("says that each task of an array waits only for the task of the same index of the array whose file it reads", () => {
+    const array = { optionsHandler: { mode: "array" } } as Partial<ProgramProcess>;
+    const generator = { optionsHandler: { mode: "generator" } } as Partial<ProgramProcess>;
+    const prompt = (writesFields: Partial<ProgramProcess>, readsFields: Partial<ProgramProcess>) => {
+      const writes = process("writes", [createOption("outf", "-outf", { direction: "output", dataType: "file" })], writesFields);
+      const reads = process("reads", [createOption("inf", "-inf")], readsFields);
+      const p = { ...program, processes: [writes, reads], edges: [
+        { id: "e", sourceProcessId: "writes", sourceOptionId: "outf", targetProcessId: "reads", targetOptionId: "inf" },
+      ] } as Program;
+      return buildCodePrompt(p, reads, "", "");
+    };
+    const counterpart = "Each task of this process runs once the task of `writes` with the same index has finished, while other tasks of `writes` may still be running";
+
+    expect(prompt(array, array)).toContain(counterpart);
+    expect(prompt(generator, array)).toContain(counterpart);
+    // A standard process on either side gives afterok
+    expect(prompt({}, array)).toContain("This process runs once `writes` has finished.");
+    expect(prompt(array, {})).toContain("This process runs once `writes` has finished.");
+    expect(prompt(array, generator)).toContain(counterpart);
+    // A manual options handler may pair the tasks by index or not
+    const manual = { optionsHandler: { mode: "manual" } } as Partial<ProgramProcess>;
+    expect(prompt(array, manual)).toContain("This process runs once `writes` has finished, unless its options handler connects each task to the task of `writes` with the same index");
+    // The generated code of an array reads the first task of a manual one
+    expect(prompt(manual, array)).toContain("This process runs once `writes` has finished.");
+  });
+
   it("says when a process with processdeps starts with respect to the one whose file it reads", () => {
     const reads = (processdeps: string) => process("reads", [createOption("inf", "-inf")], { additionalSpecs: { processdeps } } as Partial<ProgramProcess>);
     const writes = process("writes", [createOption("outf", "-outf", { direction: "output", dataType: "file" })]);
@@ -165,7 +191,7 @@ describe("buildCodePrompt", () => {
     // afterany and aftercorr together ask for every task successful
     expect(prompt("afterany:writes,aftercorr:writes")).toContain(finished);
     expect(prompt("afterany:writes")).toContain("This process runs once `writes` has ended, whether it finished or failed, so the file may be incomplete or missing.");
-    expect(prompt("aftercorr:writes")).toContain("Each task of this process runs once the task of `writes` with the same index has finished");
+    expect(prompt("aftercorr:writes")).toContain("Each task of this process runs once the task of `writes` with the same index has finished, while other tasks of `writes` may still be running (a task with no such counterpart waits for every task of `writes`).");
     expect(prompt("afternotok:writes")).toContain("This process runs once `writes` has failed, so the file may be incomplete or missing.");
     // In a list joined by "," every element holds
     expect(prompt("afterany:writes,afternotok:writes")).toContain("has failed");

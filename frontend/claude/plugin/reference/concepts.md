@@ -314,9 +314,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   refused. In a resident program the connection is what makes an input a
   business input.
 - **A file connection** makes the reader wait until the writer finished
-  (`afterok`, or task by task between two processes of several tasks). Use it
-  for batch steps, results that have to stay, steps that may be skipped or run
-  again, and Slurm.
+  (`afterok`, or task by task, each task after the task of the same index,
+  between two processes in `array` or `generator` mode that both have several
+  tasks). Use it for batch steps, results that have to stay, steps that may be
+  skipped or run again, and Slurm.
 - **A FIFO connection** adds no wait: both processes run at once and the reader
   streams until the writer closes. Use it to stream, to run steps
   concurrently, or for a cycle, which needs at least one FIFO edge. A FIFO has

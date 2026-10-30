@@ -247,16 +247,33 @@ function processOutdirNotes(process: ProgramProcess, option: ProgramOption): str
 // The dependency types that make a process wait for another one to end.
 const END_DEPTYPES = ["afterok", "afterany", "afternotok", "aftercorr"];
 
+// The modes in which the generated code connects the task of an index to
+// the task of the same index of the other process (see _TASK_INDEXED_MODES
+// in api/script_generation.py), so that the engine infers aftercorr.
+const TASK_INDEXED_MODES = ["array", "generator"];
+
 // When a process starts with respect to the process whose file an input
 // reads. With no processdeps, the inferred dependency waits for that
-// process to finish; processdeps replaces every inferred dependency, and
-// the elements on that process of a type that waits for its end say how
+// process to finish, or, between two processes of task-indexed modes, for
+// the task of the same index (aftercorr), which a manual options handler
+// may ask for too; processdeps replaces every inferred dependency, and the
+// elements on that process of a type that waits for its end say how
 // complete the file is. In a list joined by "," every element holds, so
 // they are taken together, as the engine merges them; in a list joined by
 // "?" another element may be enough, so none of them is sure to hold.
-function fileWaitNote(process: ProgramProcess, producer: string): string {
+function fileWaitNote(process: ProgramProcess, producerProcess: ProgramProcess): string {
+  const producer = producerProcess.name;
+  const counterpart = `Each task of this process runs once the task of \`${producer}\` with the same index has finished, while other tasks of \`${producer}\` may still be running`;
   const processdeps = process.additionalSpecs?.processdeps?.trim();
   if (!processdeps) {
+    const readerMode = process.optionsHandler.mode;
+    const producerMode = producerProcess.optionsHandler.mode;
+    if (TASK_INDEXED_MODES.includes(readerMode) && TASK_INDEXED_MODES.includes(producerMode)) {
+      return `${counterpart}.`;
+    }
+    if (readerMode === "manual" && producerMode !== "standard") {
+      return `This process runs once \`${producer}\` has finished, unless its options handler connects each task to the task of \`${producer}\` with the same index (\`define_opt_from_proc_task_out\`), in which case each task waits only for that task of \`${producer}\`.`;
+    }
     return `This process runs once \`${producer}\` has finished.`;
   }
   const alternatives = processdeps.includes("?");
@@ -277,7 +294,7 @@ function fileWaitNote(process: ProgramProcess, producer: string): string {
     return `This process runs once \`${producer}\` has finished.`;
   }
   if (types.has("aftercorr")) {
-    return `Each task of this process runs once the task of \`${producer}\` with the same index has finished (a task with no such counterpart waits for every task of \`${producer}\`); other tasks of \`${producer}\` may still be running.`;
+    return `${counterpart} (a task with no such counterpart waits for every task of \`${producer}\`).`;
   }
   return `This process runs once \`${producer}\` has ended, whether it finished or failed, so the file may be incomplete or missing.`;
 }
@@ -304,7 +321,7 @@ function connectionNotes(program: Program, process: ProgramProcess, option: Prog
         ? "That output is a value descriptor: `read_opt_value_from_func_args` gives the value, not the path."
         : "That output is a value descriptor: the option gives the path of a file that holds the value.");
     } else if (end.option.channel !== "shared_dir") {
-      notes.push(fileWaitNote(process, end.processName));
+      notes.push(fileWaitNote(process, end.process));
     }
   }
 
@@ -335,6 +352,7 @@ export function edgeEnd(program: Program, processId: string, optionId: string, n
   const optionDescription = oneLine(option.description);
   const processDescription = oneLine(process.description);
   return {
+    process,
     processName: process.name,
     option,
     text: `the option \`${option.label}\` of the ${noun} \`${process.name}\``
