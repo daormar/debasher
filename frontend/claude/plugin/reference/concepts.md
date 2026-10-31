@@ -210,9 +210,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   empty element, at two dependencies on the same process that no run of it
   satisfies together in a list joined by `,` (`afternotok` with `afterok` or
   with `aftercorr`), and at any type but `after` between processes linked by
-  FIFOs, in a list joined by `,` or by `?` alike), and aliases (`alias`,
-  `externalAlias`, `aliasOptMap`), which take the code of the process from
-  another one. The
+  FIFOs, in a list joined by `,` or by `?` alike; under Slurm, it also
+  stops at a list joined by `?` in a process with more than one attempt,
+  that is, with several comma-separated values in `mem` or `time`), and
+  aliases (`alias`, `externalAlias`, `aliasOptMap`), which take the code of
+  the process from another one. The
   target of `alias` needs a process function when the alias is added: a
   Bash process (of the program or of a module of the preamble) always has
   one, but a process in another language, or another alias, has one only

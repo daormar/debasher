@@ -1470,7 +1470,10 @@ pairs, second argument):
 given as a comma-separated list (e.g. ``time=00:01:00,00:02:00``, as
 used by the ``array`` example) to give increasingly generous budgets to
 successive retry attempts of the same process, instead of a single
-fixed one.
+fixed one. A process whose ``processdeps`` is a list joined by ``?``
+cannot have more than one attempt: under the SLURM scheduler, the run is
+refused when it is prepared unless ``mem`` and ``time`` each have a
+single value.
 
 Additional specifications (``;``-separated ``attribute=value`` pairs,
 third argument):
@@ -1497,7 +1500,10 @@ third argument):
   together (``afternotok`` with ``afterok`` or ``aftercorr``). Between
   processes linked by FIFOs only ``after`` (or ``none``) is allowed, as
   for an inferred dependency: any other type is refused when the run is
-  prepared, in a list joined by ``?`` too. Both
+  prepared, in a list joined by ``?`` too. Under the SLURM scheduler, a
+  list joined by ``?`` is also refused when the run is prepared if the
+  process has more than one attempt (``mem`` or ``time`` given as a
+  comma-separated list, see the HINT above). Both
   schedulers run ``aftercorr`` task by task: a task starts as soon as
   its own counterpart has finished, while other tasks of the other
   array still run or after some of them have failed (see the

@@ -305,6 +305,39 @@ ensure_scheduler_supports_fifos()
 }
 
 ########
+# On Slurm, attempt n of a process waits for the dependencies of the
+# process and for attempt n-1 to fail, joined by ",". A list of
+# dependencies joined by "?" cannot be joined with them, since Slurm reads
+# a list joined by one separator only; and waiting for attempt n-1 alone
+# is not enough, since Slurm takes an attempt cancelled for a dependency
+# that can no longer hold as failed, and would run the next one although
+# the dependencies never held. A process with such a list and more than
+# one attempt is therefore refused on Slurm, before anything is launched.
+ensure_slurm_attempts_fit_processdeps()
+{
+    [ "$(debasher::_get_scheduler)" = "${DEBASHER_SLURM_SCHEDULER}" ] || return 0
+
+    local processname
+    for processname in "${!DEBASHER_FINAL_PROCESS_SPEC[@]}"; do
+        local process_spec=${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}
+        local processdeps=$(debasher::_extract_processdeps_from_process_spec "${process_spec}")
+        [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] || continue
+
+        local -a deps_array
+        local separator
+        debasher::_split_processdeps "${processdeps}" deps_array separator
+        [ "${separator}" = "${DEBASHER_PROCESSDEPS_SEP_INTERR}" ] || continue
+
+        local mem=$(debasher::_extract_mem_from_process_spec "${process_spec}")
+        local time=$(debasher::_extract_time_from_process_spec "${process_spec}")
+        if [ "$(debasher::_get_num_attempts "${time}" "${mem}")" -gt 1 ]; then
+            echo "Error: process ${processname} has a list of dependencies joined by \"${DEBASHER_PROCESSDEPS_SEP_INTERR}\" (${processdeps}) and more than one attempt (mem=${mem}, time=${time}), which the ${DEBASHER_SLURM_SCHEDULER} scheduler cannot run one after another; give mem and time a single value" >&2
+            return 1
+        fi
+    done
+}
+
+########
 # A step of a sequential process with sched=SLURM runs through srun: a
 # run whose srun is missing is refused before any task runs, instead of
 # failing at the first such step.
@@ -1451,6 +1484,8 @@ ensure_srun_for_slurm_seq_processes || exit 1
 
 procspec_file="${prg_file_pref}.${DEBASHER_PROCSPEC_FEXT}"
 gen_final_procspec "${command_line}" > "${procspec_file}" || exit 1
+
+ensure_slurm_attempts_fit_processdeps || exit 1
 
 topologically_sort_processes || exit 1
 

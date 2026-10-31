@@ -2782,6 +2782,123 @@ def test_under_slurm_a_process_whose_dependency_on_a_process_not_launched_can_no
     assert not (execdir / "z" / "z.id").exists()
 
 
+# p has two attempts, and fails the first -fail of them, counting them in a
+# file of the directory -t; q, with afterok on p, leaves a trace there
+ATTEMPTS_MODULE = """\
+p_explain_opts()
+{
+    explain_opt "-t" "<dir>" "Directory of the traces"
+    explain_opt "-fail" "<int>" "Number of attempts that fail"
+}
+
+p_identify_cmdline_opts()
+{
+    opt_is_cmdline "-t"
+    opt_is_cmdline "-fail"
+}
+
+p_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${cmdline}" "-t" optlist || return 1
+    define_cmdline_opt "${cmdline}" "-fail" optlist || return 1
+    save_opt_list optlist
+}
+
+p()
+{
+    local t=$(read_opt_value_from_func_args "-t" "$@")
+    local fail=$(read_opt_value_from_func_args "-fail" "$@")
+    local n=$(( $(cat "${t}/p_attempts" 2> /dev/null || echo 0) + 1 ))
+    echo "${n}" > "${t}/p_attempts"
+    [ "${n}" -gt "${fail}" ]
+}
+
+q_explain_opts()
+{
+    explain_opt "-t" "<dir>" "Directory of the traces"
+}
+
+q_identify_cmdline_opts()
+{
+    opt_is_cmdline "-t"
+}
+
+q_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${cmdline}" "-t" optlist || return 1
+    save_opt_list optlist
+}
+
+q()
+{
+    local t=$(read_opt_value_from_func_args "-t" "$@")
+    touch "${t}/q_ran"
+}
+
+debasher_attempts_program()
+{
+    add_debasher_process "p" "cpus=1 mem=32 time=00:01:00,00:02:00"
+    add_debasher_process "q" "cpus=1 mem=32 time=00:01:00" "processdeps=afterok:p"
+}
+"""
+
+
+def _run_attempts(tmp_path, fail):
+    pfile = tmp_path / "debasher_attempts.sh"
+    pfile.write_text(ATTEMPTS_MODULE)
+    outdir = tmp_path / "out"
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    result = run_exec_with_sched(
+        "SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(traces), "-fail", str(fail), "--wait"
+    )
+    assert result.returncode == 0, result.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    return traces, status
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_under_slurm_a_task_whose_first_attempt_fails_runs_again_and_its_dependent_runs(tmp_path):
+    traces, status = _run_attempts(tmp_path, 1)
+    assert (traces / "p_attempts").read_text() == "2\n"
+    assert "PROCESS: p ; STATUS: FINISHED" in status
+    assert "PROCESS: q ; STATUS: FINISHED" in status
+    assert (traces / "q_ran").exists()
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_under_slurm_a_task_whose_every_attempt_fails_does_not_finish_nor_its_dependent(tmp_path):
+    traces, status = _run_attempts(tmp_path, 2)
+    assert (traces / "p_attempts").read_text() == "2\n"
+    assert "PROCESS: p ; STATUS: FINISHED" not in status
+    assert "PROCESS: q ; STATUS: FINISHED" not in status
+    assert not (traces / "q_ran").exists()
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_under_slurm_a_list_of_dependencies_joined_by_a_question_mark_with_more_than_one_attempt_is_refused(tmp_path):
+    pfile = tmp_path / "debasher_attempts.sh"
+    pfile.write_text(
+        ATTEMPTS_MODULE.replace(
+            '"cpus=1 mem=32 time=00:01:00" "processdeps=afterok:p"',
+            '"cpus=1 mem=32 time=00:01:00,00:02:00" "processdeps=afterany:p?afternotok:p"',
+        )
+    )
+    outdir = tmp_path / "out"
+    args = ["--pfile", str(pfile), "--outdir", str(outdir), "-t", str(tmp_path), "-fail", "0", "--validate"]
+    result = run_exec_with_sched("SLURM", *args)
+    assert result.returncode == 1
+    assert 'process q has a list of dependencies joined by "?"' in result.stderr
+
+    # The built-in scheduler takes the first value of mem and time only
+    result = run_exec_with_sched("BUILTIN", *args)
+    assert result.returncode == 0, result.stderr
+
+
 RESIDENT_EXAMPLE = REPO_ROOT / "data" / "webui_programs" / "webui_running_sum" / "webui_running_sum.sh"
 
 

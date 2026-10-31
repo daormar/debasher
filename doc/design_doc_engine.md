@@ -916,8 +916,10 @@ added, since an error there leaves the program without a process. The rest of
 the specification is checked when the final process specification is built
 (stage 6 of "Architecture"): a process without `cpus`, `mem` or `time`, a
 setting of a resident node that is not a positive number, a `batch_sched` other
-than `BUILTIN` or `SLURM`, and a dependency on a process that is not part of the
-program stop the preparation of the run. The final process specification is the
+than `BUILTIN` or `SLURM`, a dependency on a process that is not part of the
+program, and, under the Slurm scheduler, a process with more than one attempt
+whose explicit dependencies are joined by `?` (see "The Slurm scheduler") stop
+the preparation of the run. The final process specification is the
 specification of each process with its dependencies added as a `processdeps`
 attribute, the inferred ones, or `none` when there are none, unless explicit
 dependencies were given. `program.procspec` holds it, one line per process, in
@@ -1901,12 +1903,14 @@ and `afternotok` for instance, stop the preparation as they do when inferred
 (see "Dependency types and how they merge"); the list is kept as written, so a
 repeated dependency is accepted and nothing is merged. In a list joined by `?`,
 dependencies on the same process are not compared, since one of them is enough.
-Like an inferred one, an explicit dependency between processes linked by FIFOs
-can only be `none` or `after` (see "Running both ends together"). Explicit
-dependencies serve what the options cannot say: a process that reads what
-another leaves in a shared directory, or an order between processes that
-exchange nothing. They also take the process out of the inference altogether, so
-a process that gives them has to give every dependency it needs.
+Under the Slurm scheduler, a list joined by `?` on a process with more than one
+attempt is refused (see "The Slurm scheduler"). Like an inferred one, an
+explicit dependency between processes linked by FIFOs can only be `none` or
+`after` (see "Running both ends together"). Explicit dependencies serve what the
+options cannot say: a process that reads what another leaves in a shared
+directory, or an order between processes that exchange nothing. They also take
+the process out of the inference altogether, so a process that gives them has to
+give every dependency it needs.
 
 ## Topological order and cycles
 
@@ -2394,7 +2398,15 @@ the attempts before it failed, task by task in a job array, so that a task that
 fails, for example for exceeding its memory or its time, is run again with the
 next values. With more than one attempt, two verification jobs follow the
 attempts and record whether one of them succeeded, and the processes that depend
-on this one wait for the last of those jobs.
+on this one wait for the last of those jobs. An attempt after the first waits
+for the dependencies of the process and for the attempt before it to fail, all
+joined by `,`. A list of dependencies joined by `?` cannot be joined with them,
+since Slurm reads a list joined by one separator only, and waiting for the
+attempt before alone would not do, since Slurm counts as failed an attempt that
+it cancels because a dependency can no longer hold, and would run the next
+attempt even though the dependencies of the process never held. A process with
+such a list and more than one attempt is therefore refused when the run is
+prepared.
 
 A process script that cannot be written stops the submission with an error, as
 a job that `sbatch` refuses does; the processes submitted before it stay
@@ -3307,7 +3319,10 @@ leaves, by design, to the program or to whoever runs it.
    may make it wait longer, never less. A dependency on a process that finished
    in an earlier run and does not run again holds unless its type is
    `afternotok` (see "The scheduler abstraction"); a process that the Slurm
-   scheduler does not submit is described in "The Slurm scheduler".
+   scheduler does not submit is described in "The Slurm scheduler". Under the
+   Slurm scheduler, a process with more than one attempt and dependencies
+   joined by `?` is refused when the run is prepared (see "The Slurm
+   scheduler").
 8. Every FIFO has one owner and at most one reader in the program, and it is
    created again, empty, before its owner runs (see "Declaring and owning a
    FIFO").

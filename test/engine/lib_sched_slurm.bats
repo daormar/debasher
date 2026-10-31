@@ -187,3 +187,31 @@ setup() {
         done
     done
 }
+
+@test "the trap of a Slurm script runs the sigterm handler method of the process, or a default one that fails the task" {
+    local script="${BATS_TEST_TMPDIR}/script.sh"
+
+    # Without the method, the default handler says so and fails the task
+    {
+        debasher::_print_script_trap_slurm_sched proc
+        echo 'kill -TERM $$'
+        echo 'echo "not reached"; exit 0'
+    } > "${script}"
+    run "${BASH}" "${script}"
+    [ "${status}" -eq 1 ]
+    [ "${output}" = "SIGTERM received: process execution will be aborted" ]
+
+    # With it, the trap, which comes before the context, names the method
+    # that the context defines, and no default handler is written
+    proc_slurm_sigterm_handler() { echo "handled by the method"; exit 3; }
+    {
+        debasher::_print_script_trap_slurm_sched proc
+        declare -f proc_slurm_sigterm_handler
+        echo 'kill -TERM $$'
+        echo 'echo "not reached"; exit 0'
+    } > "${script}"
+    [ "$(grep -c '^proc_slurm_sigterm_handler ()' "${script}")" -eq 1 ]
+    run "${BASH}" "${script}"
+    [ "${status}" -eq 3 ]
+    [ "${output}" = "handled by the method" ]
+}
