@@ -1066,7 +1066,7 @@ prepare_files_and_dirs_for_process()
     echo "Preparing files and directories for process ${processname}" >&2
 
     # Obtain process status
-    local status=$(debasher::_get_process_status ${dirname} "${processname}")
+    local status=$(debasher::_get_process_status "${dirname}" "${processname}")
 
     # Decide whether the process should be executed (NOTE: for a
     # process that should not be executed, files and directories are
@@ -1169,7 +1169,7 @@ launch_process()
     # Execute process
 
     # Obtain process status
-    local status=$(debasher::_get_process_status ${dirname} "${processname}")
+    local status=$(debasher::_get_process_status "${dirname}" "${processname}")
     echo "PROCESS: ${processname} ; STATUS: ${status} ; PROCESS_SPEC: ${process_spec}" >&2
 
     # Decide whether the process should be executed
@@ -1253,7 +1253,7 @@ there_are_in_progress_processes()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # Obtain process status
-        local status=$(debasher::_get_process_status ${dirname} "${processname}")
+        local status=$(debasher::_get_process_status "${dirname}" "${processname}")
 
         if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
             return 0

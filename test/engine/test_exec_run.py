@@ -827,6 +827,67 @@ def test_a_program_runs_and_is_inspected_from_a_directory_with_spaces(tmp_path):
     assert stdout.read_text() == "again\n"
 
 
+# An array of four tasks, each writing its index into its task
+# subdirectory
+ARRAY_OF_FOUR_MODULE = """\
+arr_explain_opts()
+{
+    explain_opt "-idx" "<int>" "Index of the task"
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+arr_define_opts()
+{
+    local cmdline=$1
+    local i
+    for i in 0 1 2 3; do
+        local optlist=""
+        define_opt "-idx" "${i}" optlist || return 1
+        define_opt_from_process_outdir "-outd" optlist --subdir "${i}" || return 1
+        save_opt_list optlist
+    done
+}
+
+arr()
+{
+    local idx=$(read_opt_value_from_func_args "-idx" "$@")
+    local outd=$(read_opt_value_from_func_args "-outd" "$@")
+    echo "${idx}" > "${outd}/out"
+}
+
+debasher_array_of_four_program()
+{
+    add_debasher_process "arr" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_an_array_runs_into_an_output_directory_with_a_blank_in_its_path(tmp_path, sched):
+    pfile = tmp_path / "debasher_array_of_four.sh"
+    pfile.write_text(ARRAY_OF_FOUR_MODULE)
+    outdir = tmp_path / "out sp"
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), *extra)
+    assert result.returncode == 0, result.stderr
+    assert "binary operator expected" not in result.stderr
+
+    for i in range(4):
+        assert (outdir / "arr" / str(i) / "out").read_text() == f"{i}\n"
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert status.returncode == 0, status.stdout + status.stderr
+    assert "STATUS: FINISHED" in status.stdout
+
+
 def test_debasher_exec_writes_its_process_id_into_the_lock_file_and_marks_a_validation(tmp_path):
     outdir = tmp_path / "out"
     args = [str(DEBASHER_EXEC), "--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "--sched", "BUILTIN"]

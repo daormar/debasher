@@ -284,10 +284,10 @@ debasher::_get_slurm_output()
 
     if [ ${array_size} -eq 1 ]; then
         local slurm_log_filename=$(debasher::_get_process_log_filename "${dirname}" ${processname})
-        echo ${slurm_log_filename}${attempt_suffix}
+        echo "${slurm_log_filename}${attempt_suffix}"
     else
         local slurm_task_template_log_filename=$(debasher::_get_task_template_log_filename_slurm "${dirname}" ${processname})
-        echo ${slurm_task_template_log_filename}${attempt_suffix}
+        echo "${slurm_task_template_log_filename}${attempt_suffix}"
     fi
 }
 
@@ -539,12 +539,12 @@ debasher::_slurm_launch_attempt()
 
     # Submit job (initially it is put on hold)
     local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${output} --kill-on-invalid-dep=yes --signal=B:SIGTERM@10 -H "${file}")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${output}" --kill-on-invalid-dep=yes --signal=B:SIGTERM@10 -H "${file}")
     local exit_code=$?
 
     # Check for errors
     if [ ${exit_code} -ne 0 ]; then
-        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H ${file}"
+        local command="$SBATCH --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} -H \"${file}\""
         echo "Error while launching attempt job for process ${processname} (${command})" >&2
         return 1
     fi
@@ -606,7 +606,7 @@ debasher::_slurm_launch_preverif_job()
     # Submit preliminary verification job (the job will fail if all
     # attempts fail, initially it is put on hold)
     local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${preverif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${preverif_logf}" --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
     # Check for errors
@@ -670,7 +670,7 @@ debasher::_slurm_launch_verif_job()
     # Submit verification job (the job will succeed if preliminary
     # verification job fails, initially it is put on hold)
     local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output ${verif_logf} --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${verif_logf}" --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
     # Check for errors

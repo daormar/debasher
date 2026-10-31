@@ -378,9 +378,9 @@ debasher::_get_signal_process_completion_cmd()
 
     # Signal completion
     if [ ${total} -eq 1 ]; then
-        echo "echo \"Finished task idx: 0 ; Total: $total\" > $(debasher::_get_process_finished_filename "${dirname}" ${processname})"
+        echo "echo \"Finished task idx: 0 ; Total: $total\" > $(printf '%q' "$(debasher::_get_process_finished_filename "${dirname}" ${processname})")"
     else
-        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" > \$(debasher::_get_task_finished_filename \"${dirname}\" ${processname} \${${taskidx_varname}})"
+        echo "echo \"Finished task idx: \${${taskidx_varname}} ; Total: $total\" > \"\$(debasher::_get_task_finished_filename $(printf '%q' "${dirname}") ${processname} \${${taskidx_varname}})\""
     fi
 }
 

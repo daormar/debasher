@@ -307,7 +307,7 @@ debasher_builtin_sched::_get_array_task_status()
     elif [ -f "${cancelled_file}" ]; then
         # Task will not be launched in this run
         echo ${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS}
-    elif [ ! -f ${array_taskid_file} ]; then
+    elif [ ! -f "${array_taskid_file}" ]; then
         # Task is not started
         echo ${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}
     else
@@ -1926,7 +1926,7 @@ debasher_builtin_sched::_print_script_body()
     if [ "${opt_array_size}" -gt 1 ]; then
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
         echo "builtin_task_log_filename=\$(debasher::_get_task_log_filename $(printf '%q' "${dirname}") ${processname} \${BUILTIN_ARRAY_TASK_ID})"
-        echo "debasher_builtin_sched::_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \${builtin_task_log_filename} 2>&1"
+        echo "debasher_builtin_sched::_execute_funct_plus_postfunct \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${BUILTIN_ARRAY_TASK_ID}\" > \"\${builtin_task_log_filename}\" 2>&1"
     else
         echo "CMDLINE=$(printf '%q' "${cmdline}")"
         local builtin_log_filename=$(debasher::_get_process_log_filename "${dirname}" ${processname})

@@ -224,14 +224,14 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
         local reader_procname="${fifo_reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
         # Obtain reader process status
-        local reader_status=$(debasher::_get_process_status ${dirname} "${reader_procname}")
+        local reader_status=$(debasher::_get_process_status "${dirname}" "${reader_procname}")
 
         # Obtain owner process name
         local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
         local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
         # Obtain owner process status
-        local owner_status=$(debasher::_get_process_status ${dirname} "${owner_procname}")
+        local owner_status=$(debasher::_get_process_status "${dirname}" "${owner_procname}")
 
         # If fifo reader process is finished but fifo owner is not, or viceversa, then
         # mark both processes as rerun

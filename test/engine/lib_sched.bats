@@ -514,3 +514,17 @@ comes_before() {
     [ "${status}" -eq 1 ]
     [[ "${output}" =~ "circular dependency detected at '"[abc]"'" ]]
 }
+
+@test "the command that leaves the completion marker of a task in a script writes it into an output directory with a blank, a dollar or a double quote in its path" {
+    local dirname="${BATS_TEST_TMPDIR}/out sp \$HOME \"q\""
+    mkdir -p "${dirname}/__exec__/p"
+
+    local cmd
+    cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" p TASK_IDX 1)
+    eval "${cmd}"
+    [ -f "$(debasher::_get_process_finished_filename "${dirname}" p)" ]
+
+    cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" p TASK_IDX 3)
+    TASK_IDX=2 eval "${cmd}"
+    [ -f "$(debasher::_get_task_finished_filename "${dirname}" p 2)" ]
+}
