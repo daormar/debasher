@@ -1130,6 +1130,23 @@ def test_a_preparation_that_fails_leaves_a_finished_run_that_can_be_launched_aga
     assert wait_until(lambda: stdout.exists() and stdout.read_text() == "first\n")
 
 
+def test_a_finished_process_launched_again_that_fails_is_unfinished(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(FILE_EXAMPLE), "--outdir", str(outdir), "-s", "hi")
+    assert result.returncode == 0, result.stderr
+
+    # Without the file of file_writer, file_reader fails when launched
+    # again, and the completion marker of the earlier run does not stay
+    (outdir / "file_writer" / "out.txt").unlink()
+    execdir = outdir / "__exec__" / "file_reader"
+    log = execdir / "file_reader.sched_out"
+    launch = run_tool(DEBASHER_LAUNCH_PROCESS, "-d", str(outdir), "-p", "file_reader")
+    assert launch.returncode == 0, launch.stdout + launch.stderr
+    assert wait_until(lambda: log.exists() and "failed with exit code" in log.read_text())
+    assert wait_until(lambda: "STATUS: UNFINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir), "-p", "file_reader").stdout)
+    assert not (execdir / "file_reader.finished").exists()
+
+
 def test_validate_refuses_a_process_above_the_limits_of_the_scheduler(tmp_path):
     pfile = tmp_path / "debasher_twocpus.sh"
     pfile.write_text(TWO_CPUS_MODULE)

@@ -112,6 +112,20 @@ launch_process()
 
     debasher::_check_outdir_not_moved "${absdirname}" || return 1
 
+    # A task launched again loses the completion marker of its earlier
+    # run, so that it reads IN-PROGRESS while it runs and UNFINISHED when
+    # it fails, not FINISHED. The marker goes before the launch, not after
+    # it: a task that ends at once may already have written its new one.
+    # The id stays until the launch replaces it, since the launch reads it
+    # to stop an earlier incarnation that still runs
+    local finished_filename
+    if [ ${t_given} -eq 1 ]; then
+        finished_filename=$(debasher::_get_task_finished_filename "${absdirname}" "${processname}" "${task_idx}")
+    else
+        finished_filename=$(debasher::_get_process_finished_filename "${absdirname}" "${processname}")
+    fi
+    "${RM}" -f "${finished_filename}" || { echo "Error! the completion marker of ${processname} could not be removed" >&2; return 1; }
+
     debasher_builtin_sched::_launch "${absdirname}" "${processname}" "${task_idx}"
 }
 
