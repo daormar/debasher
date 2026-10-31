@@ -63,13 +63,18 @@ debasher::_builtin_sched_launch_id_info()
 }
 
 ########
-# Echoes the process id of the task that the id $1 names (see
-# debasher::_builtin_sched_launch_id_info) if it still runs, and fails
-# otherwise: a process with that id exists, can be signalled by this user
-# and, when the id has a start time, started at that time. A start time
-# that cannot be read now, with no ps to ask, leaves the process id alone
-# to decide, as does an id without one.
-debasher::_builtin_sched_live_pid()
+# Tells whether the task of the built-in scheduler that the id $1 names
+# (see debasher::_builtin_sched_launch_id_info) still runs, echoing the
+# process id to signal when it does. Whoever is about to signal a task asks
+# it first, so that a process that later got the id of a task that has
+# ended is never signalled: the status of a process (through
+# debasher::_builtin_sched_id_exists), the scheduler when it launches a
+# task again, debasher_stop, and the orderly stop of a resident program.
+# A task runs while a process with that id exists, can be signalled by this
+# user and, when the id has a start time, started at that time. A start
+# time that cannot be read now, with no ps to ask, leaves the process id
+# alone to decide, as does an id without one.
+debasher::_builtin_sched_get_running_task_pid()
 {
     local id_info=$1
 
@@ -93,7 +98,7 @@ debasher::_builtin_sched_id_exists()
 {
     local id_info=$1
 
-    debasher::_builtin_sched_live_pid "${id_info}" > /dev/null
+    debasher::_builtin_sched_get_running_task_pid "${id_info}" > /dev/null
 }
 
 ########
@@ -107,7 +112,7 @@ debasher::_builtin_sched_stop_process()
 
     local id pid
     for id in ${ids_info}; do
-        pid=$(debasher::_builtin_sched_live_pid "${id}") || continue
+        pid=$(debasher::_builtin_sched_get_running_task_pid "${id}") || continue
         debasher::_stop_pid "${pid}" || { echo "Error while stopping process with id ${pid}" >&2 ; return 1; }
     done
 }
@@ -117,52 +122,40 @@ debasher::_process_is_unfinished_but_runnable_builtin_sched()
 {
     # Processes where the following is true are assigned this status:
     #  - process is an array of tasks
-    #  - there are no tasks in progres (otherwise, it would be an in-progress process)
+    #  - there are no tasks in progress: debasher::_get_process_status asks
+    #    this only of a process that it did not find in progress
     #  - at least one task has been launched or cancelled
     #  - at least one task has been neither, and can start execution
 
     local dirname=$1
     local processname=$2
 
-    # Get .id files of launched tasks
-    local ids=$(debasher::_get_launched_array_task_ids "$dirname" $processname)
-    local -A launched_array_tids
-    local id
-    for id in ${ids}; do
-        launched_array_tids[${id}]=1
+    # The tasks launched or cancelled, each counted once by its index,
+    # from the names of their id files and cancellation markers: a task can
+    # have both, when it was launched after an earlier run cancelled it
+    local execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    local -A handled_tasks=()
+    local file idx
+    for file in "${execdir}/${processname}"_*.${DEBASHER_ARRAY_TASKID_FEXT} \
+                "${execdir}/${processname}"_*.${DEBASHER_CANCELLED_TASK_FEXT}; do
+        [ -f "${file}" ] || continue
+        idx=${file#"${execdir}/${processname}_"}
+        handled_tasks[${idx%.*}]=1
     done
-
-    # A cancelled task counts with the launched ones
-    local num_launched_tasks=${#launched_array_tids[@]}
-    local num_cancelled_tasks=$(debasher::_get_num_array_tasks_cancelled "${dirname}" "${processname}")
-    local num_handled_tasks=$((num_launched_tasks + num_cancelled_tasks))
+    local num_handled_tasks=${#handled_tasks[@]}
 
     # If no array task was launched or cancelled, process is not array or
     # it is not an unfinished one
     if [ ${num_handled_tasks} -eq 0 ]; then
         return 1
-    else
-        # Process is array with some tasks already launched or cancelled
-
-        # Check that not all array tasks were launched or cancelled,
-        # whether or not any of them has finished: an array whose every
-        # task was launched or cancelled, and some failed or were
-        # cancelled, is not runnable, and the scheduler takes it as failed
-        local num_array_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
-        if [ ${num_handled_tasks} -ge ${num_array_tasks} ]; then
-            return 1
-        fi
-
-        # Check there are no tasks in progress
-        for id in ${!launched_array_tids[@]}; do
-            if debasher::_id_exists $id; then
-                return 1
-            fi
-        done
-
-        # All conditions satisfied
-        return 0
     fi
+
+    # Check that not all array tasks were launched or cancelled, whether or
+    # not any of them has finished: an array whose every task was launched
+    # or cancelled, and some failed or were cancelled, is not runnable, and
+    # the scheduler takes it as failed
+    local num_array_tasks=$(debasher::_get_num_array_tasks "${dirname}" "${processname}")
+    [ ${num_handled_tasks} -lt ${num_array_tasks} ]
 }
 
 ########

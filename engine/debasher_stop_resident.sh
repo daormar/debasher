@@ -169,7 +169,7 @@ wait_for_fresh_halted_marker()
 # Reads a node's own .id file and sends its whole process group a
 # graceful stop signal (see debasher::_stop_pid_gracefully). A missing or
 # empty .id file (never launched), or one whose task has ended (see
-# debasher::_builtin_sched_live_pid), is not an error: there is nothing to
+# debasher::_builtin_sched_get_running_task_pid), is not an error: there is nothing to
 # stop.
 stop_node_gracefully()
 {
@@ -185,7 +185,7 @@ stop_node_gracefully()
     if [ -z "${id_info}" ]; then
         return 0
     fi
-    pid=$(debasher::_builtin_sched_live_pid "${id_info}") || return 0
+    pid=$(debasher::_builtin_sched_get_running_task_pid "${id_info}") || return 0
     debasher::_stop_pid_gracefully "${pid}"
 }
 

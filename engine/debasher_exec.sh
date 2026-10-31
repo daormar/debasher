@@ -1118,36 +1118,6 @@ prepare_files_and_dirs_for_processes()
 }
 
 ########
-revise_rerun_proc_status()
-{
-    echo "# Revise process status for processes to rerun..." >&2
-
-    # Read input parameters
-    local dirname=$1
-
-    local processname
-    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # Get process status
-        local status=$(debasher::_get_process_status ${dirname} "${processname}")
-
-        # A process marked to rerun loses its completion whether it
-        # finished or not: the tasks that finished ran on an input that no
-        # longer holds, and keeping them would mix the results of two runs.
-        # A process in progress has stopped the run before this point, and
-        # one that is TO-DO has nothing to lose
-        if debasher::_process_marked_as_rerun ${processname} \
-               && [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
-               && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
-            debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process" >&2 ; return 1; }
-        fi
-    done
-
-    echo "Revision complete" >&2
-
-    echo "" >&2
-}
-
-########
 get_processdeps_with_id_info_from_detailed_spec()
 {
     local processdeps_spec=$1
@@ -1548,6 +1518,14 @@ else
     publish_prep_files "${prepd}" "${outd}" || { echo "Error! cannot move the files of the run into the output directory" >&2; exit 1; }
     procspec_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PROCSPEC_FEXT}"
     program_opts_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PRGOPTS_FEXT}"
+
+    # The processes marked to rerun lose their completion before anything
+    # is prepared, under both schedulers
+    echo "# Revise process status for processes to rerun..." >&2
+    debasher::_revise_rerun_proc_status "${outd}" || exit 1
+    echo "Revision complete" >&2
+    echo "" >&2
+
     if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
@@ -1556,7 +1534,6 @@ else
             print_post_exec_wait_help
         fi
     else
-        revise_rerun_proc_status "${outd}" || exit 1
         prepare_files_and_dirs_for_processes "${outd}" || exit 1
         launch_program_processes "${command_line}" "${outd}" || exit 1
         if [ "${wait}" -eq 1 ]; then

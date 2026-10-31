@@ -210,14 +210,6 @@ debasher::_print_script_foot_slurm_sched()
 }
 
 ########
-debasher::_write_env_vars_and_funcs_slurm()
-{
-    local dirname=$1
-
-    debasher::_write_env_vars_and_funcs "${dirname}"
-}
-
-########
 debasher::_create_slurm_script()
 {
     # Init variables
@@ -232,7 +224,7 @@ debasher::_create_slurm_script()
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
     # Write environment variables
-    debasher::_write_env_vars_and_funcs_slurm "${dirname}" >> "${fname}" || return 1
+    debasher::_print_exec_context "${dirname}" >> "${fname}" || return 1
 
     # Print header
     debasher::_print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
@@ -1134,7 +1126,7 @@ debasher::seq_execute_slurm()
         echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
         # Write environment variables
-        debasher::_write_env_vars_and_funcs_slurm "${dirname}" >> "${fname}" || return 1
+        debasher::_print_exec_context "${dirname}" >> "${fname}" || return 1
 
         # Add call to command or function
         echo "${process_to_launch} \"\$@\"" >> "${fname}" || return 1

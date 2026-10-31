@@ -578,8 +578,9 @@ debasher::_write_exec_context()
 }
 
 ########
-# Writes the context of a process script (see debasher::_write_exec_context)
-debasher::_write_env_vars_and_funcs()
+# Prints the context of the process scripts, which every script of the run
+# starts with (see debasher::_write_exec_context)
+debasher::_print_exec_context()
 {
     local dirname=$1
 

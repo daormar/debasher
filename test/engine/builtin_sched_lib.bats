@@ -95,7 +95,7 @@ EOF
     pid="${id_info%%@*}"
     [ "${id_info}" = "${pid}@$(debasher::_builtin_sched_pid_start_time "${pid}")" ]
     [[ "${id_info}" != *" "* ]]
-    [ "$(debasher::_builtin_sched_live_pid "${id_info}")" = "${pid}" ]
+    [ "$(debasher::_builtin_sched_get_running_task_pid "${id_info}")" = "${pid}" ]
     kill -9 -- "-${pid}"
 }
 
@@ -172,23 +172,23 @@ EOF
     kill -9 -- "-${SLEEPER_PID}"
 }
 
-@test "_builtin_sched_live_pid takes a task for running only while its process, started at its time, runs" {
+@test "_builtin_sched_get_running_task_pid takes a task for running only while its process, started at its time, runs" {
     start_sleeper
     local start
     start="$(debasher::_builtin_sched_pid_start_time "${SLEEPER_PID}")"
     [ -n "${start}" ]
 
-    [ "$(debasher::_builtin_sched_live_pid "${SLEEPER_PID}@${start}")" = "${SLEEPER_PID}" ]
+    [ "$(debasher::_builtin_sched_get_running_task_pid "${SLEEPER_PID}@${start}")" = "${SLEEPER_PID}" ]
     # Another process that got the same PID
-    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@Mon_Jan__1_00:00:00_2001" || false
+    ! debasher::_builtin_sched_get_running_task_pid "${SLEEPER_PID}@Mon_Jan__1_00:00:00_2001" || false
     # A task that ended before its start time could be read
-    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@" || false
+    ! debasher::_builtin_sched_get_running_task_pid "${SLEEPER_PID}@" || false
     # An id without a start time, as an older run wrote it
-    [ "$(debasher::_builtin_sched_live_pid "${SLEEPER_PID}")" = "${SLEEPER_PID}" ]
+    [ "$(debasher::_builtin_sched_get_running_task_pid "${SLEEPER_PID}")" = "${SLEEPER_PID}" ]
 
     kill -9 -- "-${SLEEPER_PID}"
     wait "${SLEEPER_PID}" 2>/dev/null || true
-    ! debasher::_builtin_sched_live_pid "${SLEEPER_PID}@${start}" || false
+    ! debasher::_builtin_sched_get_running_task_pid "${SLEEPER_PID}@${start}" || false
 }
 
 @test "_builtin_sched_stop_process stops the running tasks and leaves alone the processes that got the PIDs of ended ones" {
@@ -659,6 +659,22 @@ launch_arr_task() {
     mark_task_finished arr 0
     run debasher::_get_process_status "${OUTDIR}" arr
     [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+}
+
+@test "a task launched after an earlier run cancelled it counts once among the tasks launched or cancelled" {
+    setup_array_status
+    # Task 0 has both its id and the cancellation marker of the earlier
+    # run, task 1 only that marker, and task 2 neither
+    launch_arr_task 0
+    touch "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 0)"
+    touch "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 1)"
+
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_BUT_RUNNABLE_PROCESS_STATUS}" ]
+
+    touch "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 2)"
+    run debasher::_get_process_status "${OUTDIR}" arr
+    [ "${output}" = "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ]
 }
 
 @test "an array with every task launched, some finished and the others failed is UNFINISHED" {

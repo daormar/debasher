@@ -248,24 +248,82 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
 }
 
 ########
-# Marks every finished process with a dependency of type after, afterany or
-# afterok on a process of the program that is not finished, which this run
-# is to launch: the process ran before that producer finished, and runs
-# again on what the producer leaves this time. A producer that did not finish satisfies after and
-# afterany, as when it failed and the process ran anyway, and afterok within
-# a list whose elements are joined by "?". afternotok is left out: it is
-# there for a producer that fails, and would no longer hold once the
-# producer finishes. So is aftercorr: a process that finished under it has
-# no task whose counterpart did not finish. A process that is not finished
-# itself is not marked either: it runs the tasks that it has left, and a
-# mark would run again those that have finished too.
+# Takes away the ids and then the completion markers of every process
+# marked to rerun that is neither in progress nor TO-DO, before the run
+# prepares and launches anything, under both schedulers. A process marked
+# to rerun loses its completion whether it finished or not: the tasks that
+# finished ran on an input that no longer holds, and keeping them would mix
+# the results of two runs. In a resident program, an array with only some
+# tasks finished resumes every task, each one a node, not only those
+# without a .finished. A process in progress has stopped the run before
+# this point, and one that is TO-DO has nothing to lose.
+#
+# $1 - Absolute path of the output directory.
+debasher::_revise_rerun_proc_status()
+{
+    local dirname=$1
+
+    local processname status
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        debasher::_process_marked_as_rerun "${processname}" || continue
+        status=$(debasher::_get_process_status "${dirname}" "${processname}")
+        if [ "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ] \
+               && [ "${status}" != "${DEBASHER_TODO_PROCESS_STATUS}" ]; then
+            debasher::_reset_process_completion_signal "${dirname}" "${processname}" || { echo "Error when resetting process completion signal for process ${processname}" >&2 ; return 1; }
+        fi
+    done
+}
+
+########
+# Whether the dependency $1 of a finished process may have let it run
+# before its producer finished: its type is after, afterany or afterok, and
+# its producer is a process of the program that has not finished. A
+# producer that did not finish satisfies after and afterany, as when it
+# failed and the process ran anyway, and afterok within a list whose
+# elements are joined by "?". afternotok is left out: it is there for a
+# producer that fails, and would no longer hold once the producer finishes.
+# So is aftercorr: a process that finished under it has no task whose
+# counterpart did not finish.
+#
+# $1 - The dependency, <type>:<process>.
+# $2 - Name of an associative array from each process of the program to 1
+#      when it has finished and 0 otherwise.
+debasher::_dep_may_have_run_before_producer_finished()
+{
+    local dep=$1
+    local -n _finished_ref=$2
+
+    local deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
+    case ${deptype} in
+        ${DEBASHER_AFTER_PROCESSDEP_TYPE}|${DEBASHER_AFTERANY_PROCESSDEP_TYPE}|${DEBASHER_AFTEROK_PROCESSDEP_TYPE}) ;;
+        *) return 1 ;;
+    esac
+
+    # A name that is not a process of the program has no status here: this
+    # run launches nothing of it, so it cannot be a producer to wait for
+    local depsname=$(debasher::_get_processname_part_in_dep "${dep}")
+    [ -n "${_finished_ref[${depsname}]+x}" ] || return 1
+
+    [ "${_finished_ref[${depsname}]}" -eq 0 ]
+}
+
+########
+# Marks every finished process with a dependency that may have let it run
+# before its producer finished (see
+# debasher::_dep_may_have_run_before_producer_finished), which this run is
+# to launch: the process runs again on what the producer leaves this time.
+# A process that is not finished itself is not marked either: it runs the
+# tasks that it has left, and a mark would run again those that have
+# finished too.
 #
 # $1 - Absolute path of the output directory.
 debasher::_define_rerun_processes_due_to_unfinished_producers()
 {
     local dirname=$1
 
-    # The status of each process, read once
+    # The status of each process, read once before any mark: a producer
+    # is looked up for every dependency on it, and a status is read from
+    # the files of the process and, for one launched, from the scheduler
     local -A finished=()
     local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
@@ -283,21 +341,16 @@ debasher::_define_rerun_processes_due_to_unfinished_producers()
         processdeps=$(debasher::_extract_processdeps_from_process_spec "${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}")
         [ "${processdeps}" != "${DEBASHER_ATTR_NOT_FOUND}" ] || continue
 
+        # The separator is not looked at: in a list joined by "," every
+        # element held, and in one joined by "?" any of them may have, so
+        # in both any element may have let the process run. One such
+        # element is enough to mark it
         local -a deps_array
         local separator
         debasher::_split_processdeps "${processdeps}" deps_array separator
-
-        local dep deptype depsname
+        local dep
         for dep in "${deps_array[@]}"; do
-            deptype=$(debasher::_get_deptype_part_in_dep "${dep}")
-            depsname=$(debasher::_get_processname_part_in_dep "${dep}")
-            case ${deptype} in
-                ${DEBASHER_AFTER_PROCESSDEP_TYPE}|${DEBASHER_AFTERANY_PROCESSDEP_TYPE}|${DEBASHER_AFTEROK_PROCESSDEP_TYPE}) ;;
-                *) continue ;;
-            esac
-            # A name that is not a process of the program is left out
-            [ -n "${finished[${depsname}]+x}" ] || continue
-            if [ "${finished[${depsname}]}" -eq 0 ]; then
+            if debasher::_dep_may_have_run_before_producer_finished "${dep}" finished; then
                 debasher::_mark_process_as_rerun "${processname}" "${DEBASHER_UNFINISHED_PRODUCER_RERUN_REASON}"
                 break
             fi

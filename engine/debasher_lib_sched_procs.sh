@@ -159,25 +159,6 @@ debasher::_reset_task_cancellations()
 }
 
 ########
-# The number of cancelled tasks of an array process
-debasher::_get_num_array_tasks_cancelled()
-{
-    local dirname=$1
-    local processname=$2
-    local prefix=$(debasher::_get_process_finished_filename_prefix "${dirname}" "${processname}")
-
-    local num_tasks_cancelled=0
-    local file
-    for file in "${prefix}"_*.${DEBASHER_CANCELLED_TASK_FEXT}; do
-        if [ -f "${file}" ]; then
-            num_tasks_cancelled=$((num_tasks_cancelled + 1))
-        fi
-    done
-
-    echo "${num_tasks_cancelled}"
-}
-
-########
 debasher::_get_list_of_pending_tasks_in_array()
 {
     # NOTE: a pending task here is just one that is not finished
@@ -427,7 +408,7 @@ debasher::_stop_process()
 # has not finished. The id of a task that has its completion marker is left
 # out: the task has ended, and its id may name another process by now, as a
 # process id that the system gave again does when the scheduler cannot tell
-# them apart (see debasher::_builtin_sched_live_pid).
+# them apart (see debasher::_builtin_sched_get_running_task_pid).
 debasher::_read_ids_of_unfinished_tasks()
 {
     local dirname=$1
@@ -470,25 +451,6 @@ debasher::_process_is_in_progress()
     done
 
     return 1
-}
-
-########
-debasher::_get_launched_array_task_ids()
-{
-    local dirname=$1
-    local processname=$2
-
-    # Get exec dir
-    execdir=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
-
-    # Return ids for array tasks if any
-    local taskid_file
-    for taskid_file in "${execdir}"/${processname}_*.${DEBASHER_ARRAY_TASKID_FEXT}; do
-        if [ -f "${taskid_file}" ]; then
-            "${CAT}" "${taskid_file}"
-        fi
-    done
-
 }
 
 ########

@@ -524,13 +524,13 @@ fails, before any process is launched:
    output directory, replacing those of the earlier run. Such a file that the
    earlier run wrote and this run does not (`program.opts_exh`, written only
    with `--gen-proc-graph`) is removed.
-10. It hands the processes to the scheduler. Before a process is launched, its
-    exec directory is prepared, its FIFOs and its task subdirectories are
-    created, and, when its process output directory is subdivided, what no
-    option asks for is removed from it; when it is launched, its process script
-    is written, and the scheduler runs the script for each task of the process
-    once the dependencies of the task hold (see "Scheduling" and "Running a
-    process").
+10. It resets the processes marked to rerun (see "Reruns") and hands the
+    processes to the scheduler. Before a process is launched, its exec directory
+    is prepared, its FIFOs and its task subdirectories are created, and, when
+    its process output directory is subdivided, what no option asks for is
+    removed from it; when it is launched, its process script is written, and the
+    scheduler runs the script for each task of the process once the dependencies
+    of the task hold (see "Scheduling" and "Running a process").
 
 Until stage 9, the files with which the run describes itself, the option
 lists of stage 5 among them, go into the preparation directory, not into the
@@ -2162,21 +2162,22 @@ resident program always runs on the built-in scheduler. A step that a task runs
 can use a scheduler other than that of the run, as "Sequential processes"
 describes.
 
-The choice splits the run in two paths. Under the built-in scheduler,
-`debasher_exec` hands the rest of the run to the scheduler
-(`debasher_builtin_sched::execute_program_processes`), which resets the
-processes marked to rerun and prepares each process (see "Preparing a run"),
-then launches the tasks in its loop of rounds and waits for them, unless in
-oneshot mode (see "The built-in scheduler"). Under the Slurm scheduler,
-`debasher_exec` does those steps itself, waiting only with `--wait`, and asks
-the scheduler to clean what an earlier run left in the exec directory of a
-process, to write its process script, to map its dependency types and to submit
-it (see "The Slurm scheduler"). Apart from these steps, both schedulers answer
-the same questions, for the rest of the engine and for the tools that read a
-run: the ids of what they launched, whether an id still runs, how to stop an id,
-which logs a process has, and whether a process that has not finished can still
-be launched (`UNFINISHED_BUT_RUNNABLE`, which only the built-in scheduler gives,
-see "Process status"). Under the built-in scheduler, a validation also asks it
+Before choosing, `debasher_exec` resets the processes marked to rerun, under
+either scheduler (see "Reruns"). The choice then splits the run in two paths.
+Under the built-in scheduler, `debasher_exec` hands the rest of the run to the
+scheduler (`debasher_builtin_sched::execute_program_processes`), which prepares
+each process (see "Preparing a run"), then launches the tasks in its loop of
+rounds and waits for them, unless in oneshot mode (see "The built-in
+scheduler"). Under the Slurm scheduler, `debasher_exec` prepares every process
+and then launches them itself, waiting only with `--wait`, and asks the
+scheduler to clean what an earlier run left in the exec directory of a process,
+to write its process script, to map its dependency types and to submit it (see
+"The Slurm scheduler"). Apart from these steps, both schedulers answer the same
+questions, for the rest of the engine and for the tools that read a run: the ids
+of what they launched, whether an id still runs, how to stop an id, which logs a
+process has, and whether a process that has not finished can still be launched
+(`UNFINISHED_BUT_RUNNABLE`, which only the built-in scheduler gives, see
+"Process status"). Under the built-in scheduler, a validation also asks it
 whether the resources of each process fit its budget.
 
 The ids of a process are kept in its exec directory, in a `.id` file, and a
