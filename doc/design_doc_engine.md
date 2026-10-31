@@ -2486,18 +2486,19 @@ sends it before the time limit, it installs the `_slurm_sigterm_handler` method
 of the process or a default handler that prints a message and exits with an
 error. Then come three parts:
 
-- **The execution context**, a copy of `.exec_context.sh`, which
-  `debasher_exec` writes once the program is defined (see "Architecture"). It
-  holds every function defined in the shell of `debasher_exec`, those of the
-  modules and of the engine alike, and the variables of that shell: every
-  variable of the engine, and every variable the modules define. It leaves
-  out what the task gets anyway or must not get: the variables that Bash sets
-  by itself, read-only ones, exported variables and functions, which the task
-  inherits from its environment, and the option lists of the tasks, which
-  reach each task on their own (see "How option values reach a task").
-  A variable declared with no value, such as an associative array still
-  empty, is kept with its declaration, so that it reaches the task with its
-  type.
+- **The execution context**, a copy of `.exec_context.sh`, which `debasher_exec`
+  writes once the program is defined (see "Architecture"). It holds every
+  function defined in the shell of `debasher_exec`, those of the modules and of
+  the engine alike, and the variables of that shell: every variable of the
+  engine, and every variable the modules define. It leaves out what the task
+  gets anyway or must not get: the variables that Bash sets by itself, read-only
+  ones, exported variables and functions, which the task inherits from its
+  environment, and the option lists of the tasks, which reach each task on their
+  own (see "How option values reach a task"). `PATH` and the other `DEBASHER_*`
+  variables are kept, exported or not, so that a task gets them as
+  `debasher_exec` had them, and not as the Slurm node where it runs has them. A
+  variable declared with no value, such as an associative array still empty, is
+  kept with its declaration, so that it reaches the task with its type.
 - **A header** with the name of the script, the output directory, the name of
   the process and its number of tasks, the same under both schedulers. The
   paths are written so that the script reads them back as they are, whatever
@@ -2769,7 +2770,13 @@ not finished, is one prepared and not launched yet, and is `TO-DO`: it waits for
 its dependencies or for its launch, and has not failed. Whether the process was
 launched is asked before anything else, so that an id written while the status
 is read counts as launched for every question that follows, and the process is
-never taken for one that was launched and no longer runs.
+never taken for one that was launched and no longer runs. The race arises when
+one tool reads the status while another launches the process and writes its id:
+`debasher_status`, and through it the web interface and the MCP server, or
+`debasher_stop`, while the loop of `debasher_exec`, `debasher_exec` after
+`sbatch` or `debasher_launch_process` launches it. Were it asked last, an id
+written after the questions on what runs would make a process that has just
+started read `UNFINISHED`, launched and running nowhere.
 
 `debasher_status` prints the status of every process and a summary, and ends
 with 0 when every process is `FINISHED`, 2 when some process is `IN-PROGRESS`,
@@ -2831,9 +2838,13 @@ not, for one of these reasons:
   run that launches the producer. `afternotok` is left out: it is there for a
   producer that fails, and would no longer hold once the producer finishes.
   `aftercorr` is left out too: a process that finished under it has no task
-  whose counterpart did not finish. A process that has not finished itself is
-  not marked for this reason: it runs the tasks it has left, and a mark would
-  run again those that have finished too.
+  whose counterpart did not finish. This rule marks only a process that has
+  finished. A process that has not finished is left unmarked by it: it runs the
+  tasks it has left, and a mark would run again those that have finished too.
+  For instance, with `p` failed, `c` an array with `afterany:p`, `c_0` finished
+  and `c_1` failed, the new run runs `p` and then `c_1` only. The cost is that
+  `c_0` keeps what it read from the `p` of the run before (see the limit "What
+  counts as a change" in "Guarantees and non-goals").
 
 The marks then spread until nothing changes: from a process to every process
 that depends on it, and from one end of a FIFO to the other. A process marked to
