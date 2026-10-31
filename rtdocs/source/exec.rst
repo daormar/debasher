@@ -96,7 +96,9 @@ are useful for that purpose:
   built-in scheduler, it also checks that the computational resources of
   each process fit the limits given with ``--builtinsched-cpus`` and
   ``--builtinsched-mem``. A program that passes the validation is not
-  refused for its options or for the resources of a single process. It
+  refused for its options or for the resources of a single task, but a
+  run with ``--builtinsched-oneshot`` (every resident program runs so)
+  is still refused when its tasks together do not fit. It
   also refuses a program with a process whose interpreter is not there
   (see the :ref:`implem_bash` Section), which ``--check-proc-opts`` and
   ``--show-cmdline-opts`` still accept, and a dependency other than
@@ -131,12 +133,27 @@ following two options can be used:
   can be used by the built-in scheduler. A value of -1 (the default)
   means unlimited memory.
 
+* ``--builtinsched-oneshot``: launches every task of the program at
+  once and returns without waiting for them, for programs whose
+  processes are linked by FIFOs only. It refuses a dependency other than
+  ``none`` or ``after``, a throttle below the number of tasks of an
+  array, and a budget too small to launch every task at once. A
+  resident program always runs in this mode.
+
 A resident program (see the :ref:`resident` Section) always runs with
 the built-in scheduler, which ``debasher_exec`` selects on its own for
 it, refusing any other. Its processes are meant to run until they are
 stopped, so ``debasher_exec`` launches all of them at once and returns
 without waiting for them; the resources given with the two options
-above must be enough for every process of the program together.
+above must be enough for every task of every process together, each
+task of an array counted on its own. When they are not,
+``debasher_exec`` launches nothing and stops with an error that says
+how many of the tasks fit.
+
+If the script of a process cannot be written, or one of its tasks
+cannot be launched, ``debasher_exec`` launches nothing more and stops
+with an error, under either scheduler; what it launched before goes on,
+and ``debasher_status`` shows it.
 
 Executing Programs Using External Schedulers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

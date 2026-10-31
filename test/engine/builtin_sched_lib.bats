@@ -1152,3 +1152,96 @@ write_procspec() {
         fi
     done
 }
+
+# --- rounds -----------------------------------------------------------------
+
+@test "_print_knapsack_item_value_weight_spec divides the value of a process among the tasks of an array" {
+    AWK="$(command -v awk)"
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESSNAME_TO_IDX=([arr]=0 [single]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=([arr]=4 [single]=1)
+    declare -gA BUILTIN_SCHED_EXECUTABLE_PROCESSES=([arr]="0 1 2 3" [single]="${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}")
+    debasher_builtin_sched::_get_knapsack_cpus_for_process() { echo 1; }
+    debasher_builtin_sched::_get_knapsack_mem_for_process() { echo 32; }
+
+    run debasher_builtin_sched::_print_knapsack_item_value_weight_spec
+    [ "${status}" -eq 0 ]
+    [ "$(echo "${output}" | sort)" = "$(printf '%s\n' "0_0 0.25 1 32" "0_1 0.25 1 32" "0_2 0.25 1 32" "0_3 0.25 1 32" "1 1 1 32")" ]
+}
+
+# Stubs the steps of a round before the knapsack, leaving process a as the
+# only candidate
+stub_round_before_knapsack() {
+    debasher_builtin_sched::_get_updated_process_status() { :; }
+    debasher_builtin_sched::_update_comp_resources() { :; }
+    debasher_builtin_sched::_fix_updated_process_status() { :; }
+    debasher_builtin_sched::_cancel_tasks_that_cannot_launch() { :; }
+    debasher_builtin_sched::_get_executable_processes() {
+        BUILTIN_SCHED_EXECUTABLE_PROCESSES[a]=${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}
+    }
+    debasher_builtin_sched::_hold_back_fifo_ends_without_peer() { :; }
+}
+
+@test "_select_processes_to_be_exec fails, without ending the tool, when it has candidates and the knapsack chooses none of them" {
+    stub_round_before_knapsack
+    debasher_builtin_sched::_solve_knapsack() { DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=""; }
+
+    local num_candidate_tasks=0
+    local select_status=0
+    debasher_builtin_sched::_select_processes_to_be_exec "" "${OUTDIR}" num_candidate_tasks 2> "${BATS_TEST_TMPDIR}/err" || select_status=$?
+    [ "${select_status}" -eq 3 ]
+    [ "${num_candidate_tasks}" -eq 1 ]
+    grep -q "no suitable processes could be selected" "${BATS_TEST_TMPDIR}/err"
+
+    # The round stops the loop with an error
+    debasher_builtin_sched::_select_processes_to_be_exec() { return 3; }
+    local end=0
+    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 0 1 end
+    [ "${status}" -eq 1 ]
+}
+
+@test "_run_round refuses in oneshot mode a first round in which only some tasks of an array fit, and launches nothing" {
+    local launched="${BATS_TEST_TMPDIR}/launched"
+    debasher_builtin_sched::_select_processes_to_be_exec() {
+        local -n _n=$3
+        _n=4
+        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES="0_0 0_1"
+    }
+    debasher_builtin_sched::_exec_processes() { echo launched > "${launched}"; }
+
+    local end=0
+    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 1 1 end
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"(2 of 4 tasks fit)"* ]]
+    [ ! -e "${launched}" ]
+
+    # Every task fits: they are launched
+    debasher_builtin_sched::_select_processes_to_be_exec() {
+        local -n _n=$3
+        _n=2
+        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES="0_0 0_1"
+    }
+    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 1 1 end
+    [ "${status}" -eq 0 ]
+    [ -e "${launched}" ]
+}
+
+@test "_exec_processes stops at a task whose script cannot be written, keeping what it launched before" {
+    AWK="$(command -v awk)"
+    local launched="${BATS_TEST_TMPDIR}/launched"
+    declare -gA DEBASHER_BUILTIN_SCHED_IDX_TO_PROCESSNAME=([0]=a [1]=b [2]=c)
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_LAUNCHED_TASKS=()
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS=()
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_SPEC=()
+    DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES="0 1 2"
+    debasher::_get_process_status() { echo "${DEBASHER_TODO_PROCESS_STATUS}"; }
+    debasher::_get_numtasks_for_process() { echo 1; }
+    debasher_builtin_sched::_create_script() { [ "$3" != b ]; }
+    debasher_builtin_sched::_launch() { echo "$2" >> "${launched}"; }
+    debasher_builtin_sched::_update_comp_resources() { :; }
+    debasher_builtin_sched::_fix_updated_process_status() { :; }
+
+    run debasher_builtin_sched::_exec_processes "" "${OUTDIR}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error while writing the script of process b!"* ]]
+    [ "$(cat "${launched}")" = "a" ]
+}

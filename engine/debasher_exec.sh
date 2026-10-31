@@ -1186,7 +1186,7 @@ launch_process()
 
         # Create script
         local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
-        debasher::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
+        debasher::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" || { echo "Error while writing the script of process ${processname}!" >&2 ; return 1; }
 
         # Launch process
         local task_array_list=$(debasher::_get_task_array_list "${dirname}" "${processname}" "${opt_array_size}")

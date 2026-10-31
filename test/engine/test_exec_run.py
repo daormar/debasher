@@ -2639,6 +2639,93 @@ def test_the_oneshot_mode_refuses_a_dependency_that_waits_for_a_process_to_end_a
     assert not (execdir / "file_reader" / "file_reader").exists()
 
 
+# An array of four tasks, each recording when it starts and when it ends,
+# in nanoseconds, in a file of its own under the directory -t
+TIMED_ARRAY_MODULE = """\
+timed_explain_opts()
+{
+    explain_opt "-t" "<dir>" "Directory of the times of the tasks"
+    explain_opt "-idx" "<int>" "Index of the task"
+}
+
+timed_identify_cmdline_opts()
+{
+    opt_is_cmdline "-t"
+}
+
+timed_define_opts()
+{
+    local cmdline=$1
+    local i
+    for i in 0 1 2 3; do
+        local optlist=""
+        define_cmdline_opt "${cmdline}" "-t" optlist || return 1
+        define_opt "-idx" "${i}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+timed()
+{
+    local t=$(read_opt_value_from_func_args "-t" "$@")
+    local idx=$(read_opt_value_from_func_args "-idx" "$@")
+    local start=$(python3 -c 'import time; print(time.time_ns())')
+    sleep 1
+    echo "${start} $(python3 -c 'import time; print(time.time_ns())')" > "${t}/${idx}"
+}
+
+debasher_timed_program()
+{
+    add_debasher_process "timed" "cpus=1 mem=32 time=00:01:00THROTTLE"
+}
+"""
+
+
+def _timed_array(tmp_path, throttle=""):
+    pfile = tmp_path / "debasher_timed.sh"
+    pfile.write_text(TIMED_ARRAY_MODULE.replace("THROTTLE", throttle))
+    times = tmp_path / "times"
+    times.mkdir()
+    return pfile, times
+
+
+def test_the_oneshot_mode_refuses_a_first_round_in_which_only_some_tasks_of_an_array_fit_and_launches_nothing(tmp_path):
+    pfile, times = _timed_array(tmp_path)
+    outdir = tmp_path / "out"
+    result = run_exec(
+        "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(times),
+        "--builtinsched-cpus", "2", "--builtinsched-oneshot",
+    )
+    assert result.returncode == 1
+    assert "(2 of 4 tasks fit)" in result.stderr
+    assert not list((outdir / "__exec__" / "timed").glob("*.id"))
+
+
+def test_the_oneshot_mode_refuses_a_throttle_smaller_than_the_number_of_tasks(tmp_path):
+    pfile, times = _timed_array(tmp_path, " throttle=2")
+    outdir = tmp_path / "out"
+    result = run_exec(
+        "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(times), "--builtinsched-oneshot"
+    )
+    assert result.returncode == 1
+    assert 'process "timed" has 4 tasks and a throttle of 2' in result.stderr
+    assert not (outdir / "__exec__" / "timed" / "timed").exists()
+
+
+def test_the_built_in_scheduler_never_runs_more_tasks_at_once_than_its_cpus_allow(tmp_path):
+    pfile, times = _timed_array(tmp_path)
+    outdir = tmp_path / "out"
+    result = run_exec(
+        "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(times), "--builtinsched-cpus", "2"
+    )
+    assert result.returncode == 0, result.stderr
+
+    intervals = [tuple(map(int, (times / str(i)).read_text().split())) for i in range(4)]
+    for start, _ in intervals:
+        running = sum(1 for s, e in intervals if s <= start < e)
+        assert running <= 2
+
+
 # Processes that exchange nothing, each with the exit status and the
 # processdeps given, as "<name>|<status>|<processdeps>"
 def explicit_chain_module(name, *processes):

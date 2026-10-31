@@ -409,7 +409,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
   its state. `restart_node` kills a live node, as in a crash, and has it
   relaunched from its last checkpoint; `relaunch_node` relaunches a node
-  that is down in a program without a Supervisor.
+  that is down in a program without a Supervisor. Every node runs at once:
+  when the `cpus` or `mem` of all the nodes together exceed
+  `builtinSchedCpus` or `builtinSchedMem`, the launch is refused before any
+  node starts; raise those limits, leave them empty, or lower the
+  specifications of the nodes.
 - **Notices of a live program.** `get_status` lists the notices of the
   nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks
   a node that has one, an "i" in a blue circle for `info` and an "!" in an

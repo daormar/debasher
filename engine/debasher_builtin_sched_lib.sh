@@ -1646,7 +1646,8 @@ debasher_builtin_sched::_get_debug_sel_processes_info()
 
 ########
 # Selects what a round launches, into DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES,
-# setting the variable named $3 to the number of processes with candidates.
+# setting the variable named $3 to the number of candidate tasks, each task
+# of an array counted as one, as the knapsack counts what it selects.
 # Returns 0 when something was selected, 1 when there are no candidates, 2
 # when the tasks that can no longer be launched could not be cancelled, and
 # 3 when there are candidates and none of them could be chosen.
@@ -1654,7 +1655,7 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 {
     local cmdline=$1
     local dirname=$2
-    local -n _num_exec_processes_ref=$3
+    local -n _num_candidate_tasks_ref=$3
 
     # Obtain updated status for processes
     local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
@@ -1685,8 +1686,14 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     fi
 
     # If there are executable processes, select which ones will be executed
-    _num_exec_processes_ref=${#BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}
-    if [ ${_num_exec_processes_ref} -gt 0 ]; then
+    _num_candidate_tasks_ref=0
+    local processname
+    local -a candidate_tasks
+    for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
+        read -r -a candidate_tasks <<< "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}"
+        _num_candidate_tasks_ref=$((_num_candidate_tasks_ref + ${#candidate_tasks[@]}))
+    done
+    if [ ${_num_candidate_tasks_ref} -gt 0 ]; then
         debasher_builtin_sched::_solve_knapsack "${dirname}"
 
         # Check if no processes could be selected
@@ -1876,7 +1883,7 @@ debasher_builtin_sched::_execute_process()
     # Create script
     local opt_array_size=$(debasher::_get_numtasks_for_process "${processname}")
     if [ "${launched_tasks}" = "" ] && [ -z "${DEBASHER_BUILTIN_SCHED_PROCESS_CANCELLED_TASKS[${processname}]}" ]; then
-        debasher_builtin_sched::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}"
+        debasher_builtin_sched::_create_script "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" || { echo "Error while writing the script of process ${processname}!" >&2 ; return 1; }
     fi
 
     # Launch script
@@ -1940,10 +1947,13 @@ debasher_builtin_sched::_exec_processes()
     local cmdline=$1
     local dirname=$2
 
-    # Execute selected processes and update status accordingly
+    # Execute selected processes and update status accordingly; the
+    # resources and the status of what was launched before a launch that
+    # failed are recorded all the same
+    local exec_status=0
     if [ "${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}" != "" ]; then
         local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
-        debasher_builtin_sched::_exec_processes_and_update_status "${cmdline}" "${dirname}"
+        debasher_builtin_sched::_exec_processes_and_update_status "${cmdline}" "${dirname}" || exec_status=1
     fi
 
     # Update computational resources after execution
@@ -1951,6 +1961,8 @@ debasher_builtin_sched::_exec_processes()
 
     # Set updated status as current one
     debasher_builtin_sched::_fix_updated_process_status
+
+    return ${exec_status}
 }
 
 ########
@@ -2158,9 +2170,9 @@ debasher_builtin_sched::_run_round()
     local -n _round_end_ref=$5
 
     # Select processes that should be executed
-    local num_exec_processes=0
+    local num_candidate_tasks=0
     local select_status=0
-    debasher_builtin_sched::_select_processes_to_be_exec "${cmdline}" "${dirname}" num_exec_processes || select_status=$?
+    debasher_builtin_sched::_select_processes_to_be_exec "${cmdline}" "${dirname}" num_candidate_tasks || select_status=$?
     case ${select_status} in
         0)  ;;
         1)  # There are no processes to be executed
@@ -2180,18 +2192,24 @@ debasher_builtin_sched::_run_round()
     # resources than this first one has right now: if not everything that
     # could be selected in round 1 got selected, it never will be. Check
     # before launching anything, rather than silently launching only a
-    # subset and returning as if the whole program had started.
+    # subset and returning as if the whole program had started. Tasks are
+    # compared with tasks: the knapsack selects each task of an array on
+    # its own.
     if [ ${oneshot} -eq 1 -a ${iterno} -eq 1 ]; then
         local -a debasher_builtin_sched_selected_arr=(${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES})
-        local num_selected_processes=${#debasher_builtin_sched_selected_arr[@]}
-        if [ ${num_selected_processes} -lt ${num_exec_processes} ]; then
-            echo "Error: --builtinsched-oneshot requires enough resources (cpus, memory) to launch every process at once (${num_selected_processes} of ${num_exec_processes} fit); it never waits for one to finish to free up resources for the rest. Increase --builtinsched-cpus/--builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
+        local num_selected_tasks=${#debasher_builtin_sched_selected_arr[@]}
+        if [ ${num_selected_tasks} -lt ${num_candidate_tasks} ]; then
+            echo "Error: --builtinsched-oneshot requires enough resources (cpus, memory) to launch every task at once (${num_selected_tasks} of ${num_candidate_tasks} tasks fit); it never waits for one to finish to free up resources for the rest. Increase --builtinsched-cpus/--builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
             return 1
         fi
     fi
 
-    # Execute processes
-    debasher_builtin_sched::_exec_processes "${cmdline}" "${dirname}"
+    # Execute processes: a task whose script cannot be written, or that
+    # cannot be launched, stops the round and the loop with an error
+    if ! debasher_builtin_sched::_exec_processes "${cmdline}" "${dirname}"; then
+        echo "Error: a task could not be launched; no more processes are launched. Aborting..." >&2
+        return 1
+    fi
 
     # In oneshot mode there is no need to sleep: the only dependencies that
     # can hold up a process ("after") are already satisfied by a process

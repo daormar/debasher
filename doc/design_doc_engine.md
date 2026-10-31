@@ -371,7 +371,7 @@ relative to the output directory of the run.
   scheduler. A program that passes it is not refused for its options or for what
   a single process asks for; a first round of the built-in scheduler that can
   choose no task, or, with `--builtinsched-oneshot`, that cannot launch every
-  process at once, is still refused when the run starts. Its preparation
+  task at once, is still refused when the run starts. Its preparation
   directory is a temporary one, outside the output directory, and is never moved
   into it: the validation leaves the files with which an earlier run in the
   output directory describes itself as they were (see "Architecture"), and the
@@ -621,8 +621,8 @@ until no task is left to launch or still running, or, with
 `--builtinsched-oneshot`, launches everything it can at once and ends. Either
 way, a launched task runs in a process of its own, which does not need
 `debasher_exec` to stay alive. If the built-in scheduler ends before the
-program does, because `debasher_exec` is stopped or runs with
-`--builtinsched-oneshot`, the tasks already launched go on, and those not
+program does, because `debasher_exec` is stopped, stops with an error or runs
+with `--builtinsched-oneshot`, the tasks already launched go on, and those not
 launched yet wait for a new `debasher_exec` on the same output directory. That
 one refuses to start while any process is still in progress, and afterwards
 reads from the directory what is done and launches the rest.
@@ -2292,7 +2292,11 @@ rounds until no task can be launched and none still runs. In each round it:
 6. Launches the chosen tasks, writing the process script of a process when
    its first task is launched (see "Running a process"), and waits one second
    before the next round, or five when the program has more than ten
-   processes.
+   processes. A process script that cannot be written, or a task that cannot
+   be launched, stops the run with an error; the tasks launched before it go
+   on, an end of a FIFO among them blocking until its other end runs or
+   `debasher_stop` stops it, and the others are not cancelled and wait for a
+   later run.
 
 When a round has nothing to launch and nothing runs, the scheduler cancels
 every task that still waits and ends the loop, outside the oneshot mode (see
@@ -2349,7 +2353,7 @@ without waiting for something to end. Before launching anything, it refuses what
 only the end of a task could let through: a dependency other than `none` and
 `after`, a throttle, of the process or given with `--dflt-throttle`, smaller
 than the number of tasks of its process, and a first round that does not fit in
-the budget at once.
+the budget at once, every task of an array counted on its own.
 
 ## The Slurm scheduler
 
@@ -2391,6 +2395,10 @@ fails, for example for exceeding its memory or its time, is run again with the
 next values. With more than one attempt, two verification jobs follow the
 attempts and record whether one of them succeeded, and the processes that depend
 on this one wait for the last of those jobs.
+
+A process script that cannot be written stops the submission with an error, as
+a job that `sbatch` refuses does; the processes submitted before it stay
+submitted.
 
 The Slurm scheduler refuses a program that uses FIFOs (see "Running both ends
 together"), and it has no `UNFINISHED_BUT_RUNNABLE` status: the tasks of a job
@@ -3360,7 +3368,8 @@ leaves, by design, to the program or to whoever runs it.
 21. No task waits for a dependency that can no longer hold in its run: it is
     cancelled, or, under the Slurm scheduler and for a dependency on a process
     that the run does not launch, its process is not submitted. Under the
-    built-in scheduler, a process ends in the run once none of its tasks runs or
+    built-in scheduler, unless it stops first, with an error or by
+    `debasher_stop`, a process ends in the run once none of its tasks runs or
     can still be launched, as failed if not all of them finished (see "Tasks
     that will not be launched").
 22. A task whose `_skip` method returns neither 0 nor 1 fails without touching
