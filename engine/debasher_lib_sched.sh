@@ -372,8 +372,8 @@ debasher::_stop_pid()
     # debasher_builtin_sched::_launch starts each process's script with
     # job control enabled so it becomes its own process group leader
     # (pgid == pid) precisely so this can reach every child it forks
-    # (its own stdout-capturing tee pipeline, plus a mirrored fifo's
-    # background tap, if any) instead of leaving them running as
+    # (the programs that its process function starts, plus a mirrored
+    # fifo's background tap, if any) instead of leaving them running as
     # orphans.
     kill -9 -- "-$pid" > /dev/null 2>&1 || return 1
 
@@ -826,4 +826,219 @@ debasher::_get_elapsed_time_for_process()
             debasher::_get_elapsed_time_for_process_builtin "${dirname}" "${processname}"
             ;;
     esac
+}
+
+########
+# The header of a process script, under both schedulers: the paths are
+# written with printf '%q', so that the script reads them back as they are,
+# whatever they hold.
+debasher::_print_script_header()
+{
+    local fname=$1
+    local dirname=$2
+    local processname=$3
+    local num_tasks=$4
+
+    echo "DEBASHER_SCRIPT_FILENAME=$(printf '%q' "${fname}")"
+    echo "DEBASHER_DIR_NAME=$(printf '%q' "${dirname}")"
+    echo "DEBASHER_PROCESS_NAME=${processname}"
+    echo "DEBASHER_NUM_TASKS=${num_tasks}"
+}
+
+########
+# Writes the resolved options of the task, DEBASHER_DESERIALIZED_ARGS, to its
+# ".opts" file (the webui's "See options" inspect action).
+debasher::_write_task_opts_file()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    local opts_fname=$(debasher::_get_process_opts_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    debasher::_print_opts_as_qstrings "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${opts_fname}"
+}
+
+########
+# Resets the output directory of the process before it runs, through its own
+# reset function if it has one, or by emptying it. Not for a node of a
+# resident program: what the directory holds is part of what the node has
+# done so far, like its checkpoints and its input log, and a launch of the
+# node resumes it, whether it is the Supervisor's relaunch after a crash or a
+# new run after a halt.
+debasher::_reset_task_outdir()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+    local reset_funct=$(debasher::_get_reset_funcname ${processname})
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    if [ "${reset_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${reset_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}"
+    else
+        if [ "${opt_array_size}" -eq 1 ]; then
+            debasher::_default_reset_outfiles_for_process "${dirname}" "${processname}" || return 1
+        else
+            debasher::_default_reset_outfiles_for_process_array "${dirname}" "${processname}" "${task_idx}" || return 1
+        fi
+        # Each task empties its own task subdirectories, as the output
+        # directory of a process with a single task is emptied
+        debasher::_reset_task_subdirs "${dirname}" "${processname}" "${task_idx}" || return 1
+    fi
+}
+
+########
+# Exports what the process reads about itself from the environment. Exported,
+# not plain assignments, so that they survive both the process's own wrapper
+# function and whatever it execs in turn (e.g. a resident process's "python
+# -c ..." heredoc).
+debasher::_export_process_env()
+{
+    local dirname=$1
+    local processname=$2
+    local opt_array_size=$3
+    local task_idx=$4
+
+    # Its own __exec__/<processname>/ directory (e.g. for checkpoints),
+    # without any option needing to be wired for it, its output directory
+    # (e.g. for what a launcher node keeps across launches), and the
+    # directory of the module that declares it, against which a relative
+    # path of the program resolves, as an external alias does.
+    export DEBASHER_PROCESS_EXECDIR=$(debasher::_get_prg_exec_dir_for_process "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_OUTDIR=$(debasher::_get_process_outdir_given_dirname "${dirname}" "${processname}")
+    export DEBASHER_PROCESS_MODULE_DIR="${DEBASHER_PROCESS_PFILE_DIR[${processname}]:-}"
+    # The tasks of an array share that directory, so a task also gets its
+    # own index, to name what it keeps there the way the engine names its
+    # per-task files (<process>_<idx>.id); empty for a process that is not
+    # an array.
+    if [ "${opt_array_size}" -gt 1 ]; then
+        export DEBASHER_PROCESS_TASK_IDX="${task_idx}"
+    else
+        export DEBASHER_PROCESS_TASK_IDX=""
+    fi
+    # The computational specifications of the process, so that a resident
+    # process's heredoc reads its own limits from them (see
+    # DEBASHER_RESIDENT_COMP_SPEC_NAMES). The generated script carries the
+    # specification of every process, so a relaunch gets them too.
+    export DEBASHER_PROCESS_COMP_SPECS=$(debasher::_get_process_comp_specs "${processname}")
+    # The ports of the task, for a node or the Supervisor of a resident
+    # program, which takes them from here instead of declaring them in its
+    # class (see debasher::_register_resident_task_ports); empty for any
+    # other process
+    export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
+}
+
+########
+# Runs a task of a process, as the last part of its process script does
+# under both schedulers, so that the steps are the same and in the same
+# order: the options, the ".opts" file, the start time, the skip method,
+# the reset of the output directory, the process function, the post method
+# and the completion marker. Only the built-in scheduler ($6 is 1) starts
+# the mirror taps of the FIFOs that the process owns and exports the
+# variables of the process. Fails when the task does not finish.
+#
+# $1 - Command line of the run.
+# $2 - Absolute path of the output directory.
+# $3 - Name of the process.
+# $4 - Number of tasks of the process.
+# $5 - Index of the task, 0 for a process that is not an array.
+# $6 - 1 to start the mirror taps and export the variables of the process.
+debasher::_execute_task()
+{
+    local cmdline=$1
+    local dirname=$2
+    local processname=$3
+    local opt_array_size=$4
+    local task_idx=$5
+    local builtin_sched_steps=$6
+    local skip_funct=$(debasher::_get_skip_funcname ${processname})
+    local post_funct=$(debasher::_get_post_funcname ${processname})
+
+    # Get serialized arguments
+    local sargs
+    sargs=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || {
+        echo "Error: the options of ${processname} (task ${task_idx}) could not be generated" >&2
+        return 1
+    }
+
+    # Convert serialized process options to array (result is placed into
+    # the DEBASHER_DESERIALIZED_ARGS variable)
+    debasher::_deserialize_args "${sargs}"
+
+    debasher::_write_task_opts_file "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
+
+    debasher::_display_begin_process_message
+
+    # A task that the skip method of its process skips counts as finished:
+    # it signals its completion without resetting its output directory or
+    # running the process or its post method, so that the processes that
+    # depend on it run with the outputs it already has. A skip method that
+    # fails fails the task, which then runs nothing either
+    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        local skip_status=0
+        debasher::_call_skip_method "${processname}" "${skip_funct}" "${DEBASHER_DESERIALIZED_ARGS[@]}" || skip_status=$?
+        if [ ${skip_status} -eq 0 ]; then
+            echo "Process ${processname} skipped by its skip method; counted as finished" >&2
+            debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+            debasher::_display_end_process_message
+            return 0
+        elif [ ${skip_status} -ne 1 ]; then
+            return 1
+        fi
+    fi
+
+    # A reset that fails fails the task, which then runs nothing
+    if ! debasher::_reset_task_outdir "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"; then
+        echo "Error: the output directory of ${processname} could not be reset" >&2
+        return 1
+    fi
+
+    if [ "${builtin_sched_steps}" -eq 1 ]; then
+        # Start mirror taps (if any) for fifos this process owns and
+        # writes to (see debasher::_start_fifo_mirror_taps_for_process):
+        # must run after the ".opts" dump above so that inspector keeps
+        # showing the real fifo path, and before the process function
+        # below so it gets each mirrored option's shim path instead.
+        debasher::_start_fifo_mirror_taps_for_process "${processname}"
+
+        debasher::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
+    fi
+
+    # Execute process function, keeping its stdout
+    local stdout_filename=$(debasher::_get_process_stdout_filename "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}")
+    "${processname}" "${DEBASHER_DESERIALIZED_ARGS[@]}" > "${stdout_filename}"
+
+    local funct_exit_code=$?
+
+    # Stop mirror taps and fail the process if any of them died
+    # abnormally, rather than silently losing mirrored output.
+    if [ "${builtin_sched_steps}" -eq 1 ]; then
+        debasher::_stop_fifo_mirror_taps || funct_exit_code=1
+    fi
+
+    if [ ${funct_exit_code} -ne 0 ]; then
+        echo "Error: execution of ${processname} failed with exit code ${funct_exit_code}" >&2
+    else
+        echo "Process ${processname} successfully executed" >&2
+    fi
+
+    # Execute process post-function
+    if [ "${post_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
+        ${post_funct} "${DEBASHER_DESERIALIZED_ARGS[@]}" || { echo "Error: execution of ${post_funct} failed with exit code $?" >&2 ; return 1; }
+    fi
+
+    # Treat errors
+    if [ ${funct_exit_code} -ne 0 ]; then
+        return 1;
+    fi
+
+    # Signal process completion
+    debasher::_signal_process_completion "${dirname}" "${processname}" "${task_idx}" "${opt_array_size}" || return 1
+
+    debasher::_display_end_process_message
 }

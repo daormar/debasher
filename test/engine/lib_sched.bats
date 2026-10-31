@@ -515,16 +515,13 @@ comes_before() {
     [[ "${output}" =~ "circular dependency detected at '"[abc]"'" ]]
 }
 
-@test "the command that leaves the completion marker of a task in a script writes it into an output directory with a blank, a dollar or a double quote in its path" {
-    local dirname="${BATS_TEST_TMPDIR}/out sp \$HOME \"q\""
-    mkdir -p "${dirname}/__exec__/p"
+@test "the header of a process script reads back the script name and the output directory as they are, with a blank, a dollar, a double quote or a backquote in them" {
+    local dirname="${BATS_TEST_TMPDIR}/out sp \$HOME \"q\" \`x\`"
+    local fname="${dirname}/__exec__/p/p"
 
-    local cmd
-    cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" p TASK_IDX 1)
-    eval "${cmd}"
-    [ -f "$(debasher::_get_process_finished_filename "${dirname}" p)" ]
-
-    cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" p TASK_IDX 3)
-    TASK_IDX=2 eval "${cmd}"
-    [ -f "$(debasher::_get_task_finished_filename "${dirname}" p 2)" ]
+    eval "$(debasher::_print_script_header "${fname}" "${dirname}" p 3)"
+    [ "${DEBASHER_SCRIPT_FILENAME}" = "${fname}" ]
+    [ "${DEBASHER_DIR_NAME}" = "${dirname}" ]
+    [ "${DEBASHER_PROCESS_NAME}" = p ]
+    [ "${DEBASHER_NUM_TASKS}" = 3 ]
 }

@@ -197,10 +197,10 @@ The output returned by the command is:
 
 .. code-block:: bash
 
-    Process started at 07/30/24 18:17:06
+    Process started at 2024-07-30 18:17:06.120
     * Resetting output directory for process...
-    Function hello_world successfully executed
-    Process finished at 07/30/24 18:17:06
+    Process hello_world successfully executed
+    Process finished at 2024-07-30 18:17:06.245
 
 A Program with Two Processes
 ----------------------------
@@ -1265,6 +1265,14 @@ missing.
 
   (taken from the ``array`` example, where ``array_writer`` uses it to
   remove a stale output file from a previous run before recreating it.)
+
+  A ``reset_outfiles`` method that returns a non-zero exit code fails
+  the task, under the built-in scheduler and under Slurm alike: the
+  scheduler output says that the output directory could not be reset,
+  and neither the process nor its ``post`` method runs. End the method
+  with a command that succeeds when nothing has to be removed, as the
+  ``if`` above does (a bare ``[ -f "${outf}" ] && rm "${outf}"`` would
+  return 1 when the file is missing).
 
 * ``post``: run right after the process implementation returns,
   whether it succeeded or failed, e.g. for post-processing or cleanup.

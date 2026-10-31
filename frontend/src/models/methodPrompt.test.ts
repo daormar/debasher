@@ -77,6 +77,11 @@ describe("buildMethodPrompt", () => {
       .toContain("right after the process function returns, whether the function succeeded or failed.");
   });
 
+  it("says that a reset_outfiles that fails fails the task", () => {
+    expect(buildMethodPrompt(program, align, "resetOutfilesCode", "", ""))
+      .toContain("A `reset_outfiles` that fails fails the task, which then runs neither the process function nor `post`.");
+  });
+
   it("describes the options as arguments, or as what the code of the process reads", () => {
     expect(buildMethodPrompt(program, align, "resetOutfilesCode", "", ""))
       .toContain("## The options\n\n- `-outf` (output, file)");

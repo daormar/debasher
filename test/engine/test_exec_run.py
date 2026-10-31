@@ -888,6 +888,103 @@ def test_an_array_runs_into_an_output_directory_with_a_blank_in_its_path(tmp_pat
     assert "STATUS: FINISHED" in status.stdout
 
 
+def _task_steps_process(name, body, methods=""):
+    return f"""\
+{name}_explain_opts()
+{{
+    explain_opt "-t" "<dir>" "Directory where the steps leave their traces"
+}}
+
+{name}_identify_cmdline_opts()
+{{
+    opt_is_cmdline "-t"
+}}
+
+{name}_define_opts()
+{{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${{cmdline}}" "-t" optlist || return 1
+    save_opt_list optlist
+}}
+
+{name}()
+{{
+    local t=$(read_opt_value_from_func_args "-t" "$@")
+    {body}
+}}
+{methods}
+"""
+
+
+# Four processes, each for a step of a task: a, whose _reset_outfiles
+# method fails; b, whose function fails and whose _post method leaves a
+# trace; c, whose function succeeds and whose _post method fails; and d,
+# which writes the exec directory that the scheduler exports to it
+TASK_STEPS_MODULE = (
+    _task_steps_process(
+        "a", 'touch "${t}/a_ran"', "a_reset_outfiles()\n{\n    return 1\n}\n"
+    )
+    + _task_steps_process(
+        "b",
+        'touch "${t}/b_ran"; return 1',
+        'b_post()\n{\n    local t=$(read_opt_value_from_func_args "-t" "$@")\n    touch "${t}/b_post"\n}\n',
+    )
+    + _task_steps_process("c", 'touch "${t}/c_ran"', "c_post()\n{\n    return 1\n}\n")
+    + _task_steps_process("d", 'echo "${DEBASHER_PROCESS_EXECDIR:-}" > "${t}/d_execdir"')
+    + """
+debasher_task_steps_program()
+{
+    add_debasher_process "a" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "b" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "c" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "d" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+)
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_a_task_runs_its_steps_alike_under_both_schedulers(tmp_path, sched):
+    pfile = tmp_path / "debasher_task_steps.sh"
+    pfile.write_text(TASK_STEPS_MODULE)
+    outdir = tmp_path / "out"
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    extra = ["--wait"] if sched == "SLURM" else []
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(traces), *extra)
+    assert result.returncode == 0, result.stderr
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    # A reset that fails fails the task, which runs nothing
+    assert "PROCESS: a ; STATUS: UNFINISHED" in status
+    assert not (traces / "a_ran").exists()
+    # The _post method runs after a function that failed, and the task fails
+    assert "PROCESS: b ; STATUS: UNFINISHED" in status
+    assert (traces / "b_ran").exists()
+    assert (traces / "b_post").exists()
+    # A _post method that fails fails a task whose function succeeded
+    assert "PROCESS: c ; STATUS: UNFINISHED" in status
+    assert (traces / "c_ran").exists()
+    assert "PROCESS: d ; STATUS: FINISHED" in status
+
+    # Only the built-in scheduler exports the variables of the process
+    execdir = (traces / "d_execdir").read_text().strip()
+    if sched == "BUILTIN":
+        assert execdir == str(outdir / "__exec__" / "d")
+    else:
+        assert execdir == ""
+
+
 def test_debasher_exec_writes_its_process_id_into_the_lock_file_and_marks_a_validation(tmp_path):
     outdir = tmp_path / "out"
     args = [str(DEBASHER_EXEC), "--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "--sched", "BUILTIN"]

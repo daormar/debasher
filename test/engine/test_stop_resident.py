@@ -88,7 +88,7 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
         # process-group leader (the script launch_chaos backgrounds), and a
         # resident process's own Python interpreter sits at least one
         # pipeline subshell below it (see
-        # debasher_builtin_sched::_execute_funct_plus_postfunct); a plain
+        # debasher::_execute_task); a plain
         # single-pid SIGTERM never reaches it at all: it only kills the
         # wrapper, orphaning a Python process that then never receives
         # anything and runs forever, and the dead wrapper never gets to

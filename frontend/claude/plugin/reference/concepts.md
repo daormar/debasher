@@ -221,8 +221,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Additional methods** (general programs only), bodies of optional
   functions: `skipCode` (return 0 to skip a task, 1 to run it, any other
   status fails it; never on a process at either end of a FIFO),
-  `condaEnvsCode`, `dockerImgsCode`, `postCode`, `resetOutfilesCode`,
-  `outdirBasenameCode`. The skip method may instead be a Python skip file
+  `condaEnvsCode`, `dockerImgsCode`, `postCode` (runs after the process
+  function, whether it succeeded or failed), `resetOutfilesCode` (replaces
+  the default reset of the output directory); either of these two that
+  returns a status other than 0 fails the task, `outdirBasenameCode`. The skip method may instead be a Python skip file
   (`skipLanguage` `python`) that defines `skip(task)`, which returns `True`
   to skip the task and `False` to run it, its code (`skipCode`) the whole
   file; `task.value(label)` reads an option of the task as

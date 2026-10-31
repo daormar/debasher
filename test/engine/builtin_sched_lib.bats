@@ -997,12 +997,12 @@ fail_task() {
 
 # --- skipping a task --------------------------------------------------------
 
-@test "_execute_funct_plus_postfunct counts a skipped task as finished without running the process or its post method" {
+@test "_execute_task counts a skipped task as finished without running the process or its post method" {
     local marks="${BATS_TEST_TMPDIR}/marks"
     debasher::_get_opts_for_process_and_task() {
         echo "-x${DEBASHER_ARG_SEP}1"
     }
-    debasher_builtin_sched::_write_opts_file() { :; }
+    debasher::_write_task_opts_file() { :; }
     debasher::_signal_process_completion() {
         echo "completion $2 $3" >> "${marks}"
     }
@@ -1016,7 +1016,7 @@ fail_task() {
         echo "post" >> "${marks}"
     }
 
-    run debasher_builtin_sched::_execute_funct_plus_postfunct "" "${OUTDIR}" skipped 1 0
+    run debasher::_execute_task "" "${OUTDIR}" skipped 1 0 1
     [ "${status}" -eq 0 ]
     [[ "${output}" == *"skipped by its skip method; counted as finished"* ]]
     [ "$(cat "${marks}")" = "completion skipped 0" ]
@@ -1136,7 +1136,7 @@ write_procspec() {
     [ ! -e "$(debasher::_get_task_cancelled_filename "${OUTDIR}" arr 2)" ]
 }
 
-@test "_reset_outdir empties the output directory of a process in a general program, and nothing in a resident one" {
+@test "_reset_task_outdir empties the output directory of a process in a general program, and nothing in a resident one" {
     declare -g FIND="$(command -v find)"
     local outd="${OUTDIR}/proc"
     local program_type
@@ -1144,7 +1144,7 @@ write_procspec() {
         mkdir -p "${outd}"
         touch "${outd}/state"
         DEBASHER_PROGRAM_TYPE=${program_type}
-        debasher_builtin_sched::_reset_outdir "${OUTDIR}" proc 1 0
+        debasher::_reset_task_outdir "${OUTDIR}" proc 1 0
         if [ "${program_type}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
             [ -f "${outd}/state" ]
         else

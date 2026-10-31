@@ -1446,19 +1446,18 @@ state it had. `debasher_reset_resident` does it for the whole program (see
 - The signal has to reach the node's own process, not just the process group
   leader `debasher_stop` and `.id` already agree on.
   `debasher_builtin_sched::_launch` backgrounds a generated script as its own
-  process group leader (`pgid == pid`, the pid in `.id`), and that script's
-  own pipeline (`debasher_builtin_sched::_execute_funct_plus_postfunct`)
-  forks at least one subshell of its own to run the process function, so a
-  resident process's own Python interpreter sits below the pid in `.id`, not
-  at it. A plain, single-pid `SIGTERM` there would only reach the wrapper
-  script, orphaning the Python interpreter, which would never receive
-  anything and would keep running. So a stop signal targets the whole
-  process group instead (`os.killpg`, the same group `debasher_stop` already
-  reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper script
-  itself survives that same broadcast to still write `.finished` once its
+  process group leader (`pgid == pid`, the pid in `.id`), and the process
+  function that this script runs (`debasher::_execute_task`) starts the Python
+  interpreter as a child process, so a resident process's own Python interpreter
+  sits below the pid in `.id`, not at it. A plain, single-pid `SIGTERM` there
+  would only reach the wrapper script, orphaning the Python interpreter, which
+  would never receive anything and would keep running. So a stop signal targets
+  the whole process group instead (`os.killpg`, the same group `debasher_stop`
+  already reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper
+  script itself survives that same broadcast to still write `.finished` once its
   own child actually exits, which is what
-  `debasher_builtin_sched::_print_script_trap` (`trap '' TERM`, the first
-  thing `_create_script` writes into the generated file) is for. A hard kill
+  `debasher_builtin_sched::_print_script_trap` (`trap '' TERM`, the first thing
+  `_create_script` writes into the generated file) is for. A hard kill
   (`SIGKILL`) cannot be trapped and is unaffected.
 - Resumption: relaunch every process. It is the ordinary Startup sequence above,
   with no special case for a halt: each node loads its latest checkpoint (the
@@ -2198,9 +2197,10 @@ with it the trace is exact.
   `HEARTBEAT_CHECK_INTERVAL_SECS`, not delayed by up to a full
   `HEARTBEAT_TIMEOUT_SECS`.
 - `debasher::_signal_process_completion` (`engine/debasher_lib_sched_procs.sh`),
-  which writes `.finished`, is only ever reached from
-  `_execute_funct_plus_postfunct`'s success branch: a non-zero exit code returns
-  before it. So `.finished` reliably means "exited cleanly, code 0".
+  which writes `.finished`, is only reached when the task succeeds or its
+  `_skip` method skips it (`debasher::_execute_task`): a non-zero exit code
+  returns before it. So `.finished` reliably means "exited cleanly, code 0", or
+  skipped.
 - Once `.finished` is seen for a node, it moves to a **"done"** state,
   permanently excluded from further heartbeat/PID checks and never again a
   candidate for `on_node_down`. This is what keeps an intentional ordered
@@ -2280,20 +2280,14 @@ with it the trace is exact.
 - Exceeding the limit calls **`on_node_permanently_failed(node_name)`** instead
   of relaunching again; that node moves to its own terminal "given up" state
   (distinct from "done"), never automatically retried again.
-- **The relaunch subprocess also has to leave `stdout`/`stderr` alone, not
-  just `stdin`.** `on_node_down`'s `subprocess.Popen` redirects `stdin`, and
-  also redirects `stdout`/`stderr` to `DEVNULL`: left alone, they would be
-  inherited from the Supervisor's own process, which its own launch script
-  pipes into `tee` (`debasher_builtin_sched::_execute_funct_plus_postfunct`).
-  `debasher_launch_process`, and in turn the resident process it
-  backgrounds, would inherit that same pipe, and hold its write end open for
-  as long as the relaunched node keeps running, long after the Supervisor's
-  own Python interpreter has actually exited: `tee` would never see `EOF`,
-  so the Supervisor's own wrapper script would never get past its own `wait`
-  for that pipeline, and `sup.finished` would never appear. `debasher_stop`'s
-  hard kill never surfaces this (it always kills the relaunched node too,
-  which closes the leaked fd as a side effect); a graceful stop signal (see
-  "`debasher_stop_resident`") does not.
+- **The relaunch subprocess also has to leave `stdout`/`stderr` alone, not just
+  `stdin`.** `on_node_down`'s `subprocess.Popen` redirects `stdin`, and also
+  redirects `stdout`/`stderr` to `DEVNULL`: left alone, they would be inherited
+  from the Supervisor's own process (its `.stdout` file and its log, see
+  `debasher::_execute_task`), and `debasher_launch_process`, and in turn the
+  resident process it backgrounds, would hold them open and write into them for
+  as long as the relaunched node keeps running, long after the Supervisor's own
+  Python interpreter has exited.
 
 ## Escalation on a permanent node failure
 
@@ -2478,24 +2472,23 @@ signal (see "Clean-completion detection").
   5. Re-read every node's `.id` (not reusing what step 1 or discovery already
      saw) and send each one that still runs a stop signal.
   6. Wait for every node's own `.finished`.
-- **A stop signal is `SIGTERM` to the whole process group (`kill -TERM --
-  "-$pid"`, `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of
-  `debasher::_stop_pid`'s `SIGKILL`), never a lone pid.**
+- **A stop signal is `SIGTERM` to the whole process group
+  (`kill -TERM -- "-$pid"`, `debasher::_stop_pid_gracefully`, the `SIGTERM`
+  sibling of `debasher::_stop_pid`'s `SIGKILL`), never a lone pid.**
   `debasher_builtin_sched::_launch` backgrounds a generated script as its own
-  process group leader (the pid in `.id`), but that script's own pipeline
-  (`debasher_builtin_sched::_execute_funct_plus_postfunct`) forks at least
-  one subshell to run the process function, so a resident process's own
-  Python interpreter sits below that pid, not at it. A single-pid `SIGTERM`
-  would only reach the wrapper script, which has no handler of its own and
-  would die at once, orphaning the interpreter, which would never receive
-  anything and would run forever. So the signal always targets the whole
-  group, and the wrapper script itself ignores `SIGTERM` at its own top
-  level (`debasher_builtin_sched::_print_script_trap`, `trap '' TERM`, the
-  first thing `_create_script` writes into the generated file) so it
-  survives that same broadcast long enough to still write `.finished` once
-  its own child (the Python interpreter, or a stopped `Supervisor`)
-  actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill, cannot be
-  trapped and is unaffected by any of this.
+  process group leader (the pid in `.id`), but the process function that this
+  script runs (`debasher::_execute_task`) starts the Python interpreter as a
+  child process, so a resident process's own Python interpreter sits below that
+  pid, not at it. A single-pid `SIGTERM` would only reach the wrapper script,
+  which has no handler of its own and would die at once, orphaning the
+  interpreter, which would never receive anything and would run forever. So the
+  signal always targets the whole group, and the wrapper script itself ignores
+  `SIGTERM` at its own top level (`debasher_builtin_sched::_print_script_trap`,
+  `trap '' TERM`, the first thing `_create_script` writes into the generated
+  file) so it survives that same broadcast long enough to still write
+  `.finished` once its own child (the Python interpreter, or a stopped
+  `Supervisor`) actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill,
+  cannot be trapped and is unaffected by any of this.
 
 ## `debasher_snapshot_resident`: rounds from outside the program
 

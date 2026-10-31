@@ -729,20 +729,12 @@ class Supervisor(_PortWorker):
         # failure to launch.
         #
         # stdout/stderr also go to DEVNULL, not just stdin: left alone,
-        # Popen has them inherit this Supervisor's own (this process's
-        # own launch script pipes them into tee, see
-        # debasher_builtin_sched::_execute_funct_plus_postfunct), so the
-        # relaunch command, and in turn the resident process it
-        # backgrounds, would hold that pipe's write end open for as long
-        # as the relaunched node keeps running, long after the
-        # Supervisor's own process has actually exited. Found 2026-09-22
-        # by a real debasher_exec run: a graceful stop signal (see
-        # _on_stop_signal) made the Supervisor's own Python interpreter
-        # exit cleanly, but its wrapper script never got past its own
-        # `wait` for that pipeline, since tee never saw EOF on a pipe a
-        # relaunched node was still holding open; debasher_stop's hard
-        # kill never surfaced this, since it always kills the relaunched
-        # node too, which closes the leaked fd as a side effect.
+        # Popen has them inherit this Supervisor's own (its .stdout file
+        # and its log, see debasher::_execute_task), and the relaunch
+        # command, and in turn the resident process it backgrounds, would
+        # hold them open and write into them for as long as the relaunched
+        # node keeps running, long after the Supervisor's own process has
+        # exited.
         proc = subprocess.Popen(
             command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )

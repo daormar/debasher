@@ -31,12 +31,14 @@ export const PROCESS_METHODS: ProcessMethod[] = [
     name: "reset_outfiles",
     receivesOptions: true,
     summary:
-      "Runs instead of the engine's default reset of the output directory of the process, right before the process function, with the options of the task as its arguments, read as in the process function (`read_opt_value_from_func_args \"-opt\" \"$@\"`).",
+      "Runs instead of the engine's default reset of the output directory of the process, right before the process function, with the options of the task as its arguments, read as in the process function (`read_opt_value_from_func_args \"-opt\" \"$@\"`); a status other than 0 fails the task.",
     rules: [
       "The task runs it right before the process function, to remove what an earlier run left, such as a stale output file.",
       READ_OPTIONS,
       "It replaces the default reset, which empties the output directory of the process when the process has a single task and leaves it as it is when its tasks share it.",
       "It does not run when the task is skipped.",
+      "A `reset_outfiles` that fails fails the task, which then runs neither the process function nor `post`.",
+      "End the body with a command that succeeds, such as `rm -f` or `return 0`, rather than with a test that may be false (`[ -e \"$f\" ] && rm \"$f\"` returns 1 when the file is absent) and would fail the task.",
     ],
   },
   {

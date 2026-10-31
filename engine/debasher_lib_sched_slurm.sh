@@ -67,70 +67,32 @@ debasher::_init_slurm_scheduler()
 }
 
 ########
-debasher::_print_script_header_slurm_sched()
+# The handling of SIGTERM in a process script of Slurm, which sbatch sends
+# before the time limit (--signal): the _slurm_sigterm_handler method of the
+# process when it has one, or a handler that says so and ends the task with
+# an error. It goes first in the script, before the context, as the trap of
+# the built-in scheduler does (see debasher_builtin_sched::_print_script_trap):
+# the trap names the handler, which the context defines when it is a method
+# of the process.
+debasher::_print_script_trap_slurm_sched()
 {
-    get_sigterm_handler_funcname()
-    {
-        local processname=$1
+    local processname=$1
 
-        echo "${processname}${DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER}"
-    }
-
-    write_sigterm_handler()
-    {
-        local funcname=$1
-        echo "${funcname} ()"
+    local sigterm_handler_funcname="${processname}${DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER}"
+    if ! debasher::_func_exists "${sigterm_handler_funcname}"; then
+        echo "${sigterm_handler_funcname} ()"
         echo "{"
         echo " echo \"SIGTERM received: process execution will be aborted\""
         echo " exit 1"
         echo "}"
-    }
-
-    local fname=$1
-    local dirname=$2
-    local processname=$3
-    local num_tasks=$4
-
-    local sigterm_handler_funcname=$(get_sigterm_handler_funcname "${processname}")
-    if ! debasher::_func_exists "${sigterm_handler_funcname}"; then
-        write_sigterm_handler "${sigterm_handler_funcname}"
     fi
     echo "trap '${sigterm_handler_funcname}' SIGTERM"
-    echo "DEBASHER_SCRIPT_FILENAME=$(printf '%q' "${fname}")"
-    echo "DEBASHER_DIR_NAME=$(printf '%q' "${dirname}")"
-    echo "DEBASHER_PROCESS_NAME=${processname}"
-    echo "DEBASHER_NUM_TASKS=${num_tasks}"
 }
 
 ########
-debasher::_print_opt_code_slurm_sched()
-{
-    local cmdline=$1
-    local processname=$2
-    local opt_array_size=$3
-
-    if [ "${opt_array_size}" -gt 1 ]; then
-        local task_id="\${SLURM_ARRAY_TASK_ID}"
-    else
-        local task_id=0
-    fi
-
-    # A task whose options cannot be obtained fails instead of running
-    # without them, as with the built-in scheduler
-    local opts_error="{ echo \"Error: the options of ${processname} (task ${task_id}) could not be generated\" >&2; exit 1; }"
-    if debasher::_uses_option_generator "${processname}"; then
-        echo "CMDLINE=$(printf '%q' "${cmdline}")"
-        local proc_outdir=$(debasher::_get_process_outdir "${processname}")
-        local generate_opts_funcname=$(debasher::_get_generate_opts_funcname ${processname})
-        echo "sargs=\$(debasher::_gen_opts_for_process_and_task \"\${CMDLINE}\" \"${processname}\" $(printf '%q' "${proc_outdir}") \"${generate_opts_funcname}\" \"${task_id}\") || ${opts_error}"
-    else
-        local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
-        echo "sargs=\$(debasher::_get_file_opts_for_process_and_task \"${opts_fname}\" \"${task_id}\") || ${opts_error}"
-    fi
-    echo "debasher::_deserialize_args \"\${sargs}\""
-}
-
-########
+# The last part of a process script of Slurm: it runs the task that
+# SLURM_ARRAY_TASK_ID names, or the only one (see debasher::_execute_task),
+# its output going to the log that sbatch was given.
 debasher::_print_script_body_slurm_sched()
 {
     # Initialize variables
@@ -138,75 +100,15 @@ debasher::_print_script_body_slurm_sched()
     local dirname=$2
     local processname=$3
     local opt_array_size=$4
-    local skip_funct=$(debasher::_get_skip_funcname ${processname})
-    local reset_funct=$(debasher::_get_reset_funcname ${processname})
-    local post_funct=$(debasher::_get_post_funcname ${processname})
 
-    # Retrieve and deserialize process options
-    debasher::_print_opt_code_slurm_sched "${cmdline}" "${processname}" "${opt_array_size}"
-
-    # Dump resolved options to the process's ".opts" file (webui "See
-    # options" inspect action)
-    echo "opts_fname=\$(debasher::_get_process_opts_filename $(printf '%q' "${dirname}") ${processname} ${opt_array_size} \"\${SLURM_ARRAY_TASK_ID}\")"
-    echo "debasher::_print_opts_as_qstrings \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" > \"\${opts_fname}\""
-
-    echo "debasher::_display_begin_process_message"
-
-    # A task that the skip method of its process skips counts as finished,
-    # and one whose skip method fails fails (see
-    # debasher_builtin_sched::_execute_funct_plus_postfunct)
-    local sign_process_completion_cmd=$(debasher::_get_signal_process_completion_cmd "${dirname}" "${processname}" "SLURM_ARRAY_TASK_ID" "${opt_array_size}")
-    if [ "${skip_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        echo "skip_status=0"
-        echo "debasher::_call_skip_method ${processname} ${skip_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" || skip_status=\$?"
-        echo "if [ \${skip_status} -eq 0 ]; then"
-        echo "    echo \"Process ${processname} skipped by its skip method; counted as finished\" >&2"
-        echo "    ${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
-        echo "    debasher::_display_end_process_message"
-        echo "    exit 0"
-        echo "elif [ \${skip_status} -ne 1 ]; then"
-        echo "    exit 1"
-        echo "fi"
-    fi
-
-    # Reset output directory, and empty the task subdirectories of the
-    # task, as the output directory of a process with a single task is
-    # emptied
-    if [ "${reset_funct}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        if [ "${opt_array_size}" -eq 1 ]; then
-            echo "debasher::_default_reset_outfiles_for_process $(printf '%q' "${dirname}") ${processname}"
-            echo "debasher::_reset_task_subdirs $(printf '%q' "${dirname}") ${processname} 0 || exit 1"
-        else
-            echo "debasher::_default_reset_outfiles_for_process_array $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\""
-            echo "debasher::_reset_task_subdirs $(printf '%q' "${dirname}") ${processname} \"\${SLURM_ARRAY_TASK_ID}\" || exit 1"
-        fi
+    if [ "${opt_array_size}" -gt 1 ]; then
+        local task_idx="\"\${SLURM_ARRAY_TASK_ID}\""
     else
-        echo "${reset_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\""
+        local task_idx=0
     fi
 
-    # Write function to be executed: its standard output goes to its own
-    # file only, as with the built-in scheduler, not to the scheduler log
-    echo "DEBASHER_PROCESS_STDOUT_FILENAME=\$(debasher::_get_process_stdout_filename $(printf '%q' "${dirname}") "${processname}" "${opt_array_size}" \"\${SLURM_ARRAY_TASK_ID}\")"
-    echo "${processname} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" > \"\${DEBASHER_PROCESS_STDOUT_FILENAME}\""
-    echo "funct_exit_code=\$?"
-    echo "if [ \${funct_exit_code} -ne 0 ]; then echo \"Error: execution of ${processname} failed with exit code \${funct_exit_code}\" >&2; else echo \"Function ${processname} successfully executed\" >&2; fi"
-
-    # Write post function if it was provided
-    if [ "${post_funct}" != ${DEBASHER_FUNCT_NOT_FOUND} ]; then
-        echo "${post_funct} \"\${DEBASHER_DESERIALIZED_ARGS[@]}\" || { echo \"Error: execution of ${post_funct} failed with exit code \$?\" >&2; exit 1; }"
-    fi
-
-    # Return if function to be executed failed
-    echo "if [ \${funct_exit_code} -ne 0 ]; then exit 1; fi"
-
-    # Signal process completion
-    echo "${sign_process_completion_cmd} || { echo \"Error: process completion could not be signaled\" >&2; exit 1; }"
-}
-
-########
-debasher::_print_script_foot_slurm_sched()
-{
-    echo "debasher::_display_end_process_message"
+    echo "CMDLINE=$(printf '%q' "${cmdline}")"
+    echo "debasher::_execute_task \"\${CMDLINE}\" $(printf '%q' "${dirname}") ${processname} ${opt_array_size} ${task_idx} 0"
 }
 
 ########
@@ -223,17 +125,18 @@ debasher::_create_slurm_script()
     local BASH_SHEBANG=$(debasher::_init_bash_shebang_var)
     echo "${BASH_SHEBANG}" > "${fname}" || return 1
 
+    # Handle the SIGTERM that comes before the time limit, before anything
+    # else runs (see debasher::_print_script_trap_slurm_sched)
+    debasher::_print_script_trap_slurm_sched "${processname}" >> "${fname}" || return 1
+
     # Write environment variables
     debasher::_print_exec_context "${dirname}" >> "${fname}" || return 1
 
     # Print header
-    debasher::_print_script_header_slurm_sched "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
+    debasher::_print_script_header "${fname}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
 
     # Print body
     debasher::_print_script_body_slurm_sched "${cmdline}" "${dirname}" "${processname}" "${opt_array_size}" >> "${fname}" || return 1
-
-    # Print foot
-    debasher::_print_script_foot_slurm_sched >> "${fname}" || return 1
 
     # Give execution permission
     chmod u+x "${fname}" || return 1

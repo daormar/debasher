@@ -355,8 +355,8 @@ relative to the output directory of the run.
   a process in its exec directory, and that the scheduler runs for each of its
   tasks.
 - **execution context**: `.exec_context.sh`, the variables and functions of the
-  shell of `debasher_exec` once the program is defined, with which every process
-  script starts.
+  shell of `debasher_exec` once the program is defined, which every process
+  script carries, right after its handling of `SIGTERM`.
 - **command line file**: `command_line.sh`, the command line of the run, with
   the program file resolved and the scheduler recorded, from which the tools
   reload the program.
@@ -570,7 +570,7 @@ hand processes to the scheduler  --->   __exec__/<process>/, __fifos__/
 
 process script, one per process, run for each of its tasks
 --------------------------------
-starts with the context          <---   .exec_context.sh, copied in
+carries the context              <---   .exec_context.sh, copied in
 reads its option list            <---   .sched_opts/
 runs the process function        --->   process output directory,
                                         completion marker
@@ -586,7 +586,7 @@ is written into the output directory before the first process is launched:
 - The execution context holds every function that the modules define, those
   of the engine included, and the variables of the shell, among them the
   registries of the engine, with the option lists left out. The process
-  script of each process starts with a copy of it, so a task runs the code of
+  script of each process carries a copy of it, so a task runs the code of
   the modules as it was when the run was prepared, and editing a module
   afterwards changes nothing in the run. An external script, which an alias
   runs from its file, and the Python function files of a process, which are
@@ -747,7 +747,7 @@ when a process does not define it:
 | `_explain_task_shaping_opts` | together with `_explain_opts`, and before the options of the process are defined, to check that its task shaping options are given | the process has no task shaping options |
 | `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
 | `_skip` | by the task, before the process output directory is reset, with the options of the task; it returns 0 to skip the task, 1 to run it, and any other status fails the task | the task is never skipped |
-| `_reset_outfiles` | by the task, before the process function, with the options of the task | the default reset (see "Executing a task") |
+| `_reset_outfiles` | by the task, before the process function, with the options of the task; a status other than 0 fails the task, which then runs nothing | the default reset (see "Executing a task") |
 | `_post` | by the task, once the process function returns, whether it succeeded or failed | nothing runs after the process function |
 | `_outdir_basename` | whenever the process output directory is needed | the directory is named after the process |
 | `_slurm_sigterm_handler` | by a task under the Slurm scheduler, when Slurm sends it `SIGTERM`, as when its time runs out | the task prints a message and exits with an error |
@@ -2442,8 +2442,12 @@ A task runs in a shell of its own, on the local machine or on a node of a
 cluster, which has not loaded any module and may not be able to. What it needs
 of the program travels in its process script, which the engine writes into the
 exec directory of the process when the process is launched, or, under the
-built-in scheduler, when its first task is cancelled. The script has three
-parts:
+built-in scheduler, when its first task is cancelled. The script first sets how
+it handles `SIGTERM`, before anything else runs: under the built-in scheduler it
+ignores it (see "The built-in scheduler"); under the Slurm scheduler, which
+sends it before the time limit, it installs the `_slurm_sigterm_handler` method
+of the process or a default handler that prints a message and exits with an
+error. Then come three parts:
 
 - **The execution context**, a copy of `.exec_context.sh`, which
   `debasher_exec` writes once the program is defined (see "Architecture"). It
@@ -2458,14 +2462,14 @@ parts:
   empty, is kept with its declaration, so that it reaches the task with its
   type.
 - **A header** with the name of the script, the output directory, the name of
-  the process and its number of tasks. Under the Slurm scheduler it also
-  installs the handler of `SIGTERM`, the `_slurm_sigterm_handler` method of
-  the process or a default one that prints a message and exits with an error.
-  Under the built-in scheduler it makes the script ignore `SIGTERM` (see "The
-  built-in scheduler").
+  the process and its number of tasks, the same under both schedulers. The
+  paths are written so that the script reads them back as they are, whatever
+  characters they hold.
 - **A last part** that runs one task, the one whose index the scheduler gives
-  it (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), as "Executing a
-  task" describes, and sends its output and errors to the log of the task.
+  it (`BUILTIN_ARRAY_TASK_ID` or `SLURM_ARRAY_TASK_ID`), through a function of
+  the context that both schedulers call (`debasher::_execute_task`), as
+  "Executing a task" describes, and sends its output and errors to the log of
+  the task.
 
 Since the context is copied when the script is written, a task runs the code
 that the modules had when its run was prepared, and a later run, which writes
@@ -2476,7 +2480,9 @@ languages, and aliases" and "Python function files").
 
 ## Executing a task
 
-A task does the same, in this order, under both schedulers:
+A task does the same, in this order, under both schedulers, whose process
+scripts call the same function of the context for it
+(`debasher::_execute_task`):
 
 1. It gets its option list, from its line of `.sched_opts` or from the option
    generator of its process (see "How option values reach a task"), and
@@ -2500,14 +2506,17 @@ A task does the same, in this order, under both schedulers:
    of an array process share the directory, and without the method it is left as
    it is. Without the method, the task then removes each of its task
    subdirectories with everything in it and creates it again (see "Task
-   subdirectories"). A process of a resident program is never reset, since its
-   directory holds what its node has done so far.
+   subdirectories"). A reset that fails (a `_reset_outfiles` method that returns
+   a status other than zero, or a default reset that cannot remove what it
+   should) fails the task, which then runs nothing. A process of a resident
+   program is never reset, since its directory holds what its node has done so
+   far.
 5. It starts the mirror taps of the mirrored FIFOs it owns (see "Mirror
    taps"), which only the built-in scheduler runs.
 6. It runs the process function with its options as arguments, and sends what
    the function prints to its standard output to its `.stdout` file.
-7. It stops its mirror taps, and counts the task as failed if one of them
-   ended abnormally.
+7. It stops its mirror taps, if it started them, and counts the task as failed
+   if one of them ended abnormally.
 8. It runs the `_post` method of the process, if there is one, with the
    options of the task, whether the process function succeeded or failed. A
    `_post` method that fails fails the task.
@@ -3212,7 +3221,7 @@ status 0 skips the task, 1 runs it, and any other fails it.
 
 **The reset rule.** Called once the task is known to run and before the body,
 to reset what the task finds in its process output directory, in place of the
-reset of the engine.
+reset of the engine; when it fails, the task fails, and runs nothing.
 
 **The post hook.** Called after the body, whether the body succeeded or failed;
 when it fails, the task fails.
