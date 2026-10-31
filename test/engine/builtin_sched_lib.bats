@@ -1245,3 +1245,14 @@ stub_round_before_knapsack() {
     [[ "${output}" == *"Error while writing the script of process b!"* ]]
     [ "$(cat "${launched}")" = "a" ]
 }
+
+@test "_builtin_sched_warn_if_no_ps warns only when there is no ps to ask" {
+    run debasher::_builtin_sched_warn_if_no_ps
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+
+    PS="${BATS_TEST_TMPDIR}/no_such_ps"
+    run debasher::_builtin_sched_warn_if_no_ps
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == "Warning: ps not found"*"install procps"* ]]
+}

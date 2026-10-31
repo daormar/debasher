@@ -172,9 +172,10 @@ relative to the output directory of the run.
 - **process specification**: what `add_debasher_process` records about a
   process, or `add_debasher_seq_process` about a sequential process: its
   computational specifications and its additional specifications.
-- **computational specification**: a resource that a process asks for: `cpus`,
+- **computational specification**: a resource that a process asks for (`cpus`,
   `mem` and `time`, always given, and `nodes`, `account`, `partition` and
-  `throttle`.
+  `throttle`), or, for a node of a resident program, one of its settings (its
+  limits, its timeouts, `max_concurrent_runs` and `batch_sched`).
 - **additional specification**: an attribute that changes how the engine treats
   a process or a sequential process: `processdeps`, `force`, `alias`,
   `ext_alias` and `alias_opt_map`, and, for a sequential process only, `sched`.
@@ -914,16 +915,18 @@ processes", and a process that gives it is refused when it is added.
 The name, the process function and the aliases are checked when the process is
 added, since an error there leaves the program without a process. The rest of
 the specification is checked when the final process specification is built
-(stage 6 of "Architecture"): a process without `cpus`, `mem` or `time`, a
-setting of a resident node that is not a positive number, a `batch_sched` other
-than `BUILTIN` or `SLURM`, a dependency on a process that is not part of the
-program, and, under the Slurm scheduler, a process with more than one attempt
-whose explicit dependencies are joined by `?` (see "The Slurm scheduler") stop
-the preparation of the run. The final process specification is the
-specification of each process with its dependencies added as a `processdeps`
-attribute, the inferred ones, or `none` when there are none, unless explicit
-dependencies were given. `program.procspec` holds it, one line per process, in
-no particular order:
+(stage 6 of "Architecture"). An attribute that the engine does not read, or one
+given among the computational specifications that belongs to the additional ones
+or the other way round, stops the preparation of the run, since it would
+otherwise be ignored. So do a process without `cpus`, `mem` or `time`, a setting
+of a resident node that is not a positive number, a `batch_sched` other than
+`BUILTIN` or `SLURM`, a dependency on a process that is not part of the program,
+and, under the Slurm scheduler, a process with more than one attempt whose
+explicit dependencies are joined by `?` (see "The Slurm scheduler"). The final
+process specification is the specification of each process with its dependencies
+added as a `processdeps` attribute, the inferred ones, or `none` when there are
+none, unless explicit dependencies were given. `program.procspec` holds it, one
+line per process, in no particular order:
 
 ```
 file_writer cpus=1 mem=32 time=00:01:00 |||  ; processdeps=none
@@ -2346,7 +2349,8 @@ a process, never one that merely has the process id of a task that has ended.
 a task that has its completion marker either. Without `ps`, the id is the
 process id alone, and the process id then decides by itself whether the task
 runs, as it does for any id without a start time; a task that has already ended
-when its start time is read gets an empty one, and never runs.
+when its start time is read gets an empty one, and never runs. `debasher_exec`
+warns about it when it runs a program on the built-in scheduler.
 
 The built-in scheduler gives the dependency types the meaning of the table. A
 dependency holds when the status of the producer says so: `after` once the
@@ -3462,7 +3466,9 @@ leaves, by design, to the program or to whoever runs it.
   unrelated process can make a task of the built-in scheduler that ended without
   its completion marker look running, and `debasher_stop`, a new launch of the
   task or the orderly stop of a resident program may then signal that process
-  (see "The built-in scheduler").
+  (see "The built-in scheduler"). `ps` is left optional, since the conda package
+  cannot bring it on every system and some containers lack it; `debasher_exec`
+  warns when it runs a program on the built-in scheduler without it.
 - **Names.** A process, or a shared directory, may have the name of a file of
   the engine at the top of the output directory, and the engine does not
   refuse it (see "The output directory").

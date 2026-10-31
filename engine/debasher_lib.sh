@@ -61,6 +61,13 @@ DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backl
 # The scheduler with which a launcher node runs its batch runs, one of those
 # debasher_exec takes in --sched; the built-in one when not given
 DEBASHER_BATCH_SCHED_COMP_SPEC_NAME="batch_sched"
+# The attributes that the engine reads, each in its part of the
+# specification of a process: the computational specifications and the
+# additional ones. Any other attribute, or one written in the other part, is
+# refused when the final process specification is built, since it would be
+# ignored. sched is not among them: only a sequential process has it
+DEBASHER_COMP_SPEC_NAMES="cpus mem time nodes account partition throttle ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}"
+DEBASHER_ADDITIONAL_SPEC_NAMES="${DEBASHER_PROCESSDEPS_SPEC} force alias alias_opt_map ext_alias"
 DEBASHER_VALUE_DESCRIPTOR_NAME_PREFIX=".__VAL_DESCRIPTOR__"
 DEBASHER_PROC_OUT_OPT_DESCRIPTOR_NAME_PREFIX="__PROC_OUT_OPT_DESCRIPTOR__"
 DEBASHER_SCHED_OPTS_DIRNAME=".sched_opts"

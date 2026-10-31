@@ -64,12 +64,15 @@ AC_SUBST(SACCT)
 AC_SUBST(SCONTROL)
 
 # ps, which gives the start time of the process of a task, is looked up in
-# the PATH at run time too: every system that runs the engine has one, but
-# not in a fixed place (/bin on macOS, /usr/bin or /bin on Linux), and it is
-# not a requirement that the conda package could bring under its own prefix.
+# the PATH at run time too, since it is not in a fixed place (/bin on macOS,
+# /usr/bin or /bin on Linux). It is left optional by choice: the conda
+# package is noarch and procps-ng, which brings ps, exists for Linux only on
+# conda-forge, and containers built on ubuntu or miniforge3 lack procps.
 # Without one, a task is told from another process that later gets its
 # process id by the completion marker of the task alone (see
-# debasher::_builtin_sched_live_pid in engine/debasher_lib_sched_builtin.sh).
+# debasher::_builtin_sched_get_running_task_pid in
+# engine/debasher_lib_sched_builtin.sh), and debasher_exec says so when it
+# runs a program on the built-in scheduler.
 PS="ps"
 AC_SUBST(PS)
 

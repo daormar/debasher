@@ -101,9 +101,11 @@ are useful for that purpose:
   is still refused when its tasks together do not fit. It
   also refuses a program with a process whose interpreter is not there
   (see the :ref:`implem_bash` Section), which ``--check-proc-opts`` and
-  ``--show-cmdline-opts`` still accept, and a dependency other than
+  ``--show-cmdline-opts`` still accept, a dependency other than
   ``none`` or ``after`` between processes linked by FIFOs (see the
-  ``define_opt_deps`` method in the :ref:`implem_bash` Section). The
+  ``define_opt_deps`` method in the :ref:`implem_bash` Section), and an
+  attribute in the specifications of a process that the engine does not
+  read, or one written in the other part. The
   files that describe an
   execution (see :ref:`outdstruct`) go into a temporary directory, which
   it removes, so it leaves those of an earlier execution as they were,

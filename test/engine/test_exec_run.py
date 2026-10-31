@@ -3096,6 +3096,26 @@ def test_debasher_exec_that_only_submits_to_slurm_ends_with_0_whatever_the_proce
     assert wait_until(lambda: "STATUS: UNFINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout, timeout=60)
 
 
+@pytest.mark.parametrize(
+    "specs, message",
+    [
+        ('"cpus=1 mem=32 time=00:01:00 thottle=2"', "has an unknown computational specification: thottle=2"),
+        (
+            '"cpus=1 mem=32 time=00:01:00 processdeps=afterany:a"',
+            "processdeps is written among the computational specifications of process b",
+        ),
+    ],
+)
+def test_a_validation_refuses_an_attribute_that_the_engine_would_ignore(tmp_path, specs, message):
+    pfile = tmp_path / "debasher_specs.sh"
+    module = explicit_chain_module("debasher_specs", "a|0|", "b|0|")
+    module = module.replace('add_debasher_process "b" "cpus=1 mem=32 time=00:01:00"', f'add_debasher_process "b" {specs}')
+    pfile.write_text(module)
+    result = run_exec("--pfile", str(pfile), "--outdir", str(tmp_path / "out"), "--validate")
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
 RESIDENT_EXAMPLE = REPO_ROOT / "data" / "webui_programs" / "webui_running_sum" / "webui_running_sum.sh"
 
 

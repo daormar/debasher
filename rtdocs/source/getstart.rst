@@ -25,6 +25,12 @@ Requirements
   coreutils (``realpath`` and ``timeout`` among them), ``grep``,
   ``sed``, ``awk`` and ``find``, and ``flock``, from util-linux.
 * Graphviz, whose ``dot`` command draws the graphs of programs.
+* ``ps`` (from procps on Linux), which nearly every system has but some
+  containers lack. It is optional: without it, ``debasher_exec`` warns
+  on every run with the built-in scheduler, since it can then tell a
+  task from a later process that gets the same process id only by the
+  completion marker of the task. Install procps (for example ``apt
+  install procps``) to remove the warning.
 * The autotools, to configure the package: autoconf 2.71 or newer and
   automake; and ``make``, to build it.
 * For the web interface, which is optional (see the :ref:`webui`

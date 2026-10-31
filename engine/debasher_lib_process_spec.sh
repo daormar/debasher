@@ -19,6 +19,42 @@
 ###########################################
 
 ########
+# Checks that every attribute of the list $3, whose attributes are
+# separated by $4, is one of the names in $5, and names the process $1, the
+# part $2 and the attribute otherwise: one of the names in $6, those of the
+# other part, is written in the wrong part, and any other is unknown. Either
+# would be ignored with no message.
+debasher::_check_spec_attr_names()
+{
+    local processname=$1
+    local part=$2
+    local attr_list=$3
+    local sep=$4
+    local names=$5
+    local other_names=$6
+
+    local -a fields
+    IFS="${sep}" read -r -a fields <<< "${attr_list}"
+    local field name
+    for field in "${fields[@]}"; do
+        field=$(debasher::_str_trim "${field}")
+        [ -n "${field}" ] || continue
+        name=${field%%=*}
+        if [[ " ${names} " == *" ${name} "* ]]; then
+            continue
+        fi
+        if [[ " ${other_names} " == *" ${name} "* ]]; then
+            local other_part="additional"
+            [ "${part}" = "additional" ] && other_part="computational"
+            echo "Error: ${name} is written among the ${part} specifications of process ${processname}, where it is not read; write it among the ${other_part} specifications" >&2
+        else
+            echo "Error: process ${processname} has an unknown ${part} specification: ${field}; the ${part} specifications are: ${names}" >&2
+        fi
+        return 1
+    done
+}
+
+########
 debasher::_program_process_spec_is_ok()
 {
     # NOTE: Process specification is a set of entries, each one
@@ -34,6 +70,13 @@ debasher::_program_process_spec_is_ok()
 
     # Extract process information
     local processname=$(debasher::_extract_processname_from_process_spec "$process_spec")
+
+    # Every attribute is one that the engine reads, in its own part
+    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
+    local comp_sep="${DEBASHER_LEGACY_PROCSPECS_SEP}"
+    [[ "${comp_specs}" == *"${DEBASHER_PROCSPECS_SEP}"* ]] && comp_sep="${DEBASHER_PROCSPECS_SEP}"
+    debasher::_check_spec_attr_names "${processname}" "computational" "${comp_specs}" "${comp_sep}" "${DEBASHER_COMP_SPEC_NAMES}" "${DEBASHER_ADDITIONAL_SPEC_NAMES}" || return 1
+    debasher::_check_spec_attr_names "${processname}" "additional" "$(debasher::extract_process_additional_specs "${process_spec}")" "${DEBASHER_PROCSPECS_SEP}" "${DEBASHER_ADDITIONAL_SPEC_NAMES}" "${DEBASHER_COMP_SPEC_NAMES}" || return 1
 
     # Check if basic computational specifications were provided
     local cpus=$(debasher::_extract_cpus_from_process_spec "$process_spec")
@@ -57,7 +100,6 @@ debasher::_program_process_spec_is_ok()
     # The limits that a resident process reads, when given, must be positive
     # numbers: checked here, when the program is loaded, rather than by the
     # node when it starts, after it has been launched
-    local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     local specname
     for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
         local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")

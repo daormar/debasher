@@ -1448,8 +1448,12 @@ Process Specifications
 
 The second and third arguments of ``add_debasher_process`` (see
 `Program Definition`_ above), the process's computational and
-additional specifications, accept a few more attributes besides the
-``cpus``/``mem``/``time`` ones already shown.
+additional specifications, accept only the attributes listed below,
+each in its own part. Any other attribute (a typo such as
+``thottle=2``), or one written in the other part (``processdeps`` among
+the computational specifications, ``throttle`` among the additional
+ones), stops the run when it is prepared, with an error that names the
+process and the attribute, since the engine would otherwise ignore it.
 
 Computational specifications (space-separated ``attribute=value``
 pairs, second argument):
@@ -1465,6 +1469,11 @@ pairs, second argument):
   submit to), only meaningful when running under the SLURM scheduler.
 * ``throttle``: caps how many tasks of an array/generator process are
   scheduled at the same time.
+* ``batch_sched`` and the limits of a node (``input_log_max_mb``,
+  ``out_backlog_max_mb``, ``out_backlog_fail_mb``,
+  ``gil_switch_interval_ms``, ``heartbeat_timeout_s``,
+  ``startup_timeout_s``, ``max_concurrent_runs``): only for the
+  processes of a resident program (see the :ref:`resident` Section).
 
 **HINT**: under the SLURM scheduler, ``mem`` and ``time`` may each be
 given as a comma-separated list (e.g. ``time=00:01:00,00:02:00``, as
@@ -1535,8 +1544,9 @@ third argument):
   process's own option names into the ones the aliased implementation
   expects. See the ``alias_opt_map`` example.
 
-For the exhaustive, authoritative description of every attribute, see
-the ``add_debasher_process`` entry in the :ref:`prog-def` Section.
+The ``add_debasher_process`` entry in the :ref:`prog-def` Section
+describes the function itself. ``sched`` is accepted only by
+``add_debasher_seq_process`` (see :ref:`steps`).
 
 Further Information
 ^^^^^^^^^^^^^^^^^^^^

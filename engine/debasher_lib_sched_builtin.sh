@@ -40,6 +40,18 @@ debasher::_builtin_sched_pid_start_time()
 }
 
 ########
+# Warns, on the standard error, when there is no ps to ask: the id of a
+# task is then its process id alone, and a process that later gets the
+# process id of a task that has ended may be taken for it (see
+# debasher::_builtin_sched_launch_id_info).
+debasher::_builtin_sched_warn_if_no_ps()
+{
+    if ! command -v "${PS}" > /dev/null 2>&1; then
+        echo "Warning: ps not found: the id of a task is its process id alone, and a process that later gets the process id of a task that has ended may be taken for it; install procps to tell them apart" >&2
+    fi
+}
+
+########
 # The id of a task that the built-in scheduler launched as process $1, as
 # its .id file keeps it: "<pid>@<start time>". A process id alone does not
 # name the task for good: once the task has ended, the system may give the

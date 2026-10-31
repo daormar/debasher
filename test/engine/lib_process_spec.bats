@@ -133,3 +133,26 @@ register_processes() {
     [ "$(debasher::extract_attr_from_process_additional_specs "x=1" "y")" = "${DEBASHER_ATTR_NOT_FOUND}" ]
     [ "$(debasher::_extract_processname_from_process_spec "ns.proc cpus=1 ||| ")" = "ns.proc" ]
 }
+
+@test "debasher::_program_process_spec_is_ok refuses an attribute it does not know, and one written in the other part" {
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+
+    debasher::_program_process_spec_is_ok "p cpus=1 mem=32 time=00:01:00 throttle=2 ${sep} processdeps=afterok:a;force=yes"
+    debasher::_program_process_spec_is_ok "p cpus=1;mem=32;time=00:01:00;max_concurrent_runs=2 ${sep} "
+
+    run debasher::_program_process_spec_is_ok "p cpus=1 mem=32 time=00:01:00 thottle=2 ${sep} "
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process p has an unknown computational specification: thottle=2"* ]]
+
+    run debasher::_program_process_spec_is_ok "p cpus=1 mem=32 time=00:01:00 processdeps=afterany:q ${sep} "
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"processdeps is written among the computational specifications of process p"* ]]
+
+    run debasher::_program_process_spec_is_ok "p cpus=1 mem=32 time=00:01:00 ${sep} throttle=2"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"throttle is written among the additional specifications of process p"* ]]
+
+    run debasher::_program_process_spec_is_ok "p cpus=1 mem=32 time=00:01:00 ${sep} forse=yes"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process p has an unknown additional specification: forse=yes"* ]]
+}

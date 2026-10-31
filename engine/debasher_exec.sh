@@ -1593,6 +1593,7 @@ else
     # launches, it is 0
     run_exit_code=0
     if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        debasher::_builtin_sched_warn_if_no_ps
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
             print_post_exec_nowait_help
