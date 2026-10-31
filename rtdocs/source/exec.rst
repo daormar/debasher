@@ -121,6 +121,10 @@ Word!" program as follows:
 
     $ debasher_exec --pfile debasher_hello_world.sh --outdir out --sched BUILTIN
 
+With the built-in scheduler, ``debasher_exec`` is the scheduler of the
+run: it returns once every process has ended (see below for its exit
+status), except with ``--builtinsched-oneshot``.
+
 When using the built-in scheduler, it is possible to specify the number
 of CPUs and the amount of RAM that is available. For this purpose, the
 following two options can be used:
@@ -155,6 +159,23 @@ cannot be launched, ``debasher_exec`` launches nothing more and stops
 with an error, under either scheduler; what it launched before goes on,
 and ``debasher_status`` shows it.
 
+When ``debasher_exec`` waits for the run, which it does with the
+built-in scheduler unless ``--builtinsched-oneshot`` is given, and with
+Slurm when ``--wait`` is given, its exit status tells how the run went:
+0 when every process of the program finished, and 3 when some process
+did not, after printing "Not every process of the program finished: see
+debasher_status -d <outdir>". When it only launches the run
+(``--builtinsched-oneshot``, every resident program, or Slurm without
+``--wait``), it ends with 0 once everything is launched, and the outcome
+is read later with ``debasher_status``. An error, such as a program
+refused while the run is prepared or a task that cannot be launched,
+ends it with 1. A script can therefore run a program and stop when it
+fails:
+
+::
+
+    $ debasher_exec --pfile debasher_hello_world.sh --outdir out --sched BUILTIN || exit 1
+
 Executing Programs Using External Schedulers
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -178,6 +199,11 @@ by means of the following command:
 ::
 
     $ debasher_exec --pfile debasher_hello_world.sh --outdir out --sched SLURM
+
+By default ``debasher_exec`` returns once every process is submitted to
+Slurm, with exit status 0, while the jobs run. With ``--wait`` it stays
+until they have ended, and its exit status then says whether every
+process finished (0) or not (3), as with the built-in scheduler.
 
 A program that uses FIFOs cannot run with Slurm: the two ends of a FIFO
 only meet when they run on the same machine, which the jobs of Slurm

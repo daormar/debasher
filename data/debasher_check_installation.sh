@@ -74,6 +74,11 @@ check_program_file()
                                        ${additional_opts} \
                                        --wait > "${debasher_exec_out}" 2>&1
     local ret=$?
+    # debasher_exec ends with 3 when a process of the program did not
+    # finish, which fails the check as debasher_status does below
+    if test $ret -eq 3 ; then
+        ret=1
+    fi
     if test $ret -eq 0 ; then
         local debasher_status_out="${tmpdir}/${outdirname}_status.out"
         "${TIMEOUT}" -v 10s "${debasher_bindir}/debasher_status" -d "${outdir}" > "${debasher_status_out}" 2>&1

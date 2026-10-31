@@ -2185,6 +2185,18 @@ process has, and whether a process that has not finished can still be launched
 "Process status"). Under the built-in scheduler, a validation also asks it
 whether the resources of each process fit its budget.
 
+`debasher_exec` ends with 1 on an error of its own or of the scheduler, such as
+a refusal of the preparation, a launch that fails or a stop request. A use that
+launches nothing, a validation or an option check, ends with 0 when it passes.
+Once a run has gone through, its status depends on whether it waited for the
+run. When it waits, under the built-in scheduler outside the oneshot mode or
+under the Slurm scheduler with `--wait`, it ends with 0 when every process of
+the program finished and with 3 otherwise, the status that `debasher_status`
+gives an unfinished program (see "Process status"), so that whoever waits for a
+run learns its outcome from it. When it only launches, in oneshot mode or under
+the Slurm scheduler without `--wait`, it ends with 0, and `debasher_status`
+gives the outcome later.
+
 The ids of a process are kept in its exec directory, in a `.id` file, and a
 process is `IN-PROGRESS` exactly when an id of it still runs, other than the id
 of a task that has its completion marker (see "Process status"). For the
@@ -3411,6 +3423,9 @@ leaves, by design, to the program or to whoever runs it.
     its process output directory or running its process function: a skip
     method that could not decide never lets its task run (see "Executing a
     task").
+23. A `debasher_exec` that waits for its run ends with 0 only when every process
+    of the program finished, and with 3 when one did not (see
+    "The scheduler abstraction").
 
 **Limits and non-goals.**
 

@@ -57,8 +57,9 @@ among other topics, its two mandatory options (``--pfile <string>``,
 the module file defining the program to execute, and ``--outdir
 <string>``, the output directory), how to select and configure a
 scheduler, how to inspect a program's command line options before
-running it, and the structure of the output directory that the tool
-generates.
+running it, its exit status, which tells a script whether the run it
+waited for finished, and the structure of the output directory that the
+tool generates.
 
 debasher_exec_process
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -225,7 +226,10 @@ process) options covered there, ``debasher_status`` also accepts
 process. Like ``debasher_stats`` and ``debasher_stop``, it takes the
 processes of the program from ``program.procspec`` in the output
 directory, not from the module, so it reports the processes that ran
-even if the module changed since.
+even if the module changed since. Its exit status is 0 when every
+process finished, 2 while the program is in progress, 3 when some
+process did not finish, and 1 on an error; ``debasher_exec`` ends with
+the same 3 when a run it waited for did not finish.
 
 debasher_stats
 ^^^^^^^^^^^^^^^

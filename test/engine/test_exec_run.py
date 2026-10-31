@@ -962,7 +962,8 @@ def test_a_task_runs_its_steps_alike_under_both_schedulers(tmp_path, sched):
     traces.mkdir()
     extra = ["--wait"] if sched == "SLURM" else []
     result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(traces), *extra)
-    assert result.returncode == 0, result.stderr
+    # Processes of the program did not finish, which the status says
+    assert result.returncode == 3, result.stderr
 
     status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
     # A reset that fails fails the task, which runs nothing
@@ -2873,7 +2874,8 @@ def _run_attempts(tmp_path, fail):
     result = run_exec_with_sched(
         "SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(traces), "-fail", str(fail), "--wait"
     )
-    assert result.returncode == 0, result.stderr
+    # Every attempt failing leaves p and q unfinished, which the status says
+    assert result.returncode == (3 if fail >= 2 else 0), result.stderr
     status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
     return traces, status
 
@@ -3043,7 +3045,7 @@ def test_under_slurm_a_process_marked_for_an_unfinished_producer_that_is_not_sub
     # x finishes, p fails and c, with afterany on p, finishes
     pfile.write_text(explicit_chain_module("debasher_prod", "x|0|", "p|1|", "c|0|afterany:p"))
     result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
-    assert result.returncode == 0, result.stderr
+    assert result.returncode == 3, result.stderr
     assert "PROCESS: c ; STATUS: FINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
 
     # p now has afternotok on x, which finished in the earlier run and can
@@ -3058,6 +3060,40 @@ def test_under_slurm_a_process_marked_for_an_unfinished_producer_that_is_not_sub
     assert "PROCESS: x ; STATUS: FINISHED" in status
     assert "PROCESS: c ; STATUS: FINISHED" not in status
     assert not (outdir / "__exec__" / "c" / "c.finished").exists()
+
+
+@pytest.mark.parametrize(
+    "sched",
+    [
+        "BUILTIN",
+        pytest.param(
+            "SLURM",
+            marks=pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed"),
+        ),
+    ],
+)
+def test_debasher_exec_that_waits_for_its_run_ends_with_3_when_a_process_does_not_finish(tmp_path, sched):
+    pfile = tmp_path / "debasher_status3.sh"
+    extra = ["--wait"] if sched == "SLURM" else []
+
+    pfile.write_text(explicit_chain_module("debasher_status3", "ok|0|", "bad|1|"))
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(tmp_path / "out1"), *extra)
+    assert result.returncode == 3, result.stderr
+    assert "Not every process of the program finished" in result.stderr
+
+    pfile.write_text(explicit_chain_module("debasher_status3", "ok|0|"))
+    result = run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(tmp_path / "out2"), *extra)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_debasher_exec_that_only_submits_to_slurm_ends_with_0_whatever_the_processes_do(tmp_path):
+    pfile = tmp_path / "debasher_status3.sh"
+    pfile.write_text(explicit_chain_module("debasher_status3", "bad|1|"))
+    outdir = tmp_path / "out"
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    assert wait_until(lambda: "STATUS: UNFINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout, timeout=60)
 
 
 RESIDENT_EXAMPLE = REPO_ROOT / "data" / "webui_programs" / "webui_running_sum" / "webui_running_sum.sh"

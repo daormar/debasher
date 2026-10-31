@@ -93,6 +93,11 @@ usage()
     echo "--builtinsched-debug      Show debug information for built-in scheduler"
     echo "--version                 Display version information and exit"
     echo "--help                    Display this help and exit"
+    echo ""
+    echo "Exit status: 0 once the run has gone through (when it waits for the run,"
+    echo "with the built-in scheduler outside --builtinsched-oneshot or with --wait,"
+    echo "every process finished), ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE} when it waited for the run and a process did not"
+    echo "finish (debasher_status tells which), and 1 on an error"
 }
 
 ########
@@ -1358,6 +1363,28 @@ show_program_processes_to_launch()
 }
 
 ########
+# The status with which debasher_exec ends after waiting for the run: 0
+# when every process of the program finished, and the status that
+# debasher_status gives an unfinished program otherwise, so that whoever
+# waits for a run learns its outcome from it. A process with no task, such
+# as one whose option generator gives none, has nothing to run, and is
+# left out
+get_waited_run_exit_code()
+{
+    local dirname=$1
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        [ "$(debasher::_get_numtasks_for_process "${processname}")" -gt 0 ] || continue
+        if [ "$(debasher::_get_process_status "${dirname}" "${processname}")" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            echo "${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE}"
+            return 0
+        fi
+    done
+    echo 0
+}
+
+########
 print_post_exec_wait_help()
 {
     echo "Program execution finished, possible next steps:" >&2
@@ -1561,11 +1588,16 @@ else
     echo "Revision complete" >&2
     echo "" >&2
 
+    # When debasher_exec waits for the run, its status says whether every
+    # process finished (see get_waited_run_exit_code); when it only
+    # launches, it is 0
+    run_exit_code=0
     if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
         debasher_builtin_sched::execute_program_processes "${command_line}" "${outd}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" "${builtin_sched_oneshot_given}" || exit 1
         if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
             print_post_exec_nowait_help
         else
+            run_exit_code=$(get_waited_run_exit_code "${outd}")
             print_post_exec_wait_help
         fi
     else
@@ -1573,6 +1605,7 @@ else
         launch_program_processes "${command_line}" "${outd}" || exit 1
         if [ "${wait}" -eq 1 ]; then
             wait_for_program_processes "${outd}" || exit 1
+            run_exit_code=$(get_waited_run_exit_code "${outd}")
             print_post_exec_wait_help
         else
             print_post_exec_nowait_help
@@ -1580,4 +1613,9 @@ else
     fi
     # Store old process options
     store_old_process_options "${old_program_opts_file}" "${program_opts_file}"
+
+    if [ "${run_exit_code}" -ne 0 ]; then
+        echo "Not every process of the program finished: see debasher_status -d ${outd}" >&2
+    fi
+    exit "${run_exit_code}"
 fi

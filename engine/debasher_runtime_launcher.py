@@ -206,7 +206,8 @@ def _batch_run_state(run_dir, single_process, program_status):
     `single_process` is whether the batch run is a single process, run with
     debasher_exec_process, whose shell writes `exit_code` whatever the exit
     code; otherwise the shell of debasher_exec writes `submitted` when it
-    ends with 0 and `exit_code` when it fails. `program_status(run_dir)` is
+    ends with 0 and `exit_code` when it fails, or when the run it waited for
+    did not finish (3). `program_status(run_dir)` is
     the exit code of debasher_status on the directory, or None if the
     caller does not ask it now, which counts as in progress.
 
@@ -683,8 +684,10 @@ class ProgramLauncher(FBPProcess):
     # exit code, and written there it outlives a crash of the node, and any
     # process can read it (see _batch_run_state). A single process leaves
     # its exit code whatever it is; debasher_exec leaves `submitted` when it
-    # ends with 0, since its program may still be running, and its exit code
-    # otherwise.
+    # ends with 0, since under Slurm its program may still be running (under
+    # the built-in scheduler it waits for the run, and 0 means that every
+    # process finished), and its exit code otherwise, such as the 3 of a run
+    # it waited for that did not finish.
     _RECORD_EXIT_CODE = (
         'dir=$1; shift; "$@"; code=$?; '
         'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"'
