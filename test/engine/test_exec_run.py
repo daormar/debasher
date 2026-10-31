@@ -2707,7 +2707,7 @@ def _timed_array(tmp_path, throttle=""):
     return pfile, times
 
 
-def test_the_oneshot_mode_refuses_a_first_round_in_which_only_some_tasks_of_an_array_fit_and_launches_nothing(tmp_path):
+def test_the_oneshot_mode_refuses_an_array_whose_tasks_do_not_all_fit_and_launches_nothing(tmp_path):
     pfile, times = _timed_array(tmp_path)
     outdir = tmp_path / "out"
     result = run_exec(
@@ -2715,8 +2715,22 @@ def test_the_oneshot_mode_refuses_a_first_round_in_which_only_some_tasks_of_an_a
         "--builtinsched-cpus", "2", "--builtinsched-oneshot",
     )
     assert result.returncode == 1
-    assert "(2 of 4 tasks fit)" in result.stderr
+    assert "need 4 cpus together and the budget has 2" in result.stderr
     assert not list((outdir / "__exec__" / "timed").glob("*.id"))
+
+
+def test_the_oneshot_mode_refuses_a_process_that_would_not_fit_in_a_later_round_and_launches_nothing(tmp_path):
+    # b, with after on a, becomes a candidate only once a has started, when
+    # a holds the only cpu of the budget
+    pfile = tmp_path / "debasher_later.sh"
+    pfile.write_text(explicit_chain_module("debasher_later", "a|0|", "b|0|after:a"))
+    outdir = tmp_path / "out"
+    result = run_exec(
+        "--pfile", str(pfile), "--outdir", str(outdir), "--builtinsched-cpus", "1", "--builtinsched-oneshot"
+    )
+    assert result.returncode == 1
+    assert "need 2 cpus together and the budget has 1" in result.stderr
+    assert not (outdir / "__exec__" / "a" / "a.id").exists()
 
 
 def test_the_oneshot_mode_refuses_a_throttle_smaller_than_the_number_of_tasks(tmp_path):

@@ -371,17 +371,18 @@ relative to the output directory of the run.
   checks the CPUs and memory of every process against the budget of the
   scheduler. A program that passes it is not refused for its options or for what
   a single process asks for; a first round of the built-in scheduler that can
-  choose no task, or, with `--builtinsched-oneshot`, that cannot launch every
-  task at once, is still refused when the run starts. Its preparation
-  directory is a temporary one, outside the output directory, and is never moved
-  into it: the validation leaves the files with which an earlier run in the
-  output directory describes itself as they were (see "Architecture"), and the
-  contents of the shared directories of the output directory too: it creates no
-  shared subdirectory and removes nothing (see "Shared subdirectories"). It
-  never prepares a process either, so it creates no task subdirectory, removes
-  nothing from a process output directory, and does not find a task subdirectory
-  whose subpath goes through a symbolic link, nor a path that an output option
-  names in a process output directory through one (see "Task subdirectories").
+  choose no task is still refused when the run starts, and so, with
+  `--builtinsched-oneshot`, are tasks that do not fit in the budget together.
+  Its preparation directory is a temporary one, outside the output directory,
+  and is never moved into it: the validation leaves the files with which an
+  earlier run in the output directory describes itself as they were (see
+  "Architecture"), and the contents of the shared directories of the output
+  directory too: it creates no shared subdirectory and removes nothing (see
+  "Shared subdirectories"). It never prepares a process either, so it creates no
+  task subdirectory, removes nothing from a process output directory, and does
+  not find a task subdirectory whose subpath goes through a symbolic link, nor a
+  path that an output option names in a process output directory through one
+  (see "Task subdirectories").
 - **option check**: `debasher_exec --check-proc-opts`, which loads the program,
   builds and checks the options of every task as a run does, and prints them.
   It takes no lock, refuses neither a process of an earlier run still in
@@ -2373,8 +2374,14 @@ pause, launching whatever can start, and ends as soon as nothing more can start
 without waiting for something to end. Before launching anything, it refuses what
 only the end of a task could let through: a dependency other than `none` and
 `after`, a throttle, of the process or given with `--dflt-throttle`, smaller
-than the number of tasks of its process, and a first round that does not fit in
-the budget at once, every task of an array counted on its own.
+than the number of tasks of its process, and tasks that do not fit in the budget
+together. Since nothing waits for a task to end, every task that the run
+launches runs at once, whatever the round in which it is launched: a process
+with `after` on another becomes a candidate only once that one has started, when
+the tasks before it already hold part of the budget. The CPUs and the memory of
+every task that has not finished, in the processes that have not finished, are
+therefore added up, each task of an array on its own, and compared with the
+budget once, before the first round.
 
 ## The Slurm scheduler
 

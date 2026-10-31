@@ -1185,44 +1185,46 @@ stub_round_before_knapsack() {
     stub_round_before_knapsack
     debasher_builtin_sched::_solve_knapsack() { DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=""; }
 
-    local num_candidate_tasks=0
     local select_status=0
-    debasher_builtin_sched::_select_processes_to_be_exec "" "${OUTDIR}" num_candidate_tasks 2> "${BATS_TEST_TMPDIR}/err" || select_status=$?
+    debasher_builtin_sched::_select_processes_to_be_exec "" "${OUTDIR}" 2> "${BATS_TEST_TMPDIR}/err" || select_status=$?
     [ "${select_status}" -eq 3 ]
-    [ "${num_candidate_tasks}" -eq 1 ]
     grep -q "no suitable processes could be selected" "${BATS_TEST_TMPDIR}/err"
 
     # The round stops the loop with an error
     debasher_builtin_sched::_select_processes_to_be_exec() { return 3; }
     local end=0
-    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 0 1 end
+    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 0 end
     [ "${status}" -eq 1 ]
 }
 
-@test "_run_round refuses in oneshot mode a first round in which only some tasks of an array fit, and launches nothing" {
-    local launched="${BATS_TEST_TMPDIR}/launched"
-    debasher_builtin_sched::_select_processes_to_be_exec() {
-        local -n _n=$3
-        _n=4
-        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES="0_0 0_1"
-    }
-    debasher_builtin_sched::_exec_processes() { echo launched > "${launched}"; }
+@test "_check_oneshot_budget adds up the tasks that the run launches, of every round, and refuses a budget that does not hold them together" {
+    # a, an array of four tasks, one of them finished; b, with after on a,
+    # a single task; c finished. Each task asks for 1 cpu and 32 MB
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=(
+        [a]="${DEBASHER_UNFINISHED_PROCESS_STATUS}" [b]="${DEBASHER_TODO_PROCESS_STATUS}" [c]="${DEBASHER_FINISHED_PROCESS_STATUS}")
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE=([a]=4 [b]=1 [c]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_CPUS=([a]=1 [b]=1 [c]=1)
+    declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_MEM=([a]=32 [b]=32 [c]=32)
+    debasher::_get_num_tasks_completed() { [ "$2" = a ] && echo 1 || echo 0; }
 
-    local end=0
-    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 1 1 end
+    # Three tasks of a and the one of b: 4 cpus and 128 MB
+    DEBASHER_BUILTIN_SCHED_CPUS=4
+    DEBASHER_BUILTIN_SCHED_MEM=128
+    debasher_builtin_sched::_check_oneshot_budget "${OUTDIR}"
+
+    DEBASHER_BUILTIN_SCHED_CPUS=3
+    run debasher_builtin_sched::_check_oneshot_budget "${OUTDIR}"
     [ "${status}" -eq 1 ]
-    [[ "${output}" == *"(2 of 4 tasks fit)"* ]]
-    [ ! -e "${launched}" ]
+    [[ "${output}" == *"need 4 cpus together and the budget has 3"* ]]
 
-    # Every task fits: they are launched
-    debasher_builtin_sched::_select_processes_to_be_exec() {
-        local -n _n=$3
-        _n=2
-        DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES="0_0 0_1"
-    }
-    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 1 1 end
-    [ "${status}" -eq 0 ]
-    [ -e "${launched}" ]
+    DEBASHER_BUILTIN_SCHED_CPUS=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
+    DEBASHER_BUILTIN_SCHED_MEM=100
+    run debasher_builtin_sched::_check_oneshot_budget "${OUTDIR}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"need 128 MB of memory together and the budget has 100"* ]]
+
+    DEBASHER_BUILTIN_SCHED_MEM=${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}
+    debasher_builtin_sched::_check_oneshot_budget "${OUTDIR}"
 }
 
 @test "_exec_processes stops at a task whose script cannot be written, keeping what it launched before" {

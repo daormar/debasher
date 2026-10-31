@@ -1645,9 +1645,7 @@ debasher_builtin_sched::_get_debug_sel_processes_info()
 }
 
 ########
-# Selects what a round launches, into DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES,
-# setting the variable named $3 to the number of candidate tasks, each task
-# of an array counted as one, as the knapsack counts what it selects.
+# Selects what a round launches, into DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES.
 # Returns 0 when something was selected, 1 when there are no candidates, 2
 # when the tasks that can no longer be launched could not be cancelled, and
 # 3 when there are candidates and none of them could be chosen.
@@ -1655,7 +1653,6 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 {
     local cmdline=$1
     local dirname=$2
-    local -n _num_candidate_tasks_ref=$3
 
     # Obtain updated status for processes
     local -A BUILTIN_SCHED_CURR_PROCESS_STATUS_UPDATED
@@ -1686,14 +1683,7 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     fi
 
     # If there are executable processes, select which ones will be executed
-    _num_candidate_tasks_ref=0
-    local processname
-    local -a candidate_tasks
-    for processname in "${!BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]}"; do
-        read -r -a candidate_tasks <<< "${BUILTIN_SCHED_EXECUTABLE_PROCESSES[${processname}]}"
-        _num_candidate_tasks_ref=$((_num_candidate_tasks_ref + ${#candidate_tasks[@]}))
-    done
-    if [ ${_num_candidate_tasks_ref} -gt 0 ]; then
+    if [ ${#BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]} -gt 0 ]; then
         debasher_builtin_sched::_solve_knapsack "${dirname}"
 
         # Check if no processes could be selected
@@ -2159,20 +2149,18 @@ debasher_builtin_sched::_end_round_without_candidates()
 ########
 # One round of the loop: selects what can be launched and launches it, or
 # ends the round as debasher_builtin_sched::_end_round_without_candidates
-# says when nothing can be. Sets the variable named $5 to 1 when the loop
+# says when nothing can be. Sets the variable named $4 to 1 when the loop
 # ends. Fails on an error, which ends the loop too.
 debasher_builtin_sched::_run_round()
 {
     local cmdline=$1
     local dirname=$2
     local oneshot=$3
-    local iterno=$4
-    local -n _round_end_ref=$5
+    local -n _round_end_ref=$4
 
     # Select processes that should be executed
-    local num_candidate_tasks=0
     local select_status=0
-    debasher_builtin_sched::_select_processes_to_be_exec "${cmdline}" "${dirname}" num_candidate_tasks || select_status=$?
+    debasher_builtin_sched::_select_processes_to_be_exec "${cmdline}" "${dirname}" || select_status=$?
     case ${select_status} in
         0)  ;;
         1)  # There are no processes to be executed
@@ -2186,23 +2174,6 @@ debasher_builtin_sched::_run_round()
             return 1
             ;;
     esac
-
-    # In oneshot mode, nothing ever waits for a process to finish (see
-    # below), so a later iteration can never end up with *more* available
-    # resources than this first one has right now: if not everything that
-    # could be selected in round 1 got selected, it never will be. Check
-    # before launching anything, rather than silently launching only a
-    # subset and returning as if the whole program had started. Tasks are
-    # compared with tasks: the knapsack selects each task of an array on
-    # its own.
-    if [ ${oneshot} -eq 1 -a ${iterno} -eq 1 ]; then
-        local -a debasher_builtin_sched_selected_arr=(${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES})
-        local num_selected_tasks=${#debasher_builtin_sched_selected_arr[@]}
-        if [ ${num_selected_tasks} -lt ${num_candidate_tasks} ]; then
-            echo "Error: --builtinsched-oneshot requires enough resources (cpus, memory) to launch every task at once (${num_selected_tasks} of ${num_candidate_tasks} tasks fit); it never waits for one to finish to free up resources for the rest. Increase --builtinsched-cpus/--builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
-            return 1
-        fi
-    fi
 
     # Execute processes: a task whose script cannot be written, or that
     # cannot be launched, stops the round and the loop with an error
@@ -2218,6 +2189,40 @@ debasher_builtin_sched::_run_round()
     if [ ${oneshot} -ne 1 ]; then
         # Wait before starting a new loop
         debasher_builtin_sched::_sleep
+    fi
+}
+
+########
+# In oneshot mode nothing waits for a task to end, so every task that the
+# run launches runs at once, whatever the round in which it is launched (a
+# process with after on another becomes a candidate only once that one has
+# started). The tasks that have not finished, of the processes that have
+# not finished, must therefore fit in the budget together: checked once,
+# before anything is launched, and refused with an error when they do not.
+debasher_builtin_sched::_check_oneshot_budget()
+{
+    local dirname=$1
+
+    local needed_cpus=0
+    local needed_mem=0
+    local processname
+    for processname in "${!DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[@]}"; do
+        [ "${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ] || continue
+        local num_tasks=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
+        local num_finished=$(debasher::_get_num_tasks_completed "${dirname}" "${processname}")
+        local num_to_launch=$((num_tasks - num_finished))
+        [ ${num_to_launch} -gt 0 ] || continue
+        needed_cpus=$((needed_cpus + num_to_launch * DEBASHER_BUILTIN_SCHED_PROCESS_CPUS[${processname}]))
+        needed_mem=$((needed_mem + num_to_launch * DEBASHER_BUILTIN_SCHED_PROCESS_MEM[${processname}]))
+    done
+
+    if [ ${DEBASHER_BUILTIN_SCHED_CPUS} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} ] && [ ${needed_cpus} -gt ${DEBASHER_BUILTIN_SCHED_CPUS} ]; then
+        echo "Error: --builtinsched-oneshot launches every task at once and never waits for one to finish, but the tasks of the program need ${needed_cpus} cpus together and the budget has ${DEBASHER_BUILTIN_SCHED_CPUS}. Increase --builtinsched-cpus, or remove the restriction, and try again. Aborting..." >&2
+        return 1
+    fi
+    if [ ${DEBASHER_BUILTIN_SCHED_MEM} -ne ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} ] && [ ${needed_mem} -gt ${DEBASHER_BUILTIN_SCHED_MEM} ]; then
+        echo "Error: --builtinsched-oneshot launches every task at once and never waits for one to finish, but the tasks of the program need ${needed_mem} MB of memory together and the budget has ${DEBASHER_BUILTIN_SCHED_MEM}. Increase --builtinsched-mem, or remove the restriction, and try again. Aborting..." >&2
+        return 1
     fi
 }
 
@@ -2251,7 +2256,7 @@ debasher_builtin_sched::_run_loop()
             echo "[BUILTIN_SCHED] * Iteration ${iterno}" 2>&1
         fi
 
-        if ! debasher_builtin_sched::_run_round "${cmdline}" "${dirname}" "${oneshot}" "${iterno}" end; then
+        if ! debasher_builtin_sched::_run_round "${cmdline}" "${dirname}" "${oneshot}" end; then
             trap - TERM
             return 1
         fi
@@ -2273,6 +2278,10 @@ debasher_builtin_sched::execute_program_processes()
     local oneshot=${6:-0}
 
     debasher_builtin_sched::_set_up_loop "${cmdline}" "${dirname}" "${procspec_file}" "${builtin_sched_cpus}" "${builtin_sched_mem}" || return 1
+
+    if [ ${oneshot} -eq 1 ]; then
+        debasher_builtin_sched::_check_oneshot_budget "${dirname}" || return 1
+    fi
 
     echo "* Executing program processes..." >&2
     debasher_builtin_sched::_run_loop "${cmdline}" "${dirname}" "${oneshot}" || return 1

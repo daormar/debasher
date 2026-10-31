@@ -154,7 +154,7 @@ without waiting for them; the resources given with the two options
 above must be enough for every task of every process together, each
 task of an array counted on its own. When they are not,
 ``debasher_exec`` launches nothing and stops with an error that says
-how many of the tasks fit.
+how many CPUs or how much memory the tasks need together.
 
 If the script of a process cannot be written, or one of its tasks
 cannot be launched, ``debasher_exec`` launches nothing more and stops
