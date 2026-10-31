@@ -432,10 +432,10 @@ relative to the output directory of the run.
   `UNFINISHED`, any other case.
 - **rerun mark**: the decision to run a process again although it has run
   before, for a reason (forced, changed input, outdated code, the other end of
-  one of its FIFOs runs again, a resident resume, a producer that has not
-  finished), propagated to the processes that depend on it and to the other ends
-  of its FIFOs. Every task of a marked process runs again, those that finished
-  included.
+  one of its FIFOs runs again, an external end on one of its FIFOs, a resident
+  resume, a producer that has not finished), propagated to the processes that
+  depend on it and to the other ends of its FIFOs, except an external end. Every
+  task of a marked process runs again, those that finished included.
 
 ## Business tests
 
@@ -2046,14 +2046,15 @@ of its own choosing, and the two ends of a FIFO only meet on the same machine. A
 program that uses FIFOs is refused under the Slurm scheduler when the run is
 prepared.
 
-Between runs, the two ends of a FIFO are kept in the same state (see
-"Reruns"). When a run starts and one end has finished while the other has not,
-both are marked to rerun, and a rerun mark on one end reaches the other, and
-from each of them the processes that depend on them. A run therefore never
-launches an end whose other end has finished and will not run again. The
-owner of a FIFO with an external end is run again on every run, since the
-engine cannot tell whether the outside got what it needed, and everything
-connected to it through dependencies or FIFOs runs again with it.
+Between runs, the two ends of a FIFO are kept in the same state (see "Reruns").
+When a run starts and one end has finished while the other has not, both are
+marked to rerun, and a rerun mark on one end reaches the other (an external end,
+which is not a process, excepted), and from each of them the processes that
+depend on them. A run therefore never launches an end whose other end has
+finished and will not run again. The owner of a FIFO with an external end is
+marked to rerun on every run once it has finished, since the engine cannot tell
+whether the outside got what it needed, and everything connected to it through
+dependencies or FIFOs runs again with it.
 
 ## Cycles through FIFOs
 
@@ -2791,23 +2792,32 @@ not, for one of these reasons:
 - **FIFO ends out of step.** One end of a FIFO has finished and the other has
   not (see "Running both ends together"). The owner of a FIFO with an external
   end is always marked when it has finished, since the engine cannot tell
-  whether the outside got what it needed.
+  whether the outside got what it needed; the external end, which is not a
+  process, gets no mark and passes none on.
 - **Resident resume.** In a resident program, every node that is not running
   is marked, so that the program resumes from its checkpoints, as
   `doc/design_doc_resident.md` describes.
 - **Unfinished producer.** A finished process has a dependency of type `after`,
-  `afterany` or `afterok` on a process that has not finished, which this run is
-  to launch: the process ran before that producer finished, and runs again on
-  what the producer leaves this time, waiting for it as its dependency says.
-  `after` and `afterany` hold on a producer that did not finish, as when the
-  producer failed and the process ran anyway, and an `afterok` within a list
-  separated by `?` lets the process run once another element holds (see
-  "Explicit dependencies"). `afternotok` is left out: it is there for a producer
-  that fails, and would no longer hold once the producer finishes. `aftercorr`
-  is left out too: a process that finished under it has no task whose
-  counterpart did not finish. A process that has not finished itself is not
-  marked for this reason: it runs the tasks it has left, and a mark would run
-  again those that have finished too.
+  `afterany` or `afterok` on a process that has not finished: the process ran
+  before that producer finished, and runs again on what the producer leaves this
+  time, waiting for it as its dependency says. `after` and `afterany` hold on a
+  producer that did not finish, as when the producer failed and the process ran
+  anyway, and an `afterok` within a list separated by `?` lets the process run
+  once another element holds (see "Explicit dependencies"). The rule does not
+  ask whether this run launches the producer. The built-in scheduler always
+  launches it or cancels its tasks, and `after` and `afterany` hold on it either
+  way, while an `afterok` on a producer that does not finish has the marked
+  process cancelled (see "Tasks that will not be launched"); the Slurm scheduler
+  does not submit a producer whose own dependencies can no longer hold, and then
+  does not submit the marked process either when this dependency was the one it
+  needed (see "The Slurm scheduler"); the process loses its completion markers,
+  not what it wrote in its process output directory, and runs again in the next
+  run that launches the producer. `afternotok` is left out: it is there for a
+  producer that fails, and would no longer hold once the producer finishes.
+  `aftercorr` is left out too: a process that finished under it has no task
+  whose counterpart did not finish. A process that has not finished itself is
+  not marked for this reason: it runs the tasks it has left, and a mark would
+  run again those that have finished too.
 
 The marks then spread until nothing changes: from a process to every process
 that depends on it, and from one end of a FIFO to the other. A process marked to
@@ -3352,11 +3362,14 @@ leaves, by design, to the program or to whoever runs it.
     anything, a program that it could not run without waiting for something to
     end (see "The built-in scheduler").
 14. A new run on an output directory runs the tasks that have not finished of
-    every process that has not finished. It runs every task of a process that
-    is forced, whose options changed, whose FIFO has an end that runs again, or
-    that has finished and depends through `after`, `afterany` or `afterok` on a
-    process that has not finished, together with every process that depends on
-    them, whether that process has finished or not (see "Reruns").
+    every process that has not finished. It runs every task of a process that is
+    forced, whose options changed, whose FIFO has an end that runs again, that
+    owns a FIFO with an external end and has finished, or that has finished and
+    depends through `after`, `afterany` or `afterok` on a process that has not
+    finished, together with every process that depends on them, whether that
+    process has finished or not (see "Reruns"); under the Slurm scheduler, such
+    a process whose producer is not submitted is not submitted either, and runs
+    in a later run (see "The Slurm scheduler").
 15. After `debasher_stop` on a whole program, no task of the run is running,
     nothing is left that could launch one, and nothing is left half launched
     (see "Tools that read a run").
@@ -3424,7 +3437,9 @@ leaves, by design, to the program or to whoever runs it.
 - **Dependencies on processes that the run does not launch, under Slurm.** A
   process that the Slurm scheduler does not submit, because such a dependency
   can no longer hold, does not end in the run, so that `afterany` and
-  `afternotok` on it do not hold in it either (see "The Slurm scheduler").
+  `afternotok` on it do not hold in it either (see "The Slurm scheduler"). A
+  finished process marked to rerun on such a producer loses its completion
+  markers and waits for a later run too (see "Reruns").
 - **Ending a task.** A process function that calls `exit`, or that a signal
   kills, ends its whole task, with no `_post` method and no error message from
   the engine (see "Executing a task").

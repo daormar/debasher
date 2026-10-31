@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from resident_run import DEBASHER_EXEC, REPO_ROOT, real_run, wait_until
+from resident_run import DEBASHER_EXEC, DEBASHER_STOP, REPO_ROOT, real_run, wait_until
 
 pytestmark = real_run
 
@@ -2914,6 +2914,150 @@ def test_under_slurm_a_list_of_dependencies_joined_by_a_question_mark_with_more_
     # The built-in scheduler takes the first value of mem and time only
     result = run_exec_with_sched("BUILTIN", *args)
     assert result.returncode == 0, result.stderr
+
+
+# o declares a FIFO that no process of the program reads, and finishes
+# without opening it
+EXTERNAL_FIFO_MODULE = """\
+o_explain_opts()
+{
+    explain_opt "-outf" "<fifo>" "A FIFO for someone outside the program"
+}
+
+o_define_opts()
+{
+    local optlist=""
+    define_fifo_opt "-outf" "o_fifo" optlist || return 1
+    save_opt_list optlist
+}
+
+o()
+{
+    :
+}
+
+debasher_extfifo_program()
+{
+    add_debasher_process "o" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def _rerun_list(stderr):
+    """The processes that debasher_exec prints as marked to rerun."""
+    if "Printing list of processes to rerun..." not in stderr:
+        return []
+    return stderr.split("Printing list of processes to rerun...")[1].split("\n")[1].split(",")
+
+
+def test_the_owner_of_a_fifo_with_an_external_end_runs_again_on_every_run(tmp_path):
+    pfile = tmp_path / "debasher_extfifo.sh"
+    pfile.write_text(EXTERNAL_FIFO_MODULE)
+    outdir = tmp_path / "out"
+    for _ in range(2):
+        result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+        assert result.returncode == 0, result.stderr
+    # The owner, and only it: the external end is not a process
+    assert _rerun_list(result.stderr) == ["o"]
+    assert "PROCESS: o ; STATUS: FINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+
+
+# slow writes -s into its output directory after sleeping -z seconds
+SLOW_MODULE = """\
+slow_explain_opts()
+{
+    explain_opt "-s" "<string>" "The value written"
+    explain_opt "-z" "<int>" "Seconds to sleep"
+}
+
+slow_identify_cmdline_opts()
+{
+    opt_is_cmdline "-s"
+    opt_is_cmdline "-z"
+}
+
+slow_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${cmdline}" "-s" optlist || return 1
+    define_cmdline_opt "${cmdline}" "-z" optlist || return 1
+    save_opt_list optlist
+}
+
+slow()
+{
+    local s=$(read_opt_value_from_func_args "-s" "$@")
+    local z=$(read_opt_value_from_func_args "-z" "$@")
+    sleep "${z}"
+    echo "${s}"
+}
+
+debasher_slow_program()
+{
+    add_debasher_process "slow" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_run_stopped_before_its_end_leaves_the_old_options_of_the_run_before(tmp_path):
+    pfile = tmp_path / "debasher_slow.sh"
+    pfile.write_text(SLOW_MODULE)
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "first", "-z", "0")
+    assert result.returncode == 0, result.stderr
+    old_opts = outdir / "program.opts_old"
+    assert "first" in old_opts.read_text()
+
+    # A second run, with other options, is stopped while slow runs
+    run = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "-s", "second", "-z", "60",
+         "--sched", "BUILTIN"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert wait_until(
+            lambda: "STATUS: IN-PROGRESS" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+        )
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        run.wait(timeout=60)
+    finally:
+        if run.poll() is None:
+            run.kill()
+    assert "first" in old_opts.read_text()
+    assert "second" not in old_opts.read_text()
+
+    # The next run still finds that the options changed
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "second", "-z", "0")
+    assert result.returncode == 0, result.stderr
+    assert "slow" in _rerun_list(result.stderr)
+    assert "second" in old_opts.read_text()
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_under_slurm_a_process_marked_for_an_unfinished_producer_that_is_not_submitted_waits_for_a_later_run(tmp_path):
+    pfile = tmp_path / "debasher_prod.sh"
+    outdir = tmp_path / "out"
+
+    # x finishes, p fails and c, with afterany on p, finishes
+    pfile.write_text(explicit_chain_module("debasher_prod", "x|0|", "p|1|", "c|0|afterany:p"))
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
+    assert result.returncode == 0, result.stderr
+    assert "PROCESS: c ; STATUS: FINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+
+    # p now has afternotok on x, which finished in the earlier run and can
+    # no longer fail: p is not submitted, and c, marked since p has not
+    # finished, loses its completion marker and is not submitted either
+    pfile.write_text(explicit_chain_module("debasher_prod", "x|0|", "p|1|afternotok:x", "c|0|afterany:p"))
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
+    assert _rerun_list(result.stderr) == ["c"]
+    assert "Process p is not launched" in result.stderr
+    assert "Process c is not launched" in result.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: x ; STATUS: FINISHED" in status
+    assert "PROCESS: c ; STATUS: FINISHED" not in status
+    assert not (outdir / "__exec__" / "c" / "c.finished").exists()
 
 
 RESIDENT_EXAMPLE = REPO_ROOT / "data" / "webui_programs" / "webui_running_sum" / "webui_running_sum.sh"

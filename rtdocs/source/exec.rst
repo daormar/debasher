@@ -418,9 +418,13 @@ that had already finished. They are these:
   process whose code is older than the modules of the program;
 * a process at one end of a FIFO whose other end runs again, since both
   ends have to run together;
-* a process that ran after another one that did not finish, which this
-  execution runs again: it runs again on what that one leaves this
-  time. This happens with the
+* a process that writes a FIFO that no process of the program reads
+  (one read outside the program, as with "Talk to FIFOs" in the web
+  interface), once it has finished: DeBasher cannot tell whether the
+  reader outside got what it needed, so it runs that process in every
+  execution;
+* a process that ran after another one that has not finished: it runs
+  again on what that one leaves this time. This happens with the
   dependency types that let a process run after another one that
   failed, ``afterany`` and ``after``, and with ``afterok`` within a
   list joined by ``?``. For instance, if ``report`` depends on ``grade``
@@ -428,7 +432,11 @@ that had already finished. They are these:
   what ``grade`` left; once the problem is fixed, the next execution
   runs ``grade`` and then ``report`` again. A process that depends on
   another with ``afternotok``, which is there for when it fails, is
-  not run again.
+  not run again. Under Slurm, if this execution cannot submit that
+  other process (because its own dependencies can no longer hold), it
+  does not submit the dependent one either: the dependent keeps its
+  files but is no longer counted as finished, and runs again in a later
+  execution that launches the process it depends on.
 
 Every process that depends on one of those runs again too, and so on.
 

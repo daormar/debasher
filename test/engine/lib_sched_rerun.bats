@@ -170,3 +170,68 @@ fake_statuses() {
 
     [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
 }
+
+# --- the two ends of a fifo -------------------------------------------------
+
+# Three fifos: w writes r_f to r, which writes s_f to s; o writes o_f with
+# no reader in the program. The status of each process is the one that
+# STATUS_<process> holds, FINISHED when unset
+setup_fifo_ends() {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/r_f"]="w${sep}0" ["r/s_f"]="r${sep}0" ["o/o_f"]="o${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["w/r_f"]="r${sep}0" ["r/s_f"]="s${sep}0" ["o/o_f"]="${DEBASHER_EXTERNAL_FIFO_END}")
+    declare -gA DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED=()
+    local proc
+    for proc in w r s o; do
+        DEBASHER_PROGRAM_PROCESSES[${proc}]=1
+    done
+    debasher::_get_process_status() {
+        local var="STATUS_$2"
+        echo "${!var:-${DEBASHER_FINISHED_PROCESS_STATUS}}"
+    }
+}
+
+@test "the two ends of a fifo out of step are marked, and the owner of a fifo with an external end is marked once it has finished" {
+    setup_fifo_ends
+    STATUS_s=${DEBASHER_UNFINISHED_PROCESS_STATUS}
+
+    debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
+
+    [ "${DEBASHER_RERUN_PROCESSES[r]}" = "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[s]}" = "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}" ]
+    [ -z "${DEBASHER_RERUN_PROCESSES[w]+x}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[o]}" = "${DEBASHER_EXTERNAL_FIFO_RERUN_REASON}" ]
+    # The external end is not a process, and gets no mark
+    [ -z "${DEBASHER_RERUN_PROCESSES[__EXTERNAL__]+x}" ]
+}
+
+@test "the owner of a fifo with an external end that has not finished is not marked" {
+    setup_fifo_ends
+    STATUS_o=${DEBASHER_UNFINISHED_PROCESS_STATUS}
+
+    debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
+
+    [ -z "${DEBASHER_RERUN_PROCESSES[o]+x}" ]
+    [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
+}
+
+@test "a mark spreads through fifos in both directions, along a chain, and not to an external end" {
+    setup_fifo_ends
+    debasher::_mark_process_as_rerun s "${DEBASHER_FORCED_RERUN_REASON}"
+    debasher::_mark_process_as_rerun o "${DEBASHER_FORCED_RERUN_REASON}"
+
+    debasher::_propagate_rerun_processes "${BATS_TEST_TMPDIR}"
+
+    # From the reader s to its owner r, and from r, as a reader, to w
+    [ "${DEBASHER_RERUN_PROCESSES[r]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[w]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
+    [ -z "${DEBASHER_RERUN_PROCESSES[__EXTERNAL__]+x}" ]
+    [[ "$(debasher::_get_rerun_processes_as_string)" != *__EXTERNAL__* ]]
+
+    # And from an owner to its reader
+    DEBASHER_RERUN_PROCESSES=()
+    debasher::_mark_process_as_rerun w "${DEBASHER_FORCED_RERUN_REASON}"
+    debasher::_propagate_rerun_processes "${BATS_TEST_TMPDIR}"
+    [ "${DEBASHER_RERUN_PROCESSES[r]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[s]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
+}
