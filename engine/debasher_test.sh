@@ -34,7 +34,7 @@ print_desc()
     echo "       of the processes before the tests, as debasher_exec does before a run"
     echo "       DEBASHER_BATS and DEBASHER_PYTEST, when set, give the bats and the pytest to run instead of"
     echo "       those that configure found"
-    echo "       exit status: 0 every test passed, 1 a test failed, 2 the tests could not be run, 77 no tests"
+    echo "       exit status: 0 every test passed, 1 bats or pytest failed, 2 the tests could not be run, 77 no tests"
 }
 
 ########

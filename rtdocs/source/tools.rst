@@ -170,14 +170,17 @@ skips it, with its reason, where conda or the environment is missing.
 program has conda or docker support.
 
 The exit status of ``debasher_test`` is 0 when every test passed, 1
-when a test failed, 2 when the tests could not be run (for instance,
-``<prgdir>`` has no program file, or bats or pytest is not installed)
-and 77 when the program has no tests. ``DEBASHER_BATS`` and
-``DEBASHER_PYTEST`` give the bats and the pytest to run instead of
-those found when DeBasher was configured. Running the tests writes
-nothing into ``<prgdir>``. The programs ``webui_batch_greet`` (bats
-tests), ``webui_running_sum`` and ``webui_watch_tally`` (pytest
-tests, the second of a ``DirectoryWatcher``), installed under
+when bats or pytest reported a failure (a test that failed, but also a
+pytest file that cannot be imported or that holds no tests), 2 when the
+tests could not be run (for instance, ``<prgdir>`` has no program
+file, or bats or pytest is not installed) and 77 when the program has
+no tests. ``DEBASHER_BATS`` and ``DEBASHER_PYTEST`` give the bats and
+the pytest to run instead of those found when DeBasher was configured.
+Running the tests writes nothing into ``<prgdir>``. The programs
+``webui_batch_greet`` and ``webui_conda_example`` (bats tests, the
+second of a process that runs in a Conda environment),
+``webui_running_sum`` and ``webui_watch_tally`` (pytest tests, the
+second of a ``DirectoryWatcher``), installed under
 ``<prefix>/share/debasher/webui_programs``, carry examples.
 
 debasher_proc_dataset

@@ -1089,8 +1089,9 @@ knows what makes two steps the same work, and a step that runs again on
 purpose, as a transformation called on each value of a loop, must not be
 skipped.
 `data/programs/debasher_dynamic_fanout_stepdone.sh` shows the pattern: each task
-runs one step for each file of its list, with the task index, the name of the
-file and a checksum of its contents as the id.
+runs one step for each file of its list, with the name of the file and a
+checksum of its contents as the id, and keeps the step markers in its task
+subdirectory, which tells the markers of one task from those of another.
 
 Two conditions are left to the process. The markers have to survive the reset of
 the directory that holds them: kept in the process output directory, a process
@@ -3150,11 +3151,16 @@ the program in the program directory `<dir>`:
    `DEBASHER_BATS` and `DEBASHER_PYTEST`, such as the pytest of a virtual
    environment. A kind of test whose tool is missing is an error.
 
-Its exit status is 0 when every test passed, 1 when a test failed, 2 when it
-could not run the tests (no program directory, a missing tool, a wrong
-argument) and 77 when the program has no tests. 77 is the status with which
-Automake marks a skipped test: a caller tells a program without tests from one
-whose tests pass.
+Its exit status is 0 when every test passed, 1 when bats or pytest ended with
+a status other than 0, 2 when it could not run the tests (no program directory,
+a missing tool, a wrong argument) and 77 when the program has no tests. 1
+covers a test that failed, and also a pytest file that cannot be collected (an
+import that fails) or that holds no tests, since the runner does not tell one
+status of the tools from another; a bats file with no tests passes. Whether the
+program has tests is decided from the names of the files of the test directory
+alone, before any tool runs.
+77 is the status with which Automake marks a skipped test: a caller tells a
+program without tests from one whose tests pass.
 
 A run of the tests writes nothing into the program directory: pytest runs
 without its cache (`-p no:cacheprovider`) and without writing bytecode
@@ -3170,17 +3176,17 @@ variables that the runner exports are set, which helps to debug one test.
 ## Checking an installation
 
 `make installcheck` runs `debasher_check_installation`, which runs the programs
-of `data/webui_programs` from where they were installed. Four of them carry a
-test directory, installed with them: `webui_batch_greet`, with process tests,
-`webui_running_sum`, with node tests, `webui_watch_tally`, with node tests of a
-`DirectoryWatcher` that observes a directory and of the node it feeds, and
-`webui_conda_example`, with a process test of a process that activates a conda
-environment, skipped where the environment does not exist.
-`debasher_check_installation` runs `debasher_test` on every program of
-`data/webui_programs` and fails on any status other than 0 or 77. When
-`configure` did not find the tool of a kind of test that a program has, the
-check does not run the test runner on that program, and says that its tests are
-skipped. It also checks that the test runner finds the program of a copy of
+of `data/webui_programs` from where they were installed. A program there may
+carry a test directory, installed with it, and `debasher_check_installation`
+runs `debasher_test` on every program of `data/webui_programs`, with tests or
+without, and fails on any status other than 0 or 77. The programs shipped with
+tests cover both kinds of test: process tests of a general program
+(`webui_batch_greet`) and of a process that activates a conda environment
+(`webui_conda_example`, skipped where the environment does not exist), and node
+tests of a resident program and of a `DirectoryWatcher` and the node it feeds.
+When `configure` did not find the tool of a kind of test that a program has,
+the check does not run the test runner on that program, and says that its tests
+are skipped. It also checks that the test runner finds the program of a copy of
 `webui_batch_greet` in a directory of another name, that it prepares the Conda
 environment of `webui_conda_example` with `--conda-support` where conda is
 usable, and that it refuses, with status 2, a directory that is not a program
@@ -3188,8 +3194,8 @@ directory.
 
 This checks, once DeBasher is installed, that the test runner, the test
 helpers and the node harness work as installed, which no test of `make check`
-can, since those run on the build tree. The two programs also show a module
-author how to write each kind of test.
+can, since those run on the build tree. The programs with tests also show a
+module author how to write each kind of test.
 
 # The process contract
 

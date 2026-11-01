@@ -670,7 +670,7 @@ seq_execute() { debasher::seq_execute "$@"; }
 #
 # Examples
 #
-#   debasher::mark_step_done "${outd}" "${id}_${base}"
+#   debasher::mark_step_done "${outd}" "${base}_${checksum}"
 #
 # Returns 1 if the marker could not be created or already existed.
 debasher::mark_step_done()
@@ -696,7 +696,7 @@ debasher::mark_step_done()
 #
 # Examples
 #
-#   mark_step_done "${outd}" "${id}_${base}_${checksum}"
+#   mark_step_done "${outd}" "${base}_${checksum}"
 #
 # Returns 1 if the marker could not be created or already existed.
 mark_step_done() { debasher::mark_step_done "$@"; }
@@ -726,7 +726,7 @@ debasher::is_step_done()
 #
 # Examples
 #
-#   is_step_done "${outd}" "${id}_${base}_${checksum}" || seq_execute work "${base}"
+#   is_step_done "${outd}" "${base}_${checksum}" || seq_execute work "${base}"
 #
 # Returns 0 if the step marker exists, 1 otherwise.
 is_step_done() { debasher::is_step_done "$@"; }
