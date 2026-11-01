@@ -3793,3 +3793,158 @@ def test_a_process_output_directory_removed_after_a_run_is_created_again(tmp_pat
     assert result.returncode == 0, result.stderr
     for i in range(2):
         assert (outdir / "oa" / f"{i}.txt").read_text() == "b\n"
+
+
+# --- the rules of the ends of a FIFO in real runs ---------------------------
+
+def fifo_rules_module(name, *processes):
+    """
+    A module named `name` with the processes given as (process, cpus,
+    option definitions, body) tuples: each option definition is a line of
+    its _define_opts method, in which $process_outdir is available, and the
+    body is that of its process function, in which opt <option> prints the
+    value of an option. A process with a method named <process>_post in
+    `body` after a line "---" gets it as well.
+    """
+    lines = ["opt() { read_opt_value_from_func_args \"$1\" \"${ARGS[@]}\"; }\n"]
+    adds = []
+    for proc, cpus, defines, body in processes:
+        body, _, post = body.partition("---")
+        define_lines = "\n".join(
+            f"    {line if line.endswith(' optlist') else line + ' optlist'} || return 1" for line in defines
+        )
+        explains = "\n".join(f'    explain_opt "{line.split()[1].strip(chr(34))}" "<value>" "Option"' for line in defines)
+        lines.append(f"{proc}_explain_opts()\n{{\n    :\n{explains}\n}}\n")
+        lines.append(
+            f"{proc}_define_opts()\n{{\n    local process_outdir=$4\n    local optlist=\"\"\n"
+            f"{define_lines}\n    save_opt_list optlist\n}}\n"
+        )
+        lines.append(f"{proc}()\n{{\n    ARGS=(\"$@\")\n{body}\n}}\n")
+        if post.strip():
+            lines.append(f"{proc}_post()\n{{\n    ARGS=(\"$@\")\n{post}\n}}\n")
+        adds.append(f'    add_debasher_process "{proc}" "cpus={cpus} mem=32 time=00:01:00"')
+    return "\n".join(lines) + f"\n{name}_program()\n{{\n" + "\n".join(adds) + "\n}\n"
+
+
+def test_an_end_of_a_fifo_waits_while_its_other_end_waits_for_a_process_to_end(tmp_path):
+    # x takes the two CPUs; r reads a file of x and the fifo of w. Launched
+    # with x, w would hold a CPU that x needs, waiting for r, which waits for
+    # x: w is held back until x has ended
+    pfile = tmp_path / "debasher_heldback.sh"
+    pfile.write_text(fifo_rules_module(
+        "debasher_heldback",
+        ("x", 2, ['define_opt "-outf" "${process_outdir}/done"'], '    sleep 1; date +%s%N > "$(opt -outf)"'),
+        ("w", 1, ['define_fifo_opt "-outf" "f" optlist', 'define_opt "-outts" "${process_outdir}/start"'],
+         '    date +%s%N > "$(opt -outts)"; echo hi > "$(opt -outf)"'),
+        ("r", 1, ['define_opt_from_proc_out "-inx" "x" "-outf" optlist',
+                  'define_opt_from_proc_out "-inf" "w" "-outf" optlist'], '    cat "$(opt -inf)"'),
+    ))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir),
+                      "--builtinsched-cpus", "2", "--builtinsched-mem", "128", timeout=60)
+    assert result.returncode == 0, result.stderr
+    x_end = int((outdir / "x" / "done").read_text())
+    w_start = int((outdir / "w" / "start").read_text())
+    assert w_start >= x_end
+
+
+def test_an_end_of_a_fifo_whose_other_end_is_cancelled_is_cancelled_with_its_cause(tmp_path):
+    pfile = tmp_path / "debasher_endcancelled.sh"
+    pfile.write_text(fifo_rules_module(
+        "debasher_endcancelled",
+        ("f", 1, ['define_opt "-outf" "${process_outdir}/out"'], '    return 1'),
+        ("w", 1, ['define_fifo_opt "-outf" "f" optlist'], '    echo hi > "$(opt -outf)"'),
+        ("r", 1, ['define_opt_from_proc_out "-inx" "f" "-outf" optlist',
+                  'define_opt_from_proc_out "-inf" "w" "-outf" optlist'], '    cat "$(opt -inf)"'),
+    ))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert result.returncode != 0
+    cancelled = (outdir / "__exec__" / "w" / "w.cancelled").read_text()
+    assert "Cause: fifo w/f (other end r, task 0, cancelled)" in cancelled, cancelled
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: w ; STATUS: UNFINISHED" in status
+    assert "PROCESS: r ; STATUS: UNFINISHED" in status
+
+
+def test_the_ends_of_a_chain_of_fifos_are_launched_together_under_a_cpu_limit(tmp_path):
+    # With three CPUs, launching z and part of the chain a -> b -> c would
+    # leave the rest of the chain without a CPU, and the run would not end
+    pfile = tmp_path / "debasher_chain.sh"
+    pfile.write_text(fifo_rules_module(
+        "debasher_chain",
+        ("z", 1, [], '    sleep 1'),
+        ("a", 1, ['define_fifo_opt "-outf" "fa" optlist'], '    seq 1 3 > "$(opt -outf)"'),
+        ("b", 1, ['define_opt_from_proc_out "-inf" "a" "-outf" optlist', 'define_fifo_opt "-outf" "fb" optlist'],
+         '    cat "$(opt -inf)" > "$(opt -outf)"'),
+        ("c", 1, ['define_opt_from_proc_out "-inf" "b" "-outf" optlist'], '    cat "$(opt -inf)"'),
+    ))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir),
+                      "--builtinsched-cpus", "3", "--builtinsched-mem", "128", timeout=60)
+    assert result.returncode == 0, result.stderr
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "c")
+    assert stdout.stdout.split() == ["1", "2", "3"]
+
+
+def test_a_loop_through_fifos_with_after_on_one_link_runs_and_both_processes_finish(tmp_path):
+    pfile = tmp_path / CYCLE_EXAMPLE.name
+    pfile.write_text(CYCLE_EXAMPLE.read_text() + CYCLE_AFTER.format(proc="process_b"))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-n", "10", timeout=60)
+    assert result.returncode == 0, result.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: process_a ; STATUS: FINISHED" in status
+    assert "PROCESS: process_b ; STATUS: FINISHED" in status
+
+
+def test_an_end_that_fails_before_opening_its_fifo_leaves_the_other_in_progress_until_debasher_stop(tmp_path):
+    pfile = tmp_path / "debasher_oneend.sh"
+    pfile.write_text(fifo_rules_module(
+        "debasher_oneend",
+        ("w", 1, ['define_fifo_opt "-outf" "f" optlist'], '    echo hi > "$(opt -outf)"'),
+        ("r", 1, ['define_opt_from_proc_out "-inf" "w" "-outf" optlist'], '    return 1'),
+    ))
+    outdir = tmp_path / "out"
+
+    run = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert wait_until(lambda: "PROCESS: r ; STATUS: UNFINISHED" in run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout)
+        status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+        assert "PROCESS: w ; STATUS: IN-PROGRESS" in status, status
+        assert run.poll() is None
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        run.wait(timeout=60)
+    finally:
+        if run.poll() is None:
+            run.kill()
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: w ; STATUS: UNFINISHED" in status, status
+
+
+def test_a_writer_whose_shell_is_ended_by_sigpipe_is_unfinished_and_runs_no_post(tmp_path):
+    # r reads one line and leaves; the shell of w writes, and SIGPIPE ends it
+    pfile = tmp_path / "debasher_sigpipe.sh"
+    pfile.write_text(fifo_rules_module(
+        "debasher_sigpipe",
+        ("w", 1, ['define_fifo_opt "-outf" "f" optlist', 'define_opt "-outpost" "${process_outdir}/post_ran"'],
+         '    for (( i = 0; i < 1000000; i++ )); do echo "${i}"; done > "$(opt -outf)"\n'
+         '---\n    touch "$(opt -outpost)"'),
+        ("r", 1, ['define_opt_from_proc_out "-inf" "w" "-outf" optlist'], '    head -n 1 "$(opt -inf)"'),
+    ))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert result.returncode != 0
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    assert "PROCESS: w ; STATUS: UNFINISHED" in status, status
+    assert "PROCESS: r ; STATUS: FINISHED" in status, status
+    assert not (outdir / "w" / "post_ran").exists()

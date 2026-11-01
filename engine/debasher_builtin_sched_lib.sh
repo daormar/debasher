@@ -1728,9 +1728,10 @@ debasher_builtin_sched::_select_processes_to_be_exec()
     if [ ${#BUILTIN_SCHED_EXECUTABLE_PROCESSES[@]} -gt 0 ]; then
         debasher_builtin_sched::_solve_knapsack "${dirname}"
 
-        # Check if no processes could be selected
+        # None of the candidates fits in the free resources, as when the
+        # ends of a fifo, which go together, do not fit beside the tasks
+        # that run (see debasher_builtin_sched::_run_round)
         if [ -z "${DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES}" ]; then
-            echo "Error: no suitable processes could be selected for execution. If the program uses FIFOs, consider increasing the available resources (cpus, memory) or removing resource restrictions at all. Aborting..." >&2
             return 3
         fi
 
@@ -2212,7 +2213,16 @@ debasher_builtin_sched::_run_round()
         2)  echo "Error while cancelling the tasks that can no longer be launched. Aborting..." >&2
             return 1
             ;;
-        *)  # None of the candidates could be chosen, as the selection said
+        *)  # None of the candidates fits in the free resources. The tasks
+            # that run free theirs when they end, so the loop waits for
+            # them; with none running, no candidate will ever fit. In
+            # oneshot mode the budget was checked before anything was
+            # launched
+            if [ ${oneshot} -ne 1 ] && debasher_builtin_sched::_inprogress_processes_pending; then
+                debasher_builtin_sched::_sleep
+                return 0
+            fi
+            echo "Error: no suitable processes could be selected for execution. If the program uses FIFOs, consider increasing the available resources (cpus, memory) or removing resource restrictions at all. Aborting..." >&2
             return 1
             ;;
     esac

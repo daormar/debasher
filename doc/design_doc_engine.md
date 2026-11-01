@@ -2063,9 +2063,9 @@ its CPUs and memory, possibly the ones that process needs, and the program would
 never finish. When resources are limited, the knapsack solver takes the ends of
 a FIFO, and every end of a chain of FIFOs, all together or none of them, and a
 round in which no group of ends fits in the free resources, with nothing else to
-launch, stops the run with an error (see "The built-in scheduler"). An end whose
-other end is cancelled is cancelled too, instead of being kept out of every
-round (see "Tasks that will not be launched").
+launch and no task running, stops the run with an error (see "The built-in
+scheduler"). An end whose other end is cancelled is cancelled too, instead of
+being kept out of every round (see "Tasks that will not be launched").
 
 One case remains open. An end that goes first because its other end only waits
 for it to start holds its resources while it waits, and if they are what the
@@ -2374,7 +2374,10 @@ rounds until no task can be launched and none still runs. In each round it:
    and its memory, whose value is 1, divided among the tasks of an array
    process, and the ends of a FIFO, or of a chain of FIFOs, are chosen all
    together or none of them. A round that has candidates but can choose none
-   of them stops the run with an error.
+   of them waits for the next round while some task runs, since the tasks
+   that end free their CPUs and memory. With none running it stops the run
+   with an error, and so it does in the oneshot mode, where the check of the
+   budget before the first round leaves no such round.
 6. Launches the chosen tasks, writing the process script of a process when
    its first task is launched (see "Running a process"), and waits one second
    before the next round, or five when the program has more than ten

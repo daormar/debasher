@@ -1202,19 +1202,34 @@ stub_round_before_knapsack() {
     debasher_builtin_sched::_hold_back_fifo_ends_without_peer() { :; }
 }
 
-@test "_select_processes_to_be_exec fails, without ending the tool, when it has candidates and the knapsack chooses none of them" {
+@test "_select_processes_to_be_exec returns 3, without ending the tool, when it has candidates and the knapsack chooses none of them" {
     stub_round_before_knapsack
     debasher_builtin_sched::_solve_knapsack() { DEBASHER_BUILTIN_SCHED_SELECTED_PROCESSES=""; }
 
     local select_status=0
-    debasher_builtin_sched::_select_processes_to_be_exec "" "${OUTDIR}" 2> "${BATS_TEST_TMPDIR}/err" || select_status=$?
+    debasher_builtin_sched::_select_processes_to_be_exec "" "${OUTDIR}" || select_status=$?
     [ "${select_status}" -eq 3 ]
-    grep -q "no suitable processes could be selected" "${BATS_TEST_TMPDIR}/err"
+}
 
-    # The round stops the loop with an error
+@test "a round in which no candidate fits waits while a task runs, and stops the loop with an error when none runs" {
     debasher_builtin_sched::_select_processes_to_be_exec() { return 3; }
+    debasher_builtin_sched::_sleep() { :; }
+
+    # A task runs, and frees its resources when it ends
+    declare -gA DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS=([a]="${DEBASHER_TODO_PROCESS_STATUS}" [z]="${DEBASHER_INPROGRESS_PROCESS_STATUS}")
     local end=0
+    debasher_builtin_sched::_run_round "" "${OUTDIR}" 0 end
+    [ "${end}" -eq 0 ]
+
+    # None runs: no candidate will ever fit
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[z]="${DEBASHER_FINISHED_PROCESS_STATUS}"
     run debasher_builtin_sched::_run_round "" "${OUTDIR}" 0 end
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"no suitable processes could be selected"* ]]
+
+    # In oneshot mode, the budget was checked before the run
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[z]="${DEBASHER_INPROGRESS_PROCESS_STATUS}"
+    run debasher_builtin_sched::_run_round "" "${OUTDIR}" 1 end
     [ "${status}" -eq 1 ]
 }
 
