@@ -227,6 +227,44 @@ setup() {
     [ "${output}" = "afterok:other" ]
 }
 
+@test "debasher::_get_procdeps_for_process takes a file named like a fifo of its writer for a file, with afterok" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    # w writes the file <outdir>/w/data and owns a fifo also named data
+    local file="${DEBASHER_PROGRAM_OUTDIR}/w/data"
+    DEBASHER_PROGRAM_FIFOS["w/data"]="w${sep}0"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${file}"]="w${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["r"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-inf${DEBASHER_ARG_SEP}${file}"
+    }
+
+    run debasher::_get_procdeps_for_process "" "r"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afterok:w" ]
+}
+
+@test "debasher::_register_fifos_read_by_process does not take the reader of a file named like a fifo for a reader of the fifo" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    local file="${DEBASHER_PROGRAM_OUTDIR}/w/data"
+    DEBASHER_PROGRAM_FIFOS["w/data"]="w${sep}0"
+    DEBASHER_FIFO_READERS["w/data"]="${DEBASHER_EXTERNAL_FIFO_END}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["${file}"]="w${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["r"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-inf${DEBASHER_ARG_SEP}${file}"
+    }
+
+    debasher::_register_fifos_read_by_process "" "r"
+
+    [ "${DEBASHER_FIFO_READERS["w/data"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]
+}
+
 @test "debasher::_get_procdeps_for_process merges the dependencies of every task of an array on several producers" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()

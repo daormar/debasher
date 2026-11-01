@@ -482,6 +482,30 @@ define_worker_opts() {
     [ -f "${outd}/state" ]
 }
 
+# --- debasher::_get_program_fifo_of_path ---------------------------------
+
+@test "_get_program_fifo_of_path names a fifo of the program by its path under the directory of the fifos" {
+    init_program
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/data"]="w${sep}0")
+
+    run debasher::_get_program_fifo_of_path "$(debasher::_get_absolute_fifoname w data)"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "w/data" ]
+}
+
+@test "_get_program_fifo_of_path does not take a file whose last two parts name a fifo, nor a path of no fifo, for a fifo" {
+    init_program
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["w/data"]="w${sep}0")
+
+    run debasher::_get_program_fifo_of_path "${DEBASHER_PROGRAM_OUTDIR}/w/data"
+    [ "${status}" -eq 1 ]
+    [ -z "${output}" ]
+    run debasher::_get_program_fifo_of_path "$(debasher::_get_absolute_fifoname w other)"
+    [ "${status}" -eq 1 ]
+}
+
 # --- debasher::_prepare_fifos_owned_by_process -----------------------------
 
 @test "_prepare_fifos_owned_by_process creates again, empty, the fifos of the process, their shim fifos and mirror logs" {

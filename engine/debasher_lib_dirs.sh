@@ -893,22 +893,21 @@ debasher::_get_absolute_fifoname()
 }
 
 ########
-debasher::_get_augm_fifoname_from_absname()
+# Prints the name (<process>/<name>) of the fifo of the program whose path is
+# $1, and returns 1 when $1 is not the path of one. A path is taken for a
+# fifo only under the directory of the fifos of the run: a file of a
+# process, such as <outdir>/<process>/<name>, is not one, even when a fifo
+# of the same name exists.
+debasher::_get_program_fifo_of_path()
 {
-    local absname=$1
+    local path=$1
 
-    # basename: strip everything up to and including the last '/'
-    local fifoname="${absname##*/}"
-
-    # dirname: strip the last '/' and everything after it
-    local dirpart="${absname%/*}"
-
-    # basename of dirpart: the owner process directory name
-    local owner_process="${dirpart##*/}"
-
-    echo "${owner_process}/${fifoname}"
+    local fifodir=$(debasher::_get_absolute_fifodir)
+    [[ "${path}" == "${fifodir}/"* ]] || return 1
+    local augm_fifoname="${path#"${fifodir}/"}"
+    [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || return 1
+    echo "${augm_fifoname}"
 }
-
 ########
 debasher::_get_absolute_condadir()
 {

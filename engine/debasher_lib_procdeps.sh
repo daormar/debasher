@@ -344,8 +344,7 @@ debasher::_get_procdeps_for_process()
             local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
 
             local augm_fifoname
-            augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
-            if [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]]; then
+            if augm_fifoname=$(debasher::_get_program_fifo_of_path "${value}"); then
                 debasher::_add_fifo_dep "${define_opt_deps_funcname}" "${processname}" "${opt}" "${augm_fifoname}" depdict || return 1
             else
                 debasher::_add_file_deps "${define_opt_deps_funcname}" "${processname}" "${num_tasks}" "${task_idx}" "${opt}" "${value}" depdict || return 1
@@ -468,8 +467,7 @@ debasher::_register_fifos_read_by_process()
             local value="${DEBASHER_DESERIALIZED_ARGS[i]}"
 
             local augm_fifoname
-            augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
-            [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
+            augm_fifoname=$(debasher::_get_program_fifo_of_path "${value}") || continue
 
             # The option through which the owner defines the fifo never gets
             # here: an output option is not a dependency candidate, and the

@@ -3242,6 +3242,70 @@ def test_a_cycle_of_files_is_refused_naming_a_process_of_it(tmp_path):
     assert re.search(r"circular dependency detected at '[xy]'", result.stderr), result.stderr
 
 
+# w writes the file <outdir>/w/data after a while and owns a fifo also
+# named data, which it does not open; r reads the file
+FIFO_FILE_CLASH_MODULE = """\
+w_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Output file"
+    explain_opt "-outfifo" "<fifo>" "Fifo named like the file"
+}
+
+w_define_opts()
+{
+    local process_outdir=$4
+    local optlist=""
+    define_opt "-outf" "${process_outdir}/data" optlist || return 1
+    define_fifo_opt "-outfifo" "data" optlist || return 1
+    save_opt_list optlist
+}
+
+w()
+{
+    sleep 2
+    echo written > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+r_explain_opts()
+{
+    explain_opt "-inf" "<file>" "File of w"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "w" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+r()
+{
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_fifofileclash_program()
+{
+    add_debasher_process "w" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "r" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_file_named_like_a_fifo_of_its_writer_is_read_as_a_file_after_the_writer_ends(tmp_path):
+    pfile = tmp_path / "debasher_fifofileclash.sh"
+    pfile.write_text(FIFO_FILE_CLASH_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    assert re.search(r"^PROCESS: r .*processdeps=afterok:w$", result.stderr, re.M), result.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert "PROCESS: w ; STATUS: FINISHED" in status.stdout, status.stdout
+    assert "PROCESS: r ; STATUS: FINISHED" in status.stdout, status.stdout
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "r")
+    assert stdout.stdout.strip() == "written", stdout.stdout + stdout.stderr
+
+
 # r reads a file of w, and its option dependency method answers with a
 # type that does not exist; @@SPECS@@ is the processdeps of r
 EXPLICIT_DEPS_MODULE = """\

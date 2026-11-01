@@ -1811,6 +1811,13 @@ the value decides its type:
   have to run together, and a dependency between them would make one wait for
   the other to end (see "Running both ends together").
 
+A value is taken for a FIFO only when it is under `__fifos__` of the output
+directory and names a FIFO of the program: a file `<name>` in the process
+output directory of a process gives `afterok` or `aftercorr`, even when a task
+of that process owns a FIFO of the same name. The registration of the reader of
+a FIFO (see "Declaring and owning a FIFO") tells a FIFO from a file in the same
+way.
+
 The option dependency method of the process, `_define_opt_deps`, can change the
 type of any of them. The engine calls it, in a subshell, once for each task of
 the process, each input option of the task that makes a dependency and each
