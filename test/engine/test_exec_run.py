@@ -52,13 +52,14 @@ debasher_cdpost_program()
 """
 
 
-def run_exec(*args, cwd=None):
+def run_exec(*args, cwd=None, timeout=None):
     assert DEBASHER_EXEC.exists(), "bin/debasher_exec not built: run make install first"
     return subprocess.run(
         [str(DEBASHER_EXEC), *args, "--sched", "BUILTIN"],
         cwd=cwd,
         capture_output=True,
         text=True,
+        timeout=timeout,
     )
 
 
@@ -3304,6 +3305,72 @@ def test_a_file_named_like_a_fifo_of_its_writer_is_read_as_a_file_after_the_writ
     assert "PROCESS: r ; STATUS: FINISHED" in status.stdout, status.stdout
     stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "r")
     assert stdout.stdout.strip() == "written", stdout.stdout + stdout.stderr
+
+
+# ring is an array of two tasks: task 0 writes the fifo ring_0, which task 1
+# reads; task 1 reads it whole and then fails while the file @@MARKER@@ is
+# missing, which it creates
+ARRAY_FIFO_RERUN_MODULE = """\
+ring_explain_opts()
+{
+    explain_opt "-outf" "<fifo>" "Fifo of task 0"
+    explain_opt "-inf" "<fifo>" "Fifo that task 1 reads"
+}
+
+ring_generate_opts_size()
+{
+    echo 2
+}
+
+ring_generate_opts()
+{
+    local task_idx=$5
+    local optlist=""
+    if [ "${task_idx}" -eq 0 ]; then
+        define_fifo_opt "-outf" "ring_0" optlist || return 1
+    else
+        define_opt_from_proc_task_out "-inf" "ring" 0 "-outf" optlist || return 1
+    fi
+    save_opt_list optlist
+}
+
+ring()
+{
+    local outf=$(read_opt_value_from_func_args "-outf" "$@")
+    if [ "${outf}" != "${DEBASHER_OPT_NOT_FOUND}" ]; then
+        echo line > "${outf}"
+        return 0
+    fi
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+    if [ ! -f "@@MARKER@@" ]; then
+        touch "@@MARKER@@"
+        return 1
+    fi
+}
+
+debasher_arrayfiforerun_program()
+{
+    add_debasher_process "ring" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_fifo_between_a_finished_task_and_a_failed_one_of_an_array_reruns_both_tasks(tmp_path):
+    marker = tmp_path / "failed_once"
+    pfile = tmp_path / "debasher_arrayfiforerun.sh"
+    pfile.write_text(ARRAY_FIFO_RERUN_MODULE.replace("@@MARKER@@", str(marker)))
+    outdir = tmp_path / "out"
+
+    first = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert first.returncode != 0, first.stderr
+    assert marker.exists()
+
+    # Task 1 alone would block on opening the fifo, whose other end has
+    # finished
+    second = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert second.returncode == 0, second.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert "PROCESS: ring ; STATUS: FINISHED" in status.stdout, status.stdout
 
 
 # r reads a file of w, and its option dependency method answers with a

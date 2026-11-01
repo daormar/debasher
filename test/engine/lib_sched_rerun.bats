@@ -181,9 +181,11 @@ setup_fifo_ends() {
     declare -gA DEBASHER_PROGRAM_FIFOS=(["w/r_f"]="w${sep}0" ["r/s_f"]="r${sep}0" ["o/o_f"]="o${sep}0")
     declare -gA DEBASHER_FIFO_READERS=(["w/r_f"]="r${sep}0" ["r/s_f"]="s${sep}0" ["o/o_f"]="${DEBASHER_EXTERNAL_FIFO_END}")
     declare -gA DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED=()
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=()
     local proc
     for proc in w r s o; do
         DEBASHER_PROGRAM_PROCESSES[${proc}]=1
+        DEBASHER_PROCESS_OPT_LIST_LEN[${proc}]=1
     done
     debasher::_get_process_status() {
         local var="STATUS_$2"
@@ -212,6 +214,60 @@ setup_fifo_ends() {
     debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
 
     [ -z "${DEBASHER_RERUN_PROCESSES[o]+x}" ]
+    [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
+}
+
+# The arrays $@, each of two tasks, and their task statuses: task <idx> of
+# <process> has finished when FINISHED_<process>_<idx> is 1
+setup_fifo_arrays() {
+    declare -gA DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    local proc
+    for proc in "$@"; do
+        DEBASHER_PROGRAM_PROCESSES[${proc}]=1
+        DEBASHER_PROCESS_OPT_LIST_LEN[${proc}]=2
+    done
+    debasher::_array_task_is_finished() {
+        local var="FINISHED_$2_$3"
+        [ "${!var:-0}" -eq 1 ]
+    }
+    debasher::_get_process_status() {
+        echo "${DEBASHER_UNFINISHED_PROCESS_STATUS}"
+    }
+}
+
+@test "a fifo between a finished task and an unfinished one of the same array marks the array" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    setup_fifo_arrays ring
+    # Task 0 writes ring_0, which task 1 reads
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["ring/ring_0"]="ring${sep}0")
+    declare -gA DEBASHER_FIFO_READERS=(["ring/ring_0"]="ring${sep}1")
+    FINISHED_ring_0=1
+
+    debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
+
+    [ "${DEBASHER_RERUN_PROCESSES[ring]}" = "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}" ]
+}
+
+@test "a fifo between tasks of two unfinished arrays marks both when its two tasks are out of step, and neither when they are in step" {
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    setup_fifo_arrays p c
+    # c_i reads the fifo of p_i
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["p/f_0"]="p${sep}0" ["p/f_1"]="p${sep}1")
+    declare -gA DEBASHER_FIFO_READERS=(["p/f_0"]="c${sep}0" ["p/f_1"]="c${sep}1")
+    FINISHED_p_0=1
+    FINISHED_c_1=1
+
+    debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
+
+    [ "${DEBASHER_RERUN_PROCESSES[p]}" = "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[c]}" = "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}" ]
+
+    # Both tasks of each pair finished, or both not: nothing to mark
+    DEBASHER_RERUN_PROCESSES=()
+    FINISHED_c_0=1
+    FINISHED_c_1=0
+    FINISHED_p_1=0
+    debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader "${BATS_TEST_TMPDIR}"
     [ "${#DEBASHER_RERUN_PROCESSES[@]}" -eq 0 ]
 }
 

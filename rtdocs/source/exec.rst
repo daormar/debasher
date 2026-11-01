@@ -444,8 +444,11 @@ that had already finished. They are these:
   name: a file changed in place under the same path is not a change;
 * with the ``--rerun-outdated-procs`` option of ``debasher_exec``, a
   process whose code is older than the modules of the program;
-* a process at one end of a FIFO whose other end runs again, since both
-  ends have to run together;
+* a process at one end of a FIFO whose other end runs again, and the
+  processes of both ends of a FIFO when the task at one end has finished
+  and the task at the other has not, since both ends have to run
+  together. This holds too for two arrays connected task by task, and for
+  a FIFO between two tasks of the same array;
 * a process that writes a FIFO that no process of the program reads
   (one read outside the program, as with "Talk to FIFOs" in the web
   interface), once it has finished: DeBasher cannot tell whether the

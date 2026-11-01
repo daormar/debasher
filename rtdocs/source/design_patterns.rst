@@ -301,7 +301,9 @@ rather than files: the task ``i`` of the producer declares a FIFO with
 ``define_fifo_opt``, the task ``i`` of the consumer reads it, and the
 engine runs both together. The ``debasher_fifo_generator_example``
 example does so with two option generators, the consumer asking for the
-number of tasks of the producer.
+number of tasks of the producer. When the program runs again after the
+task at one end of such a FIFO finished and the task at the other end
+did not, both processes run again whole (see :ref:`rerun`).
 
 The FIFOs that the tasks of a process declare through the same option
 are read inside the program for every task or for none. A consumer with

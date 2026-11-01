@@ -212,12 +212,35 @@ debasher::_define_rerun_processes_due_to_code_update()
 }
 
 ########
-# Marks the two ends of a FIFO when one has finished and the other has
-# not, so that a run never launches an end whose other end will not run
-# again. A FIFO with an external end, which no task of the program holds,
-# has no such pair: its owner is marked once it has finished, by a rule of
-# its own, since the engine cannot tell whether the outside got what it
-# needed.
+# Whether the task $2, at one end of a fifo, given as
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, has finished: the process,
+# for a process of one task, and that task of the array otherwise.
+#
+# $1 - Absolute path of the output directory.
+debasher::_fifo_end_is_finished()
+{
+    local dirname=$1
+    local task=$2
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    if [ "$(debasher::_get_numtasks_for_process "${processname}")" -eq 1 ]; then
+        [ "$(debasher::_get_process_status "${dirname}" "${processname}")" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]
+    else
+        debasher::_array_task_is_finished "${dirname}" "${processname}" "${task_idx}"
+    fi
+}
+
+########
+# Marks the processes of the two ends of a fifo when one end has finished
+# and the other has not, so that a run never launches an end whose other
+# end will not run again. The ends are compared task by task, so that a
+# fifo between two tasks of the same array, or between tasks of two arrays,
+# counts too, and the processes are marked whole: a rerun resets every task
+# of a process marked. A fifo with an external end, which no task of the
+# program holds, has no such pair: its owner is marked once it has
+# finished, by a rule of its own, since the engine cannot tell whether the
+# outside got what it needed.
 #
 # $1 - Absolute path of the output directory.
 debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
@@ -227,28 +250,25 @@ debasher::_define_rerun_processes_due_to_proc_status_of_fifo_owner_reader()
 
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # Obtain owner process name and status
-        local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-        local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local owner_status=$(debasher::_get_process_status "${dirname}" "${owner_procname}")
-
-        local fifo_reader=${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
-        if [ "${fifo_reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-            if [ "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
-                debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_EXTERNAL_FIFO_RERUN_REASON}"
-            fi
-            continue
+        [ "${DEBASHER_FIFO_READERS["${augm_fifoname}"]:-${DEBASHER_EXTERNAL_FIFO_END}}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] || continue
+        local owner_procname="${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        if [ "$(debasher::_get_process_status "${dirname}" "${owner_procname}")" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; then
+            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_EXTERNAL_FIFO_RERUN_REASON}"
         fi
+    done
 
-        # Obtain reader process name and status
-        local reader_procname="${fifo_reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local reader_status=$(debasher::_get_process_status "${dirname}" "${reader_procname}")
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
 
-        # If one end is finished and the other is not, mark both
-        if { [ "${reader_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && [ "${owner_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; } \
-               || { [ "${reader_status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && [ "${owner_status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ]; }; then
-            debasher::_mark_process_as_rerun "${reader_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
-            debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+    local pair owner reader
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        local owner_finished=0 reader_finished=0
+        debasher::_fifo_end_is_finished "${dirname}" "${owner}" && owner_finished=1
+        debasher::_fifo_end_is_finished "${dirname}" "${reader}" && reader_finished=1
+        if [ ${owner_finished} -ne ${reader_finished} ]; then
+            debasher::_mark_process_as_rerun "${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
+            debasher::_mark_process_as_rerun "${reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}" "${DEBASHER_PROC_STATUS_FIFO_RERUN_REASON}"
         fi
     done
 }

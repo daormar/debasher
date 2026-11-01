@@ -433,8 +433,8 @@ relative to the output directory of the run.
   process with some tasks launched or cancelled, some neither, and none running;
   `UNFINISHED`, any other case.
 - **rerun mark**: the decision to run a process again although it has run
-  before, for a reason (forced, changed input, outdated code, the other end of
-  one of its FIFOs runs again, an external end on one of its FIFOs, a resident
+  before, for a reason (forced, changed input, outdated code, the two ends of
+  one of its FIFOs out of step, an external end on one of its FIFOs, a resident
   resume, a producer that has not finished), propagated to the processes that
   depend on it and to the other ends of its FIFOs, except an external end. Every
   task of a marked process runs again, those that finished included.
@@ -2058,14 +2058,17 @@ program that uses FIFOs is refused under the Slurm scheduler when the run is
 prepared.
 
 Between runs, the two ends of a FIFO are kept in the same state (see "Reruns").
-When a run starts and one end has finished while the other has not, both are
-marked to rerun, and a rerun mark on one end reaches the other (an external end,
-which is not a process, excepted), and from each of them the processes that
-depend on them. A run therefore never launches an end whose other end has
-finished and will not run again. The owner of a FIFO with an external end is
-marked to rerun on every run once it has finished, since the engine cannot tell
-whether the outside got what it needed, and everything connected to it through
-dependencies or FIFOs runs again with it.
+When a run starts and one end has finished while the other has not, the
+processes of both are marked to rerun. The ends are compared task by task, so
+this holds as well for a FIFO between two tasks of the same array and for one
+between tasks of two arrays, and the processes are marked whole, since a rerun
+resets every task of a marked process. A rerun mark on one end reaches the other
+(an external end, which is not a process, excepted), and from each of them the
+processes that depend on them. A run therefore never launches an end whose other
+end has finished and will not run again. The owner of a FIFO with an external
+end is marked to rerun on every run once it has finished, since the engine
+cannot tell whether the outside got what it needed, and everything connected to
+it through dependencies or FIFOs runs again with it.
 
 ## Cycles through FIFOs
 
@@ -2147,7 +2150,7 @@ happens depends on when the failure comes:
 - **The writer fails after writing some data.** The reader sees the end of the
   data, and may finish successfully with what it got: a `FINISHED` reader does
   not mean that it got everything the writer meant to send. The next run
-  reruns both ends, since one of them has not finished.
+  reruns the processes of both ends, since one of them has not finished.
 - **The reader stops reading while the writer writes.** The writer gets
   `SIGPIPE` on its next write, and its task ends.
 
@@ -2826,11 +2829,12 @@ not, for one of these reasons:
   modification time of the files, and against every module of the program, not
   only the one that defines the process; an external script of an alias or a
   Python function file is not compared.
-- **FIFO ends out of step.** One end of a FIFO has finished and the other has
-  not (see "Running both ends together"). The owner of a FIFO with an external
-  end is always marked when it has finished, since the engine cannot tell
-  whether the outside got what it needed; the external end, which is not a
-  process, gets no mark and passes none on.
+- **FIFO ends out of step.** The task at one end of a FIFO has finished and
+  the task at the other has not, and the process of each end is marked (see
+  "Running both ends together"). The owner of a FIFO with an external end is
+  always marked when it has finished, since the engine cannot tell whether the
+  outside got what it needed; the external end, which is not a process, gets no
+  mark and passes none on.
 - **Resident resume.** In a resident program, every node that is not running
   is marked, so that the program resumes from its checkpoints, as
   `doc/design_doc_resident.md` describes.
