@@ -18,28 +18,27 @@
 # FIFO MIRROR-RELATED FUNCTIONS #
 ############################
 #
-# A mirrored fifo (declared with define_fifo_opt/define_fifo_opt_generator's
-# --mirror flag, engine/debasher_lib_opts.sh) lets a fifo's traffic be
-# observed without stealing data from its real reader: the owning process's
-# own writer argument is transparently redirected to a shim fifo, and the
-# background tap below bridges every line from that shim into both the real
-# fifo (so the real reader is unaffected) and a mirror log file on disk.
+# A fifo declared with --mirror (see define_fifo_opt and
+# define_fifo_opt_generator) is observed without taking data from its
+# reader. The task that owns it writes into a shim fifo instead, and a mirror
+# tap, a background job of that task, copies each line from the shim into the
+# real fifo, which its reader opens as usual, and into the mirror log of the
+# fifo on disk.
 #
 # It is a debugging aid for general programs. Resident programs keep their
 # own message log inside their processes and do not use it: declaring
 # --mirror in one is refused (see debasher::_check_fifo_mirror_allowed).
 #
-# The `--mirror` flag itself, and the DEBASHER_FIFO_MIRRORED bookkeeping it
-# populates, stay defined in debasher_lib_opts.sh (woven into fifo option
-# definition itself); only the tap process and its path helpers live here.
+# The --mirror flag and DEBASHER_FIFO_MIRRORED, which records the fifos that
+# carry it, belong to the definition of the fifo options in
+# debasher_lib_opts.sh; this file holds the paths of a mirror, the tap and
+# its start and stop.
 
 ########
-# FIFO MIRRORING path helpers. A mirrored fifo's real path (returned by
-# debasher::_get_absolute_fifoname in debasher_lib_dirs.sh) is untouched and
-# still handed to the fifo's real reader; only the writer's own resolved
-# option value gets swapped for the shim path (see
-# debasher::_start_fifo_mirror_taps_for_process), which a background tap
-# bridges into [mirror log file, real fifo].
+# The directory of the shim fifos and mirror logs of the run. The real path
+# of a mirrored fifo (debasher::_get_absolute_fifoname) does not change: its
+# reader gets it, and only the value that its owner gets is replaced by the
+# path of the shim (see debasher::_start_fifo_mirror_taps_for_process).
 debasher::_get_fifo_mirror_dir()
 {
     echo "$(debasher::_get_absolute_fifodir)/.mirror"
@@ -89,45 +88,31 @@ debasher::_check_fifo_mirror_allowed()
 }
 
 ########
-# Background loop bridging a mirrored fifo's shim fifo to both its real
-# fifo and its mirror log file, one line at a time. The real fifo and
-# the mirror file are each opened once, before the loop, and kept open
-# for the tap's entire lifetime (never closed between messages), so
-# every line is forwarded with two builtin printfs, no external process
-# forked per line (previously a piped tee per line).
+# The mirror tap of a fifo: copies each line from the shim fifo $1 into the
+# real fifo $2 and appends it to the mirror log $3, until it reads the stop
+# token. It runs in the background, started by the task that owns the fifo.
 #
-# This is safe for every known reader of a mirrored real fifo: a reader
-# that reopens the real fifo per line (this codebase's own
-# data/programs/debasher_echo.sh's stream_echo idiom) tolerates a
-# persistent writer fine, verified with a real fifo: it only needs a
-# writer present at the moment it opens, not a close between messages.
-# A reader with its own single persistent open (e.g. FBPProcess's
-# reader thread) requires exactly this shape and cannot recover from an
-# intermediate EOF at all. Re-opening the real fifo per line, as this
-# tap used to do, is the one thing that breaks that second kind of
-# reader, which is why this rewrite removes it instead of preserving it.
+# The real fifo and the log are each opened once and kept open while the tap
+# runs, and each line is written with builtins, with no process forked for
+# it. Both kinds of reader of a fifo work with a writer that keeps the fifo
+# open: one that opens it once and reads a stream, which would take a close
+# between two lines for the end of the data, and one that opens it anew for
+# each line, which only needs a writer present when it opens.
 #
-# A reader that reopens the real fifo per line is, by construction,
-# fully detached (zero readers) during the gap between one close and
-# the next open, and unlike a fresh open() (which blocks until a
-# reader appears), a write on this tap's own already-open fd during
-# that exact gap raises SIGPIPE, verified with a real fifo: killing the
-# tap outright the moment its timing loses that race. SIGPIPE is
-# ignored for this reason, and each forwarded write is retried (on the
-# very same fd, no close/reopen needed; also verified: an existing
-# writer fd starts working again as soon as a new reader attaches) until
-# it succeeds, rather than treated as fatal.
+# Between two opens of that second kind of reader, the real fifo has no
+# reader, and a write on a descriptor already open fails with SIGPIPE
+# instead of blocking as an open would. The tap ignores SIGPIPE and retries
+# the write of the line on the same descriptor until a reader is there again.
 #
-# The shim fifo is opened once too, for reading and writing, and never
-# closed until the tap ends. Opening it anew for each line would lose
-# lines: a writer that sends several lines in one open (printf with
-# several lines, cat of a file) and closes before the tap has read them
-# all leaves the rest in a fifo that, once the tap closes its own read
-# end, nobody holds, and the kernel discards what a fifo held when its
-# last descriptor is closed. Holding a write end of its own also keeps
-# the tap's reads from ever seeing EOF between writers, and a writer's
-# open from blocking. Opening a fifo for reading and writing does not
-# block on Linux or on macOS (POSIX leaves it undefined).
+# The shim fifo is opened once too, for reading and writing, and kept open.
+# Opening it anew for each line would lose lines: a writer that sends several
+# lines in one open and closes before the tap has read them all would leave
+# the rest in a fifo that nobody holds once the tap closes its own end, and
+# the system discards what a fifo holds when its last descriptor is closed.
+# Holding a write end of its own also keeps the reads of the tap from seeing
+# an end of file between two writers, and the open of a writer from blocking.
+# Opening a fifo for reading and writing does not block on Linux or on macOS
+# (POSIX leaves it undefined).
 debasher::_run_fifo_mirror_tap()
 {
     local shimfifo=$1
@@ -142,12 +127,9 @@ debasher::_run_fifo_mirror_tap()
     # to the real fifo sees EOF.
     trap 'exit 143' TERM
 
-    # High fd numbers (not 3/4): fd 3 is reserved by bats-core itself
-    # for test status reporting, and this tap's own bats tests run it
-    # as a real background job under bats, so clobbering fd 3 here
-    # would corrupt the test harness's own channel, not just this
-    # process's. That is avoided by staying well clear of low fd numbers
-    # any shell/test tooling might already be using.
+    # High descriptor numbers, clear of those that the shell and test tools
+    # use: bats reports the status of its tests on descriptor 3, and the
+    # tests of the tap run it as a background job under bats
     exec 7<>"${shimfifo}"
     exec 8>"${realfifo}"
     exec 9>>"${mirrorfile}"
@@ -183,77 +165,75 @@ debasher::_run_fifo_mirror_tap()
 }
 
 ########
-# Starts one background mirror tap per mirrored fifo referenced in
-# DEBASHER_DESERIALIZED_ARGS (already populated by the caller),
-# rewriting each matching real-fifo argument to the tap's shim path
-# instead, so the process function's own argv is the only thing that
-# changes: the real fifo path stays exactly what was persisted to the
-# ".opts" file and what any connected reader resolved at DAG-definition
-# time. Populates DEBASHER_FIFO_MIRROR_TAP_PIDS/
-# DEBASHER_FIFO_MIRROR_TAP_SHIMS for debasher::_stop_fifo_mirror_taps to
-# join on afterwards.
+# Prints the shim fifo of the value $1 of an output option when that value is
+# a mirrored fifo of the run, and returns 1 otherwise.
 #
-# Deliberately does NOT consult DEBASHER_PROGRAM_FIFOS/
-# DEBASHER_FIFO_MIRRORED: this runs inside the process's own generated
-# script, which, for both the builtin and Slurm schedulers, executes
-# as a separate bash process from the one that ran every process's
-# _define_opts (and so populated those in-memory arrays) at DAG-load
-# time; they're empty here even though the shim fifo/mirror log files
-# _prepare_fifos_owned_by_process created for a mirrored fifo (which
-# DOES run in that original process) are still there on disk. Treating
-# "a shim fifo exists at the path this real fifo argument maps to" as
-# the signal instead works across that process boundary for free, since
-# it's a plain filesystem check.
+# The script of a task runs in a bash process of its own, where
+# DEBASHER_FIFO_MIRRORED is empty: the arrays of the fifos are filled by the
+# process that loads the program. So the shim fifo that the preparation of
+# the owner creates for a mirrored fifo (see
+# debasher::_prepare_fifos_owned_by_process) tells it, found on disk.
+debasher::_get_shim_of_mirrored_fifo_value()
+{
+    local value=$1
+
+    local fifodir=$(debasher::_get_absolute_fifodir)
+    case "${value}" in
+        "${fifodir}"/*)
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    local shimfifo=$(debasher::_get_fifo_shim_name "${value#${fifodir}/}")
+    [ -p "${shimfifo}" ] || return 1
+    echo "${shimfifo}"
+}
+
+########
+# Starts the mirror tap of the real fifo $1, which the shim fifo $2 feeds,
+# and records it in DEBASHER_FIFO_MIRROR_TAP_PIDS and
+# DEBASHER_FIFO_MIRROR_TAP_SHIMS for debasher::_stop_fifo_mirror_taps.
+debasher::_start_fifo_mirror_tap()
+{
+    local realfifo=$1
+    local shimfifo=$2
+
+    local augm_fifoname="${realfifo#$(debasher::_get_absolute_fifodir)/}"
+    local mirrorfile=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
+    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" &
+    DEBASHER_FIFO_MIRROR_TAP_PIDS+=($!)
+    DEBASHER_FIFO_MIRROR_TAP_SHIMS+=("${shimfifo}")
+}
+
+########
+# Starts a mirror tap for each mirrored fifo of the run that the task gets
+# as the value of an output option in DEBASHER_DESERIALIZED_ARGS (a flat
+# list of options and values, which the caller has filled), and replaces
+# that value with the path of the shim fifo, so that the process function
+# writes into the shim. The .opts file of the task, written before, keeps
+# the real path, and so do the options of the reader.
 #
-# Only ever substitutes the argument immediately following a "-out"/
-# "--out"-prefixed flag (DEBASHER_DESERIALIZED_ARGS is a flat "flag,
-# value, flag, value, ..." sequence, see debasher::_print_opts_as_
-# qstrings): a fifo's real path is identical in both the owner's
-# argv (whose flag names the "-outf"-style option --mirror was declared
-# on) and any connected reader's argv (whose flag is its own "-inf"-
-# style connection), without this check, a reader would see its own
-# input argument redirected to the writer's shim and read nothing real
-# ever gets forwarded to. This mirrors the same "-out"/"--out" naming
-# convention frontend/src/models/option.ts's getOptionDirection already
-# uses, and that script_generation.py only ever emits --mirror for
-# (direction == "output").
+# Only the value of an output option (-out* or --out*) is replaced: the
+# owner gets a mirrored fifo through one, which define_fifo_opt checks, and
+# the reader gets the same path through an input option of its own, which
+# has to stay the real fifo.
 debasher::_start_fifo_mirror_taps_for_process()
 {
-    local processname=$1
-    local fifodir=$(debasher::_get_absolute_fifodir)
-
     DEBASHER_FIFO_MIRROR_TAP_PIDS=()
     DEBASHER_FIFO_MIRROR_TAP_SHIMS=()
 
     local n=${#DEBASHER_DESERIALIZED_ARGS[@]}
     local i
     for ((i = 0; i + 1 < n; i++)); do
-        local flag="${DEBASHER_DESERIALIZED_ARGS[i]}"
-        case "${flag}" in
-            -out*|--out*)
-                ;;
-            *)
-                continue
-                ;;
-        esac
+        debasher::_str_is_output_option "${DEBASHER_DESERIALIZED_ARGS[i]}" || continue
 
         local realfifo="${DEBASHER_DESERIALIZED_ARGS[i+1]}"
-        case "${realfifo}" in
-            "${fifodir}"/*)
-                local augm_fifoname="${realfifo#${fifodir}/}"
-                local shimfifo=$(debasher::_get_fifo_shim_name "${augm_fifoname}")
+        local shimfifo
+        shimfifo=$(debasher::_get_shim_of_mirrored_fifo_value "${realfifo}") || continue
 
-                if [ -p "${shimfifo}" ]; then
-                    local mirrorfile=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
-
-                    DEBASHER_DESERIALIZED_ARGS[i+1]="${shimfifo}"
-
-                    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" &
-                    DEBASHER_FIFO_MIRROR_TAP_PIDS+=($!)
-                    DEBASHER_FIFO_MIRROR_TAP_SHIMS+=("${shimfifo}")
-                fi
-                ;;
-        esac
+        DEBASHER_DESERIALIZED_ARGS[i+1]="${shimfifo}"
+        debasher::_start_fifo_mirror_tap "${realfifo}" "${shimfifo}"
     done
 }
 

@@ -999,12 +999,10 @@ debasher::_execute_task()
     fi
 
     if [ "${builtin_sched_steps}" -eq 1 ]; then
-        # Start mirror taps (if any) for fifos this process owns and
-        # writes to (see debasher::_start_fifo_mirror_taps_for_process):
-        # must run after the ".opts" dump above so that inspector keeps
-        # showing the real fifo path, and before the process function
-        # below so it gets each mirrored option's shim path instead.
-        debasher::_start_fifo_mirror_taps_for_process "${processname}"
+        # Start the mirror taps of the mirrored fifos that the task owns:
+        # after the .opts file is written, which keeps the real paths, and
+        # before the process function, which gets the shim fifos instead
+        debasher::_start_fifo_mirror_taps_for_process
 
         debasher::_export_process_env "${dirname}" "${processname}" "${opt_array_size}" "${task_idx}"
     fi

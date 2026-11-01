@@ -117,44 +117,19 @@ check_pars()
 }
 
 ########
-configure_scheduler()
-{
-    local sched=$1
-    if [ ${sched} != ${DEBASHER_OPT_NOT_FOUND} ]; then
-        debasher::_set_debasher_scheduler ${sched} || return 1
-    fi
-}
-
-########
 get_mirror()
 {
     local dirname=$1
     local process=$2
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
-    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file:
-    # the files read here are found in the given output directory, so
-    # neither the program file nor where the output directory was when
-    # the program ran matter
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
-
-    # Configure scheduler
-    configure_scheduler $sched || return 1
-
-    # debasher::_get_fifo_mirror_filename resolves the mirror path via
-    # DEBASHER_PROGRAM_OUTDIR (same as every other fifo path helper in
-    # engine/debasher_lib_dirs.sh), which is only set as a side effect of
-    # a full program execution: set it explicitly here since this is a
-    # standalone CLI invocation.
+    # The path of the mirror log depends on the output directory only, which
+    # debasher::_get_fifo_mirror_filename reads from DEBASHER_PROGRAM_OUTDIR,
+    # set here since no program is loaded
     debasher::_set_debasher_outdir "${absdirname}"
 
-    # Augmented fifo name matches DEBASHER_PROGRAM_FIFOS's own key
-    # convention ("<processname>/<fifoname>", see
-    # debasher::_define_fifo_task_idx); task index doesn't participate
-    # in it, mirroring how per-task fifo names are already
-    # distinguished by the process author's own generator.
+    # The name of a fifo of the run is <process>/<name>, with no task index:
+    # the fifos of the tasks of an array already have names of their own
     local augm_fifoname="${process}/${fifoname}"
     local mirror_fname=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
 
