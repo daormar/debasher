@@ -2006,16 +2006,26 @@ reader with fewer tasks than the process, or a connection made with
 would block for ever waiting for a reader. A FIFO fed from outside the program,
 which its owner reads, is left out.
 
-A FIFO whose writer is outside the program is declared by its reader, through
-an input option, with a tag that says so (`--control` or `--external`). Tags
-belong to resident programs, and a general program that uses one is refused
-(see `doc/design_doc_resident.md`).
+A FIFO whose writer is outside the program is declared through an input option
+by the task that reads it, which is its owner, and its external end is the
+writer. `data/programs/debasher_echo.sh` declares this way the FIFO through
+which it reads what a person writes from a terminal. Its owner is rerun as the
+owner of any FIFO with an external end is (see "Running both ends together").
+
+In a resident program, such a FIFO also carries a tag, `--control` or
+`--external`, which says what kind of port the end of its owner is in its node;
+`--control` also marks the triggers that the Supervisor sends to the nodes. The
+engine uses the tags to check that a round can reach every node, to give each
+node its ports and to tell the web UI what each channel is (see
+`doc/design_doc_resident.md`). A general program has no rounds, no nodes and no
+ports, so nothing would read a tag, and a general program that uses one is
+refused rather than left with a tag that looks meaningful.
 
 `program.fifos` lists every FIFO of the run: its name, the task that owns it,
-and the task that reads it or `__EXTERNAL__` for an external end. The engine
-creates a FIFO with `mkfifo` when it prepares the process of its owner, before
-the process is launched, removing the one that an earlier run left, so that
-every run of the owner starts with a new, empty FIFO.
+and the task that reads it or `__EXTERNAL__` for an external end, also when that
+end is the writer. The engine creates a FIFO with `mkfifo` when it prepares the
+process of its owner, before the process is launched, removing the one that an
+earlier run left, so that every run of the owner starts with a new, empty FIFO.
 
 ## Running both ends together
 
@@ -2032,20 +2042,30 @@ built-in scheduler launches a chain of FIFOs together, the same holds between
 any two processes of a chain.
 
 The built-in scheduler keeps an end of a FIFO out of a round until its other end
-can start with it. In each round, a task at one end of a FIFO is launched only
-when the other end, a task of the program, already runs, has finished, is
-launched in the same round, or waits only for processes to start or to have
-every task cancelled, as a reader with an `after` dependency on the owner of its
-FIFO does, which then starts in the next round. Chains of FIFOs are followed to
-the end. An end that went first while its other end waited for another process
-to end would block on opening the FIFO and hold its CPUs and memory, possibly
-the ones that process needs, and the program would never finish. When resources
-are limited, the knapsack solver takes the ends of a FIFO, and every end of a
-chain of FIFOs, all together or none of them, and a round in which no group of
-ends fits in the free resources, with nothing else to launch, stops the run with
-an error (see "The built-in scheduler"). An end whose other end is cancelled is
-cancelled too, instead of being kept out of every round (see "Tasks that will
-not be launched").
+can start at the same time or later without waiting, through its dependencies,
+for anything to end. In
+each round, a task at one end of a FIFO is launched only when its other end, a
+task of the program:
+
+- already runs, or has finished;
+- is launched in the same round; or
+- may still be launched, fits in the free CPUs and memory, and has only
+  dependencies that hold already or are `after` dependencies on processes that
+  start in this round or already run, so that it starts in a later round.
+
+For example, when `w` writes the FIFO `f` and `r` reads it with `after:w`, `w`
+goes into the first round without `r`, since `r` waits only for `w` to start,
+and `r` goes into the next one.
+
+Chains of FIFOs are followed to the end. An end that went first while its other
+end waited for another process to end would block on opening the FIFO and hold
+its CPUs and memory, possibly the ones that process needs, and the program would
+never finish. When resources are limited, the knapsack solver takes the ends of
+a FIFO, and every end of a chain of FIFOs, all together or none of them, and a
+round in which no group of ends fits in the free resources, with nothing else to
+launch, stops the run with an error (see "The built-in scheduler"). An end whose
+other end is cancelled is cancelled too, instead of being kept out of every
+round (see "Tasks that will not be launched").
 
 One case remains open. An end that goes first because its other end only waits
 for it to start holds its resources while it waits, and if they are what the
@@ -2087,8 +2107,12 @@ reads, and `process_b` owns one that `process_a` reads:
 4. `process_a` then writes `DEBASHER_SHUTDOWN_TOKEN`, which `process_b` takes
    as the end of the loop, and both return.
 
-The engine guarantees what makes such a loop possible: both processes start
-together, each FIFO exists before its owner runs, and each has one reader. It
+The engine guarantees what makes such a loop possible: neither process waits for
+the other to end, each FIFO exists before its owner runs, and each has one
+reader. When every link of the loop has the dependency type `none`, both
+processes start in the same round; with `after` on one link, the process that
+has the `after` dependency starts in the next round, once the other has started
+(see "Running both ends together"). It
 does not guarantee that the loop ends, or that it does not stop with each
 process waiting for the other: when the loop ends is decided by a protocol
 between the processes, for which the engine only provides
@@ -2171,11 +2195,19 @@ happens depends on when the failure comes:
   open for good. Its process stays `IN-PROGRESS`, the built-in scheduler waits
   for it, and `debasher_exec` does not end. `debasher_stop` ends the program.
 - **The writer fails after writing some data.** The reader sees the end of the
-  data, and may finish successfully with what it got: a `FINISHED` reader does
-  not mean that it got everything the writer meant to send. The next run
-  reruns the processes of both ends, since one of them has not finished.
-- **The reader stops reading while the writer writes.** The writer gets
-  `SIGPIPE` on its next write, and its task ends.
+  data, and may finish successfully with what it got (with a mirror too, since
+  the mirror tap ends with the task of the writer, see "Mirror taps"): a
+  `FINISHED` reader does not mean that it got everything the writer meant to
+  send. The next run reruns the processes of both ends, compared task by task,
+  since one of them has not finished.
+- **The reader stops reading while the writer writes.** The next write into
+  the FIFO fails with `SIGPIPE`. When the shell of the task writes (`echo`,
+  `printf`, a redirection of a loop of the shell), the signal ends the task.
+  When an external command writes (`cat`, `seq`, a program), it ends that
+  command alone, whose status is 141, and the process function goes on: what
+  happens then is up to the function, and the task may finish. With a mirror,
+  the owner writes into the shim, and gets no `SIGPIPE`, although its writes
+  block once the shim is full (see "Mirror taps").
 
 A task ended by `SIGPIPE`, like one whose process function calls `exit`, ends
 with no error message and without running its `_post` method, and leaves no
