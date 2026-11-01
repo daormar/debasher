@@ -54,7 +54,7 @@ for name in "${prog_def_symbols[@]}"; do
 done
 
 # Generate steps API file
-steps_symbols=("seq_execute()" "mark_step_done()" "is_step_done()")
+steps_symbols=("seq_execute()" "mark_step_done()" "is_step_done()" "unmark_steps()")
 rm -f rtdocs/source/api_steps_doc.md
 for name in "${steps_symbols[@]}"; do
     sh rtdocs/tomdoc.sh -m -s "${name}" engine/debasher_lib_sched.sh >> rtdocs/source/api_steps_doc.md

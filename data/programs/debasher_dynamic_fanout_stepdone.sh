@@ -165,7 +165,7 @@ worker_stepdone()
             # Remove the markers of this block left by an earlier run
             # with another input, since the step overwrites the output
             # they stand for
-            rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${base}_"*
+            unmark_steps "${outd}" "${base}_" || return 1
             if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
                 mark_step_done "${outd}" "${stepid}" || return 1
                 echo "Step ${stepid} completed and marked as done" >&2

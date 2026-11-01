@@ -124,7 +124,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   program with `sched` `SLURM` runs only where `srun` is found, and on the
   Slurm scheduler the step takes its resources from the job of the task that
   calls it. Needed only for special cases (non-Bash steps inside a Bash
-  process, aliases, a heavy step sent to Slurm); prefer processes.
+  process, aliases, a heavy step sent to Slurm); prefer processes. A task that
+  runs again runs all its steps again; to skip those an earlier run finished,
+  the process marks them itself with `mark_step_done <dir> <id>`, tests them
+  with `is_step_done <dir> <id>`, and removes stale ones with
+  `unmark_steps <dir> <id prefix>`; the markers must survive the reset of the
+  directory that holds them, with a `reset_outfiles` method.
 
 ## Processes
 

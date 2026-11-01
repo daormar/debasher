@@ -91,6 +91,7 @@ describe("buildCodePrompt", () => {
     expect(prompt).toContain("- `plain` (Bash): Prints $1.");
     expect(prompt).toContain("not `seq_execute_slurm`");
     expect(prompt).toContain("`< /dev/null`");
+    expect(prompt).toContain("`unmark_steps <dir> <id prefix>`");
     expect(prompt).toContain("never a FIFO");
   });
 

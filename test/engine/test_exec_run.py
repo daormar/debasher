@@ -4169,3 +4169,183 @@ def test_debasher_stop_ends_the_jobs_of_a_process_in_progress_under_slurm(tmp_pa
     finally:
         subprocess.run(["scancel", job_id], capture_output=True)
     assert not (traces / "long").exists()
+
+
+# A process that runs, as a step, a sequential process whose steps go to Slurm
+SLURM_STEP_MODULE = """\
+runner_explain_opts()
+{
+    :
+}
+
+runner_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+runner()
+{
+    seq_execute slurmstep
+}
+
+slurmstep()
+{
+    :
+}
+
+debasher_slurmstep_program()
+{
+    add_debasher_process "runner" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_seq_process "slurmstep" "" "sched=SLURM"
+}
+"""
+
+
+def _path_without(tmp_path, *commands):
+    """A directory that links every program of /usr/bin and /bin but the given
+    ones, to stand for a PATH where they are not installed."""
+    bindir = tmp_path / "bin_without"
+    bindir.mkdir()
+    for sysdir in ("/usr/bin", "/bin"):
+        for entry in os.scandir(sysdir):
+            target = bindir / entry.name
+            if entry.name in commands or target.exists() or target.is_symlink():
+                continue
+            target.symlink_to(entry.path)
+    return str(bindir)
+
+
+def test_a_run_with_a_sequential_process_on_slurm_is_refused_without_srun_and_launches_nothing(tmp_path):
+    pfile = tmp_path / "debasher_slurmstep.sh"
+    pfile.write_text(SLURM_STEP_MODULE)
+    outdir = tmp_path / "out"
+    env = {**os.environ, "PATH": _path_without(tmp_path, "srun")}
+
+    result = subprocess.run(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN"],
+        capture_output=True, text=True, env=env,
+    )
+
+    assert result.returncode != 0
+    assert "sequential process slurmstep has sched=SLURM, but srun is not found" in result.stderr
+    assert not (outdir / "__exec__" / "runner" / "runner.id").exists()
+
+
+# A process that runs one step per file of the list -list, recording each
+# step with a step marker in its task subdirectory, as
+# debasher_dynamic_fanout_stepdone.sh does: work copies a file into the
+# directory, leaves its name in TRACES/ran, and fails for a file next to
+# which a <file>.fail exists. -v only changes the options of the run
+STEP_MARKERS_MODULE = """\
+steps_explain_opts()
+{
+    explain_opt "-list" "<file>" "Files to process, one per line"
+    explain_opt "-v" "<int>" "A value that only changes the options"
+    explain_opt "-outd" "<dir>" "Task subdirectory"
+}
+
+steps_identify_cmdline_opts()
+{
+    opt_is_cmdline "-list"
+    opt_is_cmdline "-v"
+}
+
+steps_define_opts()
+{
+    local cmdline=$1
+    local optlist=""
+    define_cmdline_opt "${cmdline}" "-list" optlist || return 1
+    define_cmdline_opt "${cmdline}" "-v" optlist || return 1
+    define_opt_from_process_outdir "-outd" optlist --subdir 0 || return 1
+    save_opt_list optlist
+}
+
+steps_reset_outfiles()
+{
+    # The step markers in the task subdirectory survive to the next run
+    :
+}
+
+work()
+{
+    echo "$(basename "$1")" >> "TRACES/ran"
+    [ -e "$1.fail" ] && return 1
+    cp "$1" "$2"
+}
+
+steps()
+{
+    local list=$(read_opt_value_from_func_args "-list" "$@")
+    local outd=$(read_opt_value_from_func_args "-outd" "$@")
+    local exit_code=0
+    local filepath
+    while IFS= read -r filepath; do
+        local base=$(basename "${filepath}")
+        local sum=$(cksum < "${filepath}" | awk '{print $1}')
+        local stepid="${base}_${sum}"
+        is_step_done "${outd}" "${stepid}" && continue
+        unmark_steps "${outd}" "${base}_" || return 1
+        if seq_execute work "${filepath}" "${outd}/${base}" < /dev/null; then
+            mark_step_done "${outd}" "${stepid}" || return 1
+        else
+            exit_code=1
+        fi
+    done < "${list}"
+    return "${exit_code}"
+}
+
+debasher_stepmarkers_program()
+{
+    add_debasher_process "steps" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_seq_process "work"
+}
+"""
+
+
+def test_step_markers_skip_the_steps_that_finished_and_run_again_the_step_of_a_changed_input(tmp_path):
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    data = tmp_path / "data"
+    data.mkdir()
+    for name in ("a.txt", "b.txt", "c.txt"):
+        (data / name).write_text(f"{name}\n")
+    (data / "b.txt.fail").write_text("")
+    listfile = tmp_path / "list"
+    listfile.write_text("".join(f"{data / name}\n" for name in ("a.txt", "b.txt", "c.txt")))
+    pfile = tmp_path / "debasher_stepmarkers.sh"
+    pfile.write_text(STEP_MARKERS_MODULE.replace("TRACES", str(traces)))
+    outdir = tmp_path / "out"
+    taskdir = outdir / "steps" / "0"
+    ran = traces / "ran"
+
+    def run(value):
+        return run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-list", str(listfile), "-v", value)
+
+    def markers(base):
+        return sorted(p.name for p in taskdir.glob(f"DEBASHER_STEP_DONE_{base}_*"))
+
+    # The step of b fails: the run does not finish, and a and c are marked
+    result = run("1")
+    assert result.returncode == 3, result.stderr
+    assert ran.read_text().split() == ["a.txt", "b.txt", "c.txt"]
+    assert markers("a.txt") and markers("c.txt") and not markers("b.txt")
+
+    # The next run skips the steps that the markers record and runs b
+    (data / "b.txt.fail").unlink()
+    ran.unlink()
+    result = run("1")
+    assert result.returncode == 0, result.stderr
+    assert ran.read_text().split() == ["b.txt"]
+    assert (taskdir / "b.txt").read_text() == "b.txt\n"
+
+    # With a changed input, a run that reruns the process runs only the step
+    # of that input, and its old marker is gone
+    old_a_marker = markers("a.txt")
+    (data / "a.txt").write_text("changed\n")
+    ran.unlink()
+    result = run("2")
+    assert result.returncode == 0, result.stderr
+    assert ran.read_text().split() == ["a.txt"]
+    assert (taskdir / "a.txt").read_text() == "changed\n"
+    assert len(markers("a.txt")) == 1 and markers("a.txt") != old_a_marker

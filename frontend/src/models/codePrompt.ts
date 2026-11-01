@@ -71,6 +71,7 @@ function seqProcessesSection(program: Program, process: ProgramProcess): string[
     "",
     "- Call `seq_execute` for these steps, not `seq_execute_slurm`: whether a step runs in the shell of the task or on Slurm is set by its sequential process.",
     "- Inside a loop that reads its standard input, give the step `< /dev/null`, or the step takes the rest of the loop's input.",
+    "- The engine keeps no record of a step: a task that runs again runs all its steps again. To skip the steps that an earlier run finished, mark each one with `mark_step_done <dir> <id>` once it succeeds and test it with `is_step_done <dir> <id>`; put in the id what the step depends on (a checksum of its input), and before running a step remove with `unmark_steps <dir> <id prefix>` the markers that other inputs left for the same output. Keep the markers out of the reset of the directory that holds them with a `reset_outfiles` method.",
     ...(onSlurm
       ? ["- A step on Slurm runs in a new shell, possibly on another machine: give it everything it needs as arguments, and pass it files, never a FIFO."]
       : []),

@@ -732,6 +732,44 @@ debasher::is_step_done()
 is_step_done() { debasher::is_step_done "$@"; }
 
 ########
+# Public: Removes the step markers of the given directory whose ids start
+# with the given prefix, as a process does before a step whose output
+# other steps, with other inputs, may have written: their markers no longer
+# stand for that output. Removing a marker that does not exist is not an
+# error. An empty directory or prefix is refused, since it would remove
+# markers that the caller did not name.
+#
+# $1 - Directory of the step markers.
+# $2 - Prefix of the ids of the steps whose markers are removed.
+#
+# Returns 1 if a marker could not be removed.
+debasher::unmark_steps()
+{
+    local dir="$1"
+    local id_prefix="$2"
+
+    if [ -z "${dir}" ] || [ -z "${id_prefix}" ]; then
+        echo "Error: unmark_steps needs a directory and a prefix of step ids" >&2
+        return 1
+    fi
+    "${RM}" -f "${dir}/${DEBASHER_STEP_MARKER_PREFIX}${id_prefix}"*
+}
+
+########
+# Public: Removes the step markers of the given directory whose ids start
+# with the given prefix (see debasher::unmark_steps).
+#
+# $1 - Directory of the step markers.
+# $2 - Prefix of the ids of the steps whose markers are removed.
+#
+# Examples
+#
+#   unmark_steps "${outd}" "${base}_"
+#
+# Returns 1 if a marker could not be removed.
+unmark_steps() { debasher::unmark_steps "$@"; }
+
+########
 debasher::_format_elapsed_time()
 {
     local elapsed_ms=$1

@@ -152,6 +152,15 @@ run_with_engine() {
     [ -f "${BATS_TEST_TMPDIR}/DEBASHER_STEP_DONE_0_a.txt" ]
 }
 
+@test "unmark_steps removes the markers whose ids start with the prefix, and nothing else" {
+    run run_with_engine 'RM=$(command -v rm); mark_step_done "${DIR}" a.txt_1 && mark_step_done "${DIR}" a.txt_2 && mark_step_done "${DIR}" ab.txt_1 && unmark_steps "${DIR}" a.txt_ && ! is_step_done "${DIR}" a.txt_1 && ! is_step_done "${DIR}" a.txt_2 && is_step_done "${DIR}" ab.txt_1 && unmark_steps "${DIR}" none_'
+    [ "$status" -eq 0 ]
+
+    # An empty prefix would remove every marker of the directory
+    run run_with_engine 'RM=$(command -v rm); mark_step_done "${DIR}" x && ! unmark_steps "${DIR}" "" && is_step_done "${DIR}" x'
+    [ "$status" -eq 0 ]
+}
+
 @test "mark_step_done fails when the step is already marked" {
     run run_with_engine 'mark_step_done "${DIR}" s && mark_step_done "${DIR}" s'
     [ "$status" -eq 1 ]

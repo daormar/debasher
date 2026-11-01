@@ -1697,8 +1697,9 @@ DeBasher keeps no record of a step: when a task fails halfway through
 its steps, the next run runs all of them again. A process that wants to
 skip the steps that an earlier run finished records them itself, with
 ``mark_step_done <dir> <id>``, which creates an empty marker file for
-the step, and ``is_step_done <dir> <id>``, which tells whether it
-exists. The ``debasher_dynamic_fanout_stepdone`` module in
+the step, ``is_step_done <dir> <id>``, which tells whether it exists,
+and ``unmark_steps <dir> <id prefix>``, which removes the markers whose
+ids start with the prefix. The ``debasher_dynamic_fanout_stepdone`` module in
 ``data/programs`` runs one step per file of its list:
 
 .. code-block:: bash
@@ -1710,7 +1711,7 @@ exists. The ``debasher_dynamic_fanout_stepdone`` module in
     if is_step_done "${outd}" "${stepid}"; then
         echo "Step ${stepid} was already completed and marked as done" >&2
     else
-        rm -f "${outd}/${DEBASHER_STEP_MARKER_PREFIX}${base}_"*
+        unmark_steps "${outd}" "${base}_" || return 1
         if seq_execute worker_task "$filepath" "$outd/$base" < /dev/null; then
             mark_step_done "${outd}" "${stepid}" || return 1
         else
@@ -1729,9 +1730,10 @@ Two things are left to the process:
   that runs again because its options or its inputs changed still finds
   the markers of the earlier run. The example puts a checksum of the
   input in the id, so that a changed input has a new id, and removes
-  the markers that other inputs left for the same output before it runs
-  the step, so that an input that comes back does not find an old
-  marker for an output that was overwritten since.
+  the markers that other inputs left for the same output with
+  ``unmark_steps`` before it runs the step, so that an input that comes
+  back does not find an old marker for an output that was overwritten
+  since.
 
 Reusing Processes and Programs
 ------------------------------
