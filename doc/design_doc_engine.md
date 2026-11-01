@@ -983,7 +983,9 @@ no other method of a sequential process, which therefore needs no
 only when asked with `--show-seq-procs`, after the processes and each under a
 heading of its own, and leaves a sequential process out of the code of a process
 that runs it, which includes the other functions of its module that the process
-calls.
+calls. `debasher_exec_process` runs the function of a sequential process on its
+own, which is how a process test checks the code of a step (see "Testing a
+process with bats").
 
 The additional specifications `alias`, `ext_alias` and `alias_opt_map` mean what
 they mean for a process, and `sched`, which only a sequential process has,
@@ -3004,8 +3006,9 @@ fails; the marker goes before the launch, since a task that ends at once may
 have written its new marker by the time the launch returns. The id of the
 earlier launch stays until the new launch replaces it, so that the launch can
 stop an earlier launch of the task that still runs, and the process may read
-`UNFINISHED` for that instant. `debasher_exec_process` runs one process function
-outside any run, after loading its module, which is useful to try a process on
+`UNFINISHED` for that instant. `debasher_exec_process` runs the function of one
+process or sequential process of the program outside any run, after loading its
+module and running its `_program` method, which is useful to try a process on
 its own and is how a process test runs it (see "Testing a process with bats").
 
 # Business tests of a program
@@ -3063,15 +3066,21 @@ edit them.
 ## Testing a process with bats
 
 A process test runs a process with `debasher_exec_process`, which loads the
-module of the program, runs its `_program` method and calls the process
-function with the options that it is given, outside any run (see "Tools that
-read a run"). Nothing builds the options of the process, since `_define_opts`
-does not run: the test gives every option that the process function reads, and
-for each file that the process writes a path under the temporary directory of
-the test. An option that names a FIFO holds a path like any other, so a
-regular file stands in for the FIFO: a process that reads a FIFO is tested on a
-file that holds what would arrive, and one that writes a FIFO on a file that
-the test reads afterwards.
+module of the program, runs its `_program` method and calls the process function
+with the options that it is given, outside any run (see "Tools that read a
+run"). When the `_program` method fails, `debasher_exec_process` stops with an
+error, as a run stops in its preparation, so that a process test does not pass
+on a program whose run would stop in its preparation. It runs only a process or
+a sequential process of the program, and refuses any other name, such as that of
+another function of the module or of the engine: the function of a sequential
+process is what a step runs, and this is how its code, in Bash or in another
+language, is tested on its own. Nothing builds the options of the process, since
+`_define_opts` does not run: the test gives every option that the process
+function reads, and for each file that the process writes a path under the
+temporary directory of the test. An option that names a FIFO holds a path like
+any other, so a regular file stands in for the FIFO: a process that reads a FIFO
+is tested on a file that holds what would arrive, and one that writes a FIFO on
+a file that the test reads afterwards.
 
 A process test loads the test helpers, `debasher_bats_helpers`, a Bash library
 installed with the engine, whose path the test runner exports as

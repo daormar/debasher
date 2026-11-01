@@ -182,6 +182,25 @@ setup() {
     [ "${output}" = "${mod_dir}/old_outdir/prg.sh" ]
 }
 
+@test "a directory of older metadata whose program has another name is not the program of a process named like the module" {
+    # The name of a process, not of the program, matches the module
+    mkdir -p "${mod_dir}/sub/.debasher"
+    touch "${mod_dir}/sub/x.sh"
+    echo '{"name": "other", "processes": [{"name": "x"}]}' > "${mod_dir}/sub/.debasher/program.json"
+
+    run debasher::_is_ui_program_dir "${mod_dir}/sub" x
+    [ "${status}" -ne 0 ]
+    debasher::_is_ui_program_dir "${mod_dir}/sub" other
+}
+
+@test "the name of a namespaced program saved by an older UI is compared as text, not as a pattern" {
+    mkdir -p "${mod_dir}/ns/.debasher"
+    echo '{"name": "orgXns"}' > "${mod_dir}/ns/.debasher/program.json"
+
+    run debasher::_is_ui_program_dir "${mod_dir}/ns" "org.ns"
+    [ "${status}" -ne 0 ]
+}
+
 # --- debasher::load_debasher_module -------------------------------------
 
 @test "load_debasher_module loads a module loaded by two others once, after the modules it loads" {

@@ -104,37 +104,23 @@ debasher::_has_ui_program()
 }
 
 ########
+# True when the directory `dir` holds a program that the DeBasher UI saved
+# under the name `module`. The UI names the script of a program after the
+# top-level name of the program, whatever the name of the directory, so
+# that name, read by debasher::_get_ui_program_name from the topology file
+# or, in a directory saved before it, from .debasher/program.json, is what
+# tells a program directory apart from an unrelated folder that just
+# happens to contain a script of the same name.
 debasher::_is_ui_program_dir()
 {
-    # $1 - directory that may hold a module the DeBasher UI generated
-    # $2 - module name that a genuine UI program directory here would
-    #      have as its "name" field
-    #
-    # api/persistence.py::save always names the script after the
-    # program's own "name", and always writes that same name into the
-    # sibling .debasher/program.json (api/persistence.py::
-    # METADATA_DIRNAME/PROGRAM_FILENAME): so a real UI directory whose
-    # script is "${module}.sh" always has "name": "${module}" in that
-    # file. The directory itself need not be called "${module}" (the UI
-    # lets a program be saved under any output directory name), so this
-    # metadata check is the only way to tell a genuine UI program
-    # directory apart from an unrelated folder that just happens to
-    # contain a same-named script.
     local dir=$1
     local module=$2
 
-    if [ -f "$(debasher::_get_ui_program_topology_fname "${dir}")" ]; then
-        local name
-        name=$(debasher::_get_ui_program_name "${dir}") || return 1
-        [ "${name}" = "${module}" ]
-        return
-    fi
+    debasher::_has_ui_program "${dir}" || return 1
 
-    local metadata_fname=$(debasher::_get_ui_program_metadata_fname "${dir}")
-
-    [ -f "${metadata_fname}" ] || return 1
-
-    "${GREP}" -q "\"name\"[[:space:]]*:[[:space:]]*\"${module}\"" "${metadata_fname}"
+    local name
+    name=$(debasher::_get_ui_program_name "${dir}") || return 1
+    [ "${name}" = "${module}" ]
 }
 
 ########

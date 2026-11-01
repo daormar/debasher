@@ -67,8 +67,27 @@ debasher::load_debasher_module "${pfile}" || exit 1
 _exec_process_progress ""
 
 _exec_process_progress "Executing program function given in module..."
-debasher::_exec_program_func_for_module "${pfile}" >&2
+# A program that does not prepare would stop a run before it launches
+# anything, so a process test of it does not pass either
+debasher::_exec_program_func_for_module "${pfile}" >&2 || {
+    echo "Error: the _program method of ${pfile} failed" >&2
+    exit 1
+}
 _exec_process_progress ""
+
+# Only a process or a sequential process of the program is run: any other
+# name, such as that of a function of the module or of the engine, is
+# refused. A sequential process is accepted, since its function is what a
+# step runs, and this is the only way to run it on its own
+if [[ -v 'DEBASHER_SEQ_PROCESSES["${processname}"]' ]]; then
+    if [ $# -eq 0 ]; then
+        echo "${processname} is a sequential process of the program, which has no options"
+        exit 0
+    fi
+elif [[ ! -v 'DEBASHER_PROGRAM_PROCESSES["${processname}"]' ]]; then
+    echo "Error: ${processname} is neither a process nor a sequential process of the program: give the full name of one of them, as the program adds it" >&2
+    exit 1
+fi
 
 if [ $# -eq 0 ]; then
     _exec_process_progress "Showing documentation for process ${processname}..."

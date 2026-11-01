@@ -437,6 +437,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   filled in with real checks, and the line under the comment "remove the line
   below, which makes a skeleton fail" (`false`, or `pytest.fail(...)`) removed
   once they are.
+- A sequential process is tested as a process is, in a bats file written with
+  `write_program_file` (`add_test` writes skeletons for processes only):
+  `run debasher_process <name> <args>` runs its function on its own, with the
+  arguments that `seq_execute` would give it. This is how to test the code of
+  a step in another language.
+- When the `_program` method fails, every `debasher_process` fails with "the
+  _program method of ... failed": the program does not prepare, which
+  `validate_program` explains.
 
 ## Running and following
 

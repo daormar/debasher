@@ -67,8 +67,11 @@ which one you start with.
    purpose only once the test checks something. See "What a test checks"
    below.
 5. **Run the tests** with `run_tests`. When one fails, read the report, fix
-   the code or the test, whichever is wrong, and run them again. Stop and ask
-   the user after a few failed rounds instead of going around in circles.
+   the code or the test, whichever is wrong, and run them again. When every
+   process test fails with "the _program method ... failed", the program does
+   not prepare: run `validate_program` to see why, and fix that first. Stop
+   and ask the user after a few failed rounds instead of going around in
+   circles.
 
 Show the user the code and the test of each process as you finish it, briefly.
 When the user wants an opinion on code that is written rather than changes,
@@ -92,9 +95,9 @@ what is tested, not what is changed:
 
 ## What a test checks
 
-A business test runs one process on its own, outside any run, so it is the
-unit test of the process. A test that only checks that the process ended with
-status 0 proves little. Aim for:
+A business test runs one process, or sequential process, on its own, outside
+any run, so it is the unit test of the process. A test that only checks that
+the process ended with status 0 proves little. Aim for:
 
 - **Every output.** Read each file the process writes (or, for a node, each
   port it sends on) and compare it with what is expected, exactly when it can

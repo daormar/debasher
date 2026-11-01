@@ -68,16 +68,22 @@ debasher_exec_process
 
     $ debasher_exec_process [-q] <prgfile> <processname> [-- [<process_opts>]]
 
-``debasher_exec_process`` loads the module given by ``<prgfile>`` and
-executes a single one of its processes, ``<processname>``, directly in
-the foreground, bypassing ``debasher_exec`` and any scheduler. It is
-mainly useful to debug a process implementation in isolation.
+``debasher_exec_process`` loads the module given by ``<prgfile>``, runs
+its ``program`` method and executes a single one of its processes, or
+of its sequential processes, ``<processname>``, directly in the
+foreground, bypassing ``debasher_exec`` and any scheduler. It is mainly
+useful to debug a process implementation in isolation, and it is the
+only way to run a sequential process, such as a Python heredoc step, on
+its own. Any other name, such as that of a helper function of the
+module, is refused with an error, and so is a module whose ``program``
+method fails, before anything runs.
 
 * If ``-- <process_opts>`` is omitted, the tool does not execute the
   process. Instead, it prints the process's option documentation (the
   same information ``debasher_doc_mod --show-opts`` would show for
   it) and exits. The task shaping options of the process are listed
-  apart, since they are not given to the process.
+  apart, since they are not given to the process. For a sequential
+  process, which has no options, the tool says so.
 
 * If ``--`` is given, everything after it is passed as the process's
   own command line options, and the process is executed. The tool
@@ -108,10 +114,14 @@ which it runs with pytest.
 
 A bats test loads the helper library whose path the tool exports as
 ``DEBASHER_BATS_HELPERS``, and runs a process with
-``debasher_process <processname> [<process_opts>]``. Since no output
-directory is involved, the test gives every option the process reads,
-with the files it writes placed under the temporary directory of the
-test. For example, for a process ``greet`` that writes a greeting
+``debasher_process <processname> [<process_opts>]``; a sequential
+process is tested the same way, with the arguments that
+``seq_execute`` would give it. When the ``program`` method of the
+module fails, every call of ``debasher_process`` fails with an error
+naming the module. Since no
+output directory is involved, the test gives every option the process
+reads, with the files it writes placed under the temporary directory of
+the test. For example, for a process ``greet`` that writes a greeting
 into the file given by ``-outf``::
 
     load "${DEBASHER_BATS_HELPERS}"

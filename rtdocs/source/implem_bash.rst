@@ -1617,8 +1617,11 @@ Any function of the program can run as a step. Declaring it as a
 *sequential process*, with ``add_debasher_seq_process`` in the
 ``program`` method, is needed only when its code is not a Bash function
 (a heredoc in Python, R, Perl or Groovy), when it borrows the code of
-another process or of an external script (``alias``, ``ext_alias``), or
-when its steps go to SLURM, with resources of their own. The
+another process or of an external script (``alias``, ``ext_alias``),
+when its steps go to SLURM, with resources of their own, or when it is
+to be run on its own, or tested, with ``debasher_exec_process``, which
+refuses a function that is neither a process nor a sequential
+process. The
 ``debasher_cycle_dyn_sched`` module in ``data/programs`` does it for a
 transformation written in Python, which its ``worker`` process runs as
 a step on SLURM, although the program, which uses FIFOs, runs on the
