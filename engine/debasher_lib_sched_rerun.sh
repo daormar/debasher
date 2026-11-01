@@ -365,30 +365,28 @@ debasher::_define_rerun_processes_due_to_unfinished_producers()
 }
 
 ########
+# Spreads the rerun mark across each fifo between two tasks of the program,
+# from either end to the other (see debasher::_get_fifo_end_pairs): an
+# external end is not a process, and has no mark to spread.
+#
+# $1 - Absolute path of the output directory.
 debasher::_propagate_rerun_mark_due_to_fifos_iter()
 {
     # Read input parameters
     local dirname=$1
 
-    local augm_fifoname
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # An external end is not a process, and has no mark to spread
-        local fifo_reader=${DEBASHER_FIFO_READERS["${augm_fifoname}"]}
-        [ "${fifo_reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
 
-        # Obtain reader process name
-        local reader_procname="${fifo_reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local pair owner reader augm_fifoname
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        local owner_procname="${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+        local reader_procname="${reader%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
 
-        # Obtain owner process name
-        local fifo_owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-        local owner_procname="${fifo_owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-
-        # Mark fifo owner process as rerun if the reader is already marked
         if debasher::_process_marked_as_rerun "${reader_procname}"; then
             debasher::_mark_process_as_rerun "${owner_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi
-
-        # Mark fifo reader process as rerun if the owner is already marked
         if debasher::_process_marked_as_rerun "${owner_procname}"; then
             debasher::_mark_process_as_rerun "${reader_procname}" "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}"
         fi

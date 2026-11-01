@@ -632,9 +632,33 @@ debasher::_get_deptypes_that_wait_for_end()
 }
 
 ########
-# Writes into the caller-provided variable the process that stands for the
-# chain of fifos of a process, given the associative array that links each
-# end of a fifo to another end of its chain
+# Fills the indexed array named $1 with the fifos whose two ends are tasks
+# of the program, one entry "<owner> <reader> <fifo>" per fifo, each task as
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx> and the fifo last, so that
+# read gives it whole. A fifo with an external end, which no task of the
+# program holds, is left out, and so is one with no reader registered yet,
+# taken for one with an external end. So is a fifo that its owner task reads
+# itself: that task is its own other end, never waits for another one and
+# is never launched without it.
+debasher::_get_fifo_end_pairs()
+{
+    local -n fifo_end_pairs_ref=$1
+
+    fifo_end_pairs_ref=()
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+        local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]:-${DEBASHER_EXTERNAL_FIFO_END}}"
+        [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+        [ "${owner}" = "${reader}" ] && continue
+        fifo_end_pairs_ref+=("${owner} ${reader} ${augm_fifoname}")
+    done
+}
+
+########
+# Writes into the variable named $3 the root of the chain of fifos of the
+# process $2, following the links of the associative array named $1 (see
+# debasher::_get_fifo_chains) up to the process that links to itself.
 debasher::_get_fifo_chain_root()
 {
     local -n chain_links_ref=$1
@@ -653,24 +677,34 @@ debasher::_get_fifo_chain_root()
 # associative array chain_roots_ref with the process that stands for the
 # chain of each end of a fifo, and fifo_of_ends_ref, keyed by
 # <process><sep><process>, with a fifo between two ends, in both orders.
-# A fifo fed from outside and one read by its own owner link no processes.
+#
+# The chains are kept as a union of sets: each process links to another
+# process of its chain, and the root of a chain, the process that stands
+# for it, links to itself. A fifo between two processes joins their chains
+# by linking the root of the chain of its owner to that of its reader.
+# Only the fifos between two tasks of the program count (see
+# debasher::_get_fifo_end_pairs), and of those, not one between two tasks
+# of the same process: a process is already in its own chain.
 debasher::_get_fifo_chains()
 {
     local -n chain_roots_ref=$1
     local -n fifo_of_ends_ref=$2
     local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
 
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
+
     local -A links=()
-    local augm_fifoname
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]:-${DEBASHER_EXTERNAL_FIFO_END}}"
-        [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
+    local pair owner reader augm_fifoname
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        owner="${owner%%${sep}*}"
         reader="${reader%%${sep}*}"
-        local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]%%${sep}*}"
         [ "${owner}" = "${reader}" ] && continue
 
         fifo_of_ends_ref["${owner}${sep}${reader}"]=${augm_fifoname}
         fifo_of_ends_ref["${reader}${sep}${owner}"]=${augm_fifoname}
+        # A process seen for the first time is a chain of its own
         [[ -v links["${owner}"] ]] || links["${owner}"]=${owner}
         [[ -v links["${reader}"] ]] || links["${reader}"]=${reader}
         local owner_root reader_root
@@ -710,9 +744,15 @@ debasher::_check_deps_between_fifo_ends()
     for key in "${!waiting_deptypes[@]}"; do
         local end="${key%%${sep}*}"
         local peer="${key#*${sep}}"
+        # A process outside every chain is launched on its own, and may wait
+        # for any process to end
         [[ -v chain_roots["${end}"] ]] || continue
+        # Two processes with the same root are in the same chain
         [ "${chain_roots[${end}]}" = "${chain_roots[${peer}]:-}" ] || continue
 
+        # The message names the fifo when one joins the two processes, and
+        # the chain otherwise, and tells a dependency given by processdeps
+        # from one inferred from the options
         local link="the two ends of fifo ${fifo_of_ends[${key}]:-}"
         [[ -v fifo_of_ends["${key}"] ]] || link="linked by a chain of fifos"
         local origin="its processdeps"

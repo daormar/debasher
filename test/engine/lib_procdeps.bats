@@ -448,6 +448,21 @@ add_final_spec() {
     [ "${status}" -eq 0 ]
 }
 
+@test "debasher::_get_fifo_end_pairs lists the fifos between two tasks of the program, and not one with an external end or a self-loop" {
+    set_up_registries
+    add_fifo w/f "$(end_of w)" "$(end_of r)"
+    add_fifo a/f_0 "$(end_of a 0)" "$(end_of a 1)"
+    add_fifo e/g "$(end_of e)" outside
+    add_fifo s/self "$(end_of s)" "$(end_of s)"
+
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
+
+    [ "${#pairs[@]}" -eq 2 ]
+    [[ " ${pairs[*]} " == *" $(end_of w) $(end_of r) w/f "* ]]
+    [[ " ${pairs[*]} " == *" $(end_of a 0) $(end_of a 1) a/f_0 "* ]]
+}
+
 @test "debasher::_check_deps_between_fifo_ends refuses a dependency between the far ends of a chain of fifos" {
     set_up_registries
     add_fifo a/f "$(end_of a)" "$(end_of b)"

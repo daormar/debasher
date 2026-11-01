@@ -1028,43 +1028,56 @@ debasher_builtin_sched::_cancel_tasks_of_process()
 }
 
 ########
+# Cancels the task $4 at one end of the fifo $3 when it waits to be
+# launched and its other end, the task $5, was cancelled. Returns 0 when it
+# cancels it, 1 when it does not, and 2 on error
+debasher_builtin_sched::_cancel_fifo_end_if_peer_cancelled()
+{
+    local cmdline=$1
+    local dirname=$2
+    local augm_fifoname=$3
+    local end=$4
+    local peer=$5
+
+    debasher_builtin_sched::_task_is_cancelled "${peer}" || return 1
+    debasher_builtin_sched::_task_waits "${dirname}" "${end}" || return 1
+
+    local processname="${end%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${end#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+    local peer_processname="${peer%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local peer_task_idx="${peer#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+    local cause="fifo ${augm_fifoname} (other end ${peer_processname}, task ${peer_task_idx}, cancelled)"
+    debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
+    debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
+    return 0
+}
+
+########
 # Cancels every task at one end of a fifo that waits to be launched and
 # whose other end, a task of the program, was cancelled: it would block on
-# opening the fifo. Returns 0 when it cancels some, 1 when it cancels none,
-# and 2 on error
+# opening the fifo. Each fifo is looked at from both ends, since either of
+# them may be the one cancelled. Returns 0 when it cancels some, 1 when it
+# cancels none, and 2 on error
 debasher_builtin_sched::_cancel_fifo_ends_without_peer()
 {
     local cmdline=$1
     local dirname=$2
 
-    local cancelled=1
-    local augm_fifoname
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
-        local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
-        [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
-        [ -z "${reader}" ] && continue
-        [ "${owner}" = "${reader}" ] && continue
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
 
-        local end peer
-        for end in "${owner}" "${reader}"; do
-            if [ "${end}" = "${owner}" ]; then
-                peer=${reader}
-            else
-                peer=${owner}
-            fi
-            if debasher_builtin_sched::_task_is_cancelled "${peer}" \
-                   && debasher_builtin_sched::_task_waits "${dirname}" "${end}"; then
-                local processname="${end%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-                local task_idx="${end#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-                local peer_processname="${peer%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-                local peer_task_idx="${peer#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-                local cause="fifo ${augm_fifoname} (other end ${peer_processname}, task ${peer_task_idx}, cancelled)"
-                debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
-                debasher_builtin_sched::_refresh_status_after_cancellation "${dirname}" "${processname}"
-                cancelled=0
-            fi
-        done
+    local cancelled=1 ret
+    local pair owner reader augm_fifoname
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        ret=0
+        debasher_builtin_sched::_cancel_fifo_end_if_peer_cancelled "${cmdline}" "${dirname}" "${augm_fifoname}" "${owner}" "${reader}" || ret=$?
+        [ ${ret} -eq 2 ] && return 2
+        [ ${ret} -eq 0 ] && cancelled=0
+        ret=0
+        debasher_builtin_sched::_cancel_fifo_end_if_peer_cancelled "${cmdline}" "${dirname}" "${augm_fifoname}" "${reader}" "${owner}" || ret=$?
+        [ ${ret} -eq 2 ] && return 2
+        [ ${ret} -eq 0 ] && cancelled=0
     done
 
     return ${cancelled}
@@ -1269,40 +1282,41 @@ debasher_builtin_sched::_process_starts_or_runs()
 }
 
 ########
-# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, can
-# start once the candidates of this round have started: it runs, has
-# finished or is a candidate; or it waits to be launched, fits in the free
-# cpus and memory, and every dependency of its process that does not hold
-# yet for the task is an after dependency on a process that starts in this
-# round or runs already. A task in held_back, which the caller keeps, was
-# left out of this round and cannot.
-debasher_builtin_sched::_task_can_start_soon()
+# Whether the task $3 of process $2, which has not started and is not a
+# candidate of this round, may still be launched in this run: a process of
+# one task has not failed, and in an array the process has neither finished
+# nor failed, the task is to do and the throttle of the array leaves room
+# for one more task
+debasher_builtin_sched::_task_may_still_be_launched()
 {
     local dirname=$1
-    local task=$2
-    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-
-    [[ -v held_back["${task}"] ]] && return 1
-    debasher_builtin_sched::_task_is_candidate "${task}" && return 0
-    debasher_builtin_sched::_task_is_running_or_finished "${dirname}" "${task}" && return 0
-
-    # Waiting to be launched
+    local processname=$2
+    local task_idx=$3
     local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
+
     if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
-        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
-    else
-        [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && return 1
-        [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
-        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
-        [ "${task_status}" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ] || return 1
-        [ "$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" "${processname}")" -gt 0 ] || return 1
+        [ "${status}" != "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]
+        return
     fi
+    [ "${status}" = "${DEBASHER_FINISHED_PROCESS_STATUS}" ] && return 1
+    [ "${status}" = "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ] && return 1
+    local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" "${processname}" "${task_idx}")
+    [ "${task_status}" = "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" ] || return 1
+    [ "$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" "${processname}")" -gt 0 ]
+}
 
-    # Fits in the free resources
-    debasher_builtin_sched::_check_comp_res "${processname}" || return 1
+########
+# Whether every dependency of process $2 that does not hold yet for its
+# task $3 is an after dependency on a process that starts in this round or
+# runs already, so that the task waits at most for processes to start.
+# Dependencies joined by "," must all be so, and of those joined by "?",
+# one is enough.
+debasher_builtin_sched::_deps_wait_only_for_starts()
+{
+    local dirname=$1
+    local processname=$2
+    local task_idx=$3
 
-    # Waits, at most, for processes that start in this round or run already
     local processdeps=${DEBASHER_BUILTIN_SCHED_PROCESS_DEPS[${processname}]}
     local -a deps_array
     local separator
@@ -1327,6 +1341,29 @@ debasher_builtin_sched::_task_can_start_soon()
         return 1
     fi
     return 0
+}
+
+########
+# Whether a task, given as <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>, can
+# start once the candidates of this round have started: it runs, has
+# finished or is a candidate; or it may still be launched, fits in the free
+# cpus and memory, and waits at most for processes to start. A task in the
+# associative array named $3, the tasks left out of this round so far, cannot.
+debasher_builtin_sched::_task_can_start_soon()
+{
+    local dirname=$1
+    local task=$2
+    local -n start_soon_held_back_ref=$3
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    [[ -v start_soon_held_back_ref["${task}"] ]] && return 1
+    debasher_builtin_sched::_task_is_candidate "${task}" && return 0
+    debasher_builtin_sched::_task_is_running_or_finished "${dirname}" "${task}" && return 0
+
+    debasher_builtin_sched::_task_may_still_be_launched "${dirname}" "${processname}" "${task_idx}" || return 1
+    debasher_builtin_sched::_check_comp_res "${processname}" || return 1
+    debasher_builtin_sched::_deps_wait_only_for_starts "${dirname}" "${processname}" "${task_idx}"
 }
 
 ########
@@ -1371,33 +1408,44 @@ debasher_builtin_sched::_hold_back_fifo_ends_without_peer()
 {
     local dirname=$1
 
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
+
     local -A held_back=()
     local changed=1
     while [ ${changed} -eq 1 ]; do
         changed=0
-        local augm_fifoname
-        for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-            local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
-            local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
-            [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ] && continue
-            [ "${owner}" = "${reader}" ] && continue
-
-            local end peer
-            for end in "${owner}" "${reader}"; do
-                if [ "${end}" = "${owner}" ]; then
-                    peer=${reader}
-                else
-                    peer=${owner}
-                fi
-                if debasher_builtin_sched::_task_is_candidate "${end}" \
-                       && ! debasher_builtin_sched::_task_can_start_soon "${dirname}" "${peer}"; then
-                    debasher_builtin_sched::_remove_candidate_task "${end}"
-                    held_back["${end}"]=1
-                    changed=1
-                fi
-            done
+        local pair owner reader augm_fifoname
+        for pair in "${pairs[@]}"; do
+            read -r owner reader augm_fifoname <<< "${pair}"
+            if debasher_builtin_sched::_hold_back_fifo_end "${dirname}" "${owner}" "${reader}" held_back; then
+                changed=1
+            fi
+            if debasher_builtin_sched::_hold_back_fifo_end "${dirname}" "${reader}" "${owner}" held_back; then
+                changed=1
+            fi
         done
     done
+}
+
+########
+# Removes the task $2, at one end of a fifo, from the candidates of this
+# round when its other end, the task $3, cannot start soon (see
+# debasher_builtin_sched::_task_can_start_soon), and adds it to the
+# associative array named $4, the tasks held back so far. Returns 0 when it
+# removes it, and 1 otherwise.
+debasher_builtin_sched::_hold_back_fifo_end()
+{
+    local dirname=$1
+    local end=$2
+    local peer=$3
+    local -n hold_back_held_back_ref=$4
+
+    debasher_builtin_sched::_task_is_candidate "${end}" || return 1
+    debasher_builtin_sched::_task_can_start_soon "${dirname}" "${peer}" "$4" && return 1
+    debasher_builtin_sched::_remove_candidate_task "${end}"
+    hold_back_held_back_ref["${end}"]=1
+    return 0
 }
 
 ########
@@ -1492,46 +1540,40 @@ debasher_builtin_sched::_print_knapsack_item_value_weight_spec()
 ########
 debasher_builtin_sched::_print_knapsack_pred_spec()
 {
-    # Iterate over each executable process generating its required
-    # information for the knapsack solver
-    local fifoname
-    for fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        # A fifo whose other end is outside the program puts no constraint
-        # on what is launched together
-        if [ "${DEBASHER_FIFO_READERS["${fifoname}"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-            continue
-        fi
+    # The two ends of a fifo between two tasks of the program are launched
+    # together. A fifo with an external end puts no constraint on what is
+    # launched together (see debasher::_get_fifo_end_pairs)
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
 
-        # Get fifo owner info
-        local owner_proc_plus_idx="${DEBASHER_PROGRAM_FIFOS["${fifoname}"]}"
-        local owner_proc="${owner_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local owner_idx="${owner_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-        local owner_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${owner_proc}]}
-        local owner_knapsack_name
-        if [ ${owner_array_size} -eq 1 ]; then
-            owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc})
-        else
-            owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${owner_proc} ${owner_idx})
-        fi
+    local pair owner reader augm_fifoname
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        local owner_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name_of_task "${owner}")
+        local reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name_of_task "${reader}")
 
-        # Get fifo reader info
-        local reader_proc_plus_idx="${DEBASHER_FIFO_READERS["${fifoname}"]}"
-        local reader_proc="${reader_proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        local reader_idx="${reader_proc_plus_idx#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
-        local reader_array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${reader_proc}]}
-        local reader_knapsack_name
-        if [ ${reader_array_size} -eq 1 ]; then
-            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc})
-        else
-            reader_knapsack_name=$(debasher_builtin_sched::_get_knapsack_name ${reader_proc} ${reader_idx})
-        fi
-
-        # Print knapsack predecessor specification entry (owner and reader
-        # are provided in both senses to ensure that both processes
-        # should be executed together)
+        # Each end is given as a predecessor of the other, so that the
+        # solver selects both or neither
         echo "${reader_knapsack_name} ${owner_knapsack_name}"
         echo "${owner_knapsack_name} ${reader_knapsack_name}"
     done
+}
+
+########
+# Prints the name for the knapsack solver of a task, given as
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>: that of its process when
+# the process has one task, and that of the task of the array otherwise
+debasher_builtin_sched::_get_knapsack_name_of_task()
+{
+    local task=$1
+    local processname="${task%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local task_idx="${task#*${DEBASHER_ASSOC_ARRAY_ELEM_SEP}}"
+
+    if [ "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}" -eq 1 ]; then
+        debasher_builtin_sched::_get_knapsack_name "${processname}"
+    else
+        debasher_builtin_sched::_get_knapsack_name "${processname}" "${task_idx}"
+    fi
 }
 
 ########
