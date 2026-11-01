@@ -289,9 +289,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   options handler reads (the code that builds the array or counts the tasks),
   to decide the tasks; no task receives it, so the code of the process cannot
   read it, and it cannot be the `countSource` of a fanout family.
-- `mandatory`; `mirror` (a FIFO output keeps a copy readable without taking
-  data from the reader; general programs only); `fifoTag: "external"` (a FIFO
-  input of a resident program fed from outside).
+- `mandatory`; `mirror` (a FIFO output keeps a copy of the lines that go
+  through it, readable without taking data from the reader, for debugging: the
+  copy stays empty while no reader opens the FIFO; general programs only);
+  `fifoTag: "external"` (a FIFO input of a resident program fed from outside).
 - **Fanout family.** On a `standard` process, a label ending in `-ith`
   (`-outf-ith`) stands for `-outf0`, `-outf1`, ..., as many as its count
   source says; it connects only to an array or generator process, one option

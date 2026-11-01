@@ -455,7 +455,8 @@ the canvas follows the run. The right-button menu of a process shows
 what its process left in the output directory: "Show stdout", "Show
 scheduler output", "Show options" and "Show inputs and outputs" (where
 each file can be opened); "Watch FIFO" shows live what the process
-writes into an output FIFO whose option has "Mirror" set; and "Stop
+writes into an output FIFO whose option has "Mirror" set (nothing until
+a reader opens the FIFO); and "Stop
 process" stops that process alone. For a process that ran as several
 tasks, the task is chosen first.
 

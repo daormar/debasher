@@ -149,6 +149,12 @@ process_stop_for_pfile()
             debasher::_stop_process "${ids_info}"
         else
             echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
+            # A task of the built-in scheduler that ended without returning
+            # from its process function may have left background jobs or
+            # mirror taps in its process group
+            if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+                debasher::_builtin_sched_stop_process "${ids_info}"
+            fi
         fi
     done
 }

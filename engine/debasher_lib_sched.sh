@@ -1013,8 +1013,10 @@ debasher::_execute_task()
 
     local funct_exit_code=$?
 
-    # Stop mirror taps and fail the process if any of them died
-    # abnormally, rather than silently losing mirrored output.
+    # Stop the mirror taps, and fail the task if one of them ended with an
+    # error. A process function that does not return (exit, a signal) ends
+    # the data of its taps when the task ends (see
+    # debasher::_run_fifo_mirror_tap)
     if [ "${builtin_sched_steps}" -eq 1 ]; then
         debasher::_stop_fifo_mirror_taps || funct_exit_code=1
     fi

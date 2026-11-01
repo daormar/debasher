@@ -142,8 +142,9 @@ Section lists every class and method):
   output, whose value names what the process produces
   (``in_outdir("counts.txt")`` is the file of that name in the process
   output directory), ``fifo_output`` and ``fifo_input`` for an option
-  delivered through a FIFO of a given name (``mirror=True`` keeps the
-  copy of what is written that ``debasher_get_fifo_mirror`` reads),
+  delivered through a FIFO of a given name (``mirror=True`` keeps a
+  copy of what passes through it, which ``debasher_get_fifo_mirror``
+  reads),
   ``outdir_opt`` for an output that names the process output directory
   or a task subdirectory of it (``subpath="${task_idx}"``),
   ``shared_dir_opt``, ``procspec_opt`` and ``value_desc_output`` for the

@@ -539,6 +539,25 @@ define_worker_opts() {
     [ ! -s "${mirrorfile}" ]
 }
 
+@test "_prepare_fifos_owned_by_process removes the shim fifo and the mirror log of a fifo no longer declared with --mirror" {
+    init_program
+    MKFIFO="$(command -v mkfifo)"; DIRNAME="$(command -v dirname)"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["own/f"]="owner${sep}0")
+    declare -gA DEBASHER_FIFO_MIRRORED=(["own/f"]=1)
+    debasher::_prepare_fifos_owned_by_process owner
+    local shimfifo=$(debasher::_get_fifo_shim_name "own/f")
+    local mirrorfile=$(debasher::_get_fifo_mirror_filename "own/f")
+    echo "old line" > "${mirrorfile}"
+
+    DEBASHER_FIFO_MIRRORED=()
+    debasher::_prepare_fifos_owned_by_process owner
+
+    [ -p "$(debasher::_get_absolute_fifodir)/own/f" ]
+    [ ! -e "${shimfifo}" ]
+    [ ! -e "${mirrorfile}" ]
+}
+
 @test "_prepare_fifos_owned_by_process returns 1 with a message when a fifo cannot be created" {
     init_program
     MKFIFO="$(command -v mkfifo)"; DIRNAME="$(command -v dirname)"

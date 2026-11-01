@@ -306,12 +306,13 @@ relative to the output directory of the run.
 - **cycle through FIFOs**: processes that stream to one another in a loop, which
   the engine allows because the dependency through a FIFO adds no edge to the
   dependency graph unless it is given the type `after`.
-- **mirror tap**: for a FIFO defined with `--mirror`, the helper that copies
-  every line the owner writes both into the FIFO and into a mirror log.
+- **mirror tap**: for a FIFO defined with `--mirror`, the background job of
+  the task of the owner that copies the lines the owner writes both into the
+  mirror log and into the FIFO.
 - **shim FIFO**: the FIFO that the owner of a mirrored FIFO actually writes, and
   that its mirror tap reads, under `__fifos__/.mirror`.
-- **mirror log**: the file where the mirror tap keeps a copy of every line,
-  which can be read without taking any line from the reader.
+- **mirror log**: the file where the mirror tap keeps a copy of the lines it
+  reads, which can be read without taking any line from the reader.
 
 ## Runs
 
@@ -2112,32 +2113,54 @@ mirror log, `__fifos__/.mirror/<owner>/<name>.log`, and to the real FIFO. The
 reader, the option lists and the `.opts` file of the task keep the real path,
 and `debasher_get_fifo_mirror` prints the log of a FIFO, or follows it as it
 grows. The shim and the log are created, and the log emptied, with the FIFO,
-on every run of the owner.
+each time the process of the owner is prepared, and removed instead, when it is
+prepared, once the FIFO is no longer declared with `--mirror`.
 
 The tap keeps its three files open for its whole life. It opens the shim for
-reading and writing, so that the opens of the owner never block and lines
-written through several opens are not lost between them; POSIX leaves opening a
-FIFO for reading and writing undefined, and the engine relies on what Linux and
-macOS do, which is not to block. It opens the real FIFO once, so that its reader
-sees the end of the data only when the tap exits, and it ignores `SIGPIPE` and
-retries a write that fails, so that a reader that opens the FIFO anew for each
-line, and is briefly gone between two of them, gets every line.
+reading only, and the task holds a write end of the shim while the process
+function runs, so the shim always has a writer between two opens of the owner:
+lines written through several opens are not lost between them, and the tap sees
+the end of the data only when the task closes that write end, after the process
+function returns, or when the system closes it because the task ended in any
+other way, by `exit` or by a signal. The task starts all its taps before it
+opens any of those write ends, so that no tap holds the write end of another.
+The tap opens the real FIFO once, so its reader sees a single writer for the
+whole task, whatever opens the owner makes.
 
-When the process function returns, the engine writes a stop token into the shim.
-The tap forwards everything before it, including a last line without a newline,
-which it forwards as it was written, and exits. A tap that has not stopped
-within two seconds, because it is stuck retrying a line that no reader will
-take, is ended with `SIGTERM`, and `SIGKILL` if needed (on macOS, where
-`SIGTERM` does not interrupt a tap blocked on the real FIFO), with a warning and
-without failing the task: the lines it could not forward are in the mirror log.
-A tap that stops on its token but exits with an error fails the task.
+A write into the real FIFO blocks while its reader, if slow, does not take the
+data, and fails with `SIGPIPE` only when the FIFO has no reader, as between two
+opens of a reader that opens it anew for each line. The tap ignores `SIGPIPE`
+and retries the write. It gives the line up, takes the reader for gone, copies
+what is left in the shim into the log and ends, when the task is gone, or when
+the process function has returned and the write has failed for two seconds
+since. The task tells its taps that its process function has returned with a
+marker next to each shim, `<name>.shim.done`, which it removes when it starts
+the tap.
 
-A mirror changes how the owner runs. Its writes go to the shim, which the tap
-holds open, so the owner no longer blocks when no reader has opened the real
-FIFO yet, up to what the shim can hold. The tap copies a line to the log only
-after it has opened the real FIFO, that is, once a reader has opened it, so a
-FIFO that nobody reads leaves an empty log. And the tap forwards lines of text:
-a NUL byte does not reach the reader.
+When the process function returns, the task closes its write ends and waits for
+every tap to end, for as long as it takes, as a writer with no mirror waits for
+its reader. A tap that took the reader for gone ends with a warning, and does
+not fail the task; a tap that ends with an error fails it.
+
+A mirror is a debugging aid that guarantees little, and has these limits:
+
+- **One writer for the whole task.** The reader sees the end of the data when
+  the process function returns, or when the task ends in another way, not when
+  the owner closes the FIFO; the owner never blocks on opening it, and its
+  writes block only once the shim is full.
+- **A reader that never opens the FIFO.** The tap stays blocked on opening the
+  real FIFO, and the task waits for it, as a writer with no mirror would wait,
+  until `debasher_stop`; the log stays empty, since the tap copies a line to the
+  log as it reads it, after it has opened the real FIFO.
+- **Lines of text.** A NUL byte does not reach the reader.
+- **Background jobs.** A background job of the process function inherits the
+  write ends of the shims, and one that outlives the function keeps its taps,
+  and so the task, waiting until it ends, even if it never writes the FIFO.
+- **Leftovers.** A tap blocked on opening the real FIFO when its task ends
+  without returning from its process function stays blocked; so does a
+  background job of a process function that outlives it. Both are in the
+  process group of the task, which `debasher_stop` ends (see "Tools that read a
+  run").
 
 ## When one end fails
 
@@ -2571,7 +2594,7 @@ scripts call the same function of the context for it
 6. It runs the process function with its options as arguments, and sends what
    the function prints to its standard output to its `.stdout` file.
 7. It stops its mirror taps, if it started them, and counts the task as failed
-   if one of them ended abnormally.
+   if one of them ended with an error.
 8. It runs the `_post` method of the process, if there is one, with the
    options of the task, whether the process function succeeded or failed. A
    `_post` method that fails fails the task.
@@ -2724,7 +2747,7 @@ so a value descriptor or a step marker there is removed by nothing either (see
 | task subdirectory | the task that asks for it | when its process is prepared, if missing (see "Task subdirectories") | before the process function of its task, unless the task is skipped or the process has a `_reset_outfiles` method | when its process is prepared, when no option asks for it while another task of the process asks for a task subdirectory, unless the process has a `_reset_outfiles` method | alike |
 | value descriptor | the task | by the task, with `write_value_to_desc`, in the process output directory, named after the option and the task (see "Output options") | does not apply | with the contents of the process output directory, by the default reset of a process with a single task, or, when the process output directory is subdivided and the process has no `_reset_outfiles` method, when no output option of the run names it | alike: each task has its own |
 | step marker | the process | by a task, with `mark_step_done`, in a directory of its choice (see "Sequential processes") | does not apply | with the contents of the directory that holds it: by the default reset of a process with a single task, when it is in the process output directory; by the emptying of its task subdirectory before each task, when it is in one; when the process of a subdivided process output directory without `_reset_outfiles` is prepared, when it is in that directory outside a task subdirectory; or with a shared subdirectory that no option asks for while its shared directory is subdivided | alike in a task subdirectory; differ in the process output directory of an array, which keeps it unless the directory is subdivided |
-| FIFO, with its shim FIFO and mirror log | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO") | created again, empty, each time the process of its owner is prepared | never | alike: each task declares a FIFO of its own |
+| FIFO, with its shim FIFO, mirror log and the marker next to the shim | the task that declares it | when the process of its owner is prepared, replacing the one of an earlier run (see "Declaring and owning a FIFO"); the marker when the process function returns | created again, empty, each time the process of its owner is prepared (the shim, the marker and the log removed instead once the FIFO is no longer declared with `--mirror`); the marker removed when the task starts its tap | never | alike: each task declares a FIFO of its own |
 | shared directory | the module that declares it | before any process is launched, if missing (see "Output options") | never, except a subdivided shared directory, from which every entry that is neither a shared subdirectory of the run, nor a path that an output option of the run names, nor a directory on the way to one of them is removed before any process is launched (see "Shared subdirectories") | never | alike |
 | shared subdirectory | the tasks that ask for it | before any process is launched, if missing (see "Shared subdirectories") | never | before any process is launched, when no option asks for it while another asks for a shared subdirectory of the same shared directory (see "Shared subdirectories") | alike |
 | exec directory | the engine | when a process with no process script is prepared (see "Preparing a run") | when the process is prepared, of the ids and the logs of the tasks that have not finished (under the Slurm scheduler, of the single id of an array process, that of its job array, whole) and, under the built-in scheduler, of every cancellation marker, and, for a process marked to rerun, of its ids and then its completion markers, before the run is launched (see "Reruns") | never | alike: each task has its own id (under the Slurm scheduler, the tasks of an array share the id of its job array), log and completion marker, or, when cancelled, its own cancellation marker |
@@ -2898,7 +2921,11 @@ directories, and they neither load a module nor need the program file.
   process on, and `SIGKILL` if it has not ended within thirty seconds, and waits
   until the lock is free. Only then does it stop every process that is running,
   killing the process group of each task under the built-in scheduler and ending
-  its jobs with `scancel` under the Slurm scheduler. After it, no task of the
+  its jobs with `scancel` under the Slurm scheduler. Under the built-in
+  scheduler it also kills the process group of a task that has not finished and
+  whose leader is gone, which holds what the task left behind, such as a
+  background job or a mirror tap: the system gives the number of a process group
+  to no new process while the group has members. After it, no task of the
   run runs and nothing is left that could launch one. With `-p`, it stops the
   running tasks of that one process, and the rest of the run goes on.
 - `debasher_stats` gives the time that each process, and each task of an
@@ -3401,8 +3428,9 @@ leaves, by design, to the program or to whoever runs it.
 11. A process is `FINISHED` only when every one of its tasks has succeeded or
     was skipped (see "Process status").
 12. A mirror tap forwards every line that the owner writes, in order and as it
-    was written, to the reader and to the mirror log, and a tap that cannot
-    forward does not keep the owner from ending (see "Mirror taps").
+    was written, to a reader that reads them all, and to the mirror log once a
+    reader has opened the FIFO; a reader that is gone does not keep the task of
+    the owner from ending (see "Mirror taps").
 13. The oneshot mode of the built-in scheduler refuses, before launching
     anything, a program that it could not run without waiting for something to
     end (see "The built-in scheduler").
@@ -3540,9 +3568,9 @@ leaves, by design, to the program or to whoever runs it.
   with a sequential process with `sched=SLURM` does not start unless `srun` is
   found, but a missing `srun` goes unnoticed until the first step of a process
   function that calls `seq_execute_slurm` directly.
-- **Mirror taps.** A mirror tap forwards lines of text, and relies on opening
-  a FIFO for reading and writing, which POSIX leaves undefined (see "Mirror
-  taps").
+- **Mirror taps.** A mirror tap forwards lines of text, gives its reader a
+  single writer for the whole task, and keeps its task waiting for a reader
+  that never opens the FIFO (see "Mirror taps").
 - **Resident programs.** Their guarantees are those of
   `doc/design_doc_resident.md`, which change or replace several of the above.
 
@@ -3557,10 +3585,6 @@ What is known to be missing from the design, or left open by it:
   before the other could have the resources of both reserved, or both could be
   launched in the same round in dependency order, so that the other end always
   fits.
-- **Portable mirror taps.** A mirror tap that does not rely on opening a FIFO
-  for reading and writing, which POSIX leaves undefined, so that mirror taps
-  work on other systems than those on which the engine is checked (Linux,
-  macOS, and Windows under WSL2, which is a Linux system).
 - **Finer change detection.** Comparing the contents of input files, all the
   tasks of an array, and, for outdated code, only the module that defines each
   process, the external scripts of aliases and the Python function files.

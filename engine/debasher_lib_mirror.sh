@@ -88,79 +88,87 @@ debasher::_check_fifo_mirror_allowed()
 }
 
 ########
+# The marker that the task of the owner creates next to the shim fifo $1 once
+# its process function has returned (see debasher::_stop_fifo_mirror_taps)
+debasher::_get_fifo_mirror_done_filename()
+{
+    echo "$1.done"
+}
+
+########
 # The mirror tap of a fifo: copies each line from the shim fifo $1 into the
-# real fifo $2 and appends it to the mirror log $3, until it reads the stop
-# token. It runs in the background, started by the task that owns the fifo.
+# mirror log $3 and then into the real fifo $2, until the end of the data in
+# the shim. It runs in the background, started by the task that owns the
+# fifo, whose process id is $4, and the files stay open while it runs.
 #
-# The real fifo and the log are each opened once and kept open while the tap
-# runs, and each line is written with builtins, with no process forked for
-# it. Both kinds of reader of a fifo work with a writer that keeps the fifo
-# open: one that opens it once and reads a stream, which would take a close
-# between two lines for the end of the data, and one that opens it anew for
-# each line, which only needs a writer present when it opens.
+# The shim is opened for reading only, and the task holds a write end of it
+# while its process function runs (see
+# debasher::_start_fifo_mirror_taps_for_process). So the shim has a writer
+# between two opens of the owner, and the tap neither loses lines written
+# through several opens nor sees the end of the data before the process
+# function returns, or before the task ends, when it ends in any other way
+# and the system closes its write end.
 #
-# Between two opens of that second kind of reader, the real fifo has no
-# reader, and a write on a descriptor already open fails with SIGPIPE
-# instead of blocking as an open would. The tap ignores SIGPIPE and retries
-# the write of the line on the same descriptor until a reader is there again.
-#
-# The shim fifo is opened once too, for reading and writing, and kept open.
-# Opening it anew for each line would lose lines: a writer that sends several
-# lines in one open and closes before the tap has read them all would leave
-# the rest in a fifo that nobody holds once the tap closes its own end, and
-# the system discards what a fifo holds when its last descriptor is closed.
-# Holding a write end of its own also keeps the reads of the tap from seeing
-# an end of file between two writers, and the open of a writer from blocking.
-# Opening a fifo for reading and writing does not block on Linux or on macOS
-# (POSIX leaves it undefined).
+# The real fifo is opened once, and its reader sees a single writer for the
+# whole task. A write blocks while a reader that is slow does not take the
+# data, and fails with SIGPIPE when the fifo has no reader: a reader that
+# opens it anew for each line has none between two of them. The tap ignores
+# SIGPIPE and retries the write (see debasher::_forward_mirrored_line). When
+# it gives the line up, it copies what is left in the shim into the log and
+# ends with 2.
 debasher::_run_fifo_mirror_tap()
 {
     local shimfifo=$1
     local realfifo=$2
     local mirrorfile=$3
+    local owner_pid=$4
+    local donefile=$(debasher::_get_fifo_mirror_done_filename "${shimfifo}")
 
     trap '' PIPE
-    # The owning process's wrapper ignores SIGTERM and this tap, a
-    # subshell of it, inherits that: it catches the signal again so that
-    # debasher::_stop_fifo_mirror_taps can end it when it does not stop on
-    # its token. Exiting closes its descriptors, so a reader still attached
-    # to the real fifo sees EOF.
-    trap 'exit 143' TERM
 
     # High descriptor numbers, clear of those that the shell and test tools
     # use: bats reports the status of its tests on descriptor 3, and the
     # tests of the tap run it as a background job under bats
-    exec 7<>"${shimfifo}"
-    exec 8>"${realfifo}"
-    exec 9>>"${mirrorfile}"
+    exec 7<"${shimfifo}" || exit 1
+    exec 9>>"${mirrorfile}" || exit 1
+    exec 8>"${realfifo}" || exit 1
 
     local line
-    while :; do
-        IFS= read -r line <&7 || {
-            echo "Error: fifo mirror tap lost its shim fifo (${shimfifo}) unexpectedly" >&2
-            exec 7<&- 8>&- 9>&-
-            exit 1
-        }
-        if [ "${line}" = "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" ]; then
-            exec 7<&- 8>&- 9>&-
-            exit 0
-        fi
-        # A last line that the writer did not end with a newline is read
-        # together with the stop token that follows it: it is forwarded as
-        # it was written, with no newline, and the tap stops
-        if [[ "${line}" == *"${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" ]]; then
-            line="${line%"${DEBASHER_FIFO_MIRROR_STOP_TOKEN}"}"
-            printf '%s' "${line}" >&9
-            until printf '%s' "${line}" >&8 2>/dev/null; do
-                "${SLEEP}" 0.02
-            done
-            exec 7<&- 8>&- 9>&-
-            exit 0
-        fi
+    while IFS= read -r line <&7; do
         printf '%s\n' "${line}" >&9
-        until printf '%s\n' "${line}" >&8 2>/dev/null; do
-            "${SLEEP}" 0.02
-        done
+        if ! debasher::_forward_mirrored_line "${owner_pid}" "${donefile}" "${line}"$'\n'; then
+            "${CAT}" <&7 >&9
+            exit 2
+        fi
+    done
+    # A last line without a newline is forwarded as it was written
+    if [ -n "${line}" ]; then
+        printf '%s' "${line}" >&9
+        debasher::_forward_mirrored_line "${owner_pid}" "${donefile}" "${line}" || exit 2
+    fi
+    exit 0
+}
+
+########
+# Writes $3 into the real fifo of a mirror tap, open on descriptor 8, and
+# retries while the write fails, which it does only when the fifo has no
+# reader. Returns 1, giving the line up, when the task $1 is gone, or when
+# the marker $2 says that its process function has returned and the write
+# has failed for DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS since: the reader
+# is gone.
+debasher::_forward_mirrored_line()
+{
+    local owner_pid=$1
+    local donefile=$2
+    local text=$3
+
+    local tries_after_done=0
+    until printf '%s' "${text}" >&8 2>/dev/null; do
+        kill -0 "${owner_pid}" 2>/dev/null || return 1
+        if [ -e "${donefile}" ]; then
+            (( ++tries_after_done <= DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS * 50 )) || return 1
+        fi
+        "${SLEEP}" 0.02
     done
 }
 
@@ -193,7 +201,7 @@ debasher::_get_shim_of_mirrored_fifo_value()
 ########
 # Starts the mirror tap of the real fifo $1, which the shim fifo $2 feeds,
 # and records it in DEBASHER_FIFO_MIRROR_TAP_PIDS and
-# DEBASHER_FIFO_MIRROR_TAP_SHIMS for debasher::_stop_fifo_mirror_taps.
+# DEBASHER_FIFO_MIRROR_TAP_SHIMS.
 debasher::_start_fifo_mirror_tap()
 {
     local realfifo=$1
@@ -201,7 +209,8 @@ debasher::_start_fifo_mirror_tap()
 
     local augm_fifoname="${realfifo#$(debasher::_get_absolute_fifodir)/}"
     local mirrorfile=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
-    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" &
+    "${RM}" -f "$(debasher::_get_fifo_mirror_done_filename "${shimfifo}")"
+    debasher::_run_fifo_mirror_tap "${shimfifo}" "${realfifo}" "${mirrorfile}" "$$" &
     DEBASHER_FIFO_MIRROR_TAP_PIDS+=($!)
     DEBASHER_FIFO_MIRROR_TAP_SHIMS+=("${shimfifo}")
 }
@@ -218,10 +227,17 @@ debasher::_start_fifo_mirror_tap()
 # owner gets a mirrored fifo through one, which define_fifo_opt checks, and
 # the reader gets the same path through an input option of its own, which
 # has to stay the real fifo.
+#
+# Once every tap has started, the task opens a write end of each shim, kept
+# in DEBASHER_FIFO_MIRROR_TAP_FDS until debasher::_stop_fifo_mirror_taps
+# closes it (see debasher::_run_fifo_mirror_tap). A tap started after one of
+# them is open would hold it too, and keep the tap of that shim from ever
+# seeing the end of its data.
 debasher::_start_fifo_mirror_taps_for_process()
 {
     DEBASHER_FIFO_MIRROR_TAP_PIDS=()
     DEBASHER_FIFO_MIRROR_TAP_SHIMS=()
+    DEBASHER_FIFO_MIRROR_TAP_FDS=()
 
     local n=${#DEBASHER_DESERIALIZED_ARGS[@]}
     local i
@@ -235,69 +251,54 @@ debasher::_start_fifo_mirror_taps_for_process()
         DEBASHER_DESERIALIZED_ARGS[i+1]="${shimfifo}"
         debasher::_start_fifo_mirror_tap "${realfifo}" "${shimfifo}"
     done
-}
 
-########
-# Waits until the process $1 has exited, or $2 seconds (an integer) have
-# passed. Returns 0 if it exited, 1 otherwise.
-debasher::_wait_for_pid_exit()
-{
-    local pid=$1
-    local secs=$2
-    local step
-    for (( step = 0; step < secs * 20; step++ )); do
-        kill -0 "${pid}" 2>/dev/null || return 0
-        "${SLEEP}" 0.05
+    local shimfifo fd
+    for shimfifo in "${DEBASHER_FIFO_MIRROR_TAP_SHIMS[@]}"; do
+        exec {fd}>"${shimfifo}"
+        DEBASHER_FIFO_MIRROR_TAP_FDS+=("${fd}")
     done
-    kill -0 "${pid}" 2>/dev/null || return 0
-    return 1
 }
 
 ########
-# Stops every mirror tap started by
-# debasher::_start_fifo_mirror_taps_for_process, and never blocks for
-# good. Each tap is sent its stop token and given
-# DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS to exit. A tap that does not is
-# stuck forwarding a line that nobody reads, typically because the reader
-# of its real fifo finished or died before the owning process did: the
-# tap retries that write until it succeeds and never gets to the token.
-# It is then ended with SIGTERM (SIGKILL if that is not enough within
-# the same time), with a warning and not an error: the owning process
-# itself succeeded, and every line it wrote is in the mirror log, the
-# ones that could not be forwarded included. The token is written from
-# a background job, since that write can block (with the shim full
-# behind a stuck tap, or with no tap left to read it); the job is killed
-# once its tap is gone. Returns non-zero
-# if a tap that stopped on its token exited abnormally, so the caller can
-# fail the owning process instead of silently losing mirrored output.
+# Stops the mirror taps of the task once its process function has returned:
+# creates the marker of each shim, closes the write ends of the shims, which
+# ends the data of each tap, and waits for every tap to end, for as long as
+# it takes, as a writer with no mirror waits for its reader. A tap ends when
+# its reader has taken every line, or gives the rest up when its reader is
+# gone (see debasher::_forward_mirrored_line), with a warning, since every
+# line is still in its mirror log. A tap whose real fifo no reader opens
+# never ends, as a writer with no mirror would never end, and the task is
+# left to debasher_stop. Returns 1 if a tap ended with an error, so that the
+# caller fails the task.
 debasher::_stop_fifo_mirror_taps()
 {
-    local grace="${DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS}"
+    local shim
+    for shim in "${DEBASHER_FIFO_MIRROR_TAP_SHIMS[@]}"; do
+        : > "$(debasher::_get_fifo_mirror_done_filename "${shim}")"
+    done
+    local fd
+    for fd in "${DEBASHER_FIFO_MIRROR_TAP_FDS[@]}"; do
+        exec {fd}>&-
+    done
+
     local failed=0
-    local i pid shim token_pid
+    local i pid status
     for i in "${!DEBASHER_FIFO_MIRROR_TAP_PIDS[@]}"; do
         pid="${DEBASHER_FIFO_MIRROR_TAP_PIDS[i]}"
         shim="${DEBASHER_FIFO_MIRROR_TAP_SHIMS[i]}"
-
-        { printf '%s\n' "${DEBASHER_FIFO_MIRROR_STOP_TOKEN}" > "${shim}"; } 2>/dev/null &
-        token_pid=$!
-
-        if debasher::_wait_for_pid_exit "${pid}" "${grace}"; then
-            if ! wait "${pid}"; then
+        status=0
+        wait "${pid}" || status=$?
+        case ${status} in
+            0)
+                ;;
+            2)
+                echo "Warning: the reader of the fifo mirrored by ${shim} is gone, and did not take every line; every line is in its mirror log" >&2
+                ;;
+            *)
                 echo "Error: fifo mirror tap for ${shim} exited abnormally" >&2
                 failed=1
-            fi
-        else
-            echo "Warning: fifo mirror tap for ${shim} did not stop within ${grace}s (the reader of its real fifo is probably gone), terminating it; the lines it could not forward are in its mirror log" >&2
-            kill -TERM "${pid}" 2>/dev/null || true
-            if ! debasher::_wait_for_pid_exit "${pid}" "${grace}"; then
-                kill -KILL "${pid}" 2>/dev/null || true
-            fi
-            wait "${pid}" 2>/dev/null || true
-        fi
-
-        kill -KILL "${token_pid}" 2>/dev/null || true
-        wait "${token_pid}" 2>/dev/null || true
+                ;;
+        esac
     done
     return ${failed}
 }

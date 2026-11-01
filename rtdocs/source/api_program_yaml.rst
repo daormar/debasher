@@ -244,8 +244,8 @@ keys of an option are:
     shared subdirectory or a task subdirectory below the directory.
 
 ``mirror``
-    With ``channel: fifo``: whether a copy of what is written is kept
-    for ``debasher_get_fifo_mirror``.
+    With ``channel: fifo``: whether a copy of what passes through it is
+    kept for ``debasher_get_fifo_mirror``.
 
 ``fifo_tag``
     ``external`` for an external input of a resident program, written

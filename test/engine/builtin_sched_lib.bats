@@ -206,6 +206,27 @@ EOF
     kill -9 -- "-${SLEEPER_PID}"
 }
 
+@test "_builtin_sched_stop_process ends what is left in the process group of a task whose leader is gone" {
+    # A leader in a process group of its own, which leaves a background job
+    # behind, as a task that exits leaves its mirror taps
+    set -m
+    bash -c 'sleep 100 & echo $! > "$1"; exit 1' _ "${BATS_TEST_TMPDIR}/left_pid" &
+    local leader=$!
+    set +m
+    wait "${leader}" || true
+    local left_pid=$(cat "${BATS_TEST_TMPDIR}/left_pid")
+    kill -0 "${left_pid}"
+
+    debasher::_builtin_sched_stop_process "${leader}@Mon_Jan__1_00:00:00_2001"
+
+    local i
+    for (( i = 0; i < 20; i++ )); do
+        kill -0 "${left_pid}" 2>/dev/null || break
+        sleep 0.05
+    done
+    ! kill -0 "${left_pid}" 2>/dev/null || false
+}
+
 @test "_launch names the .id file after the task index for an array task and exports the index" {
     debasher_builtin_sched::_launch "${OUTDIR}" proc 3
     wait_for_report

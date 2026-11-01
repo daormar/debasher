@@ -498,6 +498,10 @@ To stop the whole program, the ``-p`` option is omitted:
 
     $ debasher_stop -d out
 
+Under the built-in scheduler, ``debasher_stop`` also ends what a task
+that is no longer running left behind, such as the background jobs of
+a process function that exited without returning.
+
 Program Statistics Generation
 -----------------------------
 

@@ -116,9 +116,26 @@ debasher::_prepare_fifo_mirror()
 }
 
 ########
+# Removes the shim fifo and the mirror log that an earlier run left for the
+# fifo $1 (<process>/<name>), which is no longer declared with --mirror: a
+# task starts a mirror tap for a fifo whose shim it finds (see
+# debasher::_get_shim_of_mirrored_fifo_value). Prints an error and returns 1
+# if it cannot.
+debasher::_remove_fifo_mirror()
+{
+    local augm_fifoname=$1
+
+    local file
+    local shimfifo=$(debasher::_get_fifo_shim_name "${augm_fifoname}")
+    for file in "${shimfifo}" "$(debasher::_get_fifo_mirror_done_filename "${shimfifo}")" "$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")"; do
+        "${RM}" -f "${file}" || { echo "Error: ${file} of an earlier run could not be removed" >&2; return 1; }
+    done
+}
+
+########
 # Creates anew the fifos that the tasks of process $1 own, with the mirror
-# of those declared with --mirror. Prints an error and returns 1 if it
-# cannot.
+# of those declared with --mirror, and removes the mirror of the others.
+# Prints an error and returns 1 if it cannot.
 debasher::_prepare_fifos_owned_by_process()
 {
     local processname=$1
@@ -132,6 +149,8 @@ debasher::_prepare_fifos_owned_by_process()
         debasher::_create_fifo_anew "${fifodir}/${augm_fifoname}" || return 1
         if [ -n "${DEBASHER_FIFO_MIRRORED["${augm_fifoname}"]+_}" ]; then
             debasher::_prepare_fifo_mirror "${augm_fifoname}" || return 1
+        else
+            debasher::_remove_fifo_mirror "${augm_fifoname}" || return 1
         fi
     done
 }

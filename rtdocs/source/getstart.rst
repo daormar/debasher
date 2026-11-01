@@ -124,11 +124,6 @@ If something fails, please report it on the `issues page
    ``make installcheck``, which runs the examples of DeBasher and says
    whether they work.
 
-Mirror taps (the ``--mirror`` option of ``define_fifo_opt``) rely on
-how Linux and macOS treat a FIFO opened for both reading and writing.
-On macOS, a mirror tap whose reader is gone takes a second longer to
-stop.
-
 Building and Installing
 ^^^^^^^^^^^^^^^^^^^^^^^
 

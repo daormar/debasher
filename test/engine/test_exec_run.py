@@ -3373,6 +3373,104 @@ def test_a_fifo_between_a_finished_task_and_a_failed_one_of_an_array_reruns_both
     assert "PROCESS: ring ; STATUS: FINISHED" in status.stdout, status.stdout
 
 
+# w writes two lines into the fifo f, declared with @@MIRROR@@, and then
+# runs @@END@@; r reads f. w runs on every run
+MIRROR_MODULE = """\
+w_explain_opts()
+{
+    explain_opt "-outf" "<fifo>" "Fifo that r reads"
+}
+
+w_define_opts()
+{
+    local optlist=""
+    define_fifo_opt "-outf" "f" optlist @@MIRROR@@ || return 1
+    save_opt_list optlist
+}
+
+w()
+{
+    # One open: with no mirror, a reader that reads until the end of the data
+    # would end at the first close
+    printf 'a\nb\n' > "$(read_opt_value_from_func_args "-outf" "$@")"
+    @@END@@
+}
+
+r_explain_opts()
+{
+    explain_opt "-inf" "<fifo>" "Fifo of w"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "w" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+r()
+{
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_mirror_program()
+{
+    add_debasher_process "w" "cpus=1 mem=32 time=00:01:00" "force=yes"
+    add_debasher_process "r" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+DEBASHER_GET_FIFO_MIRROR = REPO_ROOT / "bin" / "debasher_get_fifo_mirror"
+
+
+def write_mirror_module(path, mirror="--mirror", end="return 0"):
+    path.write_text(MIRROR_MODULE.replace("@@MIRROR@@", mirror).replace("@@END@@", end))
+
+
+def test_a_mirrored_fifo_reaches_its_reader_and_its_mirror_log(tmp_path):
+    pfile = tmp_path / "debasher_mirror.sh"
+    write_mirror_module(pfile)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert result.returncode == 0, result.stderr
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "r")
+    assert stdout.stdout.split() == ["a", "b"], stdout.stdout + stdout.stderr
+    mirror = run_tool(DEBASHER_GET_FIFO_MIRROR, "-d", str(outdir), "-p", "w", "-f", "f")
+    assert mirror.returncode == 0, mirror.stderr
+    assert mirror.stdout.split() == ["a", "b"]
+
+
+def test_the_reader_of_a_mirrored_fifo_ends_when_its_writer_exits_without_returning(tmp_path):
+    pfile = tmp_path / "debasher_mirror.sh"
+    write_mirror_module(pfile, end="exit 1")
+    outdir = tmp_path / "out"
+
+    # The mirror tap ends with the task of w, so r sees the end of the data
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert result.returncode != 0
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert "PROCESS: r ; STATUS: FINISHED" in status.stdout, status.stdout
+    assert "PROCESS: w ; STATUS: UNFINISHED" in status.stdout, status.stdout
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "r")
+    assert stdout.stdout.split() == ["a", "b"], stdout.stdout + stdout.stderr
+
+
+def test_a_fifo_no_longer_declared_with_mirror_is_not_mirrored_in_the_next_run(tmp_path):
+    pfile = tmp_path / "debasher_mirror.sh"
+    write_mirror_module(pfile)
+    outdir = tmp_path / "out"
+    assert run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60).returncode == 0
+
+    # w has force=yes, so it runs again, and r with it
+    write_mirror_module(pfile, mirror="")
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=60)
+    assert result.returncode == 0, result.stderr
+    mirror = run_tool(DEBASHER_GET_FIFO_MIRROR, "-d", str(outdir), "-p", "w", "-f", "f")
+    assert mirror.returncode != 0
+    assert "could not be found" in mirror.stderr
+
+
 # r reads a file of w, and its option dependency method answers with a
 # type that does not exist; @@SPECS@@ is the processdeps of r
 EXPLICIT_DEPS_MODULE = """\

@@ -115,8 +115,7 @@ debasher::_builtin_sched_id_exists()
 
 ########
 # Stops the tasks of a process that still run, among those that the ids in
-# $1 name: the ids of the tasks that have ended are left alone, since their
-# process ids may now belong to other processes.
+# $1 name, and what the others left in their process groups.
 debasher::_builtin_sched_stop_process()
 {
     # Initialize variables
@@ -124,9 +123,32 @@ debasher::_builtin_sched_stop_process()
 
     local id pid
     for id in ${ids_info}; do
-        pid=$(debasher::_builtin_sched_get_running_task_pid "${id}") || continue
-        debasher::_stop_pid "${pid}" || { echo "Error while stopping process with id ${pid}" >&2 ; return 1; }
+        if pid=$(debasher::_builtin_sched_get_running_task_pid "${id}"); then
+            debasher::_stop_pid "${pid}" || { echo "Error while stopping process with id ${pid}" >&2 ; return 1; }
+        else
+            debasher::_builtin_sched_stop_task_leftovers "${id}"
+        fi
     done
+}
+
+########
+# Ends what is left in the process group of a task of the built-in
+# scheduler whose leader, the process that the id $1 names, is gone: the
+# background jobs of its process function and its mirror taps, which outlive
+# a task that ends without returning from its process function. The
+# process group of a task has the process id of its leader (see
+# debasher::_stop_pid), and the system gives that number to no new process
+# while the group has members, so a group with that number that still has
+# members is the group of the task. An id whose process id names a process
+# again is left alone: its group had no members when the number was given
+# again.
+debasher::_builtin_sched_stop_task_leftovers()
+{
+    local id_info=$1
+
+    local pid=${id_info%%@*}
+    kill -0 "${pid}" > /dev/null 2>&1 && return 0
+    kill -9 -- "-${pid}" > /dev/null 2>&1 || true
 }
 
 ########

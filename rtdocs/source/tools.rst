@@ -252,7 +252,10 @@ or of a single one of its processes. It is described in the
 :ref:`exec` Section, in its `Program Stop` part. The output directory
 is given with ``-d <string>``; a specific process to stop can be given
 with ``-p <string>``, and is otherwise omitted to stop the whole
-program.
+program. Under the built-in scheduler, for a process that is not
+running, it also ends what its tasks left behind, such as background
+jobs of a process function that exited without returning, or its
+mirror taps.
 
 debasher_reformat_status
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -401,11 +404,17 @@ debasher_get_fifo_mirror
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_fifo_mirror`` shows the mirrored content of a process's
-FIFO, i.e. a copy of everything the owning process wrote into it,
-provided the FIFO was declared with the mirroring option of
-``define_fifo_opt`` on an output option
-(see the :ref:`implem_bash` Section for more information about FIFOs) and
-the owning process has already run.
+FIFO, i.e. a copy of what the owning process wrote into it, provided
+the FIFO was declared with the mirroring option of ``define_fifo_opt``
+on an output option (see the :ref:`implem_bash` Section for more
+information about FIFOs) and the owning process has already run. The
+copy is a debugging aid: it stays empty while no reader has opened the
+FIFO, and the owning process then waits for a reader, as it would with
+no mirror. A reader that leaves before taking every line leaves them
+all in the copy, and the owning process ends with a warning that says
+so. When a FIFO is no longer declared with ``--mirror``, the next run
+of its owner removes its copy, and the tool reports that the mirror
+file could not be found.
 
 Its options are:
 
