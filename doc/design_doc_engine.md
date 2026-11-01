@@ -2994,17 +2994,19 @@ that will not be launched").
 Two tools run processes of a run rather than read it, and refuse an output
 directory that has been moved: `debasher_exec` itself, and
 `debasher_launch_process`, which launches again one process or task of a run
-with the process script that the run wrote, as the `Supervisor` of a resident
-program does. It first takes away the completion marker of the task, so that the
-process of a task launched again after it finished reads `IN-PROGRESS` while the
-task runs and `UNFINISHED` if it fails; the marker goes before the launch, since
-a task that ends at once may have written its new marker by the time the launch
-returns. The id of the earlier launch stays until the new launch replaces it, so
-that the launch can stop an earlier launch of the task that still runs, and the
-process may read `UNFINISHED` for that instant. `debasher_exec_process` runs one
-process function outside any run, after loading its module, which is useful to
-try a process on its own and is how a process test runs it (see "Testing a
-process with bats").
+under the built-in scheduler with the process script that the run wrote, as the
+`Supervisor` of a resident program does. It refuses, with a message, a run under
+another scheduler, whose task it would run on this machine, outside that
+scheduler, and a process that is not in `program.procspec`. It first takes away
+the completion marker of the task, so that the process of a task launched again
+after it finished reads `IN-PROGRESS` while the task runs and `UNFINISHED` if it
+fails; the marker goes before the launch, since a task that ends at once may
+have written its new marker by the time the launch returns. The id of the
+earlier launch stays until the new launch replaces it, so that the launch can
+stop an earlier launch of the task that still runs, and the process may read
+`UNFINISHED` for that instant. `debasher_exec_process` runs one process function
+outside any run, after loading its module, which is useful to try a process on
+its own and is how a process test runs it (see "Testing a process with bats").
 
 # Business tests of a program
 

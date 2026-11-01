@@ -112,6 +112,24 @@ launch_process()
 
     debasher::_check_outdir_not_moved "${absdirname}" || return 1
 
+    # The launch is that of the built-in scheduler: a run of another
+    # scheduler would get, on this machine and outside it, a task that
+    # writes where its tools do not look, and an id that is not one of its
+    # jobs
+    local sched
+    sched=$(debasher::_get_sched_from_command_line_file "${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}") || {
+        echo "Error! ${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} names no scheduler" >&2
+        return 1
+    }
+    if [ "${sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+        echo "Error! the program ran on the ${sched} scheduler, and debasher_launch_process launches a task of a run of the built-in scheduler only" >&2
+        return 1
+    fi
+
+    # Only a process of the run has a process script to launch
+    debasher::_load_processes_from_procspec "${absdirname}" || return 1
+    debasher::_check_run_has_process "${processname}" || return 1
+
     # A task launched again loses the completion marker of its earlier
     # run, so that it reads IN-PROGRESS while it runs and UNFINISHED when
     # it fails, not FINISHED. The marker goes before the launch, not after

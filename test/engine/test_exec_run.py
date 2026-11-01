@@ -4033,3 +4033,139 @@ def test_a_writer_whose_shell_is_ended_by_sigpipe_is_unfinished_and_runs_no_post
     assert "PROCESS: w ; STATUS: UNFINISHED" in status, status
     assert "PROCESS: r ; STATUS: FINISHED" in status, status
     assert not (outdir / "w" / "post_ran").exists()
+
+
+DEBASHER_LAUNCH_PROCESS = REPO_ROOT / "libexec" / "debasher_launch_process"
+
+
+def test_launch_process_refuses_a_process_that_is_not_in_the_run_and_writes_nothing(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    launch = run_tool(DEBASHER_LAUNCH_PROCESS, "-d", str(outdir), "-p", "nosuch")
+
+    assert launch.returncode != 0
+    assert "nosuch is not a process of the program" in launch.stderr
+    assert not (outdir / "__exec__" / "nosuch").exists()
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_launch_process_refuses_a_run_of_the_slurm_scheduler(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec_with_sched("SLURM", "--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "--wait")
+    assert result.returncode == 0, result.stderr
+    id_file = outdir / "__exec__" / "hello_world" / "hello_world.id"
+    job_id = id_file.read_text()
+
+    launch = run_tool(DEBASHER_LAUNCH_PROCESS, "-d", str(outdir), "-p", "hello_world")
+
+    assert launch.returncode != 0
+    assert "launches a task of a run of the built-in scheduler only" in launch.stderr
+    # The job id and the completion marker of the run are left as they were
+    assert id_file.read_text() == job_id
+    assert (outdir / "__exec__" / "hello_world" / "hello_world.finished").exists()
+
+
+def sleeping_module(name, *processes):
+    """A module whose processes, given as "name|seconds|processdeps", sleep
+    for their seconds and then leave a trace in the directory that TRACES
+    names."""
+    lines = []
+    adds = []
+    for entry in processes:
+        proc, secs, deps = entry.split("|")
+        lines.append(f"{proc}_explain_opts()\n{{\n    :\n}}\n")
+        lines.append(f"{proc}_define_opts()\n{{\n    local optlist=\"\"\n    save_opt_list optlist\n}}\n")
+        lines.append(f"{proc}()\n{{\n    sleep {secs}\n    touch \"TRACES/{proc}\"\n}}\n")
+        specs = f' "processdeps={deps}"' if deps else ""
+        adds.append(f'    add_debasher_process "{proc}" "cpus=1 mem=32 time=00:05:00"{specs}')
+    return "\n".join(lines) + f"\n{name}_program()\n{{\n" + "\n".join(adds) + "\n}\n"
+
+
+def _status_of(outdir, process):
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
+    match = re.search(rf"^PROCESS: {re.escape(process)} ; STATUS: (\S+)", status, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def test_a_stopped_run_of_the_builtin_scheduler_launches_nothing_more(tmp_path):
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    pfile = tmp_path / "debasher_stopchain.sh"
+    pfile.write_text(sleeping_module("debasher_stopchain", "first|60|", "second|0|afterok:first").replace("TRACES", str(traces)))
+    outdir = tmp_path / "out"
+
+    run = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert wait_until(lambda: _status_of(outdir, "first") == "IN-PROGRESS")
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        run.wait(timeout=60)
+    finally:
+        if run.poll() is None:
+            run.kill()
+
+    # The process that waited for the stopped one was never launched
+    assert _status_of(outdir, "first") == "UNFINISHED"
+    assert _status_of(outdir, "second") == "TO-DO"
+    assert not (outdir / "__exec__" / "second" / "second.id").exists()
+    assert not (traces / "second").exists()
+
+
+def test_stopping_one_process_of_a_general_program_lets_the_rest_finish(tmp_path):
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    pfile = tmp_path / "debasher_stopone.sh"
+    pfile.write_text(sleeping_module("debasher_stopone", "long|60|", "short|3|").replace("TRACES", str(traces)))
+    outdir = tmp_path / "out"
+
+    run = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        assert wait_until(lambda: _status_of(outdir, "long") == "IN-PROGRESS")
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir), "-p", "long")
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        run.wait(timeout=60)
+    finally:
+        if run.poll() is None:
+            run.kill()
+
+    assert _status_of(outdir, "long") == "UNFINISHED"
+    assert not (traces / "long").exists()
+    assert _status_of(outdir, "short") == "FINISHED"
+    assert (traces / "short").exists()
+
+
+def _slurm_job_is_queued(job_id):
+    squeue = subprocess.run(["squeue", "-h", "-j", job_id, "-o", "%i"], capture_output=True, text=True)
+    return job_id in squeue.stdout.split()
+
+
+@pytest.mark.skipif(shutil.which("sbatch") is None, reason="Slurm is not installed")
+def test_debasher_stop_ends_the_jobs_of_a_process_in_progress_under_slurm(tmp_path):
+    traces = tmp_path / "traces"
+    traces.mkdir()
+    pfile = tmp_path / "debasher_stopslurm.sh"
+    pfile.write_text(sleeping_module("debasher_stopslurm", "long|120|").replace("TRACES", str(traces)))
+    outdir = tmp_path / "out"
+
+    # Without --wait, debasher_exec submits the job and ends
+    result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+    job_id = (outdir / "__exec__" / "long" / "long.id").read_text().strip()
+    try:
+        assert wait_until(lambda: _status_of(outdir, "long") == "IN-PROGRESS", timeout=60)
+
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        assert wait_until(lambda: not _slurm_job_is_queued(job_id), timeout=60)
+    finally:
+        subprocess.run(["scancel", job_id], capture_output=True)
+    assert not (traces / "long").exists()
