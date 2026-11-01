@@ -84,9 +84,9 @@ export const PROCESS_METHODS: ProcessMethod[] = [
     summary:
       "Declares the conda environments of the process, e.g. `define_conda_env myenv myenv.yml`. Takes no arguments, and runs once per process whatever its number of tasks.",
     rules: [
-      "It declares each conda environment that the process needs with `define_conda_env <name> <file>.yml`, which creates the environment from the file when no environment of that name exists. The file is looked for in the directories of `DEBASHER_YML_DIR` and then among the environment files that DeBasher installs.",
+      "It declares each conda environment that the process needs with `define_conda_env <env> <file>.yml`, where `<env>` is the name of the environment or the absolute path of its directory (its prefix); it creates the environment from the file when it does not exist. The file is looked for in the directories of `DEBASHER_YML_DIR` and then among the environment files that DeBasher installs.",
       "It takes no arguments. The engine calls it only for a run prepared with `--conda-support`, once for the process whatever its number of tasks, before any process runs.",
-      "It only makes sure that the environments exist: the process function activates one with `conda_activate <name>`.",
+      "It only makes sure that the environments exist: the process function activates one with `conda_activate <env>`, the same name or path.",
     ],
   },
   {

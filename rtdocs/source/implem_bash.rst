@@ -1407,13 +1407,18 @@ missing.
       }
 
 * ``conda_envs``: declares the Conda environments the process needs,
-  using the ``define_conda_env`` function (given an environment name
-  and a ``.yml`` file, looked for in the directories that the
+  using the ``define_conda_env`` function (given an environment name,
+  or the absolute path where the environment is created, and a
+  ``.yml`` file, looked for in the directories that the
   environment variable ``DEBASHER_YML_DIR`` lists, separated by ``:``,
   else among those installed with DeBasher). When the program runs with
   ``--conda-support``, DeBasher creates the environment if it does not
   exist yet, and the process implementation, which activates it with
-  ``conda_activate``, can just assume it already exists:
+  ``conda_activate``, can just assume it already exists. The output of
+  conda goes to ``<name>.log`` in the ``.conda`` directory of the output
+  directory (or in the one that ``DEBASHER_CONDA_DIR`` names), ``<name>``
+  being, for an absolute path, that path with every ``/`` turned into
+  ``_``:
 
   .. code-block:: bash
 

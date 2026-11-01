@@ -35,12 +35,17 @@
 #
 # The output of conda goes to <name>.log in the directory that
 # DEBASHER_CONDA_DIR names, or else in the .conda directory of the output
-# directory of the program. Returns 0 if the environment exists or was
+# directory of the program; for an environment given by its absolute path,
+# <name> is that path with every "/" turned into "_". Returns 0 if the environment exists or was
 # created, 1 otherwise.
 debasher::define_conda_env()
 {
     local env_name=$1
     local yml_file=$2
+
+    # Without conda there is nothing to look for nor to create with: the
+    # error is given once, here
+    debasher::_load_conda_functions || return 1
 
     if ! debasher::_conda_env_exists "${env_name}"; then
         local condadir=$(debasher::_get_absolute_condadir)
@@ -50,7 +55,7 @@ debasher::define_conda_env()
 
         echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
         debasher::_conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
-        echo "Package successfully installed"
+        echo "Conda environment ${env_name} created" >&2
     fi
 }
 
@@ -71,7 +76,8 @@ debasher::define_conda_env()
 #
 # The output of conda goes to <name>.log in the directory that
 # DEBASHER_CONDA_DIR names, or else in the .conda directory of the output
-# directory of the program. Returns 0 if the environment exists or was
+# directory of the program; for an environment given by its absolute path,
+# <name> is that path with every "/" turned into "_". Returns 0 if the environment exists or was
 # created, 1 otherwise.
 define_conda_env() { debasher::define_conda_env "$@"; }
 
@@ -83,9 +89,17 @@ define_conda_env() { debasher::define_conda_env "$@"; }
 # found (CONDA_CMD), so that a process does not depend on how the shell that
 # runs it was started. Returns 1, with an error, when there is no conda
 # executable to load them from.
+#
+# The functions alone are not enough: they call the executable through
+# CONDA_EXE, which their hook exports. A shell can have the functions and
+# not the variable: a task gets the functions through the context of the
+# process scripts, which leaves out exported variables, and inherits
+# CONDA_EXE only when its environment comes from debasher_exec (not on a
+# node of a Slurm job with --export=NONE, for instance). The hook is then
+# loaded again, which defines CONDA_EXE.
 debasher::_load_conda_functions()
 {
-    if declare -F conda > /dev/null; then
+    if declare -F conda > /dev/null && [ -f "${CONDA_EXE:-}" ] && [ -x "${CONDA_EXE:-}" ]; then
         return 0
     fi
 
@@ -171,9 +185,7 @@ debasher::_conda_env_exists()
     local envname=$1
     local env_exists=1
 
-    debasher::_load_conda_functions || return 1
-
-    conda activate $envname > /dev/null 2>&1 || env_exists=0
+    conda activate "${envname}" > /dev/null 2>&1 || env_exists=0
 
     if [ ${env_exists} -eq 1 ]; then
         conda deactivate
@@ -189,16 +201,29 @@ debasher::_conda_env_prepare()
     local env_name=$1
     local abs_yml_fname=$2
     local condadir=$3
+    local logf=$(debasher::_get_conda_env_log_fname "${condadir}" "${env_name}")
 
-    debasher::_load_conda_functions || return 1
-
+    # An absolute path is given to conda as the prefix of the environment,
+    # a name as its name
+    local env_flag="-n"
     if debasher::_is_absolute_path "${env_name}"; then
-        # Install packages given prefix name
-        conda env create -f "${abs_yml_fname}" -p "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/"${env_name}".log file for more information">&2 ; return 1; }
-    else
-        # Install packages given environment name
-        conda env create -f "${abs_yml_fname}" -n "${env_name}" > "${condadir}"/"${env_name}".log 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${condadir}/${env_name}.log file for more information">&2 ; return 1; }
+        env_flag="-p"
     fi
+
+    conda env create -f "${abs_yml_fname}" "${env_flag}" "${env_name}" > "${logf}" 2>&1 || { echo "Error while preparing conda environment ${env_name} from ${abs_yml_fname} file. See ${logf} file for more information" >&2; return 1; }
+}
+
+########
+# Prints the log file of the creation of the conda environment env_name in
+# the directory condadir: <name>.log, where the name of an environment given
+# by its absolute path is that path with every "/" turned into "_", so that
+# the log stays in condadir
+debasher::_get_conda_env_log_fname()
+{
+    local condadir=$1
+    local env_name=$2
+
+    echo "${condadir}/${env_name//\//_}.log"
 }
 
 ########

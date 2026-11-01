@@ -235,12 +235,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   task. A Python tasks file or skip file runs with the Python of DeBasher,
   not in the Conda environment or Docker image of the process. The Conda
   environments and Docker images may be data instead of bodies: `condaEnvs`
-  (a name and a YAML file each) and `dockerImgs`, `conda_envs:` (name: file)
-  and `docker_imgs:` (a list) in `program.yaml`, or `conda_envs=` and
-  `docker_imgs=` in a description, from which script generation writes the
-  `define_conda_env` and `pull_docker_img` calls; a process gives either the
-  data or the body, never both, and import turns a body made only of those
-  calls into data.
+  (a name, or the absolute path of the environment, and a YAML file each)
+  and `dockerImgs`, `conda_envs:` (name: file) and `docker_imgs:` (a list)
+  in `program.yaml`, or `conda_envs=` and `docker_imgs=` in a description,
+  from which script generation writes the `define_conda_env` and
+  `pull_docker_img` calls; a process gives either the data or the body,
+  never both, and import turns a body made only of those calls into data.
 
 ## Options
 

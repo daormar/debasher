@@ -205,7 +205,10 @@ Docker
 """"""
 
 DeBasher also provides support for `Docker <https://www.docker.com/>`__
-containers, favoring reproducibility of results.
+containers, favoring reproducibility of results. DeBasher runs the
+``docker`` that ``configure`` finds on the ``PATH``; without it, a run
+with ``--docker-support`` stops with an error, and DeBasher has to be
+configured again once docker is installed.
 
 Other languages
 """""""""""""""

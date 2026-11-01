@@ -107,7 +107,7 @@ export const processChanges = z.object({
     dockerImgsCode: z.string().optional(),
     skipLanguage: funcLanguage.optional().describe("The language of skipCode: python makes it a skip file that defines skip(task). Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
     condaEnvs: z.array(z.object({ name: z.string().min(1), file: z.string().min(1) }).strict()).optional()
-      .describe("The Conda environments as data, a name and a YAML file each (looked for in the directories of DEBASHER_YML_DIR, then among those that DeBasher installs), instead of condaEnvsCode, which has to be empty: give it as an empty string in the same change when the process has one. [] removes them, for a body to be given."),
+      .describe("The Conda environments as data, a name (or the absolute path of the environment, its prefix) and a YAML file each (looked for in the directories of DEBASHER_YML_DIR, then among those that DeBasher installs), instead of condaEnvsCode, which has to be empty: give it as an empty string in the same change when the process has one. [] removes them, for a body to be given."),
     dockerImgs: z.array(z.string().min(1)).optional()
       .describe("The Docker images as data instead of dockerImgsCode, which has to be empty: give it as an empty string in the same change when the process has one. [] removes them, for a body to be given."),
   }).strict().optional(),

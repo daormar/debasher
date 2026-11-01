@@ -78,10 +78,12 @@ several environments, each for a part of its work. It does so with
 ``conda activate`` is a shell function that conda adds to the shells
 it was set up for, which the shell running a process may lack (under a
 service, a Slurm job or ``debasher_exec_process``). ``conda_activate``
-loads those functions first when they are missing, from the conda
-executable named by ``CONDA_EXE`` or else from the one found when
-DeBasher was configured (``./configure CONDA_CMD=<conda executable>``
-gives another), and then activates the environment. After it,
+loads those functions first when they are missing, or when the shell
+has them but not the ``CONDA_EXE`` they call (a Slurm job run with
+``--export=NONE``, for instance), from the conda executable named by
+``CONDA_EXE`` or else from the one found when DeBasher was configured
+(``./configure CONDA_CMD=<conda executable>`` gives another), and then
+activates the environment. After it,
 ``conda`` itself (``conda deactivate``, another ``conda activate``)
 can be used.
 

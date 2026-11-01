@@ -57,6 +57,12 @@ debasher::pull_docker_img()
 {
     local img_name=$1
 
+    # configure sets DOCKER to "no" when it finds no docker
+    if [ ! -f "${DOCKER:-}" ] || [ ! -x "${DOCKER:-}" ]; then
+        echo "Error: docker was not found: configure found no docker executable" >&2
+        return 1
+    fi
+
     if ! debasher::_docker_img_exists "${img_name}"; then
         "${DOCKER}" pull "${img_name}" || return 1
     fi

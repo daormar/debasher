@@ -1056,6 +1056,75 @@ def test_a_program_with_namespaced_processes_runs(tmp_path, example):
 TWO_CPUS_MODULE = CD_POST_MODULE.replace("cdpost", "twocpus").replace("cpus=1", "cpus=2")
 
 
+# The array of four tasks, whose _conda_envs and _docker_imgs methods only
+# leave a trace in the file that TRACE names
+ENV_METHODS_MODULE = ARRAY_OF_FOUR_MODULE.replace("debasher_array_of_four_program", "debasher_env_methods_program") + """
+arr_conda_envs()
+{
+    echo conda >> "TRACE"
+}
+
+arr_docker_imgs()
+{
+    echo docker >> "TRACE"
+}
+"""
+
+
+def test_the_environment_methods_run_only_with_their_options_and_once_for_each_process(tmp_path):
+    trace = tmp_path / "trace"
+    pfile = tmp_path / "debasher_env_methods.sh"
+    pfile.write_text(ENV_METHODS_MODULE.replace("TRACE", str(trace)))
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(tmp_path / "plain"))
+    assert result.returncode == 0, result.stderr
+    assert not trace.exists()
+
+    result = run_exec(
+        "--pfile", str(pfile), "--outdir", str(tmp_path / "envs"), "--conda-support", "--docker-support"
+    )
+    assert result.returncode == 0, result.stderr
+    # Once for the process, whatever its number of tasks
+    assert sorted(trace.read_text().split()) == ["conda", "docker"]
+
+
+CONDA_EXAMPLE = REPO_ROOT / "data" / "programs" / "debasher_conda_example.sh"
+
+
+def _conda_env_exists(name):
+    conda = os.environ.get("CONDA_EXE") or shutil.which("conda")
+    if not conda:
+        return False
+    listed = subprocess.run([conda, "env", "list"], capture_output=True, text=True)
+    return any(line.split()[:1] == [name] for line in listed.stdout.splitlines())
+
+
+@pytest.mark.skipif(not _conda_env_exists("py27"), reason="conda or its environment py27 is missing")
+def test_a_process_script_activates_its_conda_environment_from_an_empty_environment(tmp_path):
+    # The run starts from a shell that conda never set up, so the context of
+    # the process scripts carries the functions of conda that the run loaded;
+    # the script is then run, as on a node of a Slurm job with
+    # --export=NONE, from an environment without CONDA_EXE
+    outdir = tmp_path / "out"
+    bare_env = {"HOME": os.environ["HOME"], "PATH": "/usr/bin:/bin"}
+    result = subprocess.run(
+        [str(DEBASHER_EXEC), "--pfile", str(CONDA_EXAMPLE), "--outdir", str(outdir), "--sched", "BUILTIN",
+         "--conda-support"],
+        env=bare_env, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "__conda_exe ()" in (outdir / ".exec_context.sh").read_text()
+    verfile = outdir / "conda_example" / "python_ver.txt"
+    verfile.unlink()
+
+    script = outdir / "__exec__" / "conda_example" / "conda_example"
+    result = subprocess.run(["bash", "--norc", "--noprofile", str(script)], env=bare_env,
+                            capture_output=True, text=True)
+
+    assert result.returncode == 0, result.stderr
+    assert "Python 2.7" in verfile.read_text()
+
+
 def test_validate_launches_nothing_and_leaves_a_finished_run_as_it_was(tmp_path):
     outdir = tmp_path / "out"
     result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "first")

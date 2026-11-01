@@ -1032,7 +1032,7 @@ create_basic_dirs()
 
     local condadir=$(debasher::_get_absolute_condadir)
     if [ ${conda_support_given} -eq 1 ]; then
-        "${MKDIR}" -p "${condadir}"
+        "${MKDIR}" -p "${condadir}" || { echo "Error! cannot create conda directory" >&2; return 1; }
     fi
 
     echo "Creation complete" >&2

@@ -3,6 +3,7 @@ lib_proc_doc.bats lib_procdeps.bats lib_programs.bats lib_modules.bats	\
 lib_mirror.bats builtin_sched_lib.bats lib_resident_tools.bats		\
 lib_sched.bats lib_sched_rerun.bats lib_sched_slurm.bats		\
 lib_args.bats lib_process_spec.bats lib_resident.bats fifo_registries.bash \
+lib_conda.bats lib_docker.bats						\
 conftest.py test_envelope.py test_fbpprocess.py test_thread_topology.py	\
 test_barrier.py test_checkpoint.py test_run.py test_supervisor.py	\
 test_input_log.py test_arrival_positions.py test_recovery.py test_send_data.py	\

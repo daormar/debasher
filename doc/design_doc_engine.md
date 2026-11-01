@@ -2675,8 +2675,12 @@ process is launched:
   environment of that name exists, and leaves it alone otherwise. The file is
   looked for in the directories of `DEBASHER_YML_DIR`, separated by colons,
   and then among the environment files that DeBasher installs, and the output
-  of `conda` goes to `.conda/<name>.log` in the output directory.
-- `pull_docker_img` pulls the image when it is not already present.
+  of `conda` goes to `<name>.log` in the directory that `DEBASHER_CONDA_DIR`
+  names, or else in `.conda` in the output directory. An environment may be
+  given by its absolute path instead of a name; its log is then named after the
+  path, with every `/` turned into `_`, so that it stays in that directory.
+- `pull_docker_img` pulls the image when it is not already present. When
+  `configure` found no docker, it fails with an error that says so.
 
 The engine only makes sure that the environment or the image exists. Using it
 is left to the process function, which activates the environment or runs the
@@ -2696,8 +2700,15 @@ after which `conda` itself (`conda deactivate`, another `conda activate`) can be
 used. It loads them from a conda executable, the one that the conda functions of
 the shell point to (`CONDA_EXE`), or else the one that `configure` found, which
 every built script holds as `CONDA_CMD`, as it holds `DOCKER`. With neither, it
-fails with an error that says so. `define_conda_env` loads them the same way
-before it looks for an environment or creates one. A process uses `"${DOCKER}"`
+fails with an error that says so. The functions call the executable through
+`CONDA_EXE`, which their hook exports, so `conda_activate` loads them again in a
+shell that has the functions but not the variable. A task can be such a shell:
+it receives the functions that `debasher_exec` loaded through the execution
+context, which leaves out exported variables, and it inherits `CONDA_EXE` only
+when its environment comes from `debasher_exec`, which is not the case on the
+node of a Slurm job started with `--export=NONE`. `define_conda_env` loads them
+the same way before it looks for an environment or creates one, and fails with
+the same error when there is no conda executable. A process uses `"${DOCKER}"`
 to run a container, the docker that `configure` found, rather than the first one
 in the `PATH`.
 
