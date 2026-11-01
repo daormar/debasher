@@ -2054,7 +2054,7 @@ debasher_builtin_sched::_prepare_files_and_dirs_for_process()
         else
             debasher_builtin_sched::_clean_process_files "${dirname}" ${processname} || { echo "Error when cleaning log files for process" >&2 ; return 1; }
         fi
-        debasher::_prepare_fifos_owned_by_process ${processname}
+        debasher::_prepare_fifos_owned_by_process "${processname}" || { echo "Error when preparing fifos for process" >&2 ; return 1; }
 
         # Create output directory
         debasher::_create_outdir_for_process "${dirname}" ${processname} || { echo "Error when creating output directory for process" >&2 ; return 1; }

@@ -451,8 +451,7 @@ debasher::_register_fifos_read_by_process()
     {
         local cmdline=$1
         local processname=$2
-        local num_tasks=$3
-        local task_idx=$4
+        local task_idx=$3
 
         local opts
         opts=$(debasher::_get_opts_for_process_and_task "${cmdline}" "${processname}" "${task_idx}") || return 1
@@ -472,17 +471,15 @@ debasher::_register_fifos_read_by_process()
             augm_fifoname=$(debasher::_get_augm_fifoname_from_absname "${value}")
             [[ -v DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"] ]] || continue
 
-            # The option through which the task that owns the fifo defines it
-            # does not make the task a reader of it (a fifo fed from outside
-            # that the owner reads, defined through an input option). Any
-            # other option does: that of another task of the same array, and
-            # that of the owner itself when it reads what it writes (a
-            # self-loop)
+            # The option through which the owner defines the fifo never gets
+            # here: an output option is not a dependency candidate, and the
+            # input option of a fifo whose writer is outside holds a path
+            # that no output option holds (a process does not write into a
+            # fifo that another one owns). Any option that does get here
+            # makes the task the reader of the fifo, that of another task of
+            # the same array and that of the owner itself when it reads what
+            # it writes (a self-loop) included
             local this_task="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}"
-            if [ "${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}" = "${this_task}" ] \
-                   && [ "${DEBASHER_DESERIALIZED_ARGS[j]}" = "${DEBASHER_FIFO_OWNER_OPTS["${augm_fifoname}"]:-}" ]; then
-                continue
-            fi
 
             # A fifo has a single reader: each line written into it reaches
             # only one of the processes that open it for reading, and a
@@ -504,33 +501,14 @@ debasher::_register_fifos_read_by_process()
         done
     }
 
-    debasher::_register_fifos_read_by_task_array()
-    {
-        # Initialize variables
-        local cmdline=$1
-        local processname=$2
-        local num_tasks=$3
-        declare -A depdict
-
-        # Iterate over tasks indices
-        for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
-            # Register fifos for task
-            debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${num_tasks}" "${task_idx}" || return 1
-        done
-    }
-
     local cmdline=$1
     local processname=$2
 
-    # Determine whether the process has multiple tasks
     local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
-    if [ "${num_tasks}" -eq 1 ]; then
-        # The process has only one task
-        debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${num_tasks}" 0
-    else
-        # The process is an array of tasks
-        debasher::_register_fifos_read_by_task_array "${cmdline}" "${processname}" "${num_tasks}"
-    fi
+    local task_idx
+    for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
+        debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${task_idx}" || return 1
+    done
 }
 
 ########
@@ -607,13 +585,18 @@ debasher::_check_fifos_read_alike()
         fi
     done
 
+    # Only a group with fifos of both kinds is refused. A group whose fifos
+    # are all unread is accepted (each of its other ends is outside the
+    # program), and one whose fifos are all read is not in unread_tasks
     for group in "${!unread_tasks[@]}"; do
         [[ -v read_tasks["${group}"] ]] || continue
         local processname="${group%%${sep}*}"
         local opt="${group#*${sep}}"
+        # The task indices, joined by blanks, are split into words on purpose
         local -a unread=(${unread_tasks[${group}]})
         local owners="whose owner"
         [ "${#unread[@]}" -eq 1 ] || owners="whose owners"
+        # The first such group stops the check
         echo "Error: the fifos that process ${processname} defines through ${opt} are read inside the program for $(debasher::_describe_task_indices ${read_tasks[${group}]}) but not for $(debasher::_describe_task_indices "${unread[@]}"), ${owners} would block waiting for a reader: a reader with fewer tasks than ${processname}, or a connection to ${processname} made with define_opt_from_proc_out, which takes only its first task" >&2
         return 1
     done

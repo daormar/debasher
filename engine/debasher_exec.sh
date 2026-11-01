@@ -1106,9 +1106,8 @@ prepare_files_and_dirs_for_process()
     # Obtain process status
     local status=$(debasher::_get_process_status "${dirname}" "${processname}")
 
-    # Decide whether the process should be executed (NOTE: for a
-    # process that should not be executed, files and directories are
-    # still prepared)
+    # A process that has finished or is in progress keeps its files and
+    # directories as they are: this run does not launch it
     if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" -a "${status}" != "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
         # Obtain array size
         local array_size=$(debasher::_get_numtasks_for_process "${processname}")
@@ -1125,7 +1124,7 @@ prepare_files_and_dirs_for_process()
         else
             debasher::_clean_process_files "${dirname}" "${processname}" "${array_size}" || { echo "Error when cleaning files for process" >&2 ; return 1; }
         fi
-        debasher::_prepare_fifos_owned_by_process "${processname}"
+        debasher::_prepare_fifos_owned_by_process "${processname}" || { echo "Error when preparing fifos for process" >&2 ; return 1; }
 
         # Create output directory, again if an earlier run had it and it
         # is gone

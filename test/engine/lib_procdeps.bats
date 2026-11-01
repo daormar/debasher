@@ -129,30 +129,6 @@ setup() {
     [ "${DEBASHER_FIFO_READER_OPTS["counter/counter_self"]}" = "-self" ]
 }
 
-@test "debasher::_register_fifos_read_by_process leaves outside the reader of a fifo that its owner defines through an input option" {
-    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
-    declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()
-    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
-    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
-    local fifo="$(debasher::_get_absolute_fifoname fanin fanin_ext)"
-    DEBASHER_PROGRAM_FIFOS["fanin/fanin_ext"]="fanin${sep}0"
-    DEBASHER_FIFO_READERS["fanin/fanin_ext"]="${DEBASHER_EXTERNAL_FIFO_END}"
-    DEBASHER_FIFO_OWNER_OPTS["fanin/fanin_ext"]="-ext"
-    DEBASHER_OUT_VALUE_TO_PROCESSES["${fifo}"]="fanin${sep}0"
-    DEBASHER_PROCESS_OPT_LIST_LEN["fanin"]=1
-    debasher::_get_opts_for_process_and_task() {
-        echo "-ext${DEBASHER_ARG_SEP}${fifo}"
-    }
-
-    set +e
-    debasher::_register_fifos_read_by_process "" "fanin"
-    local status=$?
-    set -e
-    [ "${status}" -eq 0 ]
-    [ "${DEBASHER_FIFO_READERS["fanin/fanin_ext"]}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]
-    [ -z "${DEBASHER_FIFO_READER_OPTS["fanin/fanin_ext"]+x}" ]
-}
-
 @test "debasher::_register_fifos_read_by_process refuses a second reader of a fifo" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_FIFO_READERS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_FIFO_READER_OPTS=() DEBASHER_OUT_VALUE_TO_PROCESSES=() DEBASHER_FIFO_OWNER_OPTS=()

@@ -432,19 +432,6 @@ debasher::_define_fifo_task_idx()
 }
 
 ########
-# Reads the optional flags of define_fifo_opt and define_fifo_opt_generator:
-# --mirror, and at most one of --control and --external (the fifo's tag, see
-# DEBASHER_FIFO_KINDS). Whether a tag is allowed in the program is checked
-# once the program is loaded (see debasher::_validate_program_fifo_kinds),
-# not here: an option generator also runs again inside the script of each of
-# its tasks, where the program type is not known.
-#
-# $1 - Name of the public function, for the error messages.
-# $2 - Name of the variable that receives 1 if --mirror was given, 0 if not.
-# $3 - Name of the variable that receives the tag, or the empty string.
-# $4... - The flags.
-#
-# Returns 0 if every flag is valid; otherwise prints an error and returns 1.
 # Gets the process and the task whose options are being defined, into the
 # variables named $1 and $2: the process of the _define_opts method or
 # option generator in the call stack, and the task index that the engine
@@ -480,6 +467,19 @@ debasher::_call_generate_opts()
 }
 
 ########
+# Reads the optional flags of define_fifo_opt and define_fifo_opt_generator:
+# --mirror, and at most one of --control and --external (the fifo's tag, see
+# DEBASHER_FIFO_KINDS). Whether a tag is allowed in the program is checked
+# once the program is loaded (see debasher::_validate_program_fifo_kinds),
+# not here: an option generator also runs again inside the script of each of
+# its tasks, where the program type is not known.
+#
+# $1 - Name of the public function, for the error messages.
+# $2 - Name of the variable that receives 1 if --mirror was given, 0 if not.
+# $3 - Name of the variable that receives the tag, or the empty string.
+# $4... - The flags.
+#
+# Returns 0 if every flag is valid; otherwise prints an error and returns 1.
 debasher::_read_fifo_opt_flags()
 {
     local funcname=$1

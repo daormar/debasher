@@ -86,46 +86,52 @@ debasher::_show_program_fifos()
 }
 
 ########
+# Creates the fifo $1 anew, with its directory: a fifo left by an earlier
+# run is removed first, so that no line written into it then is read now.
+# Prints an error and returns 1 if it cannot.
+debasher::_create_fifo_anew()
+{
+    local fifo=$1
+
+    local dir=$("${DIRNAME}" "${fifo}")
+    "${MKDIR}" -p "${dir}" || { echo "Error: directory ${dir} of fifo ${fifo} could not be created" >&2; return 1; }
+    if [ -p "${fifo}" ]; then
+        "${RM}" -f "${fifo}" || { echo "Error: fifo ${fifo} of an earlier run could not be removed" >&2; return 1; }
+    fi
+    "${MKFIFO}" "${fifo}" || { echo "Error: fifo ${fifo} could not be created" >&2; return 1; }
+}
+
+########
+# Prepares the mirror of the fifo $1 (<process>/<name>): its shim fifo,
+# created anew, and its mirror log, emptied (see
+# debasher::_start_fifo_mirror_taps_for_process). Prints an error and
+# returns 1 if it cannot.
+debasher::_prepare_fifo_mirror()
+{
+    local augm_fifoname=$1
+
+    debasher::_create_fifo_anew "$(debasher::_get_fifo_shim_name "${augm_fifoname}")" || return 1
+    local mirrorfile=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
+    : > "${mirrorfile}" || { echo "Error: mirror log ${mirrorfile} could not be emptied" >&2; return 1; }
+}
+
+########
+# Creates anew the fifos that the tasks of process $1 own, with the mirror
+# of those declared with --mirror. Prints an error and returns 1 if it
+# cannot.
 debasher::_prepare_fifos_owned_by_process()
 {
     local processname=$1
 
-    # Obtain name of directory for FIFOS
     local fifodir=$(debasher::_get_absolute_fifodir)
-
-    # Create FIFOS
     local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        local proc_plus_idx=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
-        local proc="${proc_plus_idx%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
-        if [ "${proc}" = "${processname}" ]; then
-            local dirname=$("${DIRNAME}" "${augm_fifoname}")
-            if [ ! -d "${fifodir}/${dirname}" ]; then
-                "${MKDIR}" -p "${fifodir}/${dirname}"
-            fi
-            if [ -p "${fifodir}/${augm_fifoname}" ]; then
-                "${RM}" -f "${fifodir}/${augm_fifoname}" || exit 1
-            fi
-            "${MKFIFO}" "${fifodir}/${augm_fifoname}" || exit 1
+        local owner=${DEBASHER_PROGRAM_FIFOS["${augm_fifoname}"]}
+        [ "${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}" = "${processname}" ] || continue
 
-            # Re-create the shim fifo and truncate the mirror log for a
-            # mirrored fifo, tied to the same recreate-on-rerun event as
-            # the real fifo above (see
-            # debasher::_start_fifo_mirror_taps_for_process).
-            if [ -n "${DEBASHER_FIFO_MIRRORED["${augm_fifoname}"]+_}" ]; then
-                local mirrordir=$(debasher::_get_fifo_mirror_dir)
-                local shimfifo=$(debasher::_get_fifo_shim_name "${augm_fifoname}")
-                local mirrorfile=$(debasher::_get_fifo_mirror_filename "${augm_fifoname}")
-
-                if [ ! -d "${mirrordir}/${dirname}" ]; then
-                    "${MKDIR}" -p "${mirrordir}/${dirname}"
-                fi
-                if [ -p "${shimfifo}" ]; then
-                    "${RM}" -f "${shimfifo}" || exit 1
-                fi
-                "${MKFIFO}" "${shimfifo}" || exit 1
-                : > "${mirrorfile}"
-            fi
+        debasher::_create_fifo_anew "${fifodir}/${augm_fifoname}" || return 1
+        if [ -n "${DEBASHER_FIFO_MIRRORED["${augm_fifoname}"]+_}" ]; then
+            debasher::_prepare_fifo_mirror "${augm_fifoname}" || return 1
         fi
     done
 }

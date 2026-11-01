@@ -515,6 +515,24 @@ define_worker_opts() {
     [ ! -s "${mirrorfile}" ]
 }
 
+@test "_prepare_fifos_owned_by_process returns 1 with a message when a fifo cannot be created" {
+    init_program
+    MKFIFO="$(command -v mkfifo)"; DIRNAME="$(command -v dirname)"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    declare -gA DEBASHER_PROGRAM_FIFOS=(["own/f"]="owner${sep}0")
+    declare -gA DEBASHER_FIFO_MIRRORED=()
+    # A regular file where the fifo goes is not removed, so mkfifo fails
+    local fifodir=$(debasher::_get_absolute_fifodir)
+    mkdir -p "${fifodir}/own"
+    echo data > "${fifodir}/own/f"
+
+    run debasher::_prepare_fifos_owned_by_process owner
+
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"fifo ${fifodir}/own/f could not be created"* ]]
+    [ -f "${fifodir}/own/f" ]
+}
+
 @test "_prepare_task_subdirs_for_process refuses a task subdirectory whose subpath goes through a symbolic link" {
     init_program
     local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
