@@ -215,6 +215,29 @@ describe("the code prompt", () => {
   });
 });
 
+describe("stopping a run", () => {
+
+  it("says that a general program stopped, or that the stop of some process failed", async () => {
+    const stopped = fakeBackend([program()], { stopProgram: async () => ({ output: "", exitCode: 0 }) });
+    expect(await text(stopped, "stop_program", { home_dir: HOME })).toContain("Stopped.");
+
+    const failed = fakeBackend([program()], { stopProgram: async () => ({ output: "Error while stopping", exitCode: 1 }) });
+    const answer = await text(failed, "stop_program", { home_dir: HOME });
+    expect(answer).toContain("The stop of some process failed (debasher_stop ended with exit code 1)");
+    expect(answer).not.toContain("Stopped.");
+  });
+
+  it("says that a resident program was killed, or that the kill of some node failed", async () => {
+    const resident = program({ programType: "resident", processes: [] });
+    const killed = fakeBackend([resident], { killProgram: async () => ({ output: "", exitCode: 0 }) });
+    expect(await text(killed, "stop_program", { home_dir: HOME, kill: true, confirm: true })).toContain("Killed.");
+
+    const failed = fakeBackend([resident], { killProgram: async () => ({ output: "", exitCode: 1 }) });
+    expect(await text(failed, "stop_program", { home_dir: HOME, kill: true, confirm: true }))
+      .toContain("The kill of some node failed (debasher_stop ended with exit code 1)");
+  });
+});
+
 describe("editing a program", () => {
 
   it("connects two processes and saves the program with a new digest", async () => {

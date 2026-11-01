@@ -85,21 +85,9 @@ check_pars()
 }
 
 ########
-configure_scheduler()
-{
-    local sched=$1
-    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # If the scheduler was not set in the command line, it is
-        # automatically determined
-        local sched=$(debasher::_determine_scheduler)
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    else
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    fi
-}
-
-########
-process_status_for_pfile()
+# Prints the status of each process of the run in the output directory, or of
+# the one given with -p, and returns the exit code of the status of the run
+print_status_of_run()
 {
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
@@ -110,21 +98,11 @@ process_status_for_pfile()
         return 1
     fi
 
-    # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
-
-    # The processes of the program, as the run left them in the output
-    # directory: the module is not loaded, since it may have changed
-    # since the run, and nothing here depends on where the output
+    # The processes and the scheduler of the run, as the run left them in
+    # the output directory: the module is not loaded, since it may have
+    # changed since the run, and nothing here depends on where the output
     # directory was when the program ran
-    debasher::_load_processes_from_procspec "${absdirname}" || return 1
-    if [ ${p_given} -eq 1 ]; then
-        debasher::_check_run_has_process "${given_processname}" || return 1
-    fi
-
-    # Configure scheduler
-    configure_scheduler $sched || return 1
+    debasher::_read_run_for_tool "${absdirname}" "${given_processname:-}" || return 1
 
     # Read information about the processes to be executed
     local num_processes=0
@@ -211,7 +189,7 @@ if [ ${p_given} -eq 0 ] && debasher::_outdir_is_locked_for_a_run "$(debasher::_g
     exec_holds_lock=1
 fi
 
-process_status_for_pfile "${pdir}"
+print_status_of_run "${pdir}"
 exit_code=$?
 
 if [ ${exec_holds_lock} -eq 1 ]; then

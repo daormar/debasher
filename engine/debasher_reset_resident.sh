@@ -98,20 +98,6 @@ check_pars()
 }
 
 ########
-configure_scheduler()
-{
-    local sched=$1
-    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # If the scheduler was not set in the command line, it is
-        # automatically determined
-        local sched=$(debasher::_determine_scheduler)
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    else
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    fi
-}
-
-########
 # The number of tasks of process $2, from the script the scheduler wrote for
 # it (its DEBASHER_NUM_TASKS line), or nothing if it was never launched and
 # so has no state to reset.
@@ -216,11 +202,9 @@ reset_resident_program()
 
     local pfile
     pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
 
     debasher::load_debasher_module "$pfile" || return 1
-    configure_scheduler $sched || return 1
+    debasher::_set_scheduler_of_run "${absdirname}" || return 1
     debasher::_resolve_program_type "${pfile}" || return 1
 
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then

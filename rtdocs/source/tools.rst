@@ -258,7 +258,9 @@ with ``-p <string>``, and is otherwise omitted to stop the whole
 program. Under the built-in scheduler, for a process that is not
 running, it also ends what its tasks left behind, such as background
 jobs of a process function that exited without returning, or its
-mirror taps.
+mirror taps. Its exit status is 0 when every stop it tried succeeded,
+and 1 when the run cannot be read or the stop of some process failed;
+in that case it still tries to stop the other processes first.
 
 debasher_reformat_status
 ^^^^^^^^^^^^^^^^^^^^^^^^^

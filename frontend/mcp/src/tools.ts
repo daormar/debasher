@@ -645,15 +645,21 @@ const runningTools = [
     async (backend, { home_dir, kill, confirm: confirmed }) => {
       const program = await programWithOutputDir(backend, home_dir);
       if (program.programType !== "resident") {
-        const { output } = await backend.stopProgram(program);
-        return withOutput("Stopped.", output, OUTPUT_LINES);
+        const { output, exitCode } = await backend.stopProgram(program);
+        const answer = exitCode === 0
+          ? "Stopped."
+          : `The stop of some process failed (debasher_stop ended with exit code ${exitCode}). Check the run with get_status, and call stop_program again or stop what still runs.`;
+        return withOutput(answer, output, OUTPUT_LINES);
       }
       if (kill) {
         if (!confirmed) {
           throw new Refusal(`Killing the program needs confirm. ${HARD_KILL_CONSEQUENCES}`);
         }
-        const { output } = await backend.killProgram(program);
-        return withOutput("Killed.", output, OUTPUT_LINES);
+        const { output, exitCode } = await backend.killProgram(program);
+        const answer = exitCode === 0
+          ? "Killed."
+          : `The kill of some node failed (debasher_stop ended with exit code ${exitCode}). Check the run with get_status, and call stop_program with kill again.`;
+        return withOutput(answer, output, OUTPUT_LINES);
       }
       const { output, exitCode } = await backend.stopProgram(program);
       return withOutput(orderlyStopOutcome(exitCode), output, OUTPUT_LINES);

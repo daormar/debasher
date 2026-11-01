@@ -233,6 +233,19 @@ write_command_line_file() {
     [ "${status}" -ne 0 ]
 }
 
+@test "debasher::_set_scheduler_of_run sets the scheduler that the command line file names, and fails when it names none" {
+    local outdir="${BATS_TEST_TMPDIR}/out"
+    write_command_line_file "/work" "out" "${outdir}"
+
+    debasher::_set_scheduler_of_run "${outdir}"
+    [ "$(debasher::_get_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]
+
+    printf 'cd /work\ndebasher_exec --pfile /abs/prg.sh --outdir out\n' > "${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    run debasher::_set_scheduler_of_run "${outdir}"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"names no scheduler"* ]]
+}
+
 @test "debasher::_check_outdir_not_moved accepts the directory of the run under any path, and refuses another one" {
     local workdir="${BATS_TEST_TMPDIR}/work"
     mkdir -p "${workdir}"

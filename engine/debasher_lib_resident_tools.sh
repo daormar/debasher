@@ -47,20 +47,6 @@ debasher::_resident_tool_wait_for_file()
 }
 
 ########
-debasher::_resident_tool_configure_scheduler()
-{
-    local sched=$1
-    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # If the scheduler was not set in the command line, it is
-        # automatically determined
-        local sched=$(debasher::_determine_scheduler)
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    else
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    fi
-}
-
-########
 # Loads the program whose output directory is $1 (its module, scheduler and
 # processes, into DEBASHER_PROGRAM_PROCESSES), from the command line file
 # that debasher_exec left there. Returns 1, with an error naming the tool $2,
@@ -73,9 +59,6 @@ debasher::_resident_tool_load_program()
 
     local pfile
     pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
-
     local orig_outdir
     orig_outdir=$(debasher::_get_orig_outdir_from_command_line_file "${command_line_file}") || return 1
     if debasher::_dirnames_are_equal "${orig_outdir}" "${absdirname}"; then
@@ -85,7 +68,7 @@ debasher::_resident_tool_load_program()
     fi
 
     debasher::load_debasher_module "$pfile" || return 1
-    debasher::_resident_tool_configure_scheduler $sched || return 1
+    debasher::_set_scheduler_of_run "${absdirname}" || return 1
     debasher::_resolve_program_type "${pfile}" || return 1
 
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then

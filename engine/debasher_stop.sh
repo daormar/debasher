@@ -84,41 +84,49 @@ check_pars()
 }
 
 ########
-configure_scheduler()
+# Stops one process of the run in the output directory absdirname: a process
+# in progress is stopped through the scheduler of the run; of one that is
+# not running, the built-in scheduler ends what a task that ended without
+# returning from its process function may have left in its process group
+# (background jobs, mirror taps). Prints the status of the process and its
+# ids, and returns 1 when the stop failed.
+stop_process_of_run()
 {
-    local sched=$1
-    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # If the scheduler was not set in the command line, it is
-        # automatically determined
-        local sched=$(debasher::_determine_scheduler)
-        debasher::_set_debasher_scheduler "${sched}" || return 1
+    local absdirname=$1
+    local processname=$2
+
+    local status=$(debasher::_get_process_status "${absdirname}" "${processname}")
+
+    # The ids of the tasks that may still run: the id of a task that has
+    # ended may name another process by now
+    local ids_info
+    ids_info=$(debasher::_read_ids_of_unfinished_tasks "${absdirname}" "${processname}")
+
+    if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
+        echo "PROCESS: ${processname} ; STATUS: ${status} ; SCHED_IDS: ${ids_info} (Stopping...)"
+        debasher::_stop_process "${ids_info}"
     else
-        debasher::_set_debasher_scheduler "${sched}" || return 1
+        echo "PROCESS: ${processname} ; STATUS: ${status} ; SCHED_IDS: ${ids_info} (The process is not running)"
+        if [ "$(debasher::_get_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+            debasher::_builtin_sched_stop_process "${ids_info}"
+        fi
     fi
 }
 
 ########
-process_stop_for_pfile()
+# Stops the run in the output directory, or only the process given with -p.
+# Returns 1 when the run could not be read or a stop failed, after trying
+# every process.
+stop_run()
 {
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
-    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
-
-    # The processes of the program, as the run left them in the output
-    # directory: the module is not loaded, since it may have changed
-    # since the run, and nothing here depends on where the output
+    # The processes and the scheduler of the run, as the run left them in
+    # the output directory: the module is not loaded, since it may have
+    # changed since the run, and nothing here depends on where the output
     # directory was when the program ran
-    debasher::_load_processes_from_procspec "${absdirname}" || return 1
-    if [ ${p_given} -eq 1 ]; then
-        debasher::_check_run_has_process "${given_processname}" || return 1
-    fi
-
-    # Configure scheduler
-    configure_scheduler $sched || return 1
+    debasher::_read_run_for_tool "${absdirname}" "${given_processname:-}" || return 1
 
     # Stop the debasher_exec of the run first, if it still runs, so that it
     # launches nothing once its processes are stopped. Not when a single
@@ -127,36 +135,16 @@ process_stop_for_pfile()
         debasher::_stop_run_scheduler "${absdirname}" || return 1
     fi
 
-    # Iterate over the program processes
+    local exit_code=0
+    local processname
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # If s option was given, continue to next iteration if process
-        # name does not match with the given one
-        if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
+        if [ ${p_given} -eq 1 ] && [ "${given_processname}" != "${processname}" ]; then
             continue
         fi
-
-        # Check process status
-        local status=$(debasher::_get_process_status "${absdirname}" ${processname})
-
-        # Obtain the ids of the tasks that may still run: the id of a task
-        # that has ended may name another process by now
-        local ids_info
-        ids_info=$(debasher::_read_ids_of_unfinished_tasks "${absdirname}" ${processname})
-
-        # Print status
-        if [ "${status}" = "${DEBASHER_INPROGRESS_PROCESS_STATUS}" ]; then
-            echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (Stopping...)"
-            debasher::_stop_process "${ids_info}"
-        else
-            echo "PROCESS: $processname ; STATUS: $status ; SCHED_IDS: ${ids_info} (The process is not running)"
-            # A task of the built-in scheduler that ended without returning
-            # from its process function may have left background jobs or
-            # mirror taps in its process group
-            if [ "${sched}" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
-                debasher::_builtin_sched_stop_process "${ids_info}"
-            fi
-        fi
+        stop_process_of_run "${absdirname}" "${processname}" || exit_code=1
     done
+
+    return ${exit_code}
 }
 
 ########
@@ -170,6 +158,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_stop_for_pfile "${pdir}"
+stop_run "${pdir}"
 
 exit $?

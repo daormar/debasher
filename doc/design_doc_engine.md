@@ -2956,8 +2956,8 @@ next run compares with those, and a change it did not carry out is still found.
 
 The tools that follow or act on a run read it from its output directory alone
 (see "Architecture"): they take the processes from `program.procspec`, the
-scheduler from `command_line.sh`, and everything else from the exec
-directories, and they neither load a module nor need the program file.
+scheduler, when they need it, from `command_line.sh`, and everything else from
+the exec directories, and they neither load a module nor need the program file.
 
 - `debasher_status` gives the status of the processes (see "Process status"),
   with `-i` their ids.
@@ -2974,12 +2974,17 @@ directories, and they neither load a module nor need the program file.
   background job or a mirror tap: the system gives the number of a process group
   to no new process while the group has members. After it, no task of the
   run runs and nothing is left that could launch one. With `-p`, it stops the
-  running tasks of that one process, and the rest of the run goes on.
+  running tasks of that one process, and the rest of the run goes on. A process
+  whose stop fails is reported and makes `debasher_stop` end with status 1, but
+  does not keep the other processes from being stopped; if the `debasher_exec`
+  of the run cannot be stopped, it ends with status 1 and stops no process.
 - `debasher_stats` gives the time that each process, and each task of an
   array, took, from the start and end times in their logs.
 - `debasher_get_stdout`, `debasher_get_sched_out` and
   `debasher_get_fifo_mirror` print the standard output, the log, or the mirror
-  log of a process or of one of its tasks, or follow it as it grows.
+  log of a process or of one of its tasks, or follow it as it grows. The path
+  of these files depends only on the output directory, the process and the
+  task, so these tools read neither the scheduler nor `program.procspec`.
 
 Under the built-in scheduler, a cancelled task has no id, log or standard
 output: these tools show it only through the status of its process, and its

@@ -801,6 +801,22 @@ def test_a_process_that_ran_after_its_producer_failed_runs_again_once_the_produc
     assert "consume" in result.stderr.split("Printing list of processes to rerun...")[1].split("\n")[1]
 
 
+def test_get_stdout_and_get_sched_out_print_the_files_of_a_process(tmp_path):
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "hi")
+    assert result.returncode == 0, result.stderr
+
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "hello_world")
+    assert stdout.returncode == 0, stdout.stderr
+    assert stdout.stdout == "hi\n"
+    sched_out = run_tool(DEBASHER_GET_SCHED_OUT, "-d", str(outdir), "-p", "hello_world")
+    assert sched_out.returncode == 0, sched_out.stderr
+    assert "Process started at" in sched_out.stdout
+    missing = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "hello_world", "-t", "0")
+    assert missing.returncode != 0
+    assert "stdout file for process hello_world could not be found" in missing.stderr
+
+
 def test_get_sched_out_fails_for_a_missing_file(tmp_path):
     outdir = tmp_path / "out"
     result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir))

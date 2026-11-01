@@ -28,8 +28,8 @@ debasher_lib_processes debasher_lib_proc_doc debasher_lib_procdeps	\
 debasher_lib_programs debasher_lib_resident debasher_lib_modules	\
 debasher_lib_args debasher_lib_opts debasher_lib_dirs			\
 debasher_lib_mirror debasher_lib_conda debasher_lib_docker		\
-debasher_lib_resident_tools debasher_builtin_sched_lib			\
-debasher_bats_helpers
+debasher_lib_resident_tools debasher_lib_task_file_tool		\
+debasher_builtin_sched_lib debasher_bats_helpers
 
 CLEANFILES = $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA)
 
@@ -43,7 +43,7 @@ debasher_lib_process_spec.sh debasher_lib_programs.sh			\
 debasher_lib_resident.sh debasher_lib_modules.sh debasher_lib_args.sh	\
 debasher_lib_opts.sh debasher_lib_dirs.sh debasher_lib_mirror.sh	\
 debasher_lib_conda.sh debasher_lib_docker.sh				\
-debasher_lib_resident_tools.sh						\
+debasher_lib_resident_tools.sh debasher_lib_task_file_tool.sh		\
 debasher_builtin_sched_lib.sh debasher_exec.sh debasher_exec_batch.sh	\
 debasher_get_stdout.sh debasher_get_sched_out.sh			\
 debasher_get_fifo_mirror.sh						\

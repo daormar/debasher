@@ -90,7 +90,8 @@ debasher::_get_sched_from_command_line_file()
 {
     local command_line_file=$1
     local qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}")
-    local sched=$(debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched") || return 1
+    local sched
+    sched=$(debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--sched") || return 1
     echo "${sched}"
 }
 
@@ -170,6 +171,42 @@ debasher::_load_processes_from_procspec()
         [ -z "${line}" ] && continue
         DEBASHER_PROGRAM_PROCESSES["${line%% *}"]=${DEBASHER_REGULAR_PROCESS_TYPE}
     done < "${procspec_file}"
+}
+
+########
+# Sets the scheduler of the run in the given output directory, the one
+# that its command line file names (debasher_exec always writes it there),
+# so that a tool that operates on a run works with the scheduler that ran
+# it, whatever the scheduler of the machine where the tool runs. Fails, with
+# an error, when the command line file names none.
+debasher::_set_scheduler_of_run()
+{
+    local dirname=$1
+    local command_line_file="${dirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    local sched
+    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || {
+        echo "Error: ${command_line_file} names no scheduler" >&2
+        return 1
+    }
+    debasher::_set_debasher_scheduler "${sched}"
+}
+
+########
+# Reads the run in the given output directory as the tools that operate on a
+# run need it: its processes (see debasher::_load_processes_from_procspec)
+# and its scheduler (see debasher::_set_scheduler_of_run). When a process is
+# given, fails, with an error, if it is not a process of the run.
+debasher::_read_run_for_tool()
+{
+    local dirname=$1
+    local processname=${2:-}
+
+    debasher::_load_processes_from_procspec "${dirname}" || return 1
+    if [ -n "${processname}" ]; then
+        debasher::_check_run_has_process "${processname}" || return 1
+    fi
+    debasher::_set_scheduler_of_run "${dirname}"
 }
 
 ########

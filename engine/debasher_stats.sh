@@ -84,47 +84,23 @@ check_pars()
 }
 
 ########
-configure_scheduler()
-{
-    local sched=$1
-    if [ ${sched} = ${DEBASHER_OPT_NOT_FOUND} ]; then
-        # If the scheduler was not set in the command line, it is
-        # automatically determined
-        local sched=$(debasher::_determine_scheduler)
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    else
-        debasher::_set_debasher_scheduler "${sched}" || return 1
-    fi
-}
-
-########
-process_stats_for_pfile()
+# Prints the status and the elapsed time of each process of the run in the
+# output directory, or of the one given with -p
+print_stats_of_run()
 {
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
-    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
-    # Extract the scheduler from DEBASHER_PRG_COMMAND_LINE_BASENAME file
-    local sched
-    sched=$(debasher::_get_sched_from_command_line_file "${command_line_file}") || return 1
-
-    # The processes of the program, as the run left them in the output
-    # directory: the module is not loaded, since it may have changed
-    # since the run, and nothing here depends on where the output
+    # The processes and the scheduler of the run, as the run left them in
+    # the output directory: the module is not loaded, since it may have
+    # changed since the run, and nothing here depends on where the output
     # directory was when the program ran
-    debasher::_load_processes_from_procspec "${absdirname}" || return 1
-    if [ ${p_given} -eq 1 ]; then
-        debasher::_check_run_has_process "${given_processname}" || return 1
-    fi
-
-    # Configure scheduler
-    configure_scheduler $sched || return 1
+    debasher::_read_run_for_tool "${absdirname}" "${given_processname:-}" || return 1
 
     # Iterate over the program processes
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-        # If s option was given, continue to next iteration if process
-        # name does not match with the given one
-        if [ ${p_given} -eq 1 -a "${given_processname}" != $processname ]; then
+        # Only the process given with -p, if any
+        if [ ${p_given} -eq 1 ] && [ "${given_processname}" != "${processname}" ]; then
             continue
         fi
 
@@ -150,6 +126,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-process_stats_for_pfile "${pdir}"
+print_stats_of_run "${pdir}"
 
 exit $?
