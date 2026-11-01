@@ -240,7 +240,8 @@ wait_until_gone() {
     local start=$(now_ms)
     debasher::_stop_fifo_mirror_taps 2> "${BATS_TEST_TMPDIR}/stderr"
     [ "$?" -eq 0 ]
-    [ $(( $(now_ms) - start )) -lt 3000 ]
+    # The grace period, one more second for its measure, and a margin
+    [ $(( $(now_ms) - start )) -lt 4000 ]
     ! kill -0 "${tap_pid}" 2>/dev/null || false
     grep -q "Warning: the reader of the fifo mirrored by ${shimfifo} is gone" "${BATS_TEST_TMPDIR}/stderr"
     [ "$(cat "${mirrorfile}")" = $'one\ntwo\nthree' ]

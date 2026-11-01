@@ -154,19 +154,21 @@ debasher::_run_fifo_mirror_tap()
 # retries while the write fails, which it does only when the fifo has no
 # reader. Returns 1, giving the line up, when the task $1 is gone, or when
 # the marker $2 says that its process function has returned and the write
-# has failed for DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS since: the reader
-# is gone.
+# has failed for more than DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS since:
+# the reader is gone. The time is measured with SECONDS, whatever a retry
+# takes on the system, so the tap gives up within one second more.
 debasher::_forward_mirrored_line()
 {
     local owner_pid=$1
     local donefile=$2
     local text=$3
 
-    local tries_after_done=0
+    local failing_since=""
     until printf '%s' "${text}" >&8 2>/dev/null; do
         kill -0 "${owner_pid}" 2>/dev/null || return 1
         if [ -e "${donefile}" ]; then
-            (( ++tries_after_done <= DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS * 50 )) || return 1
+            [ -n "${failing_since}" ] || failing_since=${SECONDS}
+            (( SECONDS - failing_since <= DEBASHER_FIFO_MIRROR_TAP_STOP_GRACE_SECS )) || return 1
         fi
         "${SLEEP}" 0.02
     done
