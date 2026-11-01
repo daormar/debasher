@@ -155,7 +155,12 @@ installed with the following steps:
    finds a Python with pydantic 2, the one of an activated virtual
    environment, the one that ``DEBASHER_WEBUI_PYTHON`` names or the one
    found when DeBasher was configured, and the Conda and Docker examples
-   are skipped without Conda or Docker.
+   are skipped without Conda or Docker. The business tests of the
+   programs built with the web interface, run with ``debasher_test``, are
+   skipped when neither the bats or pytest found by ``configure`` nor
+   the one that ``DEBASHER_BATS`` or ``DEBASHER_PYTEST`` names is
+   available (for example, ``DEBASHER_PYTEST=<venv>/bin/pytest make
+   installcheck``).
 
 #. You can remove the program binaries and object files from the
    source code directory by typing ``make clean``.

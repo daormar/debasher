@@ -34,6 +34,19 @@ conda_is_usable()
 }
 
 ########
+# Counts a check by its status: 0 passed, 1 failed, 2 skipped (the check
+# said so), 124 timed out.
+count_check_status()
+{
+    case $1 in
+        0) checks_passed=$((checks_passed + 1)) ;;
+        1) checks_failed=$((checks_failed + 1)) ;;
+        2) checks_skipped=$((checks_skipped + 1)) ;;
+        124) checks_timedout=$((checks_timedout + 1)) ;;
+    esac
+}
+
+########
 check_program()
 {
     local tmpdir=$1
@@ -201,8 +214,9 @@ check_watched_program()
 ########
 # Runs debasher_test on the program directory `prgdir`, with the options
 # `test_opts` if given, which passes when every test passes or the program
-# has none. The check is skipped when configure did not find the tool of a
-# kind of test that the program has.
+# has none. The check is skipped when the tool of a kind of test that the
+# program has is given neither by configure nor by DEBASHER_BATS or
+# DEBASHER_PYTEST.
 check_business_tests()
 {
     local tmpdir=$1
@@ -212,10 +226,12 @@ check_business_tests()
 
     local tool
     for tool in bats pytest; do
-        local pattern="*.bats" path="${BATS}"
+        # The tool that debasher_test would run: the one given in
+        # DEBASHER_BATS or DEBASHER_PYTEST, or else the one of configure
+        local pattern="*.bats" path="${DEBASHER_BATS:-${BATS}}"
         if [ "${tool}" = "pytest" ]; then
             pattern="test_*.py"
-            path="${PYTEST}"
+            path="${DEBASHER_PYTEST:-${PYTEST}}"
         fi
         if [ -z "${path}" ] && [ -n "$("${FIND}" "${prgdir}/test" -maxdepth 1 -name "${pattern}" 2> /dev/null)" ]; then
             echo "## Checking the business tests of ${name} ... Skipped (${tool} not found)"
@@ -442,17 +458,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_namespace_example program
 progname="debasher_namespace_example"
@@ -460,17 +466,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "--gen-proc-graph"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_namespace_multidot_example program
 progname="debasher_namespace_multidot_example"
@@ -478,17 +474,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "--gen-proc-graph"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_hello_world_py program
 progname="debasher_hello_world_py"
@@ -496,17 +482,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_hello_world_py_legacy program
 progname="debasher_hello_world_py_legacy"
@@ -514,17 +490,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_hello_world_alias_func program
 progname="debasher_hello_world_alias"
@@ -532,17 +498,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_hello_world_alias_extern program
 progname="debasher_hello_world_ext_alias"
@@ -550,17 +506,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_hello_world_alias_opt_map program
 progname="debasher_hello_world_alias_opt_map"
@@ -568,17 +514,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_cycle program
 progname="debasher_cycle"
@@ -586,17 +522,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_value_pass_example program
 progname="debasher_value_pass_example"
@@ -615,17 +541,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_explicit_deps_example program
 progname="debasher_explicit_deps_example"
@@ -633,17 +549,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-num-a 1 -num-b 2"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_array_example_original program
 progname="debasher_array_example_original"
@@ -651,17 +557,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_array_example program
 progname="debasher_array_example"
@@ -669,17 +565,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_file_example program
 progname="debasher_file_example"
@@ -687,17 +573,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-s Hello\ World!"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_fifo_example program
 progname="debasher_fifo_example"
@@ -705,17 +581,7 @@ sched="BUILTIN"
 bs_cpus=2
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_define_opt_deps_example program
 progname="debasher_define_opt_deps_example"
@@ -723,17 +589,7 @@ sched="BUILTIN"
 bs_cpus=3
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_generator_example program
 progname="debasher_generator_example"
@@ -741,17 +597,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_shared_subdir_example program
 progname="debasher_shared_subdir_example"
@@ -759,17 +605,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_aftercorr_example program
 progname="debasher_aftercorr_example"
@@ -777,17 +613,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 3"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_fifo_generator_example program
 progname="debasher_fifo_generator_example"
@@ -795,17 +621,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_subprogram_example program
 progname="debasher_subprogram_example"
@@ -813,17 +629,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 1"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_host_workflow program
 progname="debasher_host_workflow"
@@ -831,17 +637,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_host_workflow_expl_deps program
 progname="debasher_host_workflow_expl_deps"
@@ -849,17 +645,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_host_workflow_force program
 progname="debasher_host_workflow_force"
@@ -867,17 +653,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_telegram program
 progname="debasher_telegram"
@@ -887,17 +663,7 @@ bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_telegram_jobsteps program
 progname="debasher_telegram_jobsteps"
@@ -907,17 +673,7 @@ bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_telegram_imperative program
 progname="debasher_telegram_imperative"
@@ -927,17 +683,7 @@ bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_seq_process_example program
 progname="debasher_seq_process_example"
@@ -945,17 +691,7 @@ sched="BUILTIN"
 bs_cpus=1
 bs_mem=128
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 20"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_telegram_morrison program
 progname="debasher_telegram_morrison"
@@ -965,17 +701,7 @@ bs_mem=128
 telegram_data_file="${tmpdir}/telegram_data.txt"
 "${debasher_libexecdir}/debasher_gen_telegram_data" -n 100 -l 10 -w 10 > "${telegram_data_file}"
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-c 40 -f $(printf '%q ' "${telegram_data_file}")"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_conda_example if conda is available
 progname="debasher_conda_example"
@@ -984,17 +710,7 @@ if conda_is_usable; then
     bs_cpus=4
     bs_mem=1024
     check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 else
     print_skipped_check "${progname}" "conda not found"
     ((checks_skipped++))
@@ -1008,17 +724,7 @@ if command -v "${DOCKER}" > /dev/null 2>&1 && "${DOCKER}" info > /dev/null 2>&1;
     bs_cpus=4
     bs_mem=1024
     check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 4"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 else
     print_skipped_check "${progname}" "docker not found or its daemon not running"
     ((checks_skipped++))
@@ -1030,17 +736,7 @@ sched="BUILTIN"
 bs_cpus=4
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_dynamic_fanout_fifos
 progname="debasher_dynamic_fanout_fifos"
@@ -1048,17 +744,7 @@ sched="BUILTIN"
 bs_cpus=7 # increased number of cpus to be able to allocate all processes
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check debasher_dynamic_fanout_fifos_gen
 progname="debasher_dynamic_fanout_fifos_gen"
@@ -1066,17 +752,7 @@ sched="BUILTIN"
 bs_cpus=7 # increased number of cpus to be able to allocate all processes
 bs_mem=1024
 check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Checks of the programs built with the web UI
 echo "# Checks of the programs built with the web UI"
@@ -1090,17 +766,7 @@ bs_cpus=2
 bs_mem=512
 check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                    "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_hello_world, the program of the quickstart of the
 # documentation; its only option has a default
@@ -1110,17 +776,7 @@ bs_cpus=1
 bs_mem=256
 check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                    "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_hello_world_py, the same program with its process in Python
 progname="webui_hello_world_py"
@@ -1129,17 +785,7 @@ bs_cpus=1
 bs_mem=256
 check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                    "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_dynamic_fanout_fifos, a general program with a pool of
 # workers fed through FIFOs; increased number of cpus to be able to
@@ -1150,34 +796,14 @@ bs_cpus=7
 bs_mem=1024
 check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                    "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 4"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_running_sum, a resident program: the running sum of 1, 2 and 3
 # is 6
 progname="webui_running_sum"
 check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                        "${progname}" "numbers" "1 2 3" "sum" "6"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_batch_greet, the general program that webui_batch_launcher runs
 progname="webui_batch_greet"
@@ -1186,17 +812,7 @@ bs_cpus=1
 bs_mem=256
 check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                    "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-text world -secs 0"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_batch_launcher, a resident program with a launcher node: one
 # request runs webui_batch_greet, installed next to it, and Report reports
@@ -1205,17 +821,7 @@ progname="webui_batch_launcher"
 check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                        "${progname}" "requests" '{"opts":{"-text":"world","-secs":"0"},"run":"r1"}' \
                        "report" '{"run": "r1", "status": "finished", "finished": 1, "failed": 0}'
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Check webui_conda_example, a general program whose process activates a
 # conda environment, which the run creates if it does not exist
@@ -1226,17 +832,7 @@ if conda_is_usable; then
     bs_mem=256
     check_program_file "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                        "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" ""
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 else
     print_skipped_check "${progname}" "conda not found"
     ((checks_skipped++))
@@ -1247,17 +843,7 @@ fi
 progname="webui_watch_tally"
 check_watched_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                       "${progname}" "first.txt" "tally" '{"run": "first", "seen": 1}'
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    124)
-        ((checks_timedout++))
-        ;;
-esac
+count_check_status $?
 
 # Checks of the business tests of the programs built with the web UI,
 # which debasher_test runs on each program as installed
@@ -1266,17 +852,7 @@ echo ""
 
 for prgdir in "${debasher_datadir}"/webui_programs/*/; do
     check_business_tests "${tmpdir}" "${prgdir%/}"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        2)
-            ((checks_skipped++))
-            ;;
-    esac
+    count_check_status $?
 done
 
 # A program directory need not have the name of its program: the copy of
@@ -1285,33 +861,17 @@ done
 renamed_prgdir="${tmpdir}/greet_under_another_name"
 "${CP}" -r "${debasher_datadir}/webui_programs/webui_batch_greet" "${renamed_prgdir}"
 check_business_tests "${tmpdir}" "${renamed_prgdir}"
-case $? in
-    0)
-        ((checks_passed++))
-        ;;
-    1)
-        ((checks_failed++))
-        ;;
-    2)
-        ((checks_skipped++))
-        ;;
-esac
+count_check_status $?
 
 # The test runner prepares the conda environments of a program before its
 # tests when asked to, as a run does
 if conda_is_usable; then
     check_business_tests "${tmpdir}" "${debasher_datadir}/webui_programs/webui_conda_example" "--conda-support"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        2)
-            ((checks_skipped++))
-            ;;
-    esac
+    count_check_status $?
+else
+    echo "## Checking the business tests of webui_conda_example (--conda-support) ... Skipped (conda not found)"
+    echo ""
+    count_check_status 2
 fi
 
 if check_business_tests_refused "${tmpdir}" "${tmpdir}"; then
@@ -1340,17 +900,7 @@ else
     if build_sdk_program "${tmpdir}" "${progname}"; then
         check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
                            "${progname}_builtin" "BUILTIN" 1 256 ""
-        case $? in
-            0)
-                ((checks_passed++))
-                ;;
-            1)
-                ((checks_failed++))
-                ;;
-            124)
-                ((checks_timedout++))
-                ;;
-        esac
+        count_check_status $?
     else
         ((checks_failed++))
     fi
@@ -1361,17 +911,7 @@ else
     if build_sdk_program "${tmpdir}" "${progname}"; then
         check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
                            "${progname}_builtin" "BUILTIN" 7 1024 "-l 200 -c 20 -b 20 -w 4"
-        case $? in
-            0)
-                ((checks_passed++))
-                ;;
-            1)
-                ((checks_failed++))
-                ;;
-            124)
-                ((checks_timedout++))
-                ;;
-        esac
+        count_check_status $?
     else
         ((checks_failed++))
     fi
@@ -1382,17 +922,7 @@ else
     if build_sdk_program "${tmpdir}" "${progname}"; then
         check_resident_program "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
                                "${progname}" "numbers" "1 2 3" "sum" "6"
-        case $? in
-            0)
-                ((checks_passed++))
-                ;;
-            1)
-                ((checks_failed++))
-                ;;
-            124)
-                ((checks_timedout++))
-                ;;
-        esac
+        count_check_status $?
     else
         ((checks_failed++))
     fi
@@ -1431,17 +961,7 @@ else
         if build_sdk_program "${tmpdir}" "${progname}"; then
             check_program_file "${tmpdir}" "${tmpdir}/${progname}_build/${progname}.sh" \
                                "${progname}_builtin" "BUILTIN" 1 256 ""
-            case $? in
-                0)
-                    ((checks_passed++))
-                    ;;
-                1)
-                    ((checks_failed++))
-                    ;;
-                124)
-                    ((checks_timedout++))
-                    ;;
-            esac
+            count_check_status $?
         else
             ((checks_failed++))
         fi
@@ -1463,17 +983,7 @@ if command -v "${SBATCH}" > /dev/null 2>&1; then
     bs_cpus=1   # Not used with SLURM scheduler
     bs_mem=1024 # Not used with SLURM scheduler
     check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-l 200 -c 20 -b 20 -w 5"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 
     # Check debasher_seq_process_example, whose steps, declared with no
     # scheduler of their own, run in the shell of the task inside its job
@@ -1482,17 +992,7 @@ if command -v "${SBATCH}" > /dev/null 2>&1; then
     bs_cpus=1   # Not used with SLURM scheduler
     bs_mem=1024 # Not used with SLURM scheduler
     check_program "${tmpdir}" "${progname}" "${progname}_slurm" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 20"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 
     # Check debasher_cycle_dyn_sched, a program with fifos that runs on
     # the built-in scheduler and sends the steps of its sequential process
@@ -1503,17 +1003,7 @@ if command -v "${SBATCH}" > /dev/null 2>&1; then
     bs_cpus=2
     bs_mem=128
     check_program "${tmpdir}" "${progname}" "${progname}_builtin" "${sched}" "${bs_cpus}" "${bs_mem}" "-n 10 -value 0 -threshold 3"
-    case $? in
-        0)
-            ((checks_passed++))
-            ;;
-        1)
-            ((checks_failed++))
-            ;;
-        124)
-            ((checks_timedout++))
-            ;;
-    esac
+    count_check_status $?
 fi
 
 # Summary

@@ -3214,13 +3214,14 @@ tests cover both kinds of test: process tests of a general program
 (`webui_batch_greet`) and of a process that activates a conda environment
 (`webui_conda_example`, skipped where the environment does not exist), and node
 tests of a resident program and of a `DirectoryWatcher` and the node it feeds.
-When `configure` did not find the tool of a kind of test that a program has,
-the check does not run the test runner on that program, and says that its tests
-are skipped. It also checks that the test runner finds the program of a copy of
-`webui_batch_greet` in a directory of another name, that it prepares the Conda
-environment of `webui_conda_example` with `--conda-support` where conda is
-usable, and that it refuses, with status 2, a directory that is not a program
-directory.
+When the tool of a kind of test that a program has is given neither by
+`configure` nor by `DEBASHER_BATS` or `DEBASHER_PYTEST`, the check does not run
+the test runner on that program, and says that its tests are skipped. It also
+checks that the test runner finds the program of a copy of `webui_batch_greet`
+in a directory of another name, that it prepares the Conda environment of
+`webui_conda_example` with `--conda-support` where conda is usable (elsewhere
+the check says that it is skipped), and that it refuses, with status 2, a
+directory that is not a program directory.
 
 This checks, once DeBasher is installed, that the test runner, the test
 helpers and the node harness work as installed, which no test of `make check`
