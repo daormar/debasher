@@ -27,8 +27,15 @@ PRG_IS_COMPLETED=0
 PRG_REQUIRES_POST_FINISH_ACTIONS=1
 PRG_FAILED=2
 PRG_IS_NOT_COMPLETED=3
+PRG_IS_IN_PROGRESS=4
 PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME=".prg_post_finish_actions_signal"
 export RESERVED_HOOK_EXIT_CODE=200
+# The exit status of the batch when every line was processed but some run
+# did not complete, as debasher_exec ends with 3 when a process of its run
+# did not finish
+BATCH_WITH_FAILED_PROGRAMS_EXIT_CODE=3
+# Seconds between two looks at the runs while waiting for a free slot
+DEFAULT_POLL_SECS=60
 
 ########
 print_desc()
@@ -55,6 +62,17 @@ usage()
     echo "-k <string>               Execute script implementing a software hook after"
     echo "                          each program reaches finished status"
     echo "--help                    Display this help and exit"
+    echo ""
+    echo "A run that fails (more unfinished processes than -u allows, or a"
+    echo "debasher_exec command that cannot be launched) frees its slot, and the"
+    echo "other lines go on. A run that is still in progress from an earlier launch"
+    echo "of the batch is waited for, not launched again."
+    echo ""
+    echo "Exit status: 0 when every run completed, 3 when some run did not (they are"
+    echo "listed at the end), and 1 on an error of the batch itself."
+    echo ""
+    echo "DEBASHER_EXEC_BATCH_POLL_SECS, when set, gives the seconds between two looks"
+    echo "at the runs while waiting (${DEFAULT_POLL_SECS} by default)."
 }
 
 ########
@@ -275,6 +293,12 @@ extract_outd_from_debasher_exec_cmd()
 }
 
 ########
+# The state of the run whose output directory the command names, for the
+# batch: completed (moved to the final directory, or finished with its
+# post finish actions done), waiting for its post finish actions, failed
+# (more unfinished processes than -u allows), in progress (debasher_status
+# finds a process of it still running), or not completed (anything else,
+# such as a run never launched).
 get_prg_status()
 {
     local prg_cmd_outd=$1
@@ -293,40 +317,44 @@ get_prg_status()
     fi
 
     # If original output directory exists then check program status
-    if [ -d "${prg_cmd_outd}" ]; then
-        # Obtain program status
-        local tmpfile=$("${MKTEMP}")
-        "${debasher_bindir}"/debasher_status -d "${prg_cmd_outd}" > "${tmpfile}" 2>&1
-        exit_code=$?
-
-        # Obtain percentage of unfinished processes
-        local unfinished_process_perc=$(get_unfinished_process_perc "${tmpfile}")
-        "${RM}" "${tmpfile}"
-
-        # Evaluate exit code of debasher_status
-        case $exit_code in
-            ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE}) if post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
-                                                return ${PRG_IS_COMPLETED}
-                                            else
-                                                return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
-                                            fi
-                                            ;;
-            ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE}) if [ ${unfinished_process_perc} -gt ${max_unfinished_process_perc} ]; then
-                                                  return ${PRG_FAILED}
-                                              else
-                                                  if post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
-                                                      return ${PRG_IS_COMPLETED}
-                                                  else
-                                                      return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
-                                                  fi
-                                              fi
-                                              ;;
-            *) return ${PRG_IS_NOT_COMPLETED}
-               ;;
-        esac
-    else
+    if [ ! -d "${prg_cmd_outd}" ]; then
         return ${PRG_IS_NOT_COMPLETED}
     fi
+
+    # Obtain program status
+    local tmpfile=$("${MKTEMP}")
+    local exit_code=0
+    "${debasher_bindir}"/debasher_status -d "${prg_cmd_outd}" > "${tmpfile}" 2>&1 || exit_code=$?
+
+    # Obtain percentage of unfinished processes
+    local unfinished_process_perc=$(get_unfinished_process_perc "${tmpfile}")
+    "${RM}" "${tmpfile}"
+
+    # Evaluate exit code of debasher_status
+    case ${exit_code} in
+        ${DEBASHER_PROGRAM_FINISHED_EXIT_CODE})
+            if post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
+                return ${PRG_IS_COMPLETED}
+            else
+                return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
+            fi
+            ;;
+        ${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE})
+            if [ "${unfinished_process_perc:-100}" -gt "${max_unfinished_process_perc}" ]; then
+                return ${PRG_FAILED}
+            elif post_prg_finish_actions_are_executed "${prg_cmd_outd}"; then
+                return ${PRG_IS_COMPLETED}
+            else
+                return ${PRG_REQUIRES_POST_FINISH_ACTIONS}
+            fi
+            ;;
+        ${DEBASHER_PROGRAM_IN_PROGRESS_EXIT_CODE})
+            return ${PRG_IS_IN_PROGRESS}
+            ;;
+        *)
+            return ${PRG_IS_NOT_COMPLETED}
+            ;;
+    esac
 }
 
 ########
@@ -358,79 +386,55 @@ prg_has_processes_to_rerun()
 }
 
 ########
+# The state of a run when the batch reaches its line: that of
+# get_prg_status, except that a run that is not in progress and that
+# debasher_exec would partly run again (a process to rerun) is not
+# completed.
 get_initial_prg_status()
 {
     local debasher_exec_cmd=$1
     local prg_cmd_outd=$2
     local outd=$3
 
-    # Check if program has processes to re-execute (this is only necessary
-    # in the initial status check)
+    local status=0
+    get_prg_status "${prg_cmd_outd}" "${outd}" || status=$?
+
+    # A run in progress is waited for: asking debasher_exec about it would
+    # be refused, since its debasher_exec holds the lock
+    if [ ${status} -eq ${PRG_IS_IN_PROGRESS} ]; then
+        return ${status}
+    fi
+
     if prg_has_processes_to_rerun "${debasher_exec_cmd}" "${prg_cmd_outd}" "${outd}"; then
         return ${PRG_IS_NOT_COMPLETED}
     fi
 
-    # Get program status
-    get_prg_status "${prg_cmd_outd}" "${outd}"
+    return ${status}
 }
 
 ########
+# The seconds between two looks at the runs while waiting
+get_poll_secs()
+{
+    local secs=${DEBASHER_EXEC_BATCH_POLL_SECS:-${DEFAULT_POLL_SECS}}
+    if [[ ! "${secs}" =~ ^[0-9]+$ ]]; then
+        secs=${DEFAULT_POLL_SECS}
+    fi
+    echo "${secs}"
+}
+
+########
+# Waits until fewer than $1 runs are active, looking at them every few
+# seconds (see update_active_programs). A failed run is not active: it
+# frees its slot. Fails only on an error of the batch itself.
 wait_simul_exec_reduction()
 {
     local maxp=$1
-    local SLEEP_TIME=60
-    local end=0
-    local num_active_programs=${#PROGRAM_COMMANDS[@]}
 
-    while [ ${end} -eq 0 ] ; do
-        # Iterate over active programs
-        local num_completed_programs=0
-        local num_failed_programs=0
-        for program_outd in "${!PROGRAM_COMMANDS[@]}"; do
-            # Check if program has completed execution
-            get_prg_status "${program_outd}" "${outd}"
-            local exit_code=$?
-            case $exit_code in
-                ${PRG_IS_COMPLETED}) num_completed_programs=$((num_completed_programs+1))
-                                     ;;
-                ${PRG_REQUIRES_POST_FINISH_ACTIONS}) exec_post_prg_finish_actions "${program_outd}" "${outd}"
-                                                     local exit_code_post_comp_actions=$?
-                                                     case $exit_code_post_comp_actions in
-                                                         0) :
-                                                            ;;
-                                                         ${RESERVED_HOOK_EXIT_CODE}) :
-                                                                                     ;;
-                                                         *) return ${exit_code_post_comp_actions}
-                                                            ;;
-                                                     esac
-                                                     ;;
-                ${PRG_FAILED}) num_failed_programs=$((num_failed_programs+1))
-                               ;;
-            esac
-        done
-
-        # Obtain number of pending programs
-        local num_pending_programs=$((num_active_programs - num_completed_programs))
-
-        # Decide whether to wait or end the loop
-        if [ ${num_pending_programs} -eq ${num_failed_programs} ]; then
-            if [ ${num_pending_programs} -ge ${maxp} ]; then
-                echo "Error: all pending programs failed and maximum capacity was reached" >&2
-                return 1
-            else
-                end=1
-            fi
-        else
-            if [ ${num_pending_programs} -lt ${maxp} ]; then
-                end=1
-            fi
-        fi
-
-        # Sleep if not end
-        if [ ${end} -eq 0 ]; then
-            "${SLEEP}" "${SLEEP_TIME}"
-        fi
-
+    while true; do
+        update_active_programs "${outd}" || return 1
+        [ ${#PROGRAM_COMMANDS[@]} -lt ${maxp} ] && return 0
+        "${SLEEP}" "$(get_poll_secs)"
     done
 }
 
@@ -460,39 +464,70 @@ move_dir()
 }
 
 ########
+# Takes the run of $1 out of the active runs and records it as failed,
+# with the reason $2; a failed run frees its slot and is listed at the end
+mark_program_as_failed()
+{
+    local program_outd=$1
+    local reason=$2
+
+    echo "Program stored in ${program_outd} did not complete execution: ${reason}" >&2
+    FAILED_PROGRAMS["${program_outd}"]="${reason}"
+    unset 'PROGRAM_COMMANDS["${program_outd}"]'
+}
+
+########
+# Looks at one active run: a completed one leaves the active runs, one
+# that finished gets its post finish actions (the hook, the move) and then
+# leaves them, a failed one is marked as failed, and one in progress or
+# not completed yet stays. Fails only when the post finish actions fail,
+# an error of the batch, not of the run.
 update_active_program()
 {
     local program_outd=$1
     local outd=$2
 
-    # Check program status
-    get_prg_status "${program_outd}" "${outd}"
-    local exit_code=$?
+    local status=0
+    get_prg_status "${program_outd}" "${outd}" || status=$?
 
-    case $exit_code in
-        ${PRG_IS_COMPLETED}) echo "Program stored in ${program_outd} has completed execution" >&2
-                             unset PROGRAM_COMMANDS["${program_outd}"]
-                             ;;
-        ${PRG_REQUIRES_POST_FINISH_ACTIONS}) echo "Program stored in ${program_outd} has post-finish actions pending" >&2
-                                           ;;
+    case ${status} in
+        ${PRG_IS_COMPLETED})
+            echo "Program stored in ${program_outd} has completed execution" >&2
+            unset 'PROGRAM_COMMANDS["${program_outd}"]'
+            ;;
+        ${PRG_REQUIRES_POST_FINISH_ACTIONS})
+            local post_status=0
+            exec_post_prg_finish_actions "${program_outd}" "${outd}" || post_status=$?
+            case ${post_status} in
+                0)
+                    echo "Program stored in ${program_outd} has completed execution" >&2
+                    unset 'PROGRAM_COMMANDS["${program_outd}"]'
+                    ;;
+                # The hook asks to be run again at the next look
+                ${RESERVED_HOOK_EXIT_CODE})
+                    :
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+            ;;
+        ${PRG_FAILED})
+            mark_program_as_failed "${program_outd}" "more unfinished processes than -u allows (see debasher_status -d ${program_outd})"
+            ;;
     esac
 }
 
 ########
+# Looks at every active run (see update_active_program)
 update_active_programs()
 {
     local outd=$1
 
-    local num_active_programs=${#PROGRAM_COMMANDS[@]}
-    echo "Previous number of active programs: ${num_active_programs}" >&2
-
-    # Iterate over active programs
+    local program_outd
     for program_outd in "${!PROGRAM_COMMANDS[@]}"; do
         update_active_program "${program_outd}" "${outd}" || return 1
     done
-
-    local num_active_programs=${#PROGRAM_COMMANDS[@]}
-    echo "Updated number of active programs: ${num_active_programs}" >&2
 }
 
 ########
@@ -505,23 +540,108 @@ add_cmd_to_assoc_array()
 }
 
 ########
-wait_until_pending_prgs_complete()
+# Processes a line of the batch, once a slot is free: checks its output
+# directory, and launches its run unless it completed, is in progress from
+# an earlier launch of the batch (it is waited for) or only waits for its
+# post finish actions. A run is active once launched; one whose
+# debasher_exec cannot launch it is failed. Fails only on an error of the
+# batch itself, such as a line without --outdir.
+process_batch_line()
 {
-    wait_simul_exec_reduction 1 || return 1
+    local debasher_exec_cmd=$1
+
+    echo "** Extract output directory for program..." >&2
+    local prg_cmd_outd
+    prg_cmd_outd=$(extract_outd_from_debasher_exec_cmd "${debasher_exec_cmd}") || { echo "Error: program command does not contain --outdir option" >&2; return 1; }
+    echo "${prg_cmd_outd}" >&2
+    echo "" >&2
+
+    echo "** Check correctness of output directory..." >&2
+    local base_prg_cmd_outd=$("${DIRNAME}" "${prg_cmd_outd}")
+    if debasher::_dirnames_are_equal "${outd}" "${base_prg_cmd_outd}"; then
+        echo "Error: final output directory is equal to the directory containing the output directory for program" >&2
+        return 1
+    fi
+    echo "yes" >&2
+    echo "" >&2
+
+    echo "** Check if program already completed execution..." >&2
+    local status=0
+    get_initial_prg_status "${debasher_exec_cmd}" "${prg_cmd_outd}" "${outd}" || status=$?
+    case ${status} in
+        ${PRG_IS_COMPLETED})
+            echo "yes" >&2
+            return 0
+            ;;
+        ${PRG_REQUIRES_POST_FINISH_ACTIONS})
+            echo "no, its post finish actions are pending" >&2
+            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}"
+            return 0
+            ;;
+        ${PRG_IS_IN_PROGRESS})
+            echo "no, it is still in progress from an earlier launch: waiting for it" >&2
+            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}"
+            return 0
+            ;;
+    esac
+    echo "no" >&2
+    echo "" >&2
+
+    # A run that ends with 3 (the built-in scheduler waits for its run) did
+    # not finish every process, which -u judges as for any other run; any
+    # other status other than 0 means that the run could not be launched
+    echo "**********************" >&2
+    echo "** Execute program..." >&2
+    echo "${debasher_exec_cmd}" >&2
+    local exec_status=0
+    eval "${debasher_exec_cmd}" || exec_status=$?
+    echo "**********************" >&2
+    echo "" >&2
+    unset 'FAILED_PROGRAMS["${prg_cmd_outd}"]'
+    case ${exec_status} in
+        0|${DEBASHER_PROGRAM_UNFINISHED_EXIT_CODE})
+            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}"
+            ;;
+        *)
+            mark_program_as_failed "${prg_cmd_outd}" "debasher_exec could not launch it (exit status ${exec_status})"
+            ;;
+    esac
 }
 
 ########
+# Prints, at the end, the runs that did not complete, and fails when there
+# is any
+report_failed_programs()
+{
+    local num_failed=${#FAILED_PROGRAMS[@]}
+    if [ ${num_failed} -eq 0 ]; then
+        echo "All programs successfully completed execution" >&2
+        return 0
+    fi
+
+    echo "Warning: ${num_failed} programs did not complete execution:" >&2
+    local program_outd
+    for program_outd in "${!FAILED_PROGRAMS[@]}"; do
+        echo "- ${program_outd}: ${FAILED_PROGRAMS[${program_outd}]}" >&2
+    done
+    return 1
+}
+
+########
+# Runs the lines of the batch, at most maxp at the same time, and waits for
+# the last ones. Returns 0 when every run completed,
+# BATCH_WITH_FAILED_PROGRAMS_EXIT_CODE when some did not, and 1 on an
+# error of the batch itself.
 execute_batches()
 {
-    # Read file with debasher_exec commands
-    lineno=1
-
-    # Global variable declaration
+    # The active runs (running, or waiting for their post finish actions)
+    # and the failed ones, by output directory
     declare -A PROGRAM_COMMANDS
+    declare -A FAILED_PROGRAMS
 
-    # Process program execution commands...
+    local lineno=1
+    local debasher_exec_cmd
     while read -r debasher_exec_cmd; do
-
         # Execute built-in tilde expansion to avoid problems with "~"
         # symbol in file and directory paths
         debasher_exec_cmd=$(debasher::_expand_tildes "${debasher_exec_cmd}")
@@ -530,85 +650,20 @@ execute_batches()
         echo "" >&2
 
         echo "** Wait until number of simultaneous executions is below the given maximum..." >&2
-        wait_simul_exec_reduction ${maxp} || return 1
+        wait_simul_exec_reduction "${maxp}" || return 1
         echo "" >&2
 
-        echo "** Update array of active programs..." >&2
-        update_active_programs "${outd}" || return 1
-        echo "" >&2
+        process_batch_line "${debasher_exec_cmd}" || return 1
 
-        echo "** Extract output directory for program..." >&2
-        local prg_cmd_outd
-        prg_cmd_outd=$(extract_outd_from_debasher_exec_cmd "${debasher_exec_cmd}") || { echo "Error: program command does not contain --outdir option">&2; return 1; }
-        echo "${prg_cmd_outd}"
-        echo "" >&2
-
-        echo "** Check correctness of output directory..." >&2
-        local base_prg_cmd_outd=$("${DIRNAME}" "${prg_cmd_outd}")
-        if debasher::_dirnames_are_equal "${outd}" "${base_prg_cmd_outd}"; then
-            echo "Error: final output directory is equal to the directory containing the output directory for program">&2
-            return 1;
-        else
-            echo "yes" >&2
-        fi
-        echo "" >&2
-
-        echo "** Check if program already completed execution..." >&2
-        get_initial_prg_status "${debasher_exec_cmd}" "${prg_cmd_outd}" "${outd}"
-        local exit_code=$?
-        case $exit_code in
-            ${PRG_IS_COMPLETED}) echo "yes">&2
-                                 ;;
-            ${PRG_REQUIRES_POST_FINISH_ACTIONS}) echo "no">&2
-                                               ;;
-            ${PRG_FAILED}) echo "no">&2
-                           ;;
-            ${PRG_IS_NOT_COMPLETED}) echo "no">&2
-                                     ;;
-        esac
-        echo "" >&2
-
-        if [ ${exit_code} -eq ${PRG_REQUIRES_POST_FINISH_ACTIONS} ]; then
-            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}"
-        fi
-
-        if [ ${exit_code} -eq ${PRG_IS_NOT_COMPLETED} -o ${exit_code} -eq ${PRG_FAILED} ]; then
-            echo "**********************" >&2
-            echo "** Execute program..." >&2
-            echo "${debasher_exec_cmd}" >&2
-            eval "${debasher_exec_cmd}" || return 1
-            echo "**********************" >&2
-            echo "" >&2
-
-            echo "** Add program command to associative array..." >&2
-            add_cmd_to_assoc_array "${debasher_exec_cmd}" "${prg_cmd_outd}" || { echo "Error: program command does not contain --outdir option">&2 ; return 1; }
-            echo "" >&2
-        fi
-
-        # Increase lineno
         lineno=$((lineno+1))
-
     done < "${file}"
 
     # Wait for all programs to complete
     echo "* Waiting for pending programs to complete..." >&2
-    wait_until_pending_prgs_complete || return 1
+    wait_simul_exec_reduction 1 || return 1
     echo "" >&2
 
-    # Final update of active programs
-    echo "* Final update of array of active programs..." >&2
-    update_active_programs "${outd}" || return 1
-    echo "" >&2
-
-    # Check if there are active programs
-    local num_active_programs=${#PROGRAM_COMMANDS[@]}
-    if [ ${num_active_programs} -eq 0 ]; then
-        echo "All programs successfully completed execution" >&2
-        echo "" >&2
-    else
-        echo "Warning: ${num_active_programs} programs did not complete execution" >&2
-        echo "" >&2
-    fi
+    report_failed_programs || return ${BATCH_WITH_FAILED_PROGRAMS_EXIT_CODE}
 }
 
 ########
@@ -624,4 +679,4 @@ check_pars || exit 1
 
 absolutize_file_paths || exit 1
 
-execute_batches || exit 1
+execute_batches

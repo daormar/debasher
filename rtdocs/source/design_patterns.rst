@@ -48,6 +48,13 @@ number at the same time:
 
     debasher_exec_batch -f runs.txt -m 8
 
+A run that fails frees its slot and the others go on; the batch lists
+the failed runs at the end and ends with 3. Launched again with the
+same file, it skips the runs that completed, waits for those still in
+progress and launches the others again. With the built-in scheduler,
+each ``debasher_exec`` waits for its run, so the runs go one after the
+other (see ``debasher_exec_batch`` in :ref:`tools`).
+
 Under the Slurm scheduler the cluster shares out the resources among
 the runs by itself. When the entries arrive over time, a launcher node
 of a resident program launches one run for each request that it

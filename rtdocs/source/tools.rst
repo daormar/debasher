@@ -199,7 +199,8 @@ debasher_proc_dataset
 ``debasher_proc_dataset`` generates, for a set of dataset samples, one
 ``debasher_exec`` command line per sample. It does not execute the
 program itself: it prints the generated command lines to standard
-output, so that they can be inspected, redirected to a script, or
+output, so that they can be inspected, redirected to a script, given
+to ``debasher_exec_batch`` (``-f``) to run them a few at a time, or
 piped into a job submission tool.
 
 Its options are:
@@ -223,6 +224,53 @@ sample-specific options per sample:
 
     $ debasher_proc_dataset --pfile debasher_file_example.sh --sched SLURM \
         --prg-sopts samples.txt --prg-opts common_opts.txt > run_samples.sh
+
+debasher_exec_batch
+^^^^^^^^^^^^^^^^^^^^
+
+``debasher_exec_batch`` executes a batch of runs. It reads a file
+(``-f <string>``) with one ``debasher_exec`` command per line, each
+with an ``--outdir`` of its own, such as the lines that
+``debasher_proc_dataset`` writes, and launches them in order, no more
+than ``-m <int>`` at the same time:
+
+::
+
+    $ debasher_exec_batch -f runs.txt -m 8 -u 5 -o done
+
+The batch goes on to the next line when the ``debasher_exec`` of a line
+returns. A ``debasher_exec`` that waits for its run (the built-in
+scheduler, or Slurm with ``--wait``) therefore keeps the next line
+waiting until its run ends, and the runs go one after the other,
+whatever ``-m`` says. They go on at the same time under Slurm without
+``--wait``, or with the built-in scheduler only for a program that
+``--builtinsched-oneshot`` accepts (see the :ref:`exec` Section).
+
+The batch judges each run with ``debasher_status``: a run completed
+when the percentage of its processes that did not finish is not above
+``-u <int>`` (0 by default). A run with more unfinished processes, or
+whose ``debasher_exec`` command cannot be launched, failed: it frees
+its slot and the other lines go on. While it waits for a slot, the
+batch looks at the runs every 60 seconds, or every
+``DEBASHER_EXEC_BATCH_POLL_SECS`` seconds when that variable is set.
+
+When a run completed, the batch runs the script given with ``-k
+<string>``, if any, with ``DEBASHER_EXEC_BATCH_PRG_OUTD`` and
+``DEBASHER_EXEC_BATCH_PRG_CMD`` set to the output directory and the
+command of the run (a script that ends with 200 is run again at the
+next look), and then moves the output directory of the run into the
+directory given with ``-o <string>``, which cannot be the directory
+that holds the output directories of the lines.
+
+Launching the batch again with the same file skips the runs that
+completed, waits for those still in progress from the earlier launch
+instead of launching them a second time, and launches the others
+again, the failed ones included.
+
+The exit status is 0 when every run completed, 3 when some run did not
+(the batch lists them at the end, each with its reason), and 1 on an
+error of the batch itself, such as a line without ``--outdir``, a hook
+script that fails or an output directory that cannot be moved.
 
 Process Monitoring and Control
 -------------------------------
