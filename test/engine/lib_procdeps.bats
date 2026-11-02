@@ -227,6 +227,51 @@ setup() {
     [ "${output}" = "afterok:other" ]
 }
 
+@test "debasher::_get_procdeps_for_process stops when the callback fails, whatever it printed" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/a.txt"]="writer${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-a${DEBASHER_ARG_SEP}/abs/a.txt"
+    }
+
+    # A failure with a type printed, and one with nothing printed, which
+    # would otherwise keep the inferred afterok
+    local printed
+    for printed in "afterany" ""; do
+        eval "reader_define_opt_deps() { echo '${printed}'; return 3; }"
+        run debasher::_get_procdeps_for_process "" "reader"
+        [ "${status}" -ne 0 ]
+        [[ "${output}" == *"the reader_define_opt_deps method of process reader failed with exit code 3 for option -a and producer writer"* ]]
+        [[ "${output}" != *"afterany:writer"* ]]
+        [[ "${output}" != *"afterok:writer"* ]]
+    done
+}
+
+@test "debasher::_get_procdeps_for_process keeps the inferred type when the callback prints nothing and ends with 0" {
+    declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
+    declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+    DEBASHER_OUT_VALUE_TO_PROCESSES["/abs/a.txt"]="writer${sep}0"
+    DEBASHER_PROCESS_OPT_LIST_LEN["reader"]=1
+    debasher::_get_opts_for_process_and_task() {
+        echo "-a${DEBASHER_ARG_SEP}/abs/a.txt"
+    }
+    reader_define_opt_deps() {
+        case $1 in
+            "-other") echo "afterany" ;;
+        esac
+    }
+
+    run debasher::_get_procdeps_for_process "" "reader"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "afterok:writer" ]
+}
+
 @test "debasher::_get_procdeps_for_process takes a file named like a fifo of its writer for a file, with afterok" {
     declare -gA DEBASHER_PROGRAM_FIFOS=() DEBASHER_PROCESS_OPT_LIST_LEN=()
     declare -gA DEBASHER_OUT_VALUE_TO_PROCESSES=()

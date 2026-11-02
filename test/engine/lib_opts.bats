@@ -1174,3 +1174,51 @@ PY
     [ "${status}" -eq 2 ]
     [[ "${output}" == *"the skip file missing.py of process proc does not exist"* ]]
 }
+
+# --- the summary of the options, program.opts -------------------------------
+
+# Writes, with debasher::_show_program_opts_summary, the program.opts of a
+# program with a process of one task and an array of 12 tasks, whose
+# option -x takes the value $1 in task $2 of the array
+write_program_opts() {
+    local value=$1 changed_task=$2 file=$3
+    DEBASHER_PROGRAM_PROCESSES=([single]=1 [arr]=1)
+    DEBASHER_PROCESS_OPT_LIST_LEN=([single]=1 [arr]=12)
+    PROBE_VALUE=${value}
+    PROBE_TASK=${changed_task}
+    debasher::_get_opts_for_process_and_task() {
+        local processname=$2 task_idx=$3
+        local x="base"
+        [ "${processname}" = "arr" ] && [ "${task_idx}" = "${PROBE_TASK}" ] && x="${PROBE_VALUE}"
+        echo "-x${DEBASHER_ARG_SEP}${x} y${DEBASHER_ARG_SEP}-t${DEBASHER_ARG_SEP}${task_idx}"
+    }
+    debasher::_show_program_opts_summary "" 10 > "${file}" 2> /dev/null
+}
+
+@test "the program.opts that debasher_exec writes is read by debasher_compare_opts, which finds the processes whose options changed" {
+    local old="${BATS_TEST_TMPDIR}/program.opts_old" new="${BATS_TEST_TMPDIR}/program.opts"
+    write_program_opts "base" 0 "${old}"
+
+    # One line per process, in the format that the tool parses
+    [ "$(grep -c '^PROCESS: .* ; NUM_TASKS: [0-9]* ; OPTIONS: ' "${old}")" -eq 2 ]
+    grep -q '^PROCESS: arr ; NUM_TASKS: 12 ; OPTIONS: .*\.\.\.$' "${old}"
+
+    # The same options: no change
+    write_program_opts "base" 0 "${new}"
+    run python3 "${ENGINE_BUILDDIR}/debasher_compare_opts.py" --changed "${old}" "${new}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+
+    # A value with a space changed in a task among the first ten: the array
+    # changed, the process of one task did not
+    write_program_opts "other value" 3 "${new}"
+    run python3 "${ENGINE_BUILDDIR}/debasher_compare_opts.py" --changed "${old}" "${new}"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "arr" ]
+
+    # A change in a task after the first ten goes unnoticed, as documented
+    write_program_opts "other value" 11 "${new}"
+    run python3 "${ENGINE_BUILDDIR}/debasher_compare_opts.py" --changed "${old}" "${new}"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}

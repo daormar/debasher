@@ -71,3 +71,52 @@ def test_a_process_with_no_options_is_read(tmp_path):
     old = "PROCESS: p ; OPTIONS: ''\n"
     new = "PROCESS: p ; NUM_TASKS: 1 ; OPTIONS: \n"
     assert _compare(tmp_path, old, new)["unchanged"] == ["p"]
+
+
+# --- the command line, as debasher_exec runs it ---------------------------------
+
+_OLD = "PROCESS: a ; NUM_TASKS: 1 ; OPTIONS: -x 1\nPROCESS: b ; NUM_TASKS: 1 ; OPTIONS: -x 1\nPROCESS: gone ; NUM_TASKS: 1 ; OPTIONS: -x 1\n"
+_NEW = "PROCESS: a ; NUM_TASKS: 1 ; OPTIONS: -x 1\nPROCESS: b ; NUM_TASKS: 1 ; OPTIONS: -x 2\nPROCESS: c ; NUM_TASKS: 1 ; OPTIONS: -x 1\n"
+
+
+def _main(monkeypatch, capsys, tmp_path, *flags, old_text=_OLD, new_text=_NEW):
+    old = tmp_path / "program.opts_old"
+    new = tmp_path / "program.opts"
+    old.write_text(old_text)
+    new.write_text(new_text)
+    monkeypatch.setattr("sys.argv", ["debasher_compare_opts", *flags, str(old), str(new)])
+    status = compare_opts_mod.main()
+    out, err = capsys.readouterr()
+    return status, out, err
+
+
+@pytest.mark.parametrize(
+    ("flags", "listed"),
+    [
+        (["--changed"], "b\n"),
+        (["--new"], "c\n"),
+        (["--removed"], "gone\n"),
+        (["--unchanged"], "a\n"),
+        ([], "b\nc\n"),
+        (["--to-rerun"], "b\nc\n"),
+    ],
+)
+def test_the_command_line_lists_the_processes_of_each_category(monkeypatch, capsys, tmp_path, flags, listed):
+    status, out, err = _main(monkeypatch, capsys, tmp_path, *flags)
+    assert status == 0
+    assert out == listed
+    assert err == ""
+
+
+def test_the_command_line_prints_a_report_for_a_person(monkeypatch, capsys, tmp_path):
+    status, out, _ = _main(monkeypatch, capsys, tmp_path, "--human")
+    assert status == 0
+    assert "Changed processes (parameters modified) (1):\n  - b\n" in out
+    assert "New processes (1):\n  - c\n" in out
+
+
+def test_the_command_line_ends_with_2_and_says_why_when_a_file_cannot_be_read(monkeypatch, capsys, tmp_path):
+    status, out, err = _main(monkeypatch, capsys, tmp_path, "--changed", old_text="garbage line\n")
+    assert status == 2
+    assert out == ""
+    assert err.startswith("error: ") and "malformed line" in err

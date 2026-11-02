@@ -291,3 +291,39 @@ setup_fifo_arrays() {
     [ "${DEBASHER_RERUN_PROCESSES[r]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
     [ "${DEBASHER_RERUN_PROCESSES[s]}" = "${DEBASHER_PROPAGATE_FIFO_RERUN_REASON}" ]
 }
+
+# A debasher_compare_opts in a directory of its own, which runs the tool of
+# the engine, so that debasher_libexecdir can point at it
+make_compare_opts_tool() {
+    debasher_libexecdir="${BATS_TEST_TMPDIR}/libexec"
+    mkdir -p "${debasher_libexecdir}"
+    printf '#!/bin/sh\nexec python3 "%s" "$@"\n' "${ENGINE_BUILDDIR}/debasher_compare_opts.py" > "${debasher_libexecdir}/debasher_compare_opts"
+    chmod +x "${debasher_libexecdir}/debasher_compare_opts"
+}
+
+@test "debasher::_define_rerun_processes_due_to_input_changes marks the processes whose options changed and the new ones" {
+    make_compare_opts_tool
+    DEBASHER_PROGRAM_PROCESSES=([a]=1 [b]=1 [c]=1)
+    local old="${BATS_TEST_TMPDIR}/program.opts_old" new="${BATS_TEST_TMPDIR}/program.opts"
+    printf 'PROCESS: a ; NUM_TASKS: 1 ; OPTIONS: -x 1 \nPROCESS: b ; NUM_TASKS: 1 ; OPTIONS: -x 1 \n' > "${old}"
+    printf 'PROCESS: a ; NUM_TASKS: 1 ; OPTIONS: -x 1 \nPROCESS: b ; NUM_TASKS: 1 ; OPTIONS: -x 2 \nPROCESS: c ; NUM_TASKS: 1 ; OPTIONS: -x 1 \n' > "${new}"
+
+    debasher::_define_rerun_processes_due_to_input_changes "${new}" "${old}" 2> /dev/null
+
+    [ -z "${DEBASHER_RERUN_PROCESSES[a]+x}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[b]}" = "${DEBASHER_INPUT_CHANGE_RERUN_REASON}" ]
+    [ "${DEBASHER_RERUN_PROCESSES[c]}" = "${DEBASHER_NEW_PROC_RERUN_REASON}" ]
+}
+
+@test "debasher::_define_rerun_processes_due_to_input_changes fails, with the error of the tool, when the options cannot be compared" {
+    make_compare_opts_tool
+    DEBASHER_PROGRAM_PROCESSES=([a]=1)
+    local old="${BATS_TEST_TMPDIR}/program.opts_old" new="${BATS_TEST_TMPDIR}/program.opts"
+    printf 'garbage line\n' > "${old}"
+    printf 'PROCESS: a ; NUM_TASKS: 1 ; OPTIONS: -x 1 \n' > "${new}"
+
+    run debasher::_define_rerun_processes_due_to_input_changes "${new}" "${old}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"malformed line"* ]]
+    [[ "${output}" == *"the options of this run could not be compared with those of the previous one"* ]]
+}

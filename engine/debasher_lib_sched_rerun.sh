@@ -86,9 +86,15 @@ debasher::_define_rerun_processes_due_to_input_changes()
     local program_opts_file=$1
     local old_program_opts_file=$2
 
-    # Obtain processes with input change
+    # Obtain processes with input change. A comparison that fails, such as
+    # one of a file that the tool cannot read, stops the run with the
+    # error of the tool: taking it for "no change" would keep the results
+    # of processes whose options changed
     local changed_procs
-    changed_procs=$("${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null)
+    changed_procs=$("${debasher_libexecdir}"/debasher_compare_opts --changed "${old_program_opts_file}" "${program_opts_file}") || {
+        echo "Error: the options of this run could not be compared with those of the previous one (${old_program_opts_file})" >&2
+        return 1
+    }
 
     # Iterate processes with input change
     while IFS= read -r proc; do
@@ -98,7 +104,10 @@ debasher::_define_rerun_processes_due_to_input_changes()
 
     # Obtain new processes
     local new_procs
-    new_procs=$("${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}" 2>/dev/null)
+    new_procs=$("${debasher_libexecdir}"/debasher_compare_opts --new "${old_program_opts_file}" "${program_opts_file}") || {
+        echo "Error: the options of this run could not be compared with those of the previous one (${old_program_opts_file})" >&2
+        return 1
+    }
 
     # Iterate over new processes
     while IFS= read -r proc; do

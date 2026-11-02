@@ -680,88 +680,6 @@ show_cmdline_opts()
 ########
 check_process_opts()
 {
-    init_option_info()
-    {
-        local cmdline=$1
-
-        debasher::_define_opts_for_program_processes "${cmdline}"
-    }
-
-    create_option_arrays()
-    {
-        local cmdline=$1
-        local dirname=$2
-
-        # Iterate over the processes to be executed
-        local processname
-        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            if ! debasher::_uses_option_generator "${processname}"; then
-                # Load current option list
-                debasher::_load_curr_opt_list_loop "${cmdline}" "${processname}"
-
-                # Write option array to file (line by line)
-                local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
-                local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
-                debasher::_write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
-
-                # Clear variables
-                debasher::_clear_curr_opt_list_array
-            fi
-        done
-    }
-
-    print_exh_opt_list_procs()
-    {
-        local cmdline=$1
-
-        # Iterate over the processes to be executed
-        local processname
-        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            debasher::_show_curr_opt_list "${cmdline}" "${processname}" || return 1
-        done
-    }
-
-    # Prints, for each process, its number of tasks and the options of
-    # its first tasks, up to the given maximum. The result goes to
-    # program.opts too, which debasher_compare_opts compares with the
-    # one of the previous run to detect input changes: the options of an
-    # array are assumed to be uniform across its tasks, so a change is
-    # looked for in the first tasks only, while a change in the number of
-    # tasks is always detected.
-    show_process_opts()
-    {
-        local cmdline=$1
-        local max_num_proc_opts_to_display=$2
-
-        # Iterate over the processes to be executed
-        local processname
-        for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-            # Store process options in an array for visualization
-            local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
-            local serial_process_opts
-            serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}") || return 1
-
-            # Print info about options
-            local line="PROCESS: ${processname} ; NUM_TASKS: ${num_tasks} ; OPTIONS: ${serial_process_opts}"
-            echo "${line}" >&2
-            echo "${line}"
-        done
-    }
-
-    register_fifo_readers()
-    {
-        local cmdline=$1
-
-        if debasher::_program_uses_fifos; then
-            # Iterate over the processes to be executed
-            local processname
-            for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
-                # Register fifos
-                debasher::_register_fifos_read_by_process "${cmdline}" "${processname}" || return 1
-            done
-        fi
-    }
-
     echo "# Checking process options..." >&2
 
     # Read input parameters
@@ -772,7 +690,7 @@ check_process_opts()
     local program_fifos_file=$5
 
     # Initialize option information
-    init_option_info "${cmdline}" || return 1
+    debasher::_define_opts_for_program_processes "${cmdline}" || return 1
 
     # Verify that the options each process actually defines match the
     # ones it declares via explain_opts (aborts on an undeclared option;
@@ -780,19 +698,20 @@ check_process_opts()
     debasher::_check_opt_names_vs_explain "${cmdline}" || return 1
 
     # Create option arrays
-    create_option_arrays "${cmdline}" "${dirname}" || return 1
+    debasher::_write_opt_arrays_of_program "${cmdline}" || return 1
 
     # Print exhaustive option list for processes (only if process graph
     # should be generated)
     if [ "${gen_proc_graph_given}" -eq 1 ]; then
-        print_exh_opt_list_procs "${cmdline}" > "${program_opts_exh_file}" || return 1
+        debasher::_show_exh_opt_lists_of_program "${cmdline}" > "${program_opts_exh_file}" || return 1
     fi
 
-    # Show process options
-    show_process_opts "${cmdline}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
+    # Show process options, which go to program.opts too (see
+    # debasher::_show_program_opts_summary)
+    debasher::_show_program_opts_summary "${cmdline}" "${DB_EXEC_MAX_NUM_PROCESS_OPTS_TO_DISPLAY}" > "${program_opts_file}" || return 1
 
     # Register fifo readers
-    register_fifo_readers "${cmdline}" || return 1
+    debasher::_register_program_fifo_readers "${cmdline}" || return 1
 
     # Check the tags of the fifos, now that the other end of every fifo is
     # known (see debasher::_validate_program_fifo_kinds)

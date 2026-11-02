@@ -233,6 +233,32 @@ debasher::_uses_option_generator()
 }
 
 ########
+# Writes the option lists of every process without an option generator to
+# its file of .sched_opts, one line per task, which its tasks read when
+# they start; a process with an option generator has no such file, since
+# its task calls the generator (see debasher::_get_opts_for_process_and_task)
+debasher::_write_opt_arrays_of_program()
+{
+    local cmdline=$1
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        if ! debasher::_uses_option_generator "${processname}"; then
+            # Load current option list
+            debasher::_load_curr_opt_list_loop "${cmdline}" "${processname}"
+
+            # Write option array to file (line by line)
+            local opt_array_size=${DEBASHER_PROCESS_OPT_LIST_LEN["${processname}"]}
+            local opts_fname=$(debasher::_get_sched_opts_fname_for_process "${processname}")
+            debasher::_write_opt_array "DEBASHER_CURRENT_PROCESS_OPT_LIST" "${opt_array_size}" "${opts_fname}"
+
+            # Clear variables
+            debasher::_clear_curr_opt_list_array
+        fi
+    done
+}
+
+########
 debasher::_write_opt_array()
 {
     local varname=$1

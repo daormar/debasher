@@ -204,18 +204,27 @@ debasher::_get_procdeps_for_process()
     # Writes the result into the caller-provided variable name (no subshell,
     # no fork: this avoids the cost of command substitution at the call site).
     # Still forks internally when invoking the user-defined callback, since
-    # that callback's contract is to echo its result.
+    # that callback's contract is to echo its result. A callback that fails
+    # stops the preparation of the run, as a failing _define_opts does:
+    # what it printed is not an answer, and the inferred type would order
+    # the processes otherwise than the method meant
     debasher::_get_deptype_using_func()
     {
         local define_opt_deps_funcname=$1
-        local opt=$2
-        local producer_process=$3
-        local -n result_ref=$4
+        local processname=$2
+        local opt=$3
+        local producer_process=$4
+        local -n result_ref=$5
 
         if [ "${define_opt_deps_funcname}" = ${DEBASHER_FUNCT_NOT_FOUND} ]; then
             result_ref=""
         else
-            result_ref=$("${define_opt_deps_funcname}" "${opt}" "${producer_process}")
+            local status=0
+            result_ref=$("${define_opt_deps_funcname}" "${opt}" "${producer_process}") || status=$?
+            if [ "${status}" -ne 0 ]; then
+                echo "Error: the ${define_opt_deps_funcname} method of process ${processname} failed with exit code ${status} for option ${opt} and producer ${producer_process}; a method that gives no type for an option has to end with 0" >&2
+                return 1
+            fi
         fi
     }
 
@@ -237,7 +246,7 @@ debasher::_get_procdeps_for_process()
         [ "${processowner}" = "${processname}" ] && return 0
 
         local deptype
-        debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${processowner}" deptype
+        debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${processname}" "${opt}" "${processowner}" deptype || return 1
         [ -z "${deptype}" ] && deptype="${DEBASHER_NONE_PROCESSDEP_TYPE}"
         [ "${deptype}" = "${DEBASHER_NONE_PROCESSDEP_TYPE}" ] && return 0
 
@@ -279,7 +288,7 @@ debasher::_get_procdeps_for_process()
             [ "${processname}" = "${proc}" ] && continue
 
             local deptype
-            debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${opt}" "${proc}" deptype
+            debasher::_get_deptype_using_func "${define_opt_deps_funcname}" "${processname}" "${opt}" "${proc}" deptype || return 1
             if [ -z "${deptype}" ]; then
                 # aftercorr pairs a task with the task of the same
                 # index of another array, so both have to be arrays
@@ -506,6 +515,22 @@ debasher::_register_fifos_read_by_process()
     local task_idx
     for ((task_idx = 0; task_idx < num_tasks; task_idx++)); do
         debasher::_register_fifos_read_by_process_task "${cmdline}" "${processname}" "${task_idx}" || return 1
+    done
+}
+
+########
+# Registers the reader of every fifo of the program, once every process has
+# defined its options, so that the owner and the reader of each are known
+# to the checks that follow (see debasher::_register_fifos_read_by_process)
+debasher::_register_program_fifo_readers()
+{
+    local cmdline=$1
+
+    debasher::_program_uses_fifos || return 0
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        debasher::_register_fifos_read_by_process "${cmdline}" "${processname}" || return 1
     done
 }
 

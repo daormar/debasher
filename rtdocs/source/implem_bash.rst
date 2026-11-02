@@ -1370,9 +1370,13 @@ missing.
   those: it is called for every task of the process without its task
   index, so its answer can depend on the option and the producer but not
   on the task. It prints the type to use instead, ``none`` to have no
-  dependency, or nothing to keep the inferred one. By default, an option
-  connected to a file gives ``afterok`` (``aftercorr`` when both
-  processes are arrays and the option reads the task with the same
+  dependency, or nothing to keep the inferred one, and ends with status
+  0 in every case: a status other than 0 stops the run when it is
+  prepared, whatever the method printed. A method that ends with a test,
+  such as ``[ "$1" = -inf ] && echo after``, ends with 1 for any other
+  option; a ``case``, as in the example below, ends with 0. By default,
+  an option connected to a file gives ``afterok`` (``aftercorr`` when
+  both processes are arrays and the option reads the task with the same
   index), and an option connected to a FIFO gives no dependency, so that
   both ends of a FIFO start together. Between processes linked by FIFOs
   (the two ends of a FIFO, or two processes of a chain of FIFOs, which
@@ -1381,7 +1385,9 @@ missing.
   ``debasher_exec`` refuses any other type there when it prepares the
   run. A process that reads a file and a FIFO of the same producer gets
   ``afterok`` from the file, and so is refused unless its
-  ``define_opt_deps`` gives ``after`` (or ``none``) for that file:
+  ``define_opt_deps`` gives ``after`` (or ``none``) for that file. A
+  report that runs once the process it reads from has ended, whether it
+  succeeded or failed, gives ``afterany`` for its input:
 
   .. code-block:: bash
 

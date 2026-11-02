@@ -103,7 +103,8 @@ are useful for that purpose:
   (see the :ref:`implem_bash` Section), which ``--check-proc-opts`` and
   ``--show-cmdline-opts`` still accept, a dependency other than
   ``none`` or ``after`` between processes linked by FIFOs (see the
-  ``define_opt_deps`` method in the :ref:`implem_bash` Section), and an
+  ``define_opt_deps`` method in the :ref:`implem_bash` Section), a
+  ``define_opt_deps`` method that ends with a status other than 0, and an
   attribute in the specifications of a process that the engine does not
   read, or one written in the other part. The
   files that describe an
@@ -446,7 +447,11 @@ that had already finished. They are these:
 * a process whose options changed since the last execution, as
   ``program.opts`` and ``program.opts_old`` give them (see
   :ref:`outdstruct`). The options are compared, not the files they
-  name: a file changed in place under the same path is not a change;
+  name: a file changed in place under the same path is not a change.
+  When ``program.opts_old`` cannot be read or parsed, ``debasher_exec``
+  stops with the error of ``debasher_compare_opts`` instead of running
+  the program; once the file is removed, the next execution compares
+  nothing, and no process runs again for a change of its options;
 * with the ``--rerun-outdated-procs`` option of ``debasher_exec``, a
   process whose code is older than the modules of the program;
 * a process at one end of a FIFO whose other end runs again, and the

@@ -751,7 +751,7 @@ when a process does not define it:
 | `_identify_cmdline_opts` | together with `_explain_opts`, to mark which options are command line options | the process has no command line options |
 | `_explain_cmdline_opts` | an older form of the two methods above, whose options are all command line options | the two methods above are used |
 | `_explain_task_shaping_opts` | together with `_explain_opts`, and before the options of the process are defined, to check that its task shaping options are given | the process has no task shaping options |
-| `_define_opt_deps` | while the dependencies are inferred, for each option on each producer | the inferred dependency type is used |
+| `_define_opt_deps` | while the dependencies are inferred, for each option on each producer; it prints a type, or nothing to keep the inferred one, and ends with 0; any other status stops the preparation of the run | the inferred dependency type is used |
 | `_skip` | by the task, before the process output directory is reset, with the options of the task; it returns 0 to skip the task, 1 to run it, and any other status fails the task | the task is never skipped |
 | `_reset_outfiles` | by the task, before the process function, with the options of the task; a status other than 0 fails the task, which then runs nothing | the default reset (see "Executing a task") |
 | `_post` | by the task, once the process function returns, whether it succeeded or failed | nothing runs after the process function |
@@ -1834,9 +1834,10 @@ producer of its value, with the name of the option and the name of the producer
 only: it is not given the task index, so it cannot tell the tasks of an array
 apart, and its answer can depend only on the option and the producer. The engine
 takes the type it prints instead of the one above; printing nothing keeps the
-inferred type, and printing `none` removes the dependency. A reader of a FIFO
-that should not start before its owner has started, for example, gets `after`
-this way.
+inferred type, and printing `none` removes the dependency. A call that ends with
+a status other than 0 stops the preparation of the run, whatever it printed. A
+reader of a FIFO that should not start before its owner has started, for
+example, gets `after` this way.
 
 Between processes linked by FIFOs, the two ends of a FIFO or two processes of
 a chain of FIFOs, only `none` and `after` are allowed, since a dependency that
@@ -2900,7 +2901,11 @@ not, for one of these reasons:
   first ten tasks of an array are compared, on the assumption that the tasks
   of an array are alike. A process that the last run did not have is marked
   too. What is compared is the options, not the files they name: a file
-  changed in place under the same path is not a changed input.
+  changed in place under the same path is not a changed input. The comparison
+  is made by `debasher_compare_opts`, a tool of the engine that reads both
+  files; one that it cannot read or parse stops the preparation of the run,
+  before anything is launched, rather than leave unmarked a process whose
+  options changed.
 - **Outdated code.** With `--rerun-outdated-procs`, a finished process whose
   process script is older than any loaded module. The comparison is by the
   modification time of the files, and against every module of the program, not
@@ -3371,7 +3376,10 @@ replaces the inferred one, among the types of "Dependency types and how they
 merge", or no answer, which keeps the inferred one. The engine asks for it
 while the dependencies are inferred, for every option of every task that has a
 producer, so the answer depends only on the option and the producer (see
-"Inferring dependencies from options").
+"Inferring dependencies from options"). No answer is a call that succeeds and
+gives nothing. A call that fails stops the preparation of the run whatever it
+gave, as a failing call of the task options does, since an inferred type in its
+place would order the processes otherwise than the process meant.
 
 ## The parts of a task
 
@@ -3450,11 +3458,12 @@ leaves, by design, to the program or to whoever runs it.
 **Guarantees.**
 
 1. A run is prepared completely or not at all: an error while the modules are
-   loaded, the options built, the dependencies inferred or the specifications
-   checked, or a process whose interpreter is missing (see "Processes in other
-   languages, and aliases"), stops `debasher_exec` before any process is
-   launched, and leaves the files with which an earlier run in the output
-   directory describes itself as they were (see "Architecture").
+   loaded, the options built, the dependencies inferred, the specifications
+   checked or the processes to rerun marked, or a process whose interpreter is
+   missing (see "Processes in other languages, and aliases"), stops
+   `debasher_exec` before any process is launched, and leaves the files with
+   which an earlier run in the output directory describes itself as they were
+   (see "Architecture").
 2. Only one `debasher_exec` prepares or runs a program in an output directory
    at a time, and it refuses to start while a process of the program is still
    running from an earlier run in that directory (see "Architecture").

@@ -2314,6 +2314,48 @@ debasher::_show_curr_opt_list()
 }
 
 ########
+# Prints the option list of every task of every process, for the process
+# graph of --gen-proc-graph (see debasher::_show_curr_opt_list)
+debasher::_show_exh_opt_lists_of_program()
+{
+    local cmdline=$1
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        debasher::_show_curr_opt_list "${cmdline}" "${processname}" || return 1
+    done
+}
+
+########
+# Prints, for each process, its number of tasks and the options of its
+# first tasks, up to the given maximum, one line per process, on the
+# standard output and on the standard error. The standard output is
+# program.opts, which debasher_compare_opts compares with the one of the
+# previous run to detect input changes, so its format is that tool's:
+#
+#   PROCESS: <name> ; NUM_TASKS: <n> ; OPTIONS: <serialized options>
+#
+# The options of an array are assumed to be uniform across its tasks, so a
+# change is looked for in the first tasks only, while a change in the
+# number of tasks is always detected.
+debasher::_show_program_opts_summary()
+{
+    local cmdline=$1
+    local max_num_proc_opts_to_display=$2
+
+    local processname
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        local serial_process_opts
+        serial_process_opts=$(debasher::_get_serial_process_opts "${cmdline}" "${processname}" "${max_num_proc_opts_to_display}") || return 1
+
+        local line="PROCESS: ${processname} ; NUM_TASKS: ${num_tasks} ; OPTIONS: ${serial_process_opts}"
+        echo "${line}" >&2
+        echo "${line}"
+    done
+}
+
+########
 debasher::_get_serial_process_opts()
 {
     local cmdline=$1

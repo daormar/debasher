@@ -16,7 +16,8 @@ Option Dependencies Example
     # has ended, whether it succeeded or failed. The method receives the
     # name of the option and the name of the process that produces its
     # value, and prints the type to use, "none" for no dependency, or
-    # nothing to keep the inferred type.
+    # nothing to keep the inferred type, and ends with status 0 (a
+    # status other than 0 stops the run).
 
     stream_writer_document()
     {
