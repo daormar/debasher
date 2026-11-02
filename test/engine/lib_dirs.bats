@@ -454,6 +454,36 @@ define_worker_opts() {
     [ -f "${outd}/named.txt" ]
 }
 
+@test "_prepare_task_subdirs_for_process looks inside a directory on the way to a nested task subdirectory" {
+    init_program
+    local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
+    mkdir -p "${outd}/s1/bam" "${outd}/s1/old" "${outd}/s2/bam"
+    touch "${outd}/s1/bam/a.bam" "${outd}/s1/stray.txt"
+    define_worker_opts "s1/bam"
+
+    debasher::_prepare_task_subdirs_for_process "${DEBASHER_PROGRAM_OUTDIR}" worker
+
+    [ -f "${outd}/s1/bam/a.bam" ]
+    [ ! -e "${outd}/s1/old" ]
+    [ ! -e "${outd}/s1/stray.txt" ]
+    [ ! -e "${outd}/s2" ]
+}
+
+@test "_prepare_task_subdirs_for_process removes a symbolic link without following it" {
+    init_program
+    local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"
+    local outside="${BATS_TEST_TMPDIR}/outside"
+    mkdir -p "${outd}" "${outside}"
+    touch "${outside}/precious.txt"
+    ln -s "${outside}" "${outd}/link"
+    define_worker_opts 0
+
+    debasher::_prepare_task_subdirs_for_process "${DEBASHER_PROGRAM_OUTDIR}" worker
+
+    [ ! -e "${outd}/link" ] && [ ! -L "${outd}/link" ]
+    [ -f "${outside}/precious.txt" ]
+}
+
 @test "_prepare_task_subdirs_for_process removes nothing from a process with a _reset_outfiles method" {
     init_program
     local outd="${DEBASHER_PROGRAM_OUTDIR}/worker"

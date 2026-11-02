@@ -106,6 +106,26 @@ setup_unfinished_producer() {
     done
 }
 
+@test "debasher::_define_rerun_processes_due_to_unfinished_producers marks a finished process with a plain afterok on an unfinished producer" {
+    local sep="${DEBASHER_BEGIN_OF_ADDITIONAL_PROCSPECS_SEP}"
+    declare -gA DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED=()
+    # The producer a finished in an earlier run, as k did, and then failed
+    # when it ran again
+    DEBASHER_FINAL_PROCESS_SPEC[k]="k cpus=1 mem=32 time=00:01:00 ${sep} processdeps=afterok:a"
+    DEBASHER_PROCESS_DEPENDENCIES_SIMPLIFIED[k]=$(debasher::_get_processdeps_from_detailed_spec "afterok:a")
+    DEBASHER_PROGRAM_PROCESSES=([a]=1 [k]=1)
+    debasher::_get_process_status() {
+        case $2 in
+            a) echo "${DEBASHER_UNFINISHED_PROCESS_STATUS}" ;;
+            *) echo "${DEBASHER_FINISHED_PROCESS_STATUS}" ;;
+        esac
+    }
+
+    debasher::_define_rerun_processes_due_to_unfinished_producers "${BATS_TEST_TMPDIR}"
+
+    [ "${DEBASHER_RERUN_PROCESSES["k"]}" = "${DEBASHER_UNFINISHED_PRODUCER_RERUN_REASON}" ]
+}
+
 @test "debasher::_define_rerun_processes_due_to_unfinished_producers leaves out afternotok, aftercorr and none" {
     setup_unfinished_producer
 

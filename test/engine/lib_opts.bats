@@ -231,6 +231,12 @@ init_paths() {
     run debasher::define_opt "-b" "--out" optlist
     [ "${status}" -ne 0 ]
 
+    # An underscore after the dashes, as an option name may have
+    run debasher::define_opt "-b" "-_x" optlist
+    [ "${status}" -ne 0 ]
+    run debasher::define_opt "-b" "--_x" optlist
+    [ "${status}" -ne 0 ]
+
     # A negative number, a lone dash and an empty value are values
     local value
     for value in -5 -0.5 - ""; do

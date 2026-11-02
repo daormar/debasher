@@ -1321,6 +1321,91 @@ def test_debug_is_refused_and_launches_nothing(tmp_path):
     assert not (outdir / "__exec__").exists()
 
 
+# A process that, once the run is prepared, edits the external script of an
+# alias and the Python skip file of another process, both of which wait for
+# it: what the two read is what the task finds when it runs
+LATE_READ_MODULE = """\
+editor_explain_opts()
+{
+    explain_opt "-outf" "<file>" "Trace of the edit"
+}
+
+editor_define_opts()
+{
+    local optlist=""
+    define_opt "-outf" "$4/done" optlist || return 1
+    save_opt_list optlist
+}
+
+editor()
+{
+    echo 'echo after' > "__DIR__/ext.sh"
+    printf 'def skip(task):\\n    return True\\n' > "__DIR__/skipper_skip.py"
+    touch "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+ext_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Trace of the edit"
+}
+
+ext_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "editor" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+skipper_explain_opts()
+{
+    explain_opt "-inf" "<file>" "Trace of the edit"
+}
+
+skipper_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_out "-inf" "editor" "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+skipper_skip()
+{
+    skip_from_file "skipper" "skipper_skip.py" "$@"
+}
+
+skipper()
+{
+    echo ran
+}
+
+debasher_lateread_program()
+{
+    add_debasher_process "editor" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "ext" "cpus=1 mem=32 time=00:01:00" "ext_alias=ext.sh"
+    add_debasher_process "skipper" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_the_external_script_of_an_alias_and_a_python_skip_file_are_read_when_the_task_runs(tmp_path):
+    pfile = tmp_path / "debasher_lateread.sh"
+    pfile.write_text(LATE_READ_MODULE.replace("__DIR__", str(tmp_path)))
+    (tmp_path / "ext.sh").write_text("echo before\n")
+    (tmp_path / "skipper_skip.py").write_text("def skip(task):\n    return False\n")
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 0, result.stderr
+
+    # Both were edited after the run was prepared, and before their tasks
+    # ran: the alias ran the new script, and the new skip file skipped
+    assert (outdir / "__exec__" / "ext" / "ext.stdout").read_text() == "after\n"
+    skipper_log = (outdir / "__exec__" / "skipper" / "skipper.sched_out").read_text()
+    assert "skipped by its skip method" in skipper_log
+    stdout = outdir / "__exec__" / "skipper" / "skipper.stdout"
+    assert not stdout.exists() or stdout.read_text() == ""
+
+
 # An array whose elements, and an option generator whose number of tasks,
 # come from Python files beside the module, and an array whose skip method
 # is a Python file too
@@ -2919,11 +3004,15 @@ def test_the_oneshot_mode_refuses_a_process_that_would_not_fit_in_a_later_round_
     assert not (outdir / "__exec__" / "a" / "a.id").exists()
 
 
-def test_the_oneshot_mode_refuses_a_throttle_smaller_than_the_number_of_tasks(tmp_path):
-    pfile, times = _timed_array(tmp_path, " throttle=2")
+@pytest.mark.parametrize(
+    ("spec", "extra"), [(" throttle=2", []), ("", ["--dflt-throttle", "2"])], ids=["own", "default"]
+)
+def test_the_oneshot_mode_refuses_a_throttle_smaller_than_the_number_of_tasks(tmp_path, spec, extra):
+    # The throttle of the process, or the default one of debasher_exec
+    pfile, times = _timed_array(tmp_path, spec)
     outdir = tmp_path / "out"
     result = run_exec(
-        "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(times), "--builtinsched-oneshot"
+        "--pfile", str(pfile), "--outdir", str(outdir), "-t", str(times), "--builtinsched-oneshot", *extra
     )
     assert result.returncode == 1
     assert 'process "timed" has 4 tasks and a throttle of 2' in result.stderr
@@ -2988,16 +3077,21 @@ def test_under_slurm_a_process_whose_dependency_on_a_process_not_launched_can_no
     assert result.returncode == 0, result.stderr
 
     # In the second, x is not launched again, so afternotok on it can no
-    # longer hold, nor afterok on q
+    # longer hold, nor afterok or afterany on q, which does not end in the
+    # run
     pfile.write_text(
-        explicit_chain_module("debasher_notsubmitted", "x|0|", "q|0|afternotok:x", "z|0|afterok:q")
+        explicit_chain_module(
+            "debasher_notsubmitted", "x|0|", "q|0|afternotok:x", "z|0|afterok:q", "y|0|afterany:q"
+        )
     )
     result = run_exec_with_sched("SLURM", "--pfile", str(pfile), "--outdir", str(outdir), "--wait")
     assert "Process q is not launched: its dependencies (afternotok:x) cannot hold in this run" in result.stderr
     assert "Process z is not launched: its dependencies (afterok:q) cannot hold in this run" in result.stderr
+    assert "Process y is not launched: its dependencies (afterany:q) cannot hold in this run" in result.stderr
     execdir = outdir / "__exec__"
     assert not (execdir / "q" / "q.id").exists()
     assert not (execdir / "z" / "z.id").exists()
+    assert not (execdir / "y" / "y.id").exists()
 
 
 # p has two attempts, and fails the first -fail of them, counting them in a
@@ -4270,6 +4364,148 @@ def test_debasher_stop_stops_the_first_run_of_a_directory_while_it_is_being_prep
     time.sleep(7)
     assert not trace.exists()
     assert not list((outdir / "__exec__").glob("*/*.id"))
+
+
+# An array of two tasks, each with a fifo of its own through -outf, and a
+# reader of the fifo of the first task only
+FIFOS_READ_BY_SOME_MODULE = """\
+w_explain_opts()
+{
+    explain_opt "-outf" "<fifo>" "Fifo of the task"
+}
+
+w_define_opts()
+{
+    local task_idx
+    for task_idx in 0 1; do
+        local optlist=""
+        define_fifo_opt "-outf" "f${task_idx}" optlist || return 1
+        save_opt_list optlist
+    done
+}
+
+w()
+{
+    echo hi > "$(read_opt_value_from_func_args "-outf" "$@")"
+}
+
+r_explain_opts()
+{
+    explain_opt "-inf" "<fifo>" "Fifo of the first task of w"
+}
+
+r_define_opts()
+{
+    local optlist=""
+    define_opt_from_proc_task_out "-inf" "w" 0 "-outf" optlist || return 1
+    save_opt_list optlist
+}
+
+r()
+{
+    cat "$(read_opt_value_from_func_args "-inf" "$@")"
+}
+
+debasher_someread_program()
+{
+    add_debasher_process "w" "cpus=1 mem=32 time=00:01:00"
+    add_debasher_process "r" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_program_whose_fifos_of_one_option_are_read_for_some_tasks_only_is_refused(tmp_path):
+    pfile = tmp_path / "debasher_someread.sh"
+    pfile.write_text(FIFOS_READ_BY_SOME_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+    assert result.returncode == 1
+    assert "the fifos that process w defines through -outf are read inside the program for task 0 but not for task 1" in result.stderr
+    assert not list((outdir / "__exec__").glob("*/*.id"))
+
+
+# Two processes that count their runs, one of them forced
+FORCED_MODULE = """\
+forced_explain_opts()
+{
+    :
+}
+
+forced_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+forced()
+{
+    echo run >> "__DIR__/forced.count"
+}
+
+plain_explain_opts()
+{
+    :
+}
+
+plain_define_opts()
+{
+    local optlist=""
+    save_opt_list optlist
+}
+
+plain()
+{
+    echo run >> "__DIR__/plain.count"
+}
+
+debasher_forced_program()
+{
+    add_debasher_process "forced" "cpus=1 mem=32 time=00:01:00" "force=yes"
+    add_debasher_process "plain" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_a_forced_process_runs_again_in_every_run_and_a_finished_one_does_not(tmp_path):
+    pfile = tmp_path / "debasher_forced.sh"
+    pfile.write_text(FORCED_MODULE.replace("__DIR__", str(tmp_path)))
+    outdir = tmp_path / "out"
+
+    for _ in range(2):
+        result = run_exec("--pfile", str(pfile), "--outdir", str(outdir))
+        assert result.returncode == 0, result.stderr
+
+    assert (tmp_path / "forced.count").read_text().count("run") == 2
+    assert (tmp_path / "plain.count").read_text().count("run") == 1
+
+
+def test_debasher_exec_warns_when_it_runs_the_builtin_scheduler_without_ps(tmp_path):
+    # A PATH with every command of the system but ps
+    nops = tmp_path / "nops"
+    nops.mkdir()
+    for directory in ("/usr/bin", "/bin", "/usr/local/bin"):
+        if not os.path.isdir(directory):
+            continue
+        for entry in os.listdir(directory):
+            link = nops / entry
+            if entry != "ps" and not link.exists():
+                link.symlink_to(os.path.join(directory, entry))
+    assert not (nops / "ps").exists()
+    warning = "Warning: ps not found"
+
+    with_ps = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "with"))
+    assert with_ps.returncode == 0, with_ps.stderr
+    assert warning not in with_ps.stderr
+
+    without_ps = subprocess.run(
+        [str(DEBASHER_EXEC), "--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "without"), "--sched", "BUILTIN"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": str(nops)},
+    )
+    assert without_ps.returncode == 0, without_ps.stderr
+    assert warning in without_ps.stderr
 
 
 def _many_processes_module(num, sleep_secs):

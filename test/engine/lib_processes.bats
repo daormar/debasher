@@ -452,6 +452,33 @@ setup() {
     [ ! -e "${BATS_TEST_TMPDIR}/size_called" ]
 }
 
+@test "debasher::_define_opts_for_process does not call the _define_opts method of a process whose task shaping option is missing" {
+    declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
+    DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"
+
+    shapedefproc_explain_task_shaping_opts()
+    {
+        explain_task_shaping_opt "-w" "<int>" "number of workers"
+    }
+
+    shapedefproc_define_opts()
+    {
+        touch "${BATS_TEST_TMPDIR}/define_called"
+        local optlist=""
+        define_opt "-id" "0" optlist || return 1
+        save_opt_list optlist
+    }
+
+    local spec="shapedefproc cpus=1 mem=32 time=00:01:00"
+    DEBASHER_INITIAL_PROCESS_SPEC["shapedefproc"]="${spec}"
+    local cmdline=$(debasher::_serialize_args "debasher_exec" "-l" "200")
+
+    run debasher::_define_opts_for_process "${cmdline}" "${spec}"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process shapedefproc needs the task shaping option -w"* ]]
+    [ ! -e "${BATS_TEST_TMPDIR}/define_called" ]
+}
+
 @test "debasher::_define_opts_for_process stops, naming the missing methods, a process with neither _define_opts nor an option generator" {
     declare -gA DEBASHER_PROCESS_OPT_LIST_LEN=() DEBASHER_OUT_VALUE_TO_PROCESSES=()
     DEBASHER_PROGRAM_OUTDIR="${BATS_TEST_TMPDIR}"

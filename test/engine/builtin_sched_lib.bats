@@ -550,6 +550,42 @@ setup_aftercorr() {
     [ "${status}" -ne 0 ]
 }
 
+@test "_dep_holds holds after once the producer has started, afternotok only once it failed, and afterany once it ended" {
+    setup_aftercorr 3 "after:x"
+    local todo=${DEBASHER_TODO_PROCESS_STATUS} inprogress=${DEBASHER_INPROGRESS_PROCESS_STATUS}
+    local finished=${DEBASHER_FINISHED_PROCESS_STATUS} failed=${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}
+
+    # A producer that has not started
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["x"]=${todo}
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" after x c
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afternotok x c
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afterany x c
+    [ "${status}" -ne 0 ]
+
+    # A producer that runs
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["x"]=${inprogress}
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" after x c
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afternotok x c
+    [ "${status}" -ne 0 ]
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afterany x c
+    [ "${status}" -ne 0 ]
+
+    # A producer that finished
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["x"]=${finished}
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" after x c
+    run debasher_builtin_sched::_dep_holds "${OUTDIR}" afternotok x c
+    [ "${status}" -ne 0 ]
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" afterany x c
+
+    # A producer that failed
+    DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS["x"]=${failed}
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" after x c
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" afternotok x c
+    debasher_builtin_sched::_dep_holds "${OUTDIR}" afterany x c
+}
+
 @test "_has_aftercorr_dep finds an aftercorr dependency in any position of the dependencies" {
     declare -gA DEBASHER_BUILTIN_SCHED_PROCESS_DEPS=(["a"]="aftercorr:p" ["b"]="afterok:x,aftercorr:p" ["c"]="afterok:x?aftercorr:p" ["d"]="afterok:x,afterany:p" ["e"]="none")
 
