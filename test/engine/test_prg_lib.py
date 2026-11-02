@@ -56,3 +56,63 @@ def test_the_options_of_a_task_keep_the_spaces_of_their_values(tmp_path):
     graph = prg_lib.ProcessGraph(str(tmp_path / "program"))
     assert graph.prgopts_exh["writer"][0] == ["-outf", "/data/a b/out.txt"]
     assert "/data/a b/out.txt" in graph.process_out_values
+
+
+# --- the process graph ----------------------------------------------------------
+
+
+def _process_graph_output(tmp_path, capsys):
+    """The process graph of a writer of a file with a flag, an array of two
+    tasks with a fifo each, and a reader of the file and of the fifo of the
+    first task of the array, as ProcessGraph prints it, with the separators
+    of the node names made short: "~" between an option and its process,
+    "@" before a task index, "#HUB" for the hub of an array."""
+    sep = prg_lib.ARG_SEP
+    elem = prg_lib.ASSOC_ARRAY_ELEM_SEP
+    num = prg_lib.ASSOC_ARRAY_KEY_LEN
+    (tmp_path / f"program.{prg_lib.PRGOPTS_EXHAUSTIVE_FEXT}").write_text(
+        f"writer{elem}{num} -> 1\n"
+        f"writer{elem}0 -> -outf{sep}/out/writer/out.txt{sep}-v\n"
+        f"reader{elem}{num} -> 1\n"
+        f"reader{elem}0 -> -inf{sep}/out/writer/out.txt{sep}-inf2{sep}/out/__fifos__/arr/f0\n"
+        f"arr{elem}{num} -> 2\n"
+        f"arr{elem}0 -> -outf{sep}/out/__fifos__/arr/f0\n"
+        f"arr{elem}1 -> -outf{sep}/out/__fifos__/arr/f1\n"
+    )
+    (tmp_path / f"program.{prg_lib.FIFOS_FEXT}").write_text(f"arr/f0 arr{elem}0 reader{elem}0\n")
+    prg_lib.ProcessGraph(str(tmp_path / "program")).print()
+    return (
+        capsys.readouterr()
+        .out.replace(prg_lib.PROCESS_TASKIDX_SEP, "@")
+        .replace(prg_lib.OPT_PROCESS_SEP, "~")
+        .replace(prg_lib.OPTPROC_HUB_SUFFIX, "#HUB")
+    )
+
+
+def test_a_connected_option_gives_an_arc_from_the_output_of_the_writer_to_the_input_of_the_reader(tmp_path, capsys):
+    out = _process_graph_output(tmp_path, capsys)
+    assert '"writer" -> "-outf~writer@0" ;' in out
+    assert '"-outf~writer@0" -> "-inf~reader@0" ;' in out
+    assert '"-inf~reader@0" -> "reader" ;' in out
+
+
+def test_the_options_of_an_array_go_through_a_hub_and_a_fifo_gives_dashed_arcs(tmp_path, capsys):
+    out = _process_graph_output(tmp_path, capsys)
+    assert 'node [shape = point]; "-outf~arr#HUB"' in out
+    assert '"arr" -> "-outf~arr#HUB" [ style=dashed ] ;' in out
+    assert '"-outf~arr#HUB" -> "-outf~arr@0" [ style=dashed ] ;' in out
+    assert '"-outf~arr#HUB" -> "-outf~arr@1" ;' in out
+    assert '"-outf~arr@0" -> "-inf2~reader@0" [ style=dashed ] ;' in out
+
+
+def test_a_flag_is_an_input_of_its_process_and_connects_to_nothing(tmp_path, capsys):
+    out = _process_graph_output(tmp_path, capsys)
+    assert '"-v~writer@0" -> "writer" ;' in out
+    assert '"-outf~writer@0" -> "-v~writer@0"' not in out
+
+
+def test_each_process_is_a_cluster_with_its_options(tmp_path, capsys):
+    out = _process_graph_output(tmp_path, capsys)
+    cluster = out[out.index('subgraph "cluster_writer"'):]
+    cluster = cluster[: cluster.index("}")]
+    assert '"writer";' in cluster and '"-outf~writer@0";' in cluster and '"-v~writer@0";' in cluster

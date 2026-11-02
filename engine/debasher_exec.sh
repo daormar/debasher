@@ -50,7 +50,7 @@ print_desc()
 usage()
 {
     echo "debasher_exec             --pfile <string> --outdir <string> [--sched <string>]"
-    echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <int>]"
+    echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <string>]"
     echo "                          [--builtinsched-oneshot]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
     echo "                          [--rerun-outdated-procs] [--conda-support]"
@@ -68,7 +68,9 @@ usage()
     echo "                          otherwise)"
     echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} by default)."
     echo "                          A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} means unlimited CPUs"
-    echo "--builtinsched-mem <int>  Available memory in MB for built-in scheduler"
+    echo "--builtinsched-mem <string>"
+    echo "                          Available memory for built-in scheduler, in MB or"
+    echo "                          with a unit (K, M, G or T, as in 16G), at least 1 MB"
     echo "                          (${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} by default). A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} means unlimited memory"
     echo "--builtinsched-oneshot    Launch all processes in a single scheduling iteration and"
     echo "                          return immediately, without waiting for them to finish."
@@ -101,6 +103,58 @@ usage()
 }
 
 ########
+# Fails, with an error, when the option $1, which takes a value, is the last
+# argument: $2 is the number of arguments left after the option
+require_opt_value()
+{
+    local opt=$1
+    local num_args_left=$2
+
+    if [ "${num_args_left}" -eq 0 ]; then
+        echo "Error! option ${opt} needs a value" >&2
+        return 1
+    fi
+}
+
+########
+# Fails, with an error, unless $1 is a positive number of cpus, or
+# DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS for unlimited cpus
+check_builtin_sched_cpus()
+{
+    local cpus=$1
+
+    if [ "${cpus}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ] && ! debasher::_str_is_positive_integer "${cpus}"; then
+        echo "Value for --builtinsched-cpus option should be a positive integer, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} for unlimited cpus" >&2
+        return 1
+    fi
+}
+
+########
+# Prints the memory $1, given with or without a unit, in MB, or
+# DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM for unlimited memory; fails, with an
+# error, for anything else
+parse_builtin_sched_mem()
+{
+    local mem=$1
+
+    if [ "${mem}" = "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
+        echo "${mem}"
+        return 0
+    fi
+
+    local mem_mb
+    mem_mb=$(debasher::_convert_mem_value_to_mb "${mem}") || { echo "Invalid memory specification for --builtinsched-mem option" >&2; return 1; }
+    if ! debasher::_str_is_positive_integer "${mem_mb}"; then
+        echo "Value for --builtinsched-mem option should be a positive amount of memory, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} for unlimited memory" >&2
+        return 1
+    fi
+    echo "${mem_mb}"
+}
+
+########
+# Reads the options of debasher_exec. Any other argument is left for the
+# program, whose options it is, and an option of debasher_exec that takes a
+# value and has none is an error.
 read_pars()
 {
     pfile_given=0
@@ -131,83 +185,51 @@ read_pars()
                          exit 0
                          ;;
             "--pfile") shift
-                  if [ $# -ne 0 ]; then
-                      pfile=$1
-                      pfile_given=1
-                  fi
-                  ;;
+                       require_opt_value "--pfile" $# || return 1
+                       pfile=$1
+                       pfile_given=1
+                       ;;
             "--outdir") shift
-                  if [ $# -ne 0 ]; then
-                      outd=$1
-                      outdir_given=1
-                  fi
-                  ;;
+                        require_opt_value "--outdir" $# || return 1
+                        outd=$1
+                        outdir_given=1
+                        ;;
             "--sched") shift
-                  if [ $# -ne 0 ]; then
-                      sched_opt=$1
-                      sched_given=1
-                  fi
-                  ;;
+                       require_opt_value "--sched" $# || return 1
+                       sched_opt=$1
+                       sched_given=1
+                       ;;
             "--builtinsched-cpus") shift
-                  if [ $# -ne 0 ]; then
-                      builtin_sched_cpus=$1
-                      if [ "${builtin_sched_cpus}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}" ] && ! debasher::_str_is_positive_integer "${builtin_sched_cpus}"; then
-                          echo "Value for --builtinsched-cpus option should be a positive integer, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} for unlimited cpus" >&2
-                          return 1
-                      fi
-                      builtin_sched_cpus_given=1
-                  fi
-                  ;;
+                                   require_opt_value "--builtinsched-cpus" $# || return 1
+                                   check_builtin_sched_cpus "$1" || return 1
+                                   builtin_sched_cpus=$1
+                                   builtin_sched_cpus_given=1
+                                   ;;
             "--builtinsched-mem") shift
-                  if [ $# -ne 0 ]; then
-                      builtin_sched_mem=$1
-                      if [ "${builtin_sched_mem}" != "${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM}" ]; then
-                          builtin_sched_mem=$(debasher::_convert_mem_value_to_mb "${builtin_sched_mem}") || { echo "Invalid memory specification for --builtinsched-mem option" >&2; return 1; }
-                          if ! debasher::_str_is_positive_integer "${builtin_sched_mem}"; then
-                              echo "Value for --builtinsched-mem option should be a positive amount of memory, or ${DEBASHER_BUILTIN_SCHED_UNLIMITED_MEM} for unlimited memory" >&2
-                              return 1
-                          fi
-                      fi
-                      builtin_sched_mem_given=1
-                  fi
-                  ;;
-            "--builtinsched-oneshot")
-                  if [ $# -ne 0 ]; then
-                      builtin_sched_oneshot_given=1
-                  fi
-                  ;;
+                                  require_opt_value "--builtinsched-mem" $# || return 1
+                                  builtin_sched_mem=$(parse_builtin_sched_mem "$1") || return 1
+                                  builtin_sched_mem_given=1
+                                  ;;
+            "--builtinsched-oneshot") builtin_sched_oneshot_given=1
+                                      ;;
             "--dflt-nodes") shift
-                  if [ $# -ne 0 ]; then
-                      dflt_nodes=$1
-                      dflt_nodes_given=1
-                  fi
-                  ;;
+                            require_opt_value "--dflt-nodes" $# || return 1
+                            dflt_nodes=$1
+                            dflt_nodes_given=1
+                            ;;
             "--dflt-throttle") shift
-                  if [ $# -ne 0 ]; then
-                      dflt_throttle=$1
-                      dflt_throttle_given=1
-                  fi
-                  ;;
-            "--rerun-outdated-procs")
-                  if [ $# -ne 0 ]; then
-                      rerun_outdated_processes_given=1
-                  fi
-                  ;;
-            "--conda-support")
-                  if [ $# -ne 0 ]; then
-                      conda_support_given=1
-                  fi
-                  ;;
-            "--docker-support")
-                  if [ $# -ne 0 ]; then
-                      docker_support_given=1
-                  fi
-                  ;;
-            "--gen-proc-graph")
-                  if [ $# -ne 0 ]; then
-                      gen_proc_graph_given=1
-                  fi
-                  ;;
+                               require_opt_value "--dflt-throttle" $# || return 1
+                               dflt_throttle=$1
+                               dflt_throttle_given=1
+                               ;;
+            "--rerun-outdated-procs") rerun_outdated_processes_given=1
+                                      ;;
+            "--conda-support") conda_support_given=1
+                               ;;
+            "--docker-support") docker_support_given=1
+                                ;;
+            "--gen-proc-graph") gen_proc_graph_given=1
+                                ;;
             "--show-cmdline-opts") show_cmdline_opts_given=1
                           ;;
             "--check-proc-opts") check_proc_opts_given=1
@@ -590,7 +612,7 @@ gen_dependency_graph()
     "${debasher_libexecdir}"/debasher_check_prg_files -p "${prefix_of_prg_files}" -g > "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" || return 1
 
     if [ -z "${DOT}" ]; then
-        echo "Warning: Graphviz is not installed, so the process graph in pdf format won't be generated" >&2
+        echo "Warning: Graphviz is not installed, so the dependency graph in pdf format won't be generated" >&2
     else
         "${DOT}" -T pdf "${depgraph_file_prefix}.${DEBASHER_GRAPHS_FEXT}" > "${depgraph_file_prefix}.pdf"
 

@@ -765,7 +765,8 @@ class ProcessGraph:
         return os.path.basename(dirname) + "/" + basename
 
     def process_is_fifo_owner(self, process_info, abs_fifoname):
-        if not os.path.isabs(abs_fifoname):
+        # A flag has no value, and so names no fifo
+        if abs_fifoname is None or not os.path.isabs(abs_fifoname):
             return False
         else:
             base_fname = self.get_augm_fifoname(abs_fifoname)
@@ -778,7 +779,8 @@ class ProcessGraph:
                 return False
 
     def process_is_fifo_reader(self, process_info, abs_fifoname):
-        if not os.path.isabs(abs_fifoname):
+        # A flag has no value, and so names no fifo
+        if abs_fifoname is None or not os.path.isabs(abs_fifoname):
             return False
         else:
             base_fname = self.get_augm_fifoname(abs_fifoname)
@@ -797,8 +799,9 @@ class ProcessGraph:
         # Get option value
         opt_val = opt_procs[1]
 
-        # Print arcs if required
-        if not self.str_is_output_option(opt) and os.path.isabs(opt_val):
+        # Print arcs if required (a flag has no value, and so connects to
+        # nothing)
+        if not self.str_is_output_option(opt) and opt_val is not None and os.path.isabs(opt_val):
             if opt_val in self.process_out_values:
                 if self.process_is_fifo_reader(process_info, opt_val):
                     self.print_opt_to_opt_fifo(process_info, opt, opt_val)

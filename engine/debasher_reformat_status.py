@@ -48,7 +48,7 @@ def take_pars():
             if opt in ("-p", "--pstatus"):
                 values["pstatus"] = arg
                 flags["p_given"]=True
-            elif opt in ("-f", "--spec"):
+            elif opt in ("-f", "--format"):
                 values["format"] = int(arg)
                 flags["f_given"]=True
             elif opt in ("-l", "--fieldlen"):
@@ -95,8 +95,8 @@ def extract_process_info(pstatus):
         # Extract fields
         fields=line.split()
 
-        # Extract process information
-        if fields[0]=="PROCESS:":
+        # Extract process information (an empty line has no fields)
+        if fields and fields[0]=="PROCESS:":
             processname=fields[1]
             status=fields[4]
             process_map[processname]=status

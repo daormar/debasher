@@ -343,15 +343,16 @@ input, so both tools are normally combined with a pipe:
 
 Its options are:
 
-* ``-p <string>``: file containing ``debasher_status`` output to
-  reformat; if not given, the input is read from standard input.
-* ``-f <int>``: output format. ``1`` prints a header row (process
-  names) followed by a row of statuses; ``2`` prints only the row of
-  statuses.
-* ``-l <int>``: field length; every process name and status is
-  padded or truncated to this length.
-* ``-e <string>``: comma-separated list of process names to exclude
-  from the output.
+* ``-p <string>`` (``--pstatus``): file containing
+  ``debasher_status`` output to reformat; if not given, the input
+  is read from standard input.
+* ``-f <int>`` (``--format``): output format, required. ``1``
+  prints a header row (process names) followed by a row of
+  statuses; ``2`` prints only the row of statuses.
+* ``-l <int>`` (``--fieldlen``): field length, required; every
+  process name and status is padded or truncated to this length.
+* ``-e <string>`` (``--excl``): comma-separated list of process
+  names to exclude from the output.
 
 Resident Program Control
 ------------------------

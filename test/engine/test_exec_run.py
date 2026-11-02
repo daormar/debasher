@@ -2214,6 +2214,72 @@ def test_outdated_code_reruns_a_finished_process_only_on_request_against_every_l
     assert counter.read_text().count("run") == 2
 
 
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--outdir"], "Error! option --outdir needs a value"),
+        (["--outdir", "out", "--builtinsched-mem"], "Error! option --builtinsched-mem needs a value"),
+        (["--outdir", "out", "--builtinsched-mem", "abc"], "should be a positive amount of memory"),
+        (["--outdir", "out", "--builtinsched-mem", "0"], "should be a positive amount of memory"),
+        (["--outdir", "out", "--builtinsched-cpus", "x"], "should be a positive integer"),
+    ],
+    ids=["outdir-last", "mem-last", "mem-word", "mem-zero", "cpus-word"],
+)
+def test_debasher_exec_refuses_an_option_without_its_value_or_with_a_wrong_one(tmp_path, args, message):
+    # The option under test comes last, after the scheduler
+    result = subprocess.run(
+        [str(DEBASHER_EXEC), "--pfile", str(HELLO_WORLD), "--sched", "BUILTIN", "--validate", *args],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+def test_debasher_exec_takes_the_memory_of_the_builtin_scheduler_with_a_unit(tmp_path):
+    result = run_exec(
+        "--pfile", str(HELLO_WORLD), "--outdir", str(tmp_path / "out"), "--validate", "--builtinsched-mem", "1G"
+    )
+    assert result.returncode == 0, result.stderr
+
+
+# A process with a flag among its options
+FLAG_MODULE = """\
+p_explain_opts()
+{
+    explain_opt "-v" "" "A flag"
+}
+
+p_define_opts()
+{
+    local optlist=""
+    define_flag "-v" optlist || return 1
+    save_opt_list optlist
+}
+
+p()
+{
+    echo ok
+}
+
+debasher_flagged_program()
+{
+    add_debasher_process "p" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_the_process_graph_of_a_program_with_a_flag_is_drawn(tmp_path):
+    pfile = tmp_path / "debasher_flagged.sh"
+    pfile.write_text(FLAG_MODULE)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--gen-proc-graph")
+    assert result.returncode == 0, result.stderr
+    assert (outdir / "__graphs__" / "process_graph.dot").read_text().startswith("digraph G {")
+
+
 def test_debasher_exec_ignores_an_option_that_no_process_knows(tmp_path):
     outdir = tmp_path / "out"
     result = run_exec("--pfile", str(HELLO_WORLD), "--outdir", str(outdir), "-s", "hi", "-nosuchopt", "3")
