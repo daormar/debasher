@@ -79,12 +79,12 @@ processes. "Scheduling" presents the scheduler abstraction, its two
 implementations and what happens to a task that will not be launched, and
 "Running a process" what happens from the launch of a process to the end of its
 tasks. "The state of a run" describes the output directory, the life cycle of
-the run resources, the status of a process, reruns and the tools that read a
-run. "Business tests of a program" describes how the processes of a program are
-tested one at a time, outside any run. "The process contract" states what a
-process provides to the engine apart from the form in which it is written.
-"Guarantees and non-goals" gathers the guarantees stated along the way, and
-"Future work" lists what is known to be missing.
+the run resources, the status of a process, reruns, the tools that read a run
+and batches of runs. "Business tests of a program" describes how the processes
+of a program are tested one at a time, outside any run. "The process contract"
+states what a process provides to the engine apart from the form in which it is
+written. "Guarantees and non-goals" gathers the guarantees stated along the way,
+and "Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -318,6 +318,15 @@ relative to the output directory of the run.
 
 - **run**: one invocation of `debasher_exec` on an output directory, which
   launches the processes that are not finished or are marked to rerun.
+- **batch**: a file of `debasher_exec` commands, one per line, each a run with
+  an output directory of its own, and its execution by `debasher_exec_batch`,
+  which keeps at most a given number of its runs active at the same time (see
+  "Batches of runs").
+- **post finish actions**: what `debasher_exec_batch` does once for a run of a
+  batch that finished: the script given with `-k`, the move of its output
+  directory into the directory given with `-o`, and the file
+  `.prg_post_finish_actions_signal` that records that they are done (see
+  "Batches of runs"); not to be confused with the post hook of a process.
 - **output directory**: the directory given to `debasher_exec` with `--outdir`,
   made absolute, which holds everything a run writes. Once the processes are
   launched it is the only source of truth about the run.
@@ -708,12 +717,17 @@ the shell of `debasher_exec`, once, while the run is prepared. No task loads a
 module (see "Architecture"): what the top level of a module defines reaches the
 tasks through the execution context, and code at the top level that does
 something else, such as printing or creating a file, runs while the run is
-prepared and never in a task. Besides `debasher_exec`, only the tools that
-run a process function outside a run (`debasher_exec_process`) or document a
-module (`debasher_doc_mod`), the tool that resets a resident program, and the
-tool that gives the node harness the code of a node (`debasher_get_node_source`,
-see "Testing a node without the engine" in `doc/design_doc_resident.md`), load
-modules; the tools that read a run do not.
+prepared and never in a task. Besides `debasher_exec`, only the tools that run a
+process function outside a run (`debasher_exec_process`) or document a module
+(`debasher_doc_mod`), the tool that resets a resident program, and the tool that
+gives the node harness the code of a node (`debasher_get_node_source`, see
+"Testing a node without the engine" in `doc/design_doc_resident.md`), load
+modules; the tools that read a run do not. `debasher_doc_mod`, and
+`debasher_get_proc_info` for one process, print the documentation of a module in
+Markdown, a section for each process with its description, options,
+specifications and methods (`debasher_lib_proc_doc.sh`); the import of the web
+UI parses that Markdown (`api/doc_mod.py`), so its headings are a format that
+the engine and the API share.
 
 ## Processes and their methods
 
@@ -1964,8 +1978,10 @@ Every run draws its dependency graph into `__graphs__/dependency_graph.dot`,
 from the final process specification, and into a PDF and an EPS file when
 Graphviz is installed. With `--gen-proc-graph` it also draws the process graph,
 `__graphs__/process_graph.dot`, whose edges are the connections between the
-options of the tasks, FIFOs included, and which therefore shows the cycles
-that the dependency graph does not have.
+options of the tasks, FIFOs included, and which therefore shows the cycles that
+the dependency graph does not have. `debasher_check_prg_files`, with the
+`ProcessGraph` of `debasher_prg_lib.py`, draws it from `program.opts_exh` and
+`program.fifos`, after checking `program.procspec`.
 
 # FIFOs
 
@@ -2460,6 +2476,11 @@ every task that has not finished, in the processes that have not finished, are
 therefore added up, each task of an array on its own, and compared with the
 budget once, before the first round.
 
+With `--builtinsched-debug`, the loop of the built-in scheduler prints, at each
+round, the status of every process, the CPUs and the memory in use, the
+candidates and the tasks that it selects, for whoever studies a schedule; it
+changes nothing of the schedule.
+
 ## The Slurm scheduler
 
 The Slurm scheduler submits every process of the run that has not finished and
@@ -2750,6 +2771,7 @@ fixed:
 | `__fifos__/` | `debasher_exec` | the FIFOs, and, under `.mirror/`, the shim FIFOs and mirror logs |
 | `.conda/` | `debasher_exec`, with `--conda-support` | the logs of the Conda environments it created |
 | `.knapsack_*.txt` | the built-in scheduler | the input and the answer of the knapsack solver of the last round |
+| `.prg_post_finish_actions_signal` | `debasher_exec_batch` | that the post finish actions of the run, in a batch, are done (see "Batches of runs") |
 | `__exec__/<process>/` | the scheduler and the tasks | the exec directory of each process |
 
 The exec directory of a process holds its process script, named after the
@@ -2997,6 +3019,11 @@ the exec directories, and they neither load a module nor need the program file.
   log of a process or of one of its tasks, or follow it as it grows. The path
   of these files depends only on the output directory, the process and the
   task, so these tools read neither the scheduler nor `program.procspec`.
+  `debasher_get_stdout` and `debasher_get_sched_out` share one implementation,
+  `debasher_lib_task_file_tool.sh`, which each calls with the kind of file.
+- `debasher_reformat_status` turns what `debasher_status` prints into one row
+  with the status of each process, with or without a header, so that the rows
+  of several runs, such as those of a batch, line up.
 
 Under the built-in scheduler, a cancelled task has no id, log or standard
 output: these tools show it only through the status of its process, and its
@@ -3020,6 +3047,80 @@ stop an earlier launch of the task that still runs, and the process may read
 process or sequential process of the program outside any run, after loading its
 module and running its `_program` method, which is useful to try a process on
 its own and is how a process test runs it (see "Testing a process with bats").
+
+## Batches of runs
+
+A batch, such as one that `debasher_proc_dataset` writes, typically runs the
+same program many times, each run with an output directory of its own, such as
+one run for each sample of a sample sheet: the runs are independent of each
+other, and each has its own status and its own reruns. Two tools serve it, and
+neither changes how a run is prepared or executed. `debasher_proc_dataset`
+writes the batch: given a program file, a scheduler, a file with the options of
+each sample, one line per sample, which include its `--outdir`, and, optionally,
+a file with the options common to every sample, it prints one `debasher_exec`
+command per sample. `debasher_exec_batch` runs a batch (`-f`), line by line and
+in order, and keeps at most `-m` runs active at the same time. It accepts any
+`debasher_exec` commands, of one program or of several.
+
+**The state of a run in a batch.** Before each line, and while it waits for a
+free slot (every 60 seconds, or every `DEBASHER_EXEC_BATCH_POLL_SECS`),
+`debasher_exec_batch` looks at its active runs with `debasher_status`, from
+their output directories alone, as any tool that reads a run. A run is:
+
+- **completed** when its output directory is already in the directory of `-o`,
+  or when it finished, or the percentage of its processes that did not finish is
+  not above `-u` (0 by default), and its post finish actions are done;
+- **finished, waiting for its post finish actions** when it finished, or is
+  within `-u`, and its post finish actions are not done;
+- **failed** when more of its processes than `-u` allows did not finish, or when
+  its `debasher_exec` command could not launch it (a status other than 0 and 3);
+- **in progress** while `debasher_status` ends with 2: a process of it runs, or
+  a `debasher_exec` holds the lock of its output directory (see "Process
+  status");
+- **not completed** otherwise, such as a run not launched yet.
+
+A run that finishes gets its post finish actions, and is then completed: the
+script given with `-k`, run with the output directory and the command of the run
+in `DEBASHER_EXEC_BATCH_PRG_OUTD` and `DEBASHER_EXEC_BATCH_PRG_CMD`, then the
+move of its output directory into the directory of `-o`, and the file
+`.prg_post_finish_actions_signal` in the output directory of the run, wherever
+it is then, which records that they are done. A script that ends with 200 is run
+again at the next look; any other failure of the script, or a move that fails,
+is an error of `debasher_exec_batch`. `-o` cannot be the directory that holds
+the output directories of the lines, into which the move would put each run
+where it already is. The post finish actions are done once for an output
+directory: the file is never removed, so that a run without `-o` that runs
+again, because a process of it is marked to rerun, does not get them again.
+
+**Launching a line.** A run that is not in progress, and in which
+`debasher_exec --validate` would mark a process to rerun, is taken as not
+completed, unless the directory of `-o` already holds it. Then a line whose run
+completed is skipped. A line whose run is in progress, from an earlier launch of
+the batch, is waited for and not launched again, since its `debasher_exec` holds
+the lock of its output directory (see "Architecture"). A line whose run is
+finished, waiting for its post finish actions, gets them at the next look. Any
+other line is launched with its `debasher_exec` command, which reruns what is
+not finished, as any new run on an output directory does (see "Reruns"). The
+command ends with 0 once the run is launched, or, for a `debasher_exec` that
+waits for its run, with 0 or with 3 once it ended (see "The scheduler
+abstraction"): both make the run active, and its state is then judged as above.
+
+A failed run frees its slot, and the other lines go on: a failure of one run
+does not affect the others. `debasher_exec_batch` ends once every line is
+launched and no run is active, and lists the failed runs, each with its reason.
+It ends with 0 when every run completed, with 3 when some did not, and with 1 on
+an error of its own, such as a line without `--outdir`, which stops it at that
+line.
+
+**One line at a time.** `debasher_exec_batch` goes on to the next line when the
+`debasher_exec` of a line returns. With the built-in scheduler, which waits for
+its run unless in oneshot mode, and with Slurm and `--wait`, a run ends before
+the next line is launched, and the lines run one after the other, whatever `-m`
+says; the oneshot mode would let `debasher_exec` return at once, but it refuses
+what only the end of a task could let through (see "The built-in scheduler"), as
+most programs need. The runs of a batch go on at the same time under Slurm
+without `--wait`. On a single machine, a run already shares the CPUs among its
+processes, within the limits of `--builtinsched-cpus` and `--builtinsched-mem`.
 
 # Business tests of a program
 
@@ -3422,12 +3523,13 @@ the contract of `doc/design_doc_resident.md`.
 ## What the module form adds
 
 The module is the only form of a process that the engine reads. The programs
-that the web UI and the Python SDK save, a topology file and the files of
-their processes, are another form, which script generation translates into a
-module before the engine reads it (see `doc/design_doc_webui.md`), and
-within a module the body of a process can be in another language, and its
-task options and its skip rule in Python function files. Every form thus
-reaches the engine as a module.
+that the web UI and the Python SDK save, a topology file and the files of their
+processes, are another form, which script generation translates into a module
+before the engine reads it (see `doc/design_doc_webui.md`), and within a module
+the body of a process can be in another language, and the elements or the number
+of its tasks, and its skip rule, in Python function files, while its option
+lists are still built in Bash, by `_define_opts` or the option generator. Every
+form thus reaches the engine as a module.
 
 The module form gives a process more than the contract, and a process that
 relies on it honors the module form, not the contract alone:
@@ -3566,6 +3668,9 @@ leaves, by design, to the program or to whoever runs it.
 23. A `debasher_exec` that waits for its run ends with 0 only when every process
     of the program finished, and with 3 when one did not (see
     "The scheduler abstraction").
+24. A failed run of a batch does not keep `debasher_exec_batch` from launching
+    the other lines, and a run of the batch still in progress from an earlier
+    launch is waited for, never launched a second time (see "Batches of runs").
 
 **Limits and non-goals.**
 
@@ -3650,6 +3755,11 @@ leaves, by design, to the program or to whoever runs it.
 - **Mirror taps.** A mirror tap forwards lines of text, gives its reader a
   single writer for the whole task, and keeps its task waiting for a reader
   that never opens the FIFO (see "Mirror taps").
+- **Batches.** `debasher_exec_batch` launches a line when the `debasher_exec` of
+  the line before returns, so the runs of a batch go one after the other,
+  whatever `-m` says, with a `debasher_exec` that waits for its run; and it does
+  the post finish actions of an output directory once, even for a run that runs
+  again (see "Batches of runs").
 - **Resident programs.** Their guarantees are those of
   `doc/design_doc_resident.md`, which change or replace several of the above.
 
@@ -3710,25 +3820,26 @@ What is known to be missing from the design, or left open by it:
   only such a program, or also a restricted language of expressions for the
   common cases (counting the lines of a file, taking a column of a sample
   sheet), translated into one.
-- **A Bash process as a script.** A body in Bash kept in a file of its own and
-  run as a program, as an external alias in another language is, instead of a
-  function of the module. It needs the library of the engine without the
-  execution context, and so a process that keeps to the process contract, with
-  no variable or function of its module besides its own parts.
-- **Gathering the runs of a batch.** `debasher_exec_batch` executes a file of
-  `debasher_exec` commands, one per line, each a run with its own output
-  directory, at most a given number at the same time, such as one run of the
-  same program for each sample of a sample sheet. A step that combines the
-  results of every run, such as a report over all the samples, has to be
-  launched separately once the batch ends. `debasher_exec_batch` could take a
-  final command, like the hook of `-k` but run once for the whole batch, and
-  give it a manifest, a file with the output directory of every run of the batch
-  (where `-o` moved it, and those of the runs that an earlier launch of the
-  batch completed included), one per line. Left open: whether the manifest lists
-  only the runs that completed (within the tolerance of `-u`) or every run with
-  its status, whether the final command runs when some runs failed or the batch
-  stopped before launching them all, and whether its result counts in the exit
-  status of the batch.
+- **A Bash process as a script with the library of the engine.** A body in Bash
+  kept in a file of its own already runs as a program, as an external alias with
+  a `.sh` file (see "Processes in other languages, and aliases"), but in a new
+  `bash` with neither the execution context nor the library of the engine.
+  Giving it the library, without the execution context, would let such a process
+  call the functions of the engine as a process function does, and would ask of
+  it what the process contract asks: no variable or function of its module
+  besides its own parts.
+- **Gathering the runs of a batch.** `debasher_exec_batch` executes a batch,
+  such as one run of the same program for each sample of a sample sheet (see
+  "Batches of runs"). A step that combines the results of every run, such as a
+  report over all the samples, has to be launched separately once the batch
+  ends. `debasher_exec_batch` could take a final command, like the hook of `-k`
+  but run once for the whole batch, and give it a manifest, a file with the
+  output directory of every run of the batch (where `-o` moved it, and those of
+  the runs that an earlier launch of the batch completed included), one per
+  line. Left open: whether the manifest lists only the runs that completed
+  (within the tolerance of `-u`) or every run with its status, whether the final
+  command runs when some runs failed or the batch stopped before launching them
+  all, and whether its result counts in the exit status of the batch.
 - **Task counts known only during the run.** Every array is sized while the
   run is prepared, since `_define_opts` and `_generate_opts_size` run then
   (see "Arrays and option generators" and "Architecture"), and every process
