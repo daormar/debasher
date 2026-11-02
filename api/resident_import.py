@@ -84,8 +84,8 @@ def _check_process(process: ProgramProcess) -> list[_Problem]:
             _Problem(
                 process.name,
                 None,
-                "it has additional methods (reset_outfiles, post, outdir_basename, skip, "
-                "conda_envs or docker_imgs), which a resident program does not offer: remove them",
+                "it has additional methods (reset_outfiles, post, skip, conda_envs or "
+                "docker_imgs), which a resident program does not offer: remove them",
             )
         )
     return problems

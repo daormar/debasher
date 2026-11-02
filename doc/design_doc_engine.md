@@ -132,10 +132,10 @@ relative to the output directory of the run.
 - **process contract**: what a process provides to the engine, and what the
   engine gives it in return, apart from the form in which the process is
   written: its **static parts**, data that do not depend on the run (name,
-  specification, declared options, documentation, environments, output
-  directory name), and its **computed parts**, code that the engine calls
-  (task options, dependency types, and the body, skip rule, reset rule, post
-  hook and termination handler of a task). See "The process contract".
+  specification, declared options, documentation, environments), and its
+  **computed parts**, code that the engine calls (task options, dependency
+  types, and the body, skip rule, reset rule, post hook and termination handler
+  of a task). See "The process contract".
 - **form of a process**: a way of writing a process that honors the process
   contract. The **module form**, the functions of a module, is the only one
   that the engine reads; the topology file and the process files that the web
@@ -328,11 +328,10 @@ relative to the output directory of the run.
   program ends. A `debasher_exec` that only validates the program (`--validate`)
   holds it too, and says so on the second line of the lock file.
 - **process output directory**: the directory of a process under the output
-  directory, named after the process unless its `_outdir_basename` method gives
-  another name. Before each task of a general program runs, the
-  `_reset_outfiles` method of the process resets it; without that method, the
-  directory of a process with a single task is emptied, and that of an array
-  process, which its tasks share, is left as it is.
+  directory, named after the process. Before each task of a general program
+  runs, the `_reset_outfiles` method of the process resets it; without that
+  method, the directory of a process with a single task is emptied, and that of
+  an array process, which its tasks share, is left as it is.
 - **task subdirectory**: a directory below the process output directory that an
   option of a task asks for, with `define_opt_from_process_outdir --subdir`,
   which the engine creates when the process is prepared and, in a general
@@ -726,15 +725,19 @@ register it anywhere: whether a process has a given method is whether a
 function of that name exists in the shell at that moment.
 
 A process name is one part or several joined by dots (`org.namespace.name`),
-each part made of letters, digits and underscores and not starting with a
-digit. The dots let modules written independently give their processes
-qualified names that do not clash, since every process of a program shares a
-single set of names (see "Programs and subprograms"). A name may not end with
-the suffix of a process method, since the function of the process `a_skip`
-would then be the skip method of a process `a`, and it may not contain the
-marker `__NSSEP__`, which the engine uses to turn a qualified name into the
-name of a Bash variable. A process can be added to a program only once, and a
-program has at most 5000 processes.
+each part made of letters, digits and underscores and not starting with a digit.
+The dots let modules written independently give their processes qualified names
+that do not clash, since every process of a program shares a single set of names
+(see "Programs and subprograms"). A name may not end with the suffix of a
+process method, since the function of the process `a_skip` would then be the
+skip method of a process `a`, nor with `_outdir_basename`, a suffix that the
+engine reserves: the process output directory is always named after the process,
+and a process with a function `<process>_outdir_basename`, written to name it
+otherwise, is refused when it is added to a program, rather than run with its
+output where the module does not expect it. A name may not contain the marker
+`__NSSEP__`, which the engine uses to turn a qualified name into the name of a
+Bash variable. A process can be added to a program only once, and a program has
+at most 5000 processes.
 
 The methods of a process, when the engine calls each one, and what happens
 when a process does not define it:
@@ -752,7 +755,6 @@ when a process does not define it:
 | `_skip` | by the task, before the process output directory is reset, with the options of the task; it returns 0 to skip the task, 1 to run it, and any other status fails the task | the task is never skipped |
 | `_reset_outfiles` | by the task, before the process function, with the options of the task; a status other than 0 fails the task, which then runs nothing | the default reset (see "Executing a task") |
 | `_post` | by the task, once the process function returns, whether it succeeded or failed | nothing runs after the process function |
-| `_outdir_basename` | whenever the process output directory is needed | the directory is named after the process |
 | `_slurm_sigterm_handler` | by a task under the Slurm scheduler, when Slurm sends it `SIGTERM`, as when its time runs out | the task prints a message and exits with an error |
 | `_conda_envs`, `_docker_imgs` | while the run is prepared, with `--conda-support` or `--docker-support` | the process needs no environment |
 | `_document` | by `debasher_doc_mod`, which documents a module | the process has no description |
@@ -2762,10 +2764,10 @@ and no id for each task. Under it, the logs are those that Slurm writes, one for
 each attempt.
 
 Everything else at the top of the directory belongs to the processes: the
-process output directory of each process, named after it or after what its
-`_outdir_basename` method gives, and the shared directories. They share the
-top of the directory with the files of the engine, and the engine refuses
-neither a process nor a shared directory whose name is one of those names.
+process output directory of each process, named after it, and the shared
+directories. They share the top of the directory with the files of the engine,
+and the engine refuses neither a process nor a shared directory whose name is
+one of those names.
 
 A use of `debasher_exec` that launches nothing writes into the output directory
 too, though less. An option check and `--show-cmdline-opts` create the output
@@ -3256,7 +3258,6 @@ them as code that the engine calls.
 | declared options | static | documents the program, lists its command line options and checks the options of the first task | `_explain_opts`, `_identify_cmdline_opts`, `_explain_task_shaping_opts`, or the older `_explain_cmdline_opts` |
 | documentation | static | documents the module | `_document`, and the descriptions in the declared options |
 | environments | static | creates them before any process runs, when asked to | `_conda_envs`, `_docker_imgs` |
-| output directory name | static | names the process output directory | `_outdir_basename` |
 | task options | computed, per run | builds the option list of every task, from which the dependencies, the FIFOs and the directories of the run follow | `_define_opts`, or `_generate_opts_size` and `_generate_opts` |
 | dependency types | computed, per option and producer | replaces the inferred dependency type of one option | `_define_opt_deps` |
 | body | computed, per task | runs the work of the task | the process function |
@@ -3297,9 +3298,6 @@ shows with the declared options.
 needs, each with the file it is created from, and the Docker images it needs.
 The engine makes sure that they exist, and the body activates them or runs
 them itself (see "Conda and Docker environments").
-
-**The output directory name.** The name of the process output directory, the
-name of the process when it is not given.
 
 ## The task options
 

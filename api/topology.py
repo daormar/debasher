@@ -94,13 +94,12 @@ EXTENSION_BY_LANGUAGE = {
 METHOD_FIELDS = {
     "reset_outfiles": "resetOutfilesCode",
     "post": "postCode",
-    "outdir_basename": "outdirBasenameCode",
     "skip": "skipCode",
     "conda_envs": "condaEnvsCode",
     "docker_imgs": "dockerImgsCode",
 }
 
-MethodName = Literal["reset_outfiles", "post", "outdir_basename", "skip", "conda_envs", "docker_imgs"]
+MethodName = Literal["reset_outfiles", "post", "skip", "conda_envs", "docker_imgs"]
 
 # The extension of a tasks file and of a skip file in each of the languages
 # that they may be written in: a Python function file of the engine, or a

@@ -491,6 +491,12 @@ def test_the_json_schema_names_the_version_and_refuses_unknown_keys():
         ("schema_version: 0\nname: prg\n", "not a version"),
         ("- a\n- b\n", "not a topology file"),
         ("schema_version: 1\nname: prg\nprocesses: [\n", "not a topology file"),
+        # A method that the engine no longer takes: the process output
+        # directory is always named after the process
+        (
+            "schema_version: 1\nname: prg\nprocesses:\n  b:\n    methods: {outdir_basename: b_out.sh}\n",
+            "methods.outdir_basename",
+        ),
     ],
 )
 def test_a_topology_file_that_cannot_be_read_is_refused(text, message):

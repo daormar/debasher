@@ -162,10 +162,9 @@ keys of a process are:
 
 ``methods``
     The additional methods, the name of each (``skip``, ``post``,
-    ``reset_outfiles``, ``outdir_basename``, ``conda_envs``,
-    ``docker_imgs``) to the path of the file with its Bash body. The
-    file of ``skip`` may instead be a Python file that defines
-    ``skip(task)``.
+    ``reset_outfiles``, ``conda_envs``, ``docker_imgs``) to the path of
+    the file with its Bash body. The file of ``skip`` may instead be a
+    Python file that defines ``skip(task)``.
 
 ``conda_envs``
     The Conda environments of the process given as data, the name of

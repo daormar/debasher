@@ -121,9 +121,9 @@ entries below that refer to them.
   term is wider here than in the design of the engine, where a tasks
   file is the Python case only.
 - **method file**: a file with the body of one of the additional methods
-  of a process (`skip`, `post`, `reset_outfiles`, `outdir_basename`,
-  `conda_envs`, `docker_imgs`), as the editor takes it in its additional
-  methods: a Bash body, or, for `skip` only, a skip file.
+  of a process (`skip`, `post`, `reset_outfiles`, `conda_envs`,
+  `docker_imgs`), as the editor takes it in its additional methods: a Bash
+  body, or, for `skip` only, a skip file.
 - **skip file**: as in the design of the engine: a Python function file
   that defines `skip(task)`, which returns whether a task is skipped,
   given as the method file of `skip` (`skip=` with a `.py` path).
@@ -276,15 +276,15 @@ def tasks(run):
 ```
 
 The additional methods of a process are given as method files (`skip=`,
-`post=`, `reset_outfiles=`, `outdir_basename=`, `conda_envs=`,
-`docker_imgs=`), each a Bash body that the editor would take in its
-additional methods, and go into the program model as such. The method
-file of `skip` may be a skip file instead, by the same rule of the
-extension: `skip(task)` returns `True` to skip the task and `False` to
-run it, reading the options of the task (`task.value("-val-desc")`
-gives the value that a value descriptor holds), and the module calls it
-through `skip_from_file`. A Python file for any other method is
-refused, since the engine runs no other method from one.
+`post=`, `reset_outfiles=`, `conda_envs=`, `docker_imgs=`), each a Bash
+body that the editor would take in its additional methods, and go into
+the program model as such. The method file of `skip` may be a skip file
+instead, by the same rule of the extension: `skip(task)` returns `True`
+to skip the task and `False` to run it, reading the options of the task
+(`task.value("-val-desc")` gives the value that a value descriptor
+holds), and the module calls it through `skip_from_file`. A Python file
+for any other method is refused, since the engine runs no other method
+from one.
 
 The environments of a process may be given as data instead of a body:
 `conda_envs={"py27": "py27.yml"}`, the name of each Conda environment
@@ -723,11 +723,11 @@ the positions and `api.topology` for the ids derived from names.
   value of an option, a Bash word that the engine expands when the
   option is defined (`${process_outdir}/name`, `${array[$task_idx]}`),
   so that the per-task values of an array or a generator are Bash words
-  even when a Python function shapes the tasks; and the bodies of
-  `post`, `reset_outfiles` and `outdir_basename`, the last two until the
-  program model has a field for them (see "Future work"). `post` runs
-  inside the task after the process and belongs with the code of the
-  process, which may be in any language.
+  even when a Python function shapes the tasks; and the bodies of `post`
+  and `reset_outfiles`, the last until the program model has a field for
+  it (see "Future work"). `post` runs inside the task after the process
+  and belongs with the code of the process, which may be in any
+  language.
 - **The manual mode.** A whole `_define_opts` written by hand, the
   manual mode of the options handler of the editor, is not offered: it
   is the method of a module, and a description that needs it is a
@@ -735,12 +735,12 @@ the positions and `api.topology` for the ids derived from names.
 
 # Future work
 
-- **The other additional methods as data.** The files that a process
-  removes before a rerun and the name of its process output directory
-  are data (a list of paths, a name) that the editor and the SDK carry
-  as Bash bodies because the program model has no field for them. When
-  the program model gives them one, as it does for the environments, the
-  SDK takes them as arguments and script generation writes the body.
+- **The reset rule as data.** The files that a process
+  removes before a rerun are data (a list of paths) that the editor and
+  the SDK carry as a Bash body because the program model has no field
+  for them. When the program model gives them one, as it does for the
+  environments, the SDK takes them as an argument and script generation
+  writes the body.
 - **Processes as a library, and namespaces.** A process defined in a
   Python module of the user and added to several programs, as a process
   of a loaded module is. The namespace of DeBasher is a naming convention

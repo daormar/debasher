@@ -210,7 +210,7 @@ const readingTools = [
 
   tool(
     "get_code_prompt",
-    "The code prompt that the \"AI prompt\" button of the editor composes for a piece of code of a process, from the program as it is saved: the rules of the engine for that code, the options and connections, the code so far, and the form of the answer. part is \"code\" for the code of the process (or the parts of a node), \"options_handler\" for the code of an array or generator options handler, or the name of an additional method (reset_outfiles, post, outdir_basename, skip, conda_envs, docker_imgs). options_handler and skip follow the language of the process (optionsHandler.language, skipLanguage): in Python the prompt is for the whole file. conda_envs and docker_imgs given as data have none: change them with update_process. Follow it to write that code, or hand it to another model.",
+    "The code prompt that the \"AI prompt\" button of the editor composes for a piece of code of a process, from the program as it is saved: the rules of the engine for that code, the options and connections, the code so far, and the form of the answer. part is \"code\" for the code of the process (or the parts of a node), \"options_handler\" for the code of an array or generator options handler, or the name of an additional method (reset_outfiles, post, skip, conda_envs, docker_imgs). options_handler and skip follow the language of the process (optionsHandler.language, skipLanguage): in Python the prompt is for the whole file. conda_envs and docker_imgs given as data have none: change them with update_process. Follow it to write that code, or hand it to another model.",
     {
       home_dir: schemas.homeDir,
       process: schemas.processName,

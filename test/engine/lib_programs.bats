@@ -431,6 +431,18 @@ PYEOF
     [[ "${output}" == *"has no noexplain_explain_opts method"* ]]
 }
 
+@test "add_debasher_process refuses a process that defines _outdir_basename, which the engine no longer takes" {
+    prepare_add_process
+    proc() { :; }
+    proc_explain_opts() { :; }
+    proc_outdir_basename() { echo "proc_out"; }
+
+    run add_debasher_process proc "cpus=1;mem=32;time=00:01:00"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"process proc defines proc_outdir_basename, which DeBasher does not take: the output directory of a process is always named after the process. Remove the method."* ]]
+    [ "$(debasher::_get_num_processes)" -eq 0 ]
+}
+
 @test "add_debasher_process accepts _explain_opts, or the older _explain_cmdline_opts" {
     prepare_add_process
     modern() { :; }
@@ -631,6 +643,12 @@ PYEOF
     run debasher::_is_valid_processname "proc_define_opts"
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"collides with method '_define_opts'"* ]]
+}
+
+@test "debasher::_is_valid_processname refuses a name that ends with the suffix of a method that the engine no longer takes" {
+    run debasher::_is_valid_processname "a_outdir_basename"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"collides with method '_outdir_basename'"* ]]
 }
 
 @test "debasher::_is_valid_processname refuses a name that ends with the suffix of the termination handler" {

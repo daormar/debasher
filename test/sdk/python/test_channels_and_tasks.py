@@ -264,7 +264,6 @@ def test_the_additional_methods_come_from_their_files(tmp_path):
         skip=_file(tmp_path, "skip.sh", "return 1\n"),
         post=_file(tmp_path, "post.sh", "echo done\n"),
         reset_outfiles=_file(tmp_path, "reset.sh", 'rm -f "${outf}"\n'),
-        outdir_basename=_file(tmp_path, "basename.sh", "echo work_out\n"),
         conda_envs=_file(tmp_path, "conda.sh", "define_conda_env py27 py27.yml\n"),
         docker_imgs=_file(tmp_path, "docker.sh", "define_docker_img ubuntu\n"),
     )
@@ -275,7 +274,6 @@ def test_the_additional_methods_come_from_their_files(tmp_path):
     assert methods.skipCode == "return 1"
     assert methods.postCode == "echo done"
     assert methods.resetOutfilesCode == 'rm -f "${outf}"'
-    assert methods.outdirBasenameCode == "echo work_out"
     assert methods.condaEnvsCode == "define_conda_env py27 py27.yml"
     assert methods.dockerImgsCode == "define_docker_img ubuntu"
     module = prg.write(tmp_path / "home").read_text()
@@ -296,7 +294,7 @@ def test_a_skip_file_in_python_gives_a_skip_method_in_python(tmp_path):
     assert 'work_skip()\n{\n    debasher::skip_from_file "work" "work_skip.py" "$@"\n}' in module
 
 
-@pytest.mark.parametrize("method", ["post", "reset_outfiles", "outdir_basename", "conda_envs", "docker_imgs"])
+@pytest.mark.parametrize("method", ["post", "reset_outfiles", "conda_envs", "docker_imgs"])
 def test_a_python_file_for_another_method_is_refused(tmp_path, method):
     with pytest.raises(DefinitionError, match="only the skip method takes one"):
         Process("work", code="work.sh", **{method: "method.py"})

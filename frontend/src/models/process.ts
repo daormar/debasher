@@ -129,8 +129,6 @@ export interface AdditionalMethods {
 
   postCode?: string;
 
-  outdirBasenameCode?: string;
-
   skipCode?: string;
 
   condaEnvsCode?: string;
@@ -153,7 +151,6 @@ export interface AdditionalMethods {
 export type MethodCodeKey =
   | "resetOutfilesCode"
   | "postCode"
-  | "outdirBasenameCode"
   | "skipCode"
   | "condaEnvsCode"
   | "dockerImgsCode";

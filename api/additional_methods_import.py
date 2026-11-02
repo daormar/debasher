@@ -1,6 +1,6 @@
 """
 Recovers a process's AdditionalMethods — reset_outfiles/post/
-outdir_basename/skip/conda_envs/docker_imgs, the DEBASHER_PROCESS_METHODS
+skip/conda_envs/docker_imgs, the DEBASHER_PROCESS_METHODS
 (engine/debasher_lib.sh) not already covered by ProcessInfo.description/
 code/options/optionHandler — from the raw `declare -f` dumps
 markdown_parsing.parse_methods_with_code pulls out of a process's
@@ -20,7 +20,6 @@ from pathlib import Path
 from .debasher_constants import (
     PROCESS_METHOD_CONDA_ENVS_SUFFIX,
     PROCESS_METHOD_DOCKER_IMGS_SUFFIX,
-    PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX,
     PROCESS_METHOD_POST_SUFFIX,
     PROCESS_METHOD_RESET_OUTFILES_SUFFIX,
     PROCESS_METHOD_SKIP_SUFFIX,
@@ -39,7 +38,6 @@ from .models import AdditionalMethods
 _FIELD_BY_SUFFIX = {
     PROCESS_METHOD_RESET_OUTFILES_SUFFIX: "resetOutfilesCode",
     PROCESS_METHOD_POST_SUFFIX: "postCode",
-    PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX: "outdirBasenameCode",
     PROCESS_METHOD_SKIP_SUFFIX: "skipCode",
     PROCESS_METHOD_CONDA_ENVS_SUFFIX: "condaEnvsCode",
     PROCESS_METHOD_DOCKER_IMGS_SUFFIX: "dockerImgsCode",

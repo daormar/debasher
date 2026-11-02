@@ -135,10 +135,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 
 - **Name.** Letters, digits and `_`, starting with a letter or `_`; may be
   namespaced with dots (`org.ns.name`). It may not end with the suffix of a
-  method (`_define_opts`, `_post`, `_skip`, `_outdir_basename`,
-  `_slurm_sigterm_handler`, ...) or of a language (`_py`, `_r`, `_perl`,
-  `_groovy`), nor contain `__NSSEP__`. Unique, ignoring case, among processes
-  and sequential processes.
+  method (`_define_opts`, `_post`, `_skip`, `_reset_outfiles`,
+  `_slurm_sigterm_handler`, ...), with `_outdir_basename`, or with that of a
+  language (`_py`, `_r`, `_perl`, `_groovy`), nor contain `__NSSEP__`. Unique,
+  ignoring case, among processes and sequential processes.
 - **Language.** `bash`, `python`, `perl`, `r` or `groovy`.
 - **Code.** In Bash, the whole function `name() { ... }`, called with the
   option list of its task: read a value with
@@ -228,28 +228,27 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   one, but a process in another language, or another alias, has one only
   once it is added, so such a target has to come before the alias in the
   program (every process comes before the sequential processes).
-- **Additional methods** (general programs only), bodies of optional
-  functions: `skipCode` (return 0 to skip a task, 1 to run it, any other
-  status fails it; never on a process at either end of a FIFO),
-  `condaEnvsCode`, `dockerImgsCode`, `postCode` (runs after the process
-  function, whether it succeeded or failed), `resetOutfilesCode` (replaces
-  the default reset of the output directory); either of these two that
-  returns a status other than 0 fails the task, `outdirBasenameCode`. The skip
-  method may instead be a Python skip file (`skipLanguage` `python`) that
-  defines `skip(task)`, which returns `True`
-  to skip the task and `False` to run it, its code (`skipCode`) the whole
-  file; `task.value(label)` reads an option of the task as
+- **Additional methods** (general programs only), bodies of optional functions:
+  `skipCode` (return 0 to skip a task, 1 to run it, any other status fails it;
+  never on a process at either end of a FIFO), `condaEnvsCode`,
+  `dockerImgsCode`, `postCode` (runs after the process function, whether it
+  succeeded or failed), `resetOutfilesCode` (replaces the default reset of the
+  output directory); either of these two that returns a status other than 0
+  fails the task. The skip method may instead be a Python skip file
+  (`skipLanguage` `python`) that defines `skip(task)`, which returns `True` to
+  skip the task and `False` to run it, its code (`skipCode`) the whole file;
+  `task.value(label)` reads an option of the task as
   `read_opt_value_from_func_args` does (the value that a value descriptor
-  holds), and anything but `True` or `False`, or an exception, fails the
-  task. A Python tasks file or skip file runs with the Python of DeBasher,
-  not in the Conda environment or Docker image of the process. The Conda
-  environments and Docker images may be data instead of bodies: `condaEnvs`
-  (a name, or the absolute path of the environment, and a YAML file each)
-  and `dockerImgs`, `conda_envs:` (name: file) and `docker_imgs:` (a list)
-  in `program.yaml`, or `conda_envs=` and `docker_imgs=` in a description,
-  from which script generation writes the `define_conda_env` and
-  `pull_docker_img` calls; a process gives either the data or the body,
-  never both, and import turns a body made only of those calls into data.
+  holds), and anything but `True` or `False`, or an exception, fails the task. A
+  Python tasks file or skip file runs with the Python of DeBasher, not in the
+  Conda environment or Docker image of the process. The Conda environments and
+  Docker images may be data instead of bodies: `condaEnvs` (a name, or the
+  absolute path of the environment, and a YAML file each) and `dockerImgs`,
+  `conda_envs:` (name: file) and `docker_imgs:` (a list) in `program.yaml`, or
+  `conda_envs=` and `docker_imgs=` in a description, from which script
+  generation writes the `define_conda_env` and `pull_docker_img` calls; a
+  process gives either the data or the body, never both, and import turns a body
+  made only of those calls into data.
 
 ## Options
 
@@ -262,16 +261,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   given on the command line or as a value, has to name an existing regular
   file or directory, and the engine makes its path absolute.
 - **channel**, how the data gets to the process: `none` (a value or a
-  connection; the process receives the data itself), `fifo` (`value` is the
-  name of the FIFO), `value_desc` (an output into which the task writes a
-  value), `shared_dir` (`value` names a shared directory that the program
-  or a module of its preamble declares; any other name stops the preparation
-  of the run), `process_outdir`
-  (an output: the output directory of the process, `value` empty). Through a
-  FIFO or a value descriptor the process receives a path, and the data type
-  is that of each line of the FIFO, or of the value held (a FIFO of `int`
-  carries an integer per line); in Bash, `read_opt_value_from_func_args` on
-  an input that reads a value descriptor gives the value, not the path.
+  connection; the process receives the data itself), `fifo` (`value` is the name
+  of the FIFO), `value_desc` (an output into which the task writes a value),
+  `shared_dir` (`value` names a shared directory that the program or a module of
+  its preamble declares; any other name stops the preparation of the run),
+  `process_outdir` (an output: the output directory of the process,
+  `<outputDir>/<process name>`, always named after the process, `value` empty).
+  Through a FIFO or a value descriptor the process receives a path, and the data
+  type is that of each line of the FIFO, or of the value held (a FIFO of `int`
+  carries an integer per line); in Bash, `read_opt_value_from_func_args` on an
+  input that reads a value descriptor gives the value, not the path.
 - **Fixed data types.** A directory channel (`shared_dir`,
   `process_outdir`) has data type `dir`, and a connected input has the data
   type of the output it reads, and follows it. An edit that names another

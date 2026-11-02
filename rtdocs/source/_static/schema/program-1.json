@@ -349,7 +349,6 @@
             "enum": [
               "reset_outfiles",
               "post",
-              "outdir_basename",
               "skip",
               "conda_envs",
               "docker_imgs"

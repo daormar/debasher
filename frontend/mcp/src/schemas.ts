@@ -75,7 +75,7 @@ const computationalSpecs = z.object({
 }).strict();
 
 const processNameRule =
-  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _outdir_basename, _slurm_sigterm_handler, ...) or of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes.";
+  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _reset_outfiles, _slurm_sigterm_handler, ...), with _outdir_basename, or with that of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes.";
 
 const aliasOptMap = z.array(z.object({ fromLabel: z.string(), toLabel: z.string() }).strict());
 
@@ -104,7 +104,6 @@ export const processChanges = z.object({
   additionalMethods: z.object({
     resetOutfilesCode: z.string().optional(),
     postCode: z.string().optional(),
-    outdirBasenameCode: z.string().optional(),
     skipCode: z.string().optional(),
     condaEnvsCode: z.string().optional(),
     dockerImgsCode: z.string().optional(),

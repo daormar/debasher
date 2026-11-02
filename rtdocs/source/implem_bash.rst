@@ -297,13 +297,13 @@ qualified with one or more namespace prefixes separated by dots (e.g.
 part follows the same rule.
 
 A name may not end with the suffix of a process method (``_post``,
-``_skip``, ``_define_opts``, ``_outdir_basename``,
-``_slurm_sigterm_handler`` and the others of `Process Methods`_ below),
-since the function ``a_post`` would be the ``post`` method of a process
-``a``, nor with that of a language (``_py``, ``_r``, ``_perl``,
-``_groovy``, and so ``_heredoc_py`` and the like), and it may not
-contain ``__NSSEP__``, which the engine uses internally. DeBasher and
-the web interface refuse such a name.
+``_skip``, ``_define_opts``, ``_slurm_sigterm_handler`` and the others
+of `Process Methods`_ below, and ``_outdir_basename``, which DeBasher no
+longer takes), since the function ``a_post`` would be the ``post``
+method of a process ``a``, nor with that of a language (``_py``, ``_r``,
+``_perl``, ``_groovy``, and so ``_heredoc_py`` and the like), and it may
+not contain ``__NSSEP__``, which the engine uses internally. DeBasher
+and the web interface refuse such a name.
 
 **If you are implementing a module that you plan to share with other
 people, it is strongly recommended that you qualify all of its process
@@ -1405,16 +1405,6 @@ missing.
   process it reads from succeeded or failed, and a FIFO reader is
   launched once its writer has started.)
 
-* ``outdir_basename``: echoes the basename to use for the process's own
-  output directory, instead of the default (the process name itself):
-
-  .. code-block:: bash
-
-      my_process_outdir_basename()
-      {
-          echo "my_custom_dirname"
-      }
-
 * ``conda_envs``: declares the Conda environments the process needs,
   using the ``define_conda_env`` function (given an environment name,
   or the absolute path where the environment is created, and a
@@ -1457,11 +1447,15 @@ missing.
   before the time limit of the job. Without it, the task prints that it
   received the signal and ends with an error.
 
-Unlike ``reset_outfiles``/``post``/``skip``, the ``outdir_basename``,
-``conda_envs``, ``docker_imgs`` and ``slurm_sigterm_handler`` methods
-take no input parameters, and each of ``conda_envs`` and
-``docker_imgs`` is only run once per process, regardless of how many
-tasks it executes.
+Unlike ``reset_outfiles``/``post``/``skip``, the ``conda_envs``,
+``docker_imgs`` and ``slurm_sigterm_handler`` methods take no input
+parameters, and each of ``conda_envs`` and ``docker_imgs`` is only run
+once per process, regardless of how many tasks it executes.
+
+The output directory of a process is always named after the process.
+Earlier versions of DeBasher took an ``outdir_basename`` method that
+gave it another name; a process that still defines it is refused, with
+an error that says so, and the method has to be removed.
 
 Process Specifications
 ^^^^^^^^^^^^^^^^^^^^^^^

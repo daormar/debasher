@@ -20,7 +20,6 @@ from .debasher_constants import (
     PROCESS_METHOD_EXEC_SUFFIX,
     PROCESS_METHOD_RESET_OUTFILES_SUFFIX,
     PROCESS_METHOD_POST_SUFFIX,
-    PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX,
     PROCESS_METHOD_SKIP_SUFFIX,
     PROCESS_METHOD_CONDA_ENVS_SUFFIX,
     PROCESS_METHOD_DOCKER_IMGS_SUFFIX,
@@ -1038,12 +1037,11 @@ def _add_exec_func(process):
 # verbatim. None of them take a fixed positional-arg header, reset_
 # outfiles/post/skip receive the same args as the process's own exec
 # function (accessible via "$@", see debasher_lib_sched.sh's
-# debasher::_execute_task), while outdir_basename/conda_envs/
-# docker_imgs are called with no arguments at all.
+# debasher::_execute_task), while conda_envs/docker_imgs are called
+# with no arguments at all.
 _ADDITIONAL_METHOD_SUFFIXES = (
     ("resetOutfilesCode", PROCESS_METHOD_RESET_OUTFILES_SUFFIX),
     ("postCode", PROCESS_METHOD_POST_SUFFIX),
-    ("outdirBasenameCode", PROCESS_METHOD_OUTDIR_BASENAME_SUFFIX),
     ("skipCode", PROCESS_METHOD_SKIP_SUFFIX),
     ("condaEnvsCode", PROCESS_METHOD_CONDA_ENVS_SUFFIX),
     ("dockerImgsCode", PROCESS_METHOD_DOCKER_IMGS_SUFFIX),

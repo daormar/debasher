@@ -400,9 +400,10 @@ debasher::_processname_contains_reserved_suffixes()
 
     # Check process methods (this also covers the HEREDOC language
     # suffixes, e.g. "_py", since DEBASHER_PROCESS_METHODS includes
-    # them, see debasher_lib.sh)
+    # them, see debasher_lib.sh), and the methods that the engine no
+    # longer takes
     local method
-    for method in "${DEBASHER_PROCESS_METHODS[@]}"; do
+    for method in "${DEBASHER_PROCESS_METHODS[@]}" "${DEBASHER_RETIRED_PROCESS_METHODS[@]}"; do
         # The empty "exec" entry has no suffix: every process name
         # trivially "ends with" it, so it is skipped.
         [ -z "${method}" ] && continue
@@ -1020,6 +1021,26 @@ debasher::_check_process_explains_opts()
 }
 
 ########
+# Fails, with an error for each, if a process defines a method that the
+# engine no longer takes (DEBASHER_RETIRED_PROCESS_METHODS): ignoring it
+# would run the module otherwise than its author meant.
+debasher::_check_process_has_no_retired_methods()
+{
+    local processname=$1
+
+    local method
+    local failed=0
+    for method in "${DEBASHER_RETIRED_PROCESS_METHODS[@]}"; do
+        if debasher::_process_method_exists "${processname}" "${method}"; then
+            echo "Error: process ${processname} defines ${processname}${method}, which DeBasher does not take: the output directory of a process is always named after the process. Remove the method. Aborting execution..." >&2
+            failed=1
+        fi
+    done
+
+    [ "${failed}" -eq 0 ]
+}
+
+########
 # Public: Adds a process to a DeBasher program.
 #
 # $1 - Name of the process to add into the program.
@@ -1063,6 +1084,9 @@ debasher::add_debasher_process()
     # also what tells a process apart from any other function of a
     # module, so it is required (a sequential process does not need it)
     debasher::_check_process_explains_opts "${processname}" || exit 1
+
+    # A method that the engine no longer takes is refused, not ignored
+    debasher::_check_process_has_no_retired_methods "${processname}" || exit 1
 
     DEBASHER_PROGRAM_PROCESSES["${processname}"]="${DEBASHER_RESOLVED_PROCESS_TYPE}"
 

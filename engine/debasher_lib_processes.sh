@@ -83,14 +83,6 @@ debasher::_get_post_funcname()
 }
 
 ########
-debasher::_get_outdir_funcname()
-{
-    local processname=$1
-
-    debasher::_search_process_func "${processname}" "${DEBASHER_PROCESS_METHOD_NAME_OUTDIR}"
-}
-
-########
 debasher::_get_explain_cmdline_opts_funcname()
 {
     local processname=$1
@@ -1286,28 +1278,14 @@ debasher::_get_process_schedout_filename()
 }
 
 ########
-debasher::_get_default_process_outdir_given_dirname()
-{
-    local dirname=$1
-    local processname=$2
-    echo "${dirname}/${processname}"
-}
-
-########
+# The process output directory, always named after the process, whose name
+# is unique in the program and valid as the name of a directory
 debasher::_get_process_outdir_given_dirname()
 {
     local dirname=$1
     local processname=$2
 
-    # Get name of process function to set output directory
-    process_function_outdir=$(debasher::_get_outdir_funcname "${processname}")
-
-    if [ "${process_function_outdir}" = "${DEBASHER_FUNCT_NOT_FOUND}" ]; then
-        debasher::_get_default_process_outdir_given_dirname "$dirname" "$processname"
-    else
-        local outdir_basename=$("${process_function_outdir}")
-        echo "${dirname}/${outdir_basename}"
-    fi
+    echo "${dirname}/${processname}"
 }
 
 ########

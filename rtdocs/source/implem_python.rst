@@ -199,12 +199,12 @@ Skipping tasks, and the environments of a process
 -------------------------------------------------
 
 The additional methods of a process (``skip``, ``post``,
-``reset_outfiles``, ``outdir_basename``) are given as files, each with
-the Bash body that the editor takes. The skip method may be a Python
-file instead, with a function ``skip(task)`` that returns ``True`` to
-skip the task and ``False`` to run it. The skip example of the
-:ref:`implem_bash` Section, shipped as ``sdk_skip_py``, skips the
-process that reads a sum when the sum is odd:
+``reset_outfiles``) are given as files, each with the Bash body that the
+editor takes. The skip method may be a Python file instead, with a
+function ``skip(task)`` that returns ``True`` to skip the task and
+``False`` to run it. The skip example of the :ref:`implem_bash` Section,
+shipped as ``sdk_skip_py``, skips the process that reads a sum when the
+sum is odd:
 
 .. literalinclude:: ../../data/sdk_programs/python/sdk_skip_py/sdk_skip_py.py
    :language: python
@@ -288,8 +288,8 @@ What the SDK does not do
   ``program.yaml`` only and is written over by the next build.
 * It shapes no tasks itself: a tasks file in Python is run by the
   engine when it prepares a run, and only shapes the tasks; the values
-  of the options, the preamble and the bodies of ``post``,
-  ``reset_outfiles`` and ``outdir_basename`` stay Bash, as the engine
-  reads them. The manual mode of the editor, a whole ``define_opts``
-  written by hand, is not offered: a program that needs it is written
-  as a module (see the :ref:`implem_bash` Section).
+  of the options, the preamble and the bodies of ``post`` and
+  ``reset_outfiles`` stay Bash, as the engine reads them. The manual
+  mode of the editor, a whole ``define_opts`` written by hand, is not
+  offered: a program that needs it is written as a module (see the
+  :ref:`implem_bash` Section).

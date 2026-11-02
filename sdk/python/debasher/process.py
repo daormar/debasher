@@ -236,9 +236,8 @@ class Process:
     The additional methods of the process are given as files too, each
     with the body that the editor takes: `skip` (whether a task is
     skipped), a Bash body, or a skip file in Python (`.py`) that defines
-    `skip(task)`; `post` (run after the process), `reset_outfiles` (what
-    to remove before a rerun) and `outdir_basename` (the name of the
-    process output directory), Bash bodies. The environments that the
+    `skip(task)`; `post` (run after the process) and `reset_outfiles`
+    (what to remove before a rerun), Bash bodies. The environments that the
     process declares are data: `conda_envs`, a dict of the name of each
     Conda environment to its yml file, and `docker_imgs`, a list of
     Docker images; a path given instead is a file with the Bash body of
@@ -263,7 +262,6 @@ class Process:
         skip: str | Path | None = None,
         post: str | Path | None = None,
         reset_outfiles: str | Path | None = None,
-        outdir_basename: str | Path | None = None,
         conda_envs: str | Path | dict[str, str] | None = None,
         docker_imgs: str | Path | list[str] | tuple[str, ...] | None = None,
     ):
@@ -301,7 +299,6 @@ class Process:
             ("skipCode", skip),
             ("postCode", post),
             ("resetOutfilesCode", reset_outfiles),
-            ("outdirBasenameCode", outdir_basename),
             ("condaEnvsCode", conda_envs),
             ("dockerImgsCode", docker_imgs),
         ):

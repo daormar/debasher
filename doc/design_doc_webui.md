@@ -1535,20 +1535,19 @@ edits it:
 - The processes, a map from name to process, in the order of the module: its
   `description`; where its code is (`code`, the path of its process file;
   `script`, the path of its script file; or `alias`, the name of another
-  process; `alias_opt_map` goes with the last two; see "The process files");
-  its options handler, `mode` (`array`, `generator` or `manual`; absent for
-  the standard mode) and `tasks`, the path of its tasks file; `methods`, a
-  map from the name of an additional method (`skip`,
-  `post`, `reset_outfiles`, `outdir_basename`, `conda_envs`, `docker_imgs`)
-  to the path of its method file; `conda_envs`, a map from the name of a
-  Conda environment to its YAML file, and `docker_imgs`, a list of Docker
-  images, the environments of the process given as data, in place of the
-  method files of the same names, a process that gives both being refused when
-  the program is loaded; `specs`, one map with the names that the
-  engine gives the computational and additional specifications (`cpus`,
-  `mem`, `time`, `processdeps`, `force`, and the limits of a node); `group`,
-  for a process that "Add program" brought in; and, for a node of a resident
-  program, `kind` and `initiator`.
+  process; `alias_opt_map` goes with the last two; see "The process files"); its
+  options handler, `mode` (`array`, `generator` or `manual`; absent for the
+  standard mode) and `tasks`, the path of its tasks file; `methods`, a map from
+  the name of an additional method (`skip`, `post`, `reset_outfiles`,
+  `conda_envs`, `docker_imgs`) to the path of its method file; `conda_envs`, a
+  map from the name of a Conda environment to its YAML file, and `docker_imgs`,
+  a list of Docker images, the environments of the process given as data, in
+  place of the method files of the same names, a process that gives both being
+  refused when the program is loaded; `specs`, one map with the names that the
+  engine gives the computational and additional specifications (`cpus`, `mem`,
+  `time`, `processdeps`, `force`, and the limits of a node); `group`, for a
+  process that "Add program" brought in; and, for a node of a resident program,
+  `kind` and `initiator`.
 - The options of a process, a map from label to option, in their order: `type`
   (the data type, with `flag` for an option that takes no value), `description`,
   `value`, `channel`, `subpath`, `mirror`, `fifo_tag`, `cmdline`,
@@ -2794,9 +2793,6 @@ process under the name of that process (see "Future work"). Of the second,
 `reset_outfiles`, `skip` and `post` act before or after a run of a process
 that finishes, which a node never does; `conda_envs` and `docker_imgs` give
 environments that a resident program is not launched with (see "Running a
-resident program"); and `outdir_basename` is left out so that the output
-directory of every node keeps the name that the engine gives it by default,
-by which the backend finds the program state (see "The directories of a
 resident program").
 
 **Groups.** "Add program" brings in only a program of the same type. In a
@@ -4399,16 +4395,15 @@ leaves out the first code of the dialog, the comment asks for a docstring of
 ## The code prompt of an additional method
 
 The editor of each additional method of a process (`reset_outfiles`, `post`,
-`outdir_basename`, `skip`, `conda_envs` and `docker_imgs`) offers the same
-prompt panel, with the same button. An additional method is a Bash function,
-whatever the language of the process, which script generation writes as
-`<process>_<method>()` around the body that the user gives, and which the
-engine calls at a moment of its own, with arguments of its own, and expects
-something of: `skip` skips the task when it returns success, `post` runs
-whether the process function succeeded or failed, `outdir_basename` prints a
-name and nothing else, and `conda_envs` and `docker_imgs` run once for the
-process and only make sure that an environment or an image exists. The code
-prompt says so, after a title and a sentence on what a method is:
+`skip`, `conda_envs` and `docker_imgs`) offers the same prompt panel, with the
+same button. An additional method is a Bash function, whatever the language of
+the process, which script generation writes as `<process>_<method>()` around the
+body that the user gives, and which the engine calls at a moment of its own,
+with arguments of its own, and expects something of: `skip` skips the task when
+it returns success, `post` runs whether the process function succeeded or
+failed, and `conda_envs` and `docker_imgs` run once for the process and only
+make sure that an environment or an image exists. The code prompt says so, after
+a title and a sentence on what a method is:
 
 1. **How the engine runs the method.** That it is a Bash function whose body
    alone is written, and the rules of the method: when the engine calls it, with

@@ -168,7 +168,6 @@ class AdditionalMethods(BaseModel):
     # / optionsHandler. See script_generation.py's _add_method_body_func.
     resetOutfilesCode: Optional[str] = None
     postCode: Optional[str] = None
-    outdirBasenameCode: Optional[str] = None
     skipCode: Optional[str] = None
     condaEnvsCode: Optional[str] = None
     dockerImgsCode: Optional[str] = None

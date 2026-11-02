@@ -20,7 +20,7 @@ def test_a_name_the_engine_accepts_is_valid(name):
 # process a method of another, and the engine refuses it
 @pytest.mark.parametrize(
     "name",
-    ["1st", "a-b", "a_define_opts", "a_post", "a_document", "a_slurm_sigterm_handler", "hello_py", "hello_heredoc_py", "a__NSSEP__b"],
+    ["1st", "a-b", "a_define_opts", "a_post", "a_document", "a_slurm_sigterm_handler", "a_outdir_basename", "hello_py", "hello_heredoc_py", "a__NSSEP__b"],
 )
 def test_a_name_the_engine_refuses_is_not_valid(name):
     assert not is_valid_process_name(name)

@@ -54,17 +54,6 @@ export const PROCESS_METHODS: ProcessMethod[] = [
     ],
   },
   {
-    key: "outdirBasenameCode",
-    name: "outdir_basename",
-    receivesOptions: false,
-    summary:
-      "Prints the basename of the output directory of the process, instead of the default, the name of the process. Takes no arguments.",
-    rules: [
-      "It prints, on its standard output, the basename of the output directory of the process, instead of the name of the process.",
-      "It takes no arguments. The engine calls it whenever it needs the directory, so it prints the same name every time and does nothing else.",
-    ],
-  },
-  {
     key: "skipCode",
     name: "skip",
     receivesOptions: true,
