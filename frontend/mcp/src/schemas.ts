@@ -74,10 +74,13 @@ const computationalSpecs = z.object({
   heartbeat_timeout_s: z.number().optional(),
 }).strict();
 
+const processNameRule =
+  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _outdir_basename, _slurm_sigterm_handler, ...) or of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes.";
+
 const aliasOptMap = z.array(z.object({ fromLabel: z.string(), toLabel: z.string() }).strict());
 
 export const processChanges = z.object({
-  name: z.string().optional(),
+  name: z.string().optional().describe(processNameRule),
   description: z.string().optional(),
   language: language.optional(),
   code: z.string().optional().describe("The whole function of the process, for a process that is not a node."),
@@ -169,7 +172,7 @@ export const programFields = z.object({
 }).strict();
 
 export const addProcessFields = {
-  name: z.string().min(1),
+  name: z.string().min(1).describe(processNameRule),
   nodeKind: nodeKind.optional()
     .describe("In a resident program: the node kind of a node that no module of the preamble defines."),
   changes: processChanges.optional()
@@ -192,11 +195,11 @@ export const namedEdit = z.discriminatedUnion("op", [
   z.object({ op: z.literal("connect"), from: optionRef, to: optionRef, display: connectionDisplay.optional() }).strict(),
   z.object({ op: z.literal("disconnect"), from: optionRef, to: optionRef }).strict(),
   z.object({ op: z.literal("setConnectionDisplay"), from: optionRef, to: optionRef, display: connectionDisplay }).strict(),
-  z.object({ op: z.literal("addSeqProcess"), name: z.string().min(1), changes: seqProcessChanges.optional() }).strict(),
+  z.object({ op: z.literal("addSeqProcess"), name: z.string().min(1).describe(processNameRule), changes: seqProcessChanges.optional() }).strict(),
   z.object({
     op: z.literal("updateSeqProcess"),
     name: z.string().min(1),
-    changes: seqProcessChanges.extend({ name: z.string().optional() }).strict(),
+    changes: seqProcessChanges.extend({ name: z.string().optional().describe(processNameRule) }).strict(),
   }).strict(),
   z.object({ op: z.literal("removeSeqProcess"), name: z.string().min(1) }).strict(),
 ]);

@@ -18,14 +18,6 @@
 # SCHEDULER FUNCTIONS RELATED TO SLURM #
 ########################################
 
-#############
-# CONSTANTS #
-#############
-
-# PROCESS METHOD NAMES
-DEBASHER_PROCESS_METHOD_NAME_SLURM_SIGTERM_HANDLER="${DEBASHER_PROCESS_METHOD_SEP}slurm_sigterm_handler"
-
-
 ########
 debasher::_validate_jid()
 {

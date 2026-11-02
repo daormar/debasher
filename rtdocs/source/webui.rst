@@ -189,7 +189,8 @@ edits the selected process, and a toolbar above:
   (see `Sequential Processes`_ below). A resident program has none.
 * **Add process**: adds a process, by name. The names of the processes
   that the modules of the preamble define are suggested, and choosing
-  one brings its options and code in.
+  one brings its options and code in. A name follows the rules of
+  :ref:`process-naming`, which the dialog checks.
 * **Add program**: brings every process of another program saved with
   the web interface into this one (see `Groups`_ below).
 * **Save**, **Run** (the menu described in `Running a General Program`_

@@ -578,21 +578,21 @@ A program carries, besides its processes and edges:
 ## Processes and options
 
 A process has a `name`, which is the engine's name for it and follows the
-engine's rules (the backend checks it against the same pattern and the same
-reserved suffixes as the engine), a `description`, a `position` on the canvas,
-its `options`, its `optionsHandler`, its specifications (`computationalSpecs`
-and `additionalSpecs`) and its code. The code has three parts: `language` and
-`code`, the process's own work (a Bash function, or the source for another
-interpreter, which the engine wraps in a function); `additionalMethods`, the
-bodies of the other methods a process may define (`_post`, `_skip`,
-`_conda_envs`, ...); and the option methods, which script generation derives
-from the options and the options handler. The body of the skip method is Bash
-or Python, as `additionalMethods.skipLanguage` says: in Python, it is the text
-of the skip file, which the module calls. The Conda environments and the
-Docker images of a process are given either as the bodies of `_conda_envs` and
-`_docker_imgs` or as data, `additionalMethods.condaEnvs` (a name and a YAML
-file each) and `additionalMethods.dockerImgs`, from which script generation
-writes one `define_conda_env` or `pull_docker_img` per entry.
+engine's rules (the backend checks it against the same pattern, reserved
+suffixes and reserved marker as the engine), a `description`, a `position` on
+the canvas, its `options`, its `optionsHandler`, its specifications
+(`computationalSpecs` and `additionalSpecs`) and its code. The code has three
+parts: `language` and `code`, the process's own work (a Bash function, or the
+source for another interpreter, which the engine wraps in a function);
+`additionalMethods`, the bodies of the other methods a process may define
+(`_post`, `_skip`, `_conda_envs`, ...); and the option methods, which script
+generation derives from the options and the options handler. The body of the
+skip method is Bash or Python, as `additionalMethods.skipLanguage` says: in
+Python, it is the text of the skip file, which the module calls. The Conda
+environments and the Docker images of a process are given either as the bodies
+of `_conda_envs` and `_docker_imgs` or as data, `additionalMethods.condaEnvs` (a
+name and a YAML file each) and `additionalMethods.dockerImgs`, from which script
+generation writes one `define_conda_env` or `pull_docker_img` per entry.
 
 The editor of an additional method follows the same split. That of `skip` has a
 language selector, Bash or Python, which starts a skip file from a `skip(task)`
@@ -1269,9 +1269,9 @@ held in a heredoc comes back as a process file that the module runs as it is
 (see "The process files"), and import gives it back as a script file, an
 external alias of that file, which the round trip takes for the same process.
 Some things a module can say have no place in the model and are lost: the
-explicit dependency
-types of `_define_opt_deps`, which the module documentation shows and import
-does not keep; the program type of `_program_type`; any code of the module after
+dependency types of `_define_opt_deps` and the termination handler
+`_slurm_sigterm_handler`, which the module documentation shows and import does
+not keep; the program type of `_program_type`; any code of the module after
 its first function that belongs to no process or sequential process, unless it
 is a Bash function that an alias runs (see "Code that a loaded module already
 provides"); and the specifications the model does not hold.
@@ -5553,9 +5553,11 @@ address of the WebSocket and the answers of the request in
   node state, since a routing that a replay may change would make the sequence
   numbers of a channel label other messages (see "Fan-out and fan-in sized from
   the command line" in `doc/design_doc_resident.md`).
-- **What import loses.** Giving `_define_opt_deps` and `_program_type` a place
-  in the model. The second is needed by resident programs, and "Script
-  generation and import of a resident program" designs it.
+- **What import loses.** Giving the dependency types of `_define_opt_deps`,
+  the termination handler `_slurm_sigterm_handler` and the program type of
+  `_program_type` a place in the model. The last is needed by resident
+  programs, and "Script generation and import of a resident program" designs
+  it.
 - **Refusing at edit time what the engine refuses at run time.** Three mistakes
   reach the engine and stop the preparation of the run, with an error that names
   them, when `validateEdits` and script generation could refuse them as soon as

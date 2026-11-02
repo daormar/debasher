@@ -327,7 +327,7 @@ def test_what_script_generation_refuses_is_refused_with_its_message(tmp_path):
 # --- what the SDK refuses ------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["1st", "a-b", "a b", "a..b", "", "a_define_opts", "hello_py"])
+@pytest.mark.parametrize("name", ["1st", "a-b", "a b", "a..b", "", "a_define_opts", "a_slurm_sigterm_handler", "hello_py"])
 def test_a_name_the_engine_would_refuse_is_refused(name):
     with pytest.raises(DefinitionError, match="cannot name a process"):
         Process(name)

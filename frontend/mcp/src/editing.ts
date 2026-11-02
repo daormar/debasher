@@ -109,7 +109,9 @@ function newNames(named: NamedEdit[]): string[] {
 async function checkNamesWithEngine(backend: Backend, named: NamedEdit[]): Promise<void> {
   for (const name of new Set(newNames(named).map(name => name.trim()))) {
     if (!(await backend.validateProcessName(name))) {
-      throw new Refusal(`"${name}" is not a valid process name for the engine.`);
+      throw new Refusal(
+        `"${name}" is not a valid process name for the engine: use letters, digits and _ (not starting with a digit) in dot-separated parts, not ending with the suffix of a method (_define_opts, _post, _skip, ...) or of a language (_py, _r, _perl, _groovy), and without __NSSEP__.`,
+      );
     }
   }
 }

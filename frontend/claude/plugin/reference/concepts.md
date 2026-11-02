@@ -134,7 +134,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 ## Processes
 
 - **Name.** Letters, digits and `_`, starting with a letter or `_`; may be
-  namespaced with dots (`org.ns.name`). Unique, ignoring case, among processes
+  namespaced with dots (`org.ns.name`). It may not end with the suffix of a
+  method (`_define_opts`, `_post`, `_skip`, `_outdir_basename`,
+  `_slurm_sigterm_handler`, ...) or of a language (`_py`, `_r`, `_perl`,
+  `_groovy`), nor contain `__NSSEP__`. Unique, ignoring case, among processes
   and sequential processes.
 - **Language.** `bash`, `python`, `perl`, `r` or `groovy`.
 - **Code.** In Bash, the whole function `name() { ... }`, called with the
@@ -231,8 +234,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `condaEnvsCode`, `dockerImgsCode`, `postCode` (runs after the process
   function, whether it succeeded or failed), `resetOutfilesCode` (replaces
   the default reset of the output directory); either of these two that
-  returns a status other than 0 fails the task, `outdirBasenameCode`. The skip method may instead be a Python skip file
-  (`skipLanguage` `python`) that defines `skip(task)`, which returns `True`
+  returns a status other than 0 fails the task, `outdirBasenameCode`. The skip
+  method may instead be a Python skip file (`skipLanguage` `python`) that
+  defines `skip(task)`, which returns `True`
   to skip the task and `False` to run it, its code (`skipCode`) the whole
   file; `task.value(label)` reads an option of the task as
   `read_opt_value_from_func_args` does (the value that a value descriptor

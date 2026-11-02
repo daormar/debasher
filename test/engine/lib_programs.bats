@@ -632,3 +632,11 @@ PYEOF
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"collides with method '_define_opts'"* ]]
 }
+
+@test "debasher::_is_valid_processname refuses a name that ends with the suffix of the termination handler" {
+    # Under Slurm, the trap of a process "a" would call the process
+    # function of a process "a_slurm_sigterm_handler" as its handler
+    run debasher::_is_valid_processname "a_slurm_sigterm_handler"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"collides with method '_slurm_sigterm_handler'"* ]]
+}

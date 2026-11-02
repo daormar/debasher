@@ -280,3 +280,15 @@ EOF2
     [[ "${output}" == *$'```r\nprint(2)\n```'* ]]
     [[ "${output}" != *"Warning"* ]]
 }
+
+@test "debasher::_show_proc_methods lists the termination handler among the methods of a process" {
+    proc() { :; }
+    proc_post() { :; }
+    proc_slurm_sigterm_handler() { echo "stopping"; exit 1; }
+
+    run debasher::_show_proc_methods proc 1
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'- `proc_slurm_sigterm_handler`'* ]]
+    [[ "${output}" == *"#### slurm_sigterm_handler"* ]]
+    [[ "${output}" == *'- `proc_post`'* ]]
+}

@@ -365,7 +365,7 @@ describe("editing a program", () => {
 
     await expect(call(backend, "update_process", {
       home_dir: HOME, process: "a", changes: { name: "bad name" },
-    })).rejects.toThrow('"bad name" is not a valid process name');
+    })).rejects.toThrow('"bad name" is not a valid process name for the engine: use letters, digits and _');
   });
 
   it("answers a dry run with a proposal and saves nothing", async () => {
