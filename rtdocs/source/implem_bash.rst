@@ -827,6 +827,14 @@ writes the value. The older
 ``define_fifo_opt_generator``, which takes the task index as an
 argument, still works, and ignores that argument.
 
+``define_fifo_opt`` with ``--mirror`` keeps a copy of what the owner
+writes into the FIFO, which ``debasher_get_fifo_mirror`` and "Watch
+FIFO" in the web interface show. The copy is a debugging aid: it fills
+only while a reader has the FIFO open, and an owner that keeps writing
+after its reader has left waits until ``debasher_stop``, so a mirror
+does not let a reader stop early (see ``debasher_get_fifo_mirror`` in
+:ref:`tools`).
+
 The two alternatives differ in when the options are computed.
 ``define_opts`` runs once, when the run is prepared, and the engine
 keeps the option list of every task until the task runs. A generator

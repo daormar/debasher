@@ -134,6 +134,29 @@ def test_the_runs_of_a_batch_are_moved_given_to_the_hook_and_not_launched_again(
     assert len(hook_log.read_text().split()) == 2
 
 
+def test_a_run_launched_again_gets_the_hook_again(tmp_path):
+    # A process with force=yes runs again in every launch, so that a new
+    # launch of the batch, without -o, launches its run again
+    forced = tmp_path / "debasher_forced.sh"
+    forced.write_text(
+        SLOW_MODULE.replace("debasher_slow_", "debasher_forced_").replace(
+            '"cpus=1 mem=32 time=00:05:00"', '"cpus=1 mem=32 time=00:05:00" "force=yes"'
+        )
+    )
+    hook = tmp_path / "hook.sh"
+    hook_log = tmp_path / "hook.log"
+    hook.write_text(f'#!/bin/sh\necho "$DEBASHER_EXEC_BATCH_PRG_OUTD" >> {hook_log}\n')
+    hook.chmod(0o755)
+    lines = [_command(forced, tmp_path / "runs" / "a")]
+
+    first = _run_batch(tmp_path, lines, "-m", "1", "-k", str(hook))
+    assert first.returncode == 0, first.stderr
+    again = _run_batch(tmp_path, lines, "-m", "1", "-k", str(hook))
+    assert again.returncode == 0, again.stderr
+    assert "** Execute program..." in again.stderr
+    assert hook_log.read_text().split() == [str(tmp_path / "runs" / "a")] * 2
+
+
 def test_a_line_without_an_output_directory_stops_the_batch(tmp_path):
     slow, _ = _modules(tmp_path)
 

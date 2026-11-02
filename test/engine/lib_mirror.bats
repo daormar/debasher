@@ -127,6 +127,23 @@ wait_until_gone() {
     cmp -s "${readerout}" "${mirrorfile}"
 }
 
+@test "a mirror tap writes a line to its mirror log only once a reader has opened the real fifo" {
+    start_tap
+
+    printf 'one\n' > "${shimfifo}" &
+    local writer_pid=$!
+    # No reader yet: the tap holds the line, and the mirror log stays empty
+    "${SLEEP}" 0.5
+    [ ! -s "${mirrorfile}" ]
+
+    local got
+    got=$(IFS= read -r line < "${realfifo}" && printf '%s' "${line}")
+    [ "${got}" = "one" ]
+    wait "${writer_pid}"
+    debasher::_stop_fifo_mirror_taps
+    [ "$(cat "${mirrorfile}")" = "one" ]
+}
+
 @test "a mirror tap forwards a last line without a newline as it was written" {
     cat "${realfifo}" > "${readerout}" &
     local reader_pid=$!

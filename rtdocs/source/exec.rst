@@ -512,6 +512,12 @@ Under the built-in scheduler, ``debasher_stop`` also ends what a task
 that is no longer running left behind, such as the background jobs of
 a process function that exited without returning.
 
+While the first run of an output directory is still being prepared
+(``debasher_exec`` has not yet written ``command_line.sh``),
+``debasher_stop -d out`` stops that ``debasher_exec`` before it
+launches any process. A single process cannot be stopped yet: with
+``-p``, the tool reports that ``command_line.sh`` is missing.
+
 Program Statistics Generation
 -----------------------------
 

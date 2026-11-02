@@ -76,11 +76,40 @@ check_pars()
             exit 1
         fi
 
+        # The command line file is written once the first run of the
+        # directory is prepared: without it, a debasher_exec that holds the
+        # lock to run the program, not to validate it, is preparing that run
+        # and has launched nothing, and stopping it stops the whole program
+        # (see stop_run_being_prepared)
         if [ ! -f "${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}" ]; then
-            echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
-            exit 1
+            if [ ${p_given} -eq 0 ] && debasher::_outdir_is_locked_for_a_run "$(debasher::_get_absolute_path "${pdir}")"; then
+                stop_preparation_only=1
+            else
+                echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
+                exit 1
+            fi
         fi
     fi
+}
+
+########
+# Stops the debasher_exec that prepares the first run of the output
+# directory: there is no process of the run to stop yet. Should it have
+# finished the preparation in the meantime, and launched a round before it
+# took the signal, the command line file is there by then, and the
+# processes of the run are stopped as for any run. Returns 1 when a stop
+# failed.
+stop_run_being_prepared()
+{
+    local dirname=$1
+    local absdirname=$(debasher::_get_absolute_path "${dirname}")
+
+    debasher::_stop_run_scheduler "${absdirname}" || return 1
+    if [ -f "${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}" ]; then
+        stop_run "${dirname}"
+        return
+    fi
+    echo "The first run of ${absdirname} was being prepared: debasher_exec is stopped, and no process was launched" >&2
 }
 
 ########
@@ -156,7 +185,13 @@ fi
 
 read_pars "$@" || exit 1
 
+stop_preparation_only=0
 check_pars || exit 1
+
+if [ ${stop_preparation_only} -eq 1 ]; then
+    stop_run_being_prepared "${pdir}"
+    exit $?
+fi
 
 stop_run "${pdir}"
 

@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -1054,6 +1055,35 @@ def test_a_moved_output_directory_can_be_inspected_but_not_run_again(tmp_path):
     assert again.returncode != 0
     assert "was run in" in again.stderr
 
+    # The other tool that runs a process of the run refuses it too, and one
+    # that reads it reads it
+    launch = run_tool(REPO_ROOT / "libexec" / "debasher_launch_process", "-d", str(moved), "-p", "hello_world")
+    assert launch.returncode != 0
+    assert "was run in" in launch.stdout + launch.stderr
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(moved), "-p", "hello_world")
+    assert stdout.returncode == 0, stdout.stderr
+
+
+def test_the_tools_that_read_a_run_work_once_its_module_is_removed(tmp_path):
+    pfile = tmp_path / "debasher_hello_world.sh"
+    pfile.write_text(HELLO_WORLD.read_text())
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "hi")
+    assert result.returncode == 0, result.stderr
+    pfile.unlink()
+
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert status.returncode == 0, status.stderr
+    assert "PROCESS: hello_world ; STATUS: FINISHED" in status.stdout
+    stats = run_tool(DEBASHER_STATS, "-d", str(outdir))
+    assert stats.returncode == 0, stats.stderr
+    assert "hello_world" in stats.stdout
+    stdout = run_tool(REPO_ROOT / "bin" / "debasher_get_stdout", "-d", str(outdir), "-p", "hello_world")
+    assert stdout.returncode == 0, stdout.stderr
+    assert stdout.stdout == "hi\n"
+    stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+    assert stop.returncode == 0, stop.stderr
+
 
 @pytest.mark.parametrize(
     "example", ["debasher_namespace_example", "debasher_namespace_multidot_example"]
@@ -1215,6 +1245,41 @@ def test_a_preparation_that_fails_leaves_a_finished_run_that_can_be_launched_aga
     launch = run_tool(DEBASHER_LAUNCH_PROCESS, "-d", str(outdir), "-p", "file_reader")
     assert launch.returncode == 0, launch.stdout + launch.stderr
     assert wait_until(lambda: stdout.exists() and stdout.read_text() == "first\n")
+
+
+@pytest.mark.parametrize(
+    ("addition", "message"),
+    [
+        # The last top-level command of the module fails while it loads
+        ("\nfalse\n", "ended with status 1"),
+        # An unknown dependency type stops the inference of the dependencies
+        ("\nfile_reader_define_opt_deps()\n{\n    echo afterbogus\n}\n", "afterbogus"),
+    ],
+    ids=["module", "dependencies"],
+)
+def test_a_module_or_a_dependency_that_fails_leaves_a_finished_run_as_it_was_and_launches_nothing(tmp_path, addition, message):
+    pfile = tmp_path / "debasher_file_example.sh"
+    pfile.write_text(FILE_EXAMPLE.read_text())
+    outdir = tmp_path / "out"
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "first")
+    assert result.returncode == 0, result.stderr
+    before = read_run_files(outdir)
+    ids = {p: p.stat().st_mtime_ns for p in (outdir / "__exec__").glob("*/*.id")}
+    assert ids
+
+    pfile.write_text(pfile.read_text() + addition)
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "-s", "second")
+
+    assert result.returncode != 0
+    assert message in result.stderr
+    # The files with which the run describes itself are those of the first
+    # run, and no task was launched
+    assert read_run_files(outdir) == before
+    assert not list(outdir.glob(".prep*"))
+    assert {p: p.stat().st_mtime_ns for p in (outdir / "__exec__").glob("*/*.id")} == ids
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert "PROCESS: file_writer ; STATUS: FINISHED" in status.stdout
+    assert "PROCESS: file_reader ; STATUS: FINISHED" in status.stdout
 
 
 def test_a_finished_process_launched_again_that_fails_is_unfinished(tmp_path):
@@ -1427,13 +1492,18 @@ def test_a_skip_method_that_fails_fails_its_task_instead_of_running_it(tmp_path,
     pfile = tmp_path / "debasher_skipchain.sh"
     pfile.write_text(FAILING_SKIP_MODULE.replace("__PRODUCED_FILE__", str(produced)))
     outdir = tmp_path / "out"
+    # What an earlier run left in the process output directory, which the
+    # reset of a task that runs would remove
+    (outdir / "producer").mkdir(parents=True)
+    (outdir / "producer" / "left.txt").write_text("from before\n")
 
     extra = ["--wait"] if sched == "SLURM" else []
     run_exec_with_sched(sched, "--pfile", str(pfile), "--outdir", str(outdir), *extra)
 
-    # The process did not run over the file it would produce, and did not
-    # finish
+    # The process did not run over the file it would produce, did not
+    # finish, and its process output directory was not touched
     assert produced.read_text() == "there from before\n"
+    assert (outdir / "producer" / "left.txt").read_text() == "from before\n"
     execdir = outdir / "__exec__" / "producer"
     assert not (execdir / "producer.finished").exists()
     log = "".join(p.read_text() for p in execdir.glob("producer.*") if p.suffix in (".log", ".sched_out"))
@@ -2027,6 +2097,36 @@ def test_the_shared_directories_of_a_loaded_module_that_adds_no_process_are_crea
     result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert (outdir / "extradata").is_dir()
+
+
+def test_outdated_code_reruns_a_finished_process_only_on_request_against_every_loaded_module(tmp_path):
+    (tmp_path / "extra.sh").write_text(EXTRA_SHDIR_MODULE)
+    pfile = tmp_path / "debasher_loader.sh"
+    counter = tmp_path / "runs.txt"
+    pfile.write_text(LOADS_EXTRA_MODULE.replace("    echo done\n", f"    echo run >> {counter}\n"))
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert counter.read_text().count("run") == 1
+
+    # The module that the program file loads, not the program file itself,
+    # becomes newer than the process script of the run
+    script = outdir / "__exec__" / "loader" / "loader"
+    newer = script.stat().st_mtime + 10
+    os.utime(tmp_path / "extra.sh", (newer, newer))
+
+    # Without the option, a finished process does not run again
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert counter.read_text().count("run") == 1
+
+    # With it, the process runs again, since one of the modules of the
+    # program is newer than its script
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), "--rerun-outdated-procs", cwd=tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert "used outdated modules" in result.stderr
+    assert counter.read_text().count("run") == 2
 
 
 def test_debasher_exec_ignores_an_option_that_no_process_knows(tmp_path):
@@ -3541,6 +3641,30 @@ def test_the_reader_of_a_mirrored_fifo_ends_when_its_writer_exits_without_return
     assert stdout.stdout.split() == ["a", "b"], stdout.stdout + stdout.stderr
 
 
+def test_a_reader_of_a_mirrored_fifo_that_is_gone_does_not_keep_the_task_of_the_owner_from_ending(tmp_path):
+    pfile = tmp_path / "debasher_mirror.sh"
+    write_mirror_module(pfile)
+    # The owner writes less than the shim holds, so that its process function
+    # returns, and the reader takes one line and goes: the mirror tap gives
+    # the rest up instead of keeping the task waiting, and every line still
+    # reaches the mirror log. An owner that writes more than the shim holds
+    # after its reader is gone stays blocked (see "Mirror taps")
+    module = pfile.read_text()
+    module = module.replace("printf 'a\nb\n' >", "seq 1 1000 >")
+    module = module.replace('cat "$(read_opt_value_from_func_args "-inf"', 'head -n 1 "$(read_opt_value_from_func_args "-inf"')
+    assert "seq 1 1000 >" in module and "head -n 1" in module
+    pfile.write_text(module)
+    outdir = tmp_path / "out"
+
+    result = run_exec("--pfile", str(pfile), "--outdir", str(outdir), timeout=120)
+    assert result.returncode == 0, result.stderr
+    status = run_tool(DEBASHER_STATUS, "-d", str(outdir))
+    assert "PROCESS: w ; STATUS: FINISHED" in status.stdout, status.stdout
+    assert "PROCESS: r ; STATUS: FINISHED" in status.stdout, status.stdout
+    mirror = run_tool(DEBASHER_GET_FIFO_MIRROR, "-d", str(outdir), "-p", "w", "-f", "f")
+    assert len(mirror.stdout.split()) == 1000
+
+
 def test_a_fifo_no_longer_declared_with_mirror_is_not_mirrored_in_the_next_run(tmp_path):
     pfile = tmp_path / "debasher_mirror.sh"
     write_mirror_module(pfile)
@@ -4087,6 +4211,106 @@ def _status_of(outdir, process):
     status = run_tool(DEBASHER_STATUS, "-d", str(outdir)).stdout
     match = re.search(rf"^PROCESS: {re.escape(process)} ; STATUS: (\S+)", status, re.MULTILINE)
     return match.group(1) if match else None
+
+
+# A process whose _define_opts sleeps, so that the first run of a directory
+# stays in its preparation for a while, and whose function leaves a trace
+SLOW_PREPARATION_MODULE = """\
+slowprep_explain_opts()
+{
+    :
+}
+
+slowprep_define_opts()
+{
+    sleep 6
+    local optlist=""
+    save_opt_list optlist
+}
+
+slowprep()
+{
+    touch "__TRACE__"
+}
+
+debasher_slowprep_program()
+{
+    add_debasher_process "slowprep" "cpus=1 mem=32 time=00:01:00"
+}
+"""
+
+
+def test_debasher_stop_stops_the_first_run_of_a_directory_while_it_is_being_prepared(tmp_path):
+    pfile = tmp_path / "debasher_slowprep.sh"
+    trace = tmp_path / "ran"
+    pfile.write_text(SLOW_PREPARATION_MODULE.replace("__TRACE__", str(trace)))
+    outdir = tmp_path / "out"
+    execution = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        # The lock is held, and the command line file of the run is not
+        # written yet
+        assert wait_until(lambda: (outdir / "lock").exists(), timeout=30)
+        time.sleep(1)
+        assert not (outdir / "command_line.sh").exists()
+
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        assert "was being prepared: debasher_exec is stopped, and no process was launched" in stop.stderr
+        execution.wait(timeout=60)
+    finally:
+        if execution.poll() is None:
+            os.killpg(execution.pid, 9)
+
+    # Nothing was launched, then or later
+    time.sleep(7)
+    assert not trace.exists()
+    assert not list((outdir / "__exec__").glob("*/*.id"))
+
+
+def _many_processes_module(num, sleep_secs):
+    procs = "".join(
+        f"p{i}_explain_opts()\n{{\n    :\n}}\n\np{i}_define_opts()\n{{\n    local optlist=\"\"\n    save_opt_list optlist\n}}\n\n"
+        f"p{i}()\n{{\n    sleep {sleep_secs}\n}}\n\n"
+        for i in range(num)
+    )
+    adds = "".join(f'    add_debasher_process "p{i}" "cpus=1 mem=1 time=00:10:00"\n' for i in range(num))
+    return procs + "debasher_many_program()\n{\n" + adds + "}\n"
+
+
+def test_a_stop_while_the_builtin_scheduler_launches_leaves_no_task_half_launched(tmp_path):
+    # Forty processes in rounds of ten: the stop falls after the first round
+    # has started, while its tasks run and the next round waits for them
+    pfile = tmp_path / "debasher_many.sh"
+    pfile.write_text(_many_processes_module(40, 3))
+    outdir = tmp_path / "out"
+    execution = subprocess.Popen(
+        [str(DEBASHER_EXEC), "--pfile", str(pfile), "--outdir", str(outdir), "--sched", "BUILTIN", "--builtinsched-cpus", "10"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        assert wait_until(lambda: any((outdir / "__exec__").glob("p*/p*.id")), timeout=120)
+        stop = run_tool(DEBASHER_STOP, "-d", str(outdir))
+        assert stop.returncode == 0, stop.stdout + stop.stderr
+        execution.wait(timeout=60)
+    finally:
+        if execution.poll() is None:
+            os.killpg(execution.pid, 9)
+
+    # Every task launched has its id, so that the stop reached it; the stop
+    # came between two rounds, and nothing of the run is left running
+    launched = [d for d in (outdir / "__exec__").glob("p*") if (d / f"{d.name}.id").exists()]
+    with_script = [d for d in (outdir / "__exec__").glob("p*") if (d / d.name).exists()]
+    assert 0 < len(launched) < 40 and len(launched) % 10 == 0
+    assert {d.name for d in with_script} <= {d.name for d in launched}
+    alive = subprocess.run(["pgrep", "-f", str(outdir / "__exec__")], capture_output=True, text=True)
+    assert alive.stdout == ""
 
 
 def test_a_stopped_run_of_the_builtin_scheduler_launches_nothing_more(tmp_path):

@@ -592,6 +592,11 @@ process_batch_line()
     echo "no" >&2
     echo "" >&2
 
+    # A run launched again, such as one with a process to rerun, gets its
+    # post finish actions again once it finishes: the signal of the ones
+    # that an earlier launch did goes
+    "${RM}" -f "${prg_cmd_outd}/${PRG_POST_FINISH_ACTIONS_SIGNAL_FILENAME}"
+
     # A run that ends with 3 (the built-in scheduler waits for its run) did
     # not finish every process, which -u judges as for any other run; any
     # other status other than 0 means that the run could not be launched

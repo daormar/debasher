@@ -322,8 +322,8 @@ relative to the output directory of the run.
   an output directory of its own, and its execution by `debasher_exec_batch`,
   which keeps at most a given number of its runs active at the same time (see
   "Batches of runs").
-- **post finish actions**: what `debasher_exec_batch` does once for a run of a
-  batch that finished: the script given with `-k`, the move of its output
+- **post finish actions**: what `debasher_exec_batch` does for a run of a batch
+  once it has finished: the script given with `-k`, the move of its output
   directory into the directory given with `-o`, and the file
   `.prg_post_finish_actions_signal` that records that they are done (see
   "Batches of runs"); not to be confused with the post hook of a process.
@@ -2201,6 +2201,12 @@ A mirror is a debugging aid that guarantees little, and has these limits:
   real FIFO, and the task waits for it, as a writer with no mirror would wait,
   until `debasher_stop`; the log stays empty, since the tap copies a line to the
   log as it reads it, after it has opened the real FIFO.
+- **A reader that goes while the owner writes.** The tap cannot tell a reader
+  that is gone from one that opens the FIFO anew for each line, and so waits for
+  a reader while the process function runs. An owner that still writes more than
+  the shim holds once its reader is gone stays blocked on the shim, and its task
+  with it, until `debasher_stop`, where an owner with no mirror would get
+  `SIGPIPE`.
 - **Lines of text.** A NUL byte does not reach the reader.
 - **Background jobs.** A background job of the process function inherits the
   write ends of the shims, and one that outlives the function keeps its taps,
@@ -2232,7 +2238,7 @@ happens depends on when the failure comes:
   command alone, whose status is 141, and the process function goes on: what
   happens then is up to the function, and the task may finish. With a mirror,
   the owner writes into the shim, and gets no `SIGPIPE`, although its writes
-  block once the shim is full (see "Mirror taps").
+  block once the shim is full, until `debasher_stop` (see "Mirror taps").
 
 A task ended by `SIGPIPE`, like one whose process function calls `exit`, ends
 with no error message and without running its `_post` method, and leaves no
@@ -3006,12 +3012,17 @@ the exec directories, and they neither load a module nor need the program file.
   scheduler it also kills the process group of a task that has not finished and
   whose leader is gone, which holds what the task left behind, such as a
   background job or a mirror tap: the system gives the number of a process group
-  to no new process while the group has members. After it, no task of the
-  run runs and nothing is left that could launch one. With `-p`, it stops the
+  to no new process while the group has members. After it, no task of the run
+  runs and nothing is left that could launch one. With `-p`, it stops the
   running tasks of that one process, and the rest of the run goes on. A process
   whose stop fails is reported and makes `debasher_stop` end with status 1, but
   does not keep the other processes from being stopped; if the `debasher_exec`
   of the run cannot be stopped, it ends with status 1 and stops no process.
+  Without `-p`, on an output directory whose first run is still being prepared,
+  which has no command line file yet, it stops that `debasher_exec` alone (not
+  one that only validates the program), since no process is launched before the
+  preparation ends; should the preparation end in the meantime, it stops the
+  processes of the run as for any run.
 - `debasher_stats` gives the time that each process, and each task of an
   array, took, from the start and end times in their logs.
 - `debasher_get_stdout`, `debasher_get_sched_out` and
@@ -3088,9 +3099,9 @@ it is then, which records that they are done. A script that ends with 200 is run
 again at the next look; any other failure of the script, or a move that fails,
 is an error of `debasher_exec_batch`. `-o` cannot be the directory that holds
 the output directories of the lines, into which the move would put each run
-where it already is. The post finish actions are done once for an output
-directory: the file is never removed, so that a run without `-o` that runs
-again, because a process of it is marked to rerun, does not get them again.
+where it already is. The file goes when the line is launched again, so that a
+run that runs again, because a process of it is marked to rerun, gets its post
+finish actions again once it finishes.
 
 **Launching a line.** A run that is not in progress, and in which
 `debasher_exec --validate` would mark a process to rerun, is taken as not
@@ -3610,8 +3621,9 @@ leaves, by design, to the program or to whoever runs it.
     was skipped (see "Process status").
 12. A mirror tap forwards every line that the owner writes, in order and as it
     was written, to a reader that reads them all, and to the mirror log once a
-    reader has opened the FIFO; a reader that is gone does not keep the task of
-    the owner from ending (see "Mirror taps").
+    reader has opened the FIFO; once the process function of the owner has
+    returned, a reader that is gone does not keep the task of the owner from
+    ending (see "Mirror taps").
 13. The oneshot mode of the built-in scheduler refuses, before launching
     anything, a program that it could not run without waiting for something to
     end (see "The built-in scheduler").
@@ -3753,13 +3765,13 @@ leaves, by design, to the program or to whoever runs it.
   found, but a missing `srun` goes unnoticed until the first step of a process
   function that calls `seq_execute_slurm` directly.
 - **Mirror taps.** A mirror tap forwards lines of text, gives its reader a
-  single writer for the whole task, and keeps its task waiting for a reader
-  that never opens the FIFO (see "Mirror taps").
+  single writer for the whole task, and keeps its task waiting for a reader that
+  never opens the FIFO, and keeps an owner that writes more than the shim holds
+  blocked once its reader is gone (see "Mirror taps").
 - **Batches.** `debasher_exec_batch` launches a line when the `debasher_exec` of
   the line before returns, so the runs of a batch go one after the other,
-  whatever `-m` says, with a `debasher_exec` that waits for its run; and it does
-  the post finish actions of an output directory once, even for a run that runs
-  again (see "Batches of runs").
+  whatever `-m` says, with a `debasher_exec` that waits for its run (see
+  "Batches of runs").
 - **Resident programs.** Their guarantees are those of
   `doc/design_doc_resident.md`, which change or replace several of the above.
 

@@ -265,7 +265,9 @@ that holds the output directories of the lines.
 Launching the batch again with the same file skips the runs that
 completed, waits for those still in progress from the earlier launch
 instead of launching them a second time, and launches the others
-again, the failed ones included.
+again, the failed ones included. A run that the batch launches again
+after it had completed (for example because a process of it has to run
+again) gets the script of ``-k`` again once it completes.
 
 The exit status is 0 when every run completed, 3 when some run did not
 (the batch lists them at the end, each with its reason), and 1 on an
@@ -319,6 +321,9 @@ jobs of a process function that exited without returning, or its
 mirror taps. Its exit status is 0 when every stop it tried succeeded,
 and 1 when the run cannot be read or the stop of some process failed;
 in that case it still tries to stop the other processes first.
+Without ``-p``, while the first run of an output directory is still
+being prepared, it stops that ``debasher_exec`` before it launches any
+process.
 
 debasher_reformat_status
 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -467,17 +472,19 @@ debasher_get_fifo_mirror
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_get_fifo_mirror`` shows the mirrored content of a process's
-FIFO, i.e. a copy of what the owning process wrote into it, provided
-the FIFO was declared with the mirroring option of ``define_fifo_opt``
-on an output option (see the :ref:`implem_bash` Section for more
-information about FIFOs) and the owning process has already run. The
-copy is a debugging aid: it stays empty while no reader has opened the
-FIFO, and the owning process then waits for a reader, as it would with
-no mirror. A reader that leaves before taking every line leaves them
-all in the copy, and the owning process ends with a warning that says
-so. When a FIFO is no longer declared with ``--mirror``, the next run
-of its owner removes its copy, and the tool reports that the mirror
-file could not be found.
+FIFO, i.e. a copy of what the owning process wrote into it, provided the
+FIFO was declared with the mirroring option of ``define_fifo_opt`` on an
+output option (see the :ref:`implem_bash` Section for more information
+about FIFOs) and the owning process has already run. The copy is a
+debugging aid: it stays empty while no reader has opened the FIFO, and
+the owning process then waits for a reader, as it would with no mirror.
+A reader that leaves before taking every line leaves them all in the
+copy. If the owning process has nothing more to write, it ends with a
+warning that says so once its process function returns. If it still
+writes more than the FIFO holds, it waits for a new reader until
+``debasher_stop`` stops it. When a FIFO is no longer declared with
+``--mirror``, the next run of its owner removes its copy, and the tool
+reports that the mirror file could not be found.
 
 Its options are:
 
