@@ -421,6 +421,28 @@ debasher::_validate_resident_channels()
 
     # Every task of every business node
     local -A is_node=()
+    debasher::_collect_resident_business_nodes
+
+    # Edges of the graph, and the initiators, which start the walk
+    local -A successors=()
+    local -A reached=()
+    local -a queue=()
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
+        debasher::_add_resident_fifo_to_graph "${augm_fifoname}" || return 1
+        debasher::_check_resident_fifo_owner_opt "${augm_fifoname}" || return 1
+    done
+
+    debasher::_walk_resident_graph_from_initiators
+    debasher::_check_every_resident_node_reached
+}
+
+########
+# Fills is_node, an associative array of debasher::_validate_resident_channels
+# (seen by dynamic scope), with every task of every FBPProcess, as
+# <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>.
+debasher::_collect_resident_business_nodes()
+{
     local processname idx num_tasks
     for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
         [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
@@ -429,61 +451,90 @@ debasher::_validate_resident_channels()
             is_node["${processname}${sep}${idx}"]=1
         done
     done
+}
 
-    # Edges of the graph, and the initiators
-    local -A successors=()
-    local -A reached=()
-    local -a queue=()
-    local augm_fifoname owner reader kind initiator owner_proc reader_proc owner_opt
-    for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
-        reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
-        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
-        owner_proc="${owner%%${sep}*}"
-        reader_proc="${reader%%${sep}*}"
-        case "${kind}" in
-            "")
-                if [ -n "${is_node[${owner}]+x}" ] && [ -n "${is_node[${reader}]+x}" ]; then
-                    successors["${owner}"]+=" ${reader}"
-                fi
-                ;;
-            "${DEBASHER_FIFO_KIND_EXTERNAL}")
-                if [ "${reader}" != "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-                    echo "Error: fifo ${augm_fifoname} is tagged --external, but process ${reader_proc} of the program reads it: a fifo fed from outside the program has no other end inside it" >&2
-                    return 1
-                fi
-                ;;
-            "${DEBASHER_FIFO_KIND_CONTROL}")
-                if [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-                    initiator="${owner}"
-                elif [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${owner_proc}]:-}" = "supervisor" ] && [ -n "${is_node[${reader}]+x}" ]; then
-                    initiator="${reader}"
-                else
-                    echo "Error: fifo ${augm_fifoname} is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node" >&2
-                    return 1
-                fi
-                if [ -n "${is_node[${initiator}]+x}" ] && [ -z "${reached[${initiator}]+x}" ]; then
-                    reached["${initiator}"]=1
-                    queue+=("${initiator}")
-                fi
-                ;;
-        esac
+########
+# Adds the fifo $1 to the graph of debasher::_validate_resident_channels,
+# whose is_node, successors, reached and queue it sees by dynamic scope: a
+# fifo without a tag between two nodes is an edge from its owner to its
+# reader; a fifo tagged --control makes an initiator of the node that reads
+# it (from outside the program, its owner; from the Supervisor, its reader),
+# which goes into the queue of the walk. Fails, with an error, for a fifo
+# tagged --external that a process of the program reads, and for one tagged
+# --control that is neither fed from outside nor written by the Supervisor
+# to a node.
+debasher::_add_resident_fifo_to_graph()
+{
+    local augm_fifoname=$1
 
-        # The option through which the owner defines the fifo says whether it
-        # writes or reads it
-        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]:-}"
-        if [ -n "${kind}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-            if debasher::_str_is_output_option "${owner_opt}"; then
-                echo "Error: fifo ${augm_fifoname} is tagged --${kind} and fed from outside the program, so process ${owner_proc} reads it, but defines it through the output option ${owner_opt}" >&2
+    local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+    local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+    local kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+    local owner_proc="${owner%%${sep}*}"
+    local reader_proc="${reader%%${sep}*}"
+    local initiator
+    case "${kind}" in
+        "")
+            if [ -n "${is_node[${owner}]+x}" ] && [ -n "${is_node[${reader}]+x}" ]; then
+                successors["${owner}"]+=" ${reader}"
+            fi
+            ;;
+        "${DEBASHER_FIFO_KIND_EXTERNAL}")
+            if [ "${reader}" != "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+                echo "Error: fifo ${augm_fifoname} is tagged --external, but process ${reader_proc} of the program reads it: a fifo fed from outside the program has no other end inside it" >&2
                 return 1
             fi
-        elif ! debasher::_str_is_output_option "${owner_opt}"; then
-            echo "Error: fifo ${augm_fifoname} is defined by process ${owner_proc} through the input option ${owner_opt}: a fifo is defined by the process that writes it, through an output option (-out...), unless it is fed from outside the program and tagged --external or --control" >&2
+            ;;
+        "${DEBASHER_FIFO_KIND_CONTROL}")
+            if [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+                initiator="${owner}"
+            elif [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${owner_proc}]:-}" = "supervisor" ] && [ -n "${is_node[${reader}]+x}" ]; then
+                initiator="${reader}"
+            else
+                echo "Error: fifo ${augm_fifoname} is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node" >&2
+                return 1
+            fi
+            if [ -n "${is_node[${initiator}]+x}" ] && [ -z "${reached[${initiator}]+x}" ]; then
+                reached["${initiator}"]=1
+                queue+=("${initiator}")
+            fi
+            ;;
+    esac
+}
+
+########
+# Fails, with an error, when the option through which the owner of the fifo
+# $1 defines it does not say what the owner does with it: a fifo is written
+# by its owner, through an output option ("-out..."), except a tagged fifo
+# fed from outside the program, which its owner reads through an input
+# option.
+debasher::_check_resident_fifo_owner_opt()
+{
+    local augm_fifoname=$1
+
+    local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+    local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+    local kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+    local owner_proc="${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*}"
+    local owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]:-}"
+    if [ -n "${kind}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+        if debasher::_str_is_output_option "${owner_opt}"; then
+            echo "Error: fifo ${augm_fifoname} is tagged --${kind} and fed from outside the program, so process ${owner_proc} reads it, but defines it through the output option ${owner_opt}" >&2
             return 1
         fi
-    done
+    elif ! debasher::_str_is_output_option "${owner_opt}"; then
+        echo "Error: fifo ${augm_fifoname} is defined by process ${owner_proc} through the input option ${owner_opt}: a fifo is defined by the process that writes it, through an output option (-out...), unless it is fed from outside the program and tagged --external or --control" >&2
+        return 1
+    fi
+}
 
-    # Every node a round can reach, from the initiators
+########
+# Marks in reached, an associative array of
+# debasher::_validate_resident_channels (seen by dynamic scope, with its
+# successors and queue), every node that a round can reach from the
+# initiators in the queue, walking the edges breadth first.
+debasher::_walk_resident_graph_from_initiators()
+{
     local head=0 node next
     while [ "${head}" -lt "${#queue[@]}" ]; do
         node="${queue[head]}"
@@ -495,8 +546,17 @@ debasher::_validate_resident_channels()
             fi
         done
     done
+}
 
+########
+# Fails, with an error that names them sorted, when a node of is_node is not
+# in reached, both associative arrays of
+# debasher::_validate_resident_channels seen by dynamic scope: no round
+# could reach it.
+debasher::_check_every_resident_node_reached()
+{
     local -a unreached=()
+    local node
     for node in "${!is_node[@]}"; do
         if [ -z "${reached[${node}]+x}" ]; then
             unreached+=("$(debasher::_resident_node_display_name "${node}")")
@@ -575,112 +635,29 @@ debasher::_register_resident_task_ports()
 
     # The ports found so far, blank-separated, by <node><sep><field>
     local -A ports=()
-    # $1: node, $2: field, $3: option
-    debasher::_add_resident_task_port()
-    {
-        local port="${3#-}"
-        ports["$1${sep}$2"]+=" ${port#-}"
-    }
-
     # The fifos of the business channels, blank-separated
     local held=""
 
-    local augm_fifoname owner reader kind owner_opt reader_opt hb_port node_label startup
+    local augm_fifoname
     for augm_fifoname in "${!DEBASHER_PROGRAM_FIFOS[@]}"; do
-        owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
-        reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
-        kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
-        owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]}"
-        reader_opt="${DEBASHER_FIFO_READER_OPTS[${augm_fifoname}]:-}"
-
-        # The owner's end: an output port, unless the fifo is tagged and fed
-        # from outside the program, in which case the owner reads it
-        if [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ]; then
-            if [ -n "${kind}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-                # The tag, "control" or "external", is also the name of the field
-                debasher::_add_resident_task_port "${owner}" input "${owner_opt}"
-                debasher::_add_resident_task_port "${owner}" "${kind}" "${owner_opt}"
-            else
-                debasher::_add_resident_task_port "${owner}" output "${owner_opt}"
-                if [ "$(debasher::_resident_node_role "${reader}")" = "supervisor" ]; then
-                    debasher::_add_resident_task_port "${owner}" supervisor "${owner_opt}"
-                fi
-            fi
-        fi
-
-        # The other end, when a node of the program reads the fifo: an input
-        # port, and a control port too if the fifo is tagged --control
-        if [ "$(debasher::_resident_node_role "${reader}")" = "fbpprocess" ]; then
-            debasher::_add_resident_task_port "${reader}" input "${reader_opt}"
-            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
-                debasher::_add_resident_task_port "${reader}" control "${reader_opt}"
-            fi
-        fi
-
-        # A business channel: a fifo without a tag between two nodes
-        if [ -z "${kind}" ] \
-               && [ "$(debasher::_resident_node_role "${owner}")" = "fbpprocess" ] \
-               && [ "$(debasher::_resident_node_role "${reader}")" = "fbpprocess" ]; then
-            held+=" ${augm_fifoname}"
-        fi
-
-        # The Supervisor's end. It reads the heartbeat channel of a node, the
-        # one fifo without a tag that a node writes to it (the checks above
-        # refuse a tagged one). It defines a trigger to a node, tagged
-        # --control, or its manual trigger, tagged --control and fed from
-        # outside, and nothing else.
-        if [ "$(debasher::_resident_node_role "${reader}")" = "supervisor" ]; then
-            hb_port="${reader_opt#-}"
-            node_label=$(debasher::_resident_node_display_name "${owner}")
-            debasher::_add_resident_task_port "${reader}" nodes "${node_label}=${hb_port#-}"
-            startup=$(debasher::extract_attr_from_process_comp_specs "$(debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${owner%%${sep}*}]:-}")" startup_timeout_s)
-            if [ "${startup}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-                debasher::_add_resident_task_port "${reader}" startup "${node_label}=${startup}"
-            fi
-        fi
-        if [ "$(debasher::_resident_node_role "${owner}")" = "supervisor" ]; then
-            if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
-                debasher::_add_resident_task_port "${owner}" manual_trigger "${owner_opt}"
-            elif [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
-                debasher::_add_resident_task_port "${owner}" trigger "${owner_opt}"
-            else
-                echo "Error: the Supervisor ${owner%%${sep}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control" >&2
-                return 1
-            fi
-        fi
+        debasher::_add_resident_fifo_ports "${augm_fifoname}" || return 1
     done
 
     # The Supervisor, if there is one: every node then needs a heartbeat
     # channel to it
-    local supervisor="" processname
-    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
-        if [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ]; then
-            supervisor="${processname}"
-        fi
-    done
+    local supervisor
+    supervisor=$(debasher::_get_resident_supervisor)
 
     # One entry for every task, also for one with no port at all, so that
     # every node of the program takes its ports from here
-    local idx num_tasks node field list entry
+    local processname idx num_tasks node entry
     for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
         [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "fbpprocess" ] || continue
         num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
         for (( idx = 0; idx < num_tasks; idx++ )); do
             node="${processname}${sep}${idx}"
-            entry=""
-            for field in input output control external supervisor; do
-                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
-                if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
-                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
-                    return 1
-                fi
-                if [ "${field}" = "supervisor" ] && [ -z "${list}" ] && [ -n "${supervisor}" ]; then
-                    echo "Error: node $(debasher::_resident_node_display_name "${node}") has no output read by the Supervisor ${supervisor}, but in a program with a Supervisor every node has a heartbeat channel: without one, the node would run unsupervised" >&2
-                    return 1
-                fi
-                entry+=";${field}=${list}"
-            done
-            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+            entry=$(debasher::_resident_node_ports_entry "${node}" "${supervisor}") || return 1
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry}"
         done
     done
 
@@ -690,17 +667,207 @@ debasher::_register_resident_task_ports()
         num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
         for (( idx = 0; idx < num_tasks; idx++ )); do
             node="${processname}${sep}${idx}"
-            entry=""
             ports["${node}${sep}hold"]="${held}"
-            for field in nodes trigger manual_trigger startup hold; do
-                list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
-                if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
-                    echo "Error: the Supervisor ${processname} has more than one manual trigger fed from outside the program (${list})" >&2
-                    return 1
-                fi
-                entry+=";${field}=${list}"
-            done
-            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry#;}"
+            entry=$(debasher::_resident_supervisor_ports_entry "${node}") || return 1
+            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry}"
         done
     done
+}
+
+########
+# $1: node, $2: field, $3: option, or a value already written as a port
+# (<node>=<port>). Adds the port, the option without its leading dashes, to
+# ports, the associative array of debasher::_register_resident_task_ports
+# seen by dynamic scope.
+debasher::_add_resident_task_port()
+{
+    local port="${3#-}"
+    ports["$1${sep}$2"]+=" ${port#-}"
+}
+
+########
+# Adds to ports and held, of debasher::_register_resident_task_ports (seen
+# by dynamic scope), the ports that the fifo $1 gives the processes at its
+# two ends, and the fifo to held when it is a business channel. Fails, with
+# an error, for a fifo that the Supervisor defines and that is neither a
+# trigger to a node nor its manual trigger.
+debasher::_add_resident_fifo_ports()
+{
+    local augm_fifoname=$1
+
+    local owner="${DEBASHER_PROGRAM_FIFOS[${augm_fifoname}]}"
+    local reader="${DEBASHER_FIFO_READERS[${augm_fifoname}]}"
+    local kind="${DEBASHER_FIFO_KINDS[${augm_fifoname}]:-}"
+    local owner_opt="${DEBASHER_FIFO_OWNER_OPTS[${augm_fifoname}]}"
+    local reader_opt="${DEBASHER_FIFO_READER_OPTS[${augm_fifoname}]:-}"
+    local owner_role reader_role
+    owner_role=$(debasher::_resident_node_role "${owner}")
+    reader_role=$(debasher::_resident_node_role "${reader}")
+
+    # A node at the owner's end
+    if [ "${owner_role}" = "fbpprocess" ]; then
+        debasher::_add_resident_owner_port "${owner}" "${owner_opt}" "${reader}" "${reader_role}" "${kind}"
+    fi
+
+    # A node at the other end reads it: an input port, and a control port
+    # too if the fifo is tagged --control
+    if [ "${reader_role}" = "fbpprocess" ]; then
+        debasher::_add_resident_task_port "${reader}" input "${reader_opt}"
+        if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+            debasher::_add_resident_task_port "${reader}" control "${reader_opt}"
+        fi
+    fi
+
+    # A business channel: a fifo without a tag between two nodes
+    if [ -z "${kind}" ] && [ "${owner_role}" = "fbpprocess" ] && [ "${reader_role}" = "fbpprocess" ]; then
+        held+=" ${augm_fifoname}"
+    fi
+
+    # The Supervisor's end. It reads the heartbeat channel of a node, the
+    # one fifo without a tag that a node writes to it (the checks of
+    # debasher::_validate_resident_channels refuse a tagged one), and
+    # defines only its triggers
+    if [ "${reader_role}" = "supervisor" ]; then
+        debasher::_add_resident_heartbeat_port "${owner}" "${reader}" "${reader_opt}"
+    fi
+    if [ "${owner_role}" = "supervisor" ]; then
+        debasher::_add_resident_supervisor_trigger_port "${augm_fifoname}" "${owner}" "${owner_opt}" "${reader}" "${kind}" || return 1
+    fi
+}
+
+########
+# Adds to ports (of debasher::_register_resident_task_ports, seen by
+# dynamic scope) the port of the node $1 at the owner's end of a fifo, which
+# it defines through the option $2 and whose other end is $3, of role $4,
+# with the tag $5: an output port, unless the fifo is tagged and fed from
+# outside the program, in which case the owner reads it; an output read by
+# the Supervisor is its heartbeat channel too.
+debasher::_add_resident_owner_port()
+{
+    local owner=$1
+    local owner_opt=$2
+    local reader=$3
+    local reader_role=$4
+    local kind=$5
+
+    if [ -n "${kind}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+        # The tag, "control" or "external", is also the name of the field
+        debasher::_add_resident_task_port "${owner}" input "${owner_opt}"
+        debasher::_add_resident_task_port "${owner}" "${kind}" "${owner_opt}"
+    else
+        debasher::_add_resident_task_port "${owner}" output "${owner_opt}"
+        if [ "${reader_role}" = "supervisor" ]; then
+            debasher::_add_resident_task_port "${owner}" supervisor "${owner_opt}"
+        fi
+    fi
+}
+
+########
+# Adds to ports (of debasher::_register_resident_task_ports, seen by
+# dynamic scope) the port of the Supervisor $2 for the fifo $1 that it
+# defines through the option $3, whose other end is $4, with the tag $5: its
+# manual trigger, tagged --control and fed from outside, or a trigger to a
+# node, tagged --control. Fails, with an error, for any other fifo.
+debasher::_add_resident_supervisor_trigger_port()
+{
+    local augm_fifoname=$1
+    local owner=$2
+    local owner_opt=$3
+    local reader=$4
+    local kind=$5
+
+    if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
+        debasher::_add_resident_task_port "${owner}" manual_trigger "${owner_opt}"
+    elif [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
+        debasher::_add_resident_task_port "${owner}" trigger "${owner_opt}"
+    else
+        echo "Error: the Supervisor ${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control" >&2
+        return 1
+    fi
+}
+
+########
+# Adds to the ports of the Supervisor $2 (in ports, seen by dynamic scope)
+# the heartbeat channel of the node $1, read through the option $3, as
+# <node>=<port>, and the startup deadline of the node when its
+# computational specifications give one (startup_timeout_s), as
+# <node>=<seconds>.
+debasher::_add_resident_heartbeat_port()
+{
+    local node=$1
+    local supervisor_node=$2
+    local reader_opt=$3
+
+    local hb_port="${reader_opt#-}"
+    local node_label=$(debasher::_resident_node_display_name "${node}")
+    debasher::_add_resident_task_port "${supervisor_node}" nodes "${node_label}=${hb_port#-}"
+    local startup
+    startup=$(debasher::extract_attr_from_process_comp_specs "$(debasher::extract_process_comp_specs "${DEBASHER_INITIAL_PROCESS_SPEC[${node%%${sep}*}]:-}")" startup_timeout_s)
+    if [ "${startup}" != "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+        debasher::_add_resident_task_port "${supervisor_node}" startup "${node_label}=${startup}"
+    fi
+}
+
+########
+# Prints the name of the Supervisor of the resident program, or nothing
+# when it has none.
+debasher::_get_resident_supervisor()
+{
+    local processname supervisor=""
+    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
+        if [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ]; then
+            supervisor="${processname}"
+        fi
+    done
+    echo "${supervisor}"
+}
+
+########
+# Prints the entry of DEBASHER_RESIDENT_TASK_PORTS of the node $1, from
+# ports (seen by dynamic scope): input=...;output=...;control=...;
+# external=...;supervisor=... (see debasher::_register_resident_task_ports).
+# $2 is the Supervisor of the program, or empty. Fails, with an error, for a
+# node with more than one output read by the Supervisor, or with none in a
+# program with a Supervisor.
+debasher::_resident_node_ports_entry()
+{
+    local node=$1
+    local supervisor=$2
+
+    local field list entry=""
+    for field in input output control external supervisor; do
+        list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+        if [ "${field}" = "supervisor" ] && [[ "${list}" == *,* ]]; then
+            echo "Error: node $(debasher::_resident_node_display_name "${node}") has more than one output read by the Supervisor (${list}), but a node has a single heartbeat channel" >&2
+            return 1
+        fi
+        if [ "${field}" = "supervisor" ] && [ -z "${list}" ] && [ -n "${supervisor}" ]; then
+            echo "Error: node $(debasher::_resident_node_display_name "${node}") has no output read by the Supervisor ${supervisor}, but in a program with a Supervisor every node has a heartbeat channel: without one, the node would run unsupervised" >&2
+            return 1
+        fi
+        entry+=";${field}=${list}"
+    done
+    echo "${entry#;}"
+}
+
+########
+# Prints the entry of DEBASHER_RESIDENT_TASK_PORTS of the Supervisor task
+# $1, from ports (seen by dynamic scope): nodes=...;trigger=...;
+# manual_trigger=...;startup=...;hold=... (see
+# debasher::_register_resident_task_ports). Fails, with an error, for a
+# Supervisor with more than one manual trigger.
+debasher::_resident_supervisor_ports_entry()
+{
+    local node=$1
+
+    local field list entry=""
+    for field in nodes trigger manual_trigger startup hold; do
+        list=$(debasher::_sorted_comma_list "${ports[${node}${sep}${field}]:-}")
+        if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
+            echo "Error: the Supervisor ${node%%${sep}*} has more than one manual trigger fed from outside the program (${list})" >&2
+            return 1
+        fi
+        entry+=";${field}=${list}"
+    done
+    echo "${entry#;}"
 }
