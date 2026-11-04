@@ -28,7 +28,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Union
 
-from api.process_names import process_name_problem
+from api.process_names import option_label_problem, process_name_problem
 from api.topology import LANGUAGE_BY_EXTENSION
 
 from .errors import DefinitionError
@@ -97,15 +97,17 @@ class _ReceivedOption:
 
 
 def opt(label: str, data_type: str, description: str = "") -> _ReceivedOption:
-    """An option that a task of the process receives, with its data type
-    (int, float, string, file, dir) and its description, for the
-    `options` of a process."""
+    """An option that a task of the process receives, for the `options` of
+    a process: its label, "-" or "--" followed by an ASCII letter or an
+    underscore, as the engine takes it, its data type (int, float, string,
+    file, dir) and its description."""
     return _ReceivedOption(label, data_type, description)
 
 
 def flag(label: str, description: str = "") -> _ReceivedOption:
     """A flag that a task of the process receives, an option with no value
-    (its data type is "None" in the program model)."""
+    (its data type is "None" in the program model), with a label as that of
+    `opt` and its description."""
     return _ReceivedOption(label, "None", description)
 
 
@@ -418,8 +420,9 @@ class Process:
         return tuple(received)
 
     def _check_label(self, label: str) -> None:
-        if not label.startswith("-"):
-            raise DefinitionError(f'Option "{label}" of process "{self.name}": a label starts with "-".')
+        problem = option_label_problem(label)
+        if problem is not None:
+            raise DefinitionError(f'Option "{label}" of process "{self.name}": {problem}')
 
     def _check_data_type(self, label: str, data_type: str, allow_flag: bool) -> None:
         if data_type in DATA_TYPES or (allow_flag and data_type == "None"):

@@ -1,6 +1,6 @@
 import pytest
 
-from api.process_names import process_name_problem
+from api.process_names import option_label_problem, process_name_problem
 
 
 @pytest.mark.parametrize("name", ["hello", "org.mymodule.hello", "_x1"])
@@ -43,3 +43,14 @@ def test_the_editor_checks_a_name_with_the_same_rule():
 
     assert is_valid_process_name("org.mymodule.hello")
     assert not is_valid_process_name("a_post")
+
+
+@pytest.mark.parametrize("label", ["-a", "--log-level", "-_x", "-outf", "--out-dir", "-x1"])
+def test_a_label_the_engine_accepts_has_no_problem(label):
+    assert option_label_problem(label) is None
+
+
+# The engine takes "-" or "--" followed by an ASCII letter or an underscore
+@pytest.mark.parametrize("label", ["", "a", "-", "--", "---x", "-1n", "-é", " -a"])
+def test_a_label_the_engine_refuses_has_its_reason(label):
+    assert "an ASCII letter or an underscore" in option_label_problem(label)

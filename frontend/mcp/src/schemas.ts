@@ -10,7 +10,7 @@ export const homeDir = z.string().min(1)
 
 export const processName = z.string().min(1).describe("The name of a process of the program.");
 
-export const optionLabel = z.string().min(1).describe('The label of an option of the process, such as "-outf".');
+export const optionLabel = z.string().min(1).describe('The label of an option of the process, such as "-outf": - or -- followed by an ASCII letter or _; an output when it starts with -out or --out.');
 
 export const optionRef = z.object({ process: processName, option: optionLabel }).strict();
 
@@ -57,7 +57,7 @@ export const optionFields = z.object({
 export const newOption = optionFields.extend({ label: optionLabel }).strict();
 
 export const optionChanges = optionFields.extend({
-  label: optionLabel.optional().describe("A new label; its direction follows from it (output when it starts with -out), and an option whose direction changes loses its connections."),
+  label: optionLabel.optional().describe("A new label; its direction follows from it (output when it starts with -out or --out), and an option whose direction changes loses its connections."),
 }).strict();
 
 const computationalSpecs = z.object({
@@ -82,7 +82,7 @@ const aliasOptMap = z.array(z.object({ fromLabel: z.string(), toLabel: z.string(
 export const processChanges = z.object({
   name: z.string().optional().describe(processNameRule),
   description: z.string().optional(),
-  language: language.optional(),
+  language: language.optional().describe("The language of the code. The engine runs a file by its extension: a save writes the process file under the extension of the language."),
   code: z.string().optional().describe("The whole function of the process, for a process that is not a node."),
   optionsHandler: z.object({
     mode: z.enum(["standard", "array", "generator", "manual"]).optional(),
@@ -99,7 +99,7 @@ export const processChanges = z.object({
       .describe("The dependencies of the process, replacing those inferred from its connections, so list every one it needs: <type>:<process>, joined by \",\" when all have to hold or by \"?\" when one is enough, with no empty element; the types are after, afterok, afternotok, afterany and aftercorr, or none for no dependency. Joined by \",\", two dependencies on the same process that no run of it satisfies together (afternotok with afterok or with aftercorr) stop the preparation of the run. Under the Slurm scheduler, a list joined by \"?\" in a process with more than one attempt (several comma-separated values in mem or time) stops the preparation of the run; give mem and time a single value. Between processes linked by FIFOs (the two ends of a FIFO, or two processes of a chain of FIFOs) only after is allowed, or the preparation of the run stops."),
     alias: z.string().optional().describe("The process whose code this one runs: a Bash process, or one in another language or another alias that comes before this one (every process comes before the sequential processes)."),
     aliasOptMap: aliasOptMap.optional(),
-    externalAlias: z.string().optional(),
+    externalAlias: z.string().optional().describe("The path of a script that the process runs as its code, relative to the home directory or absolute. Its extension (.sh, .py, .pl, .R, .groovy) says its language, which the engine runs it with: a script without one is refused."),
   }).strict().optional(),
   additionalMethods: z.object({
     resetOutfilesCode: z.string().optional(),
@@ -129,7 +129,7 @@ export const processChanges = z.object({
 
 export const seqProcessChanges = z.object({
   description: z.string().optional(),
-  language: language.optional(),
+  language: language.optional().describe("The language of the code. The engine runs a file by its extension: a save writes the process file under the extension of the language."),
   code: z.string().optional(),
   computationalSpecs: z.object({
     cpus: z.number().optional(),
@@ -140,7 +140,7 @@ export const seqProcessChanges = z.object({
   additionalSpecs: z.object({
     alias: z.string().optional().describe("The process whose code this one runs: a Bash process, or one in another language or another alias that comes before this one (every process comes before the sequential processes)."),
     aliasOptMap: aliasOptMap.optional(),
-    externalAlias: z.string().optional(),
+    externalAlias: z.string().optional().describe("The path of a script that the process runs as its code, relative to the home directory or absolute. Its extension (.sh, .py, .pl, .R, .groovy) says its language, which the engine runs it with: a script without one is refused."),
     sched: z.enum(["BUILTIN", "SLURM"]).nullable().optional()
       .describe('Where seq_execute runs its steps: in the shell of the task when not set, whatever the scheduler of the run; "SLURM" sends them through srun with its computationalSpecs, and the run then needs srun. seq_execute_slurm sends a step to Slurm whatever its sched, and refuses one whose sched is "BUILTIN". Leave it unset unless a step has to go to Slurm or must never go there; null unsets it.'),
   }).strict().optional(),

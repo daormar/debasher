@@ -330,11 +330,13 @@ invariant part (see "What a program may give again" in
 The options that the process receives are a list (`options=`) of
 `opt(label, type, description)` and `flag(label, description)`, in the order in
 which the program model, the module and the editor show them. The label is the
-name of the option for the engine, starts with `-`, and is listed once per
-process; its direction comes from the label as the engine reads it: an output is
-a label that starts with `-out` or `--out`. The data types are those of the
-program model: `int`, `float`, `string`, `file` and `dir`, and `None` for a
-flag, an option with no value. A label that ends in `-ith` is a fanout family,
+name of the option for the engine, `-` or `--` followed by an ASCII letter or an
+underscore, as the engine takes it (the SDK checks it with the function of
+`api/process_names.py`, where the rule of a process name is), and is listed once
+per process; its direction comes from the label as the engine reads it: an
+output is a label that starts with `-out` or `--out`. The data types are those
+of the program model: `int`, `float`, `string`, `file` and `dir`, and `None` for
+a flag, an option with no value. A label that ends in `-ith` is a fanout family,
 which stands for one option per task of the array or generator at the other end
 of its connection (`-outf-ith` for `-outf0`, `-outf1`, ...), and whose count the
 task options give. An option is reached by its label, `generate["-outf"]`, to
@@ -850,18 +852,18 @@ by `make` from the directories of the installation (`pkgdatadir`,
 is not a source, git ignores it, and in a source tree the library works
 without it, since the root of the repository is tried first.
 
-The API finds the tools of the engine through the environment variables
-that `debasher_webui` sets for it (`DEBASHER_WEBUI_BIN_DIR`,
-`DEBASHER_WEBUI_LIBEXEC_DIR`, `DEBASHER_WEBUI_PYTHON_DIR`), or, without
-them, in the source tree. The library sets the same variables from the
-installation module when they are not set and the directories exist, so
-that script generation finds `debasher_get_proc_info` in an installation
-as it does under the web UI. Nothing of the library imports the routers
-of the API or FastAPI: it uses `api.topology` for the topology file, its
-loading and the languages of the extensions, `api.persistence` to save
-the program, `api.script_generation` for the names of the specifications
-of a node, `api.process_names` for the rule of a process name and
-`api.resident_node_code` for the node kind of a node file.
+The API finds the tools of the engine through the environment variables that
+`debasher_webui` sets for it (`DEBASHER_WEBUI_BIN_DIR`,
+`DEBASHER_WEBUI_LIBEXEC_DIR`, `DEBASHER_WEBUI_PYTHON_DIR`), or, without them, in
+the source tree. The library sets the same variables from the installation
+module when they are not set and the directories exist, so that script
+generation finds `debasher_get_proc_info` in an installation as it does under
+the web UI. Nothing of the library imports the routers of the API or FastAPI: it
+uses `api.topology` for the topology file, its loading and the languages of the
+extensions, `api.persistence` to save the program, `api.script_generation` for
+the names of the specifications of a node, `api.process_names` for the rules of
+a process name and of an option label and `api.resident_node_code` for the node
+kind of a node file.
 
 # Guarantees and non-goals
 

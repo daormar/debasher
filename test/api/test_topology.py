@@ -552,13 +552,30 @@ def test_a_topology_that_names_what_does_not_exist_is_refused(text, files, messa
         join(loads(text), files)
 
 
-def test_a_file_with_an_explicit_language_is_read():
-    text = "schema_version: 1\nname: prg\nprocesses:\n  b:\n    code: b.txt\n    language: perl\n"
+def test_a_bash_file_whose_extension_says_no_language_is_read_with_its_language():
+    text = "schema_version: 1\nname: prg\nprocesses:\n  b:\n    code: b.txt\n    language: bash\n"
 
-    joined = join(loads(text), {"b.txt": "print 1;\n"})
+    joined = join(loads(text), {"b.txt": "b()\n{\n    :\n}\n"})
 
-    assert (joined.processes[0].language, joined.processes[0].code) == ("perl", "print 1;")
-    assert split(joined).topology.processes["b"].language == "perl"
+    assert joined.processes[0].language == "bash"
+    assert split(joined).topology.processes["b"].language == "bash"
+
+
+# The engine runs a file of a language other than Bash, and every script,
+# by its extension, whatever the topology file says
+@pytest.mark.parametrize(
+    "keys, files, message",
+    [
+        ("code: b.txt\n    language: perl", {"b.txt": ""}, "needs the extension of its language"),
+        ("code: b.sh\n    language: python", {"b.sh": ""}, "says bash, and `language` says python"),
+        ("script: b.txt\n    language: bash", {"b.txt": ""}, "the engine runs a script by its extension"),
+        ("script: b.py\n    language: perl", {"b.py": ""}, "says python, and `language` says perl"),
+    ],
+)
+def test_a_language_that_the_engine_would_not_run_the_file_with_is_refused(keys, files, message):
+    text = f"schema_version: 1\nname: prg\nprocesses:\n  b:\n    {keys}\n"
+    with pytest.raises(TopologyError, match=message):
+        join(loads(text), files)
 
 
 def test_a_tasks_file_and_a_skip_file_in_python_are_read_as_python():
@@ -607,6 +624,27 @@ def test_a_tasks_file_takes_the_extension_of_its_language():
 
     process.optionsHandler.language = "bash"
     assert split(_program("prg", [process])).topology.processes["w"].tasks == "tasks/w.sh"
+
+
+def test_a_process_file_takes_the_extension_of_its_language():
+    # A process loaded in one language and changed to another is written
+    # under the default name of the new one, which loading reads again
+    process = _process("count", language="python", code="print(1)")
+    process.files.code = "lib/count.sh"
+    taken_apart = split(_program("prg", [process]))
+    assert taken_apart.topology.processes["count"].code == "count.py"
+    assert taken_apart.topology.processes["count"].language is None
+    assert join(taken_apart.topology, taken_apart.files).processes[0].language == "python"
+
+    # A Bash file whose extension says no language keeps its name, with
+    # its language
+    process = _process("count", language="bash", code="count()\n{\n    :\n}")
+    process.files.code = "count.txt"
+    taken_apart = split(_program("prg", [process]))
+    assert (taken_apart.topology.processes["count"].code, taken_apart.topology.processes["count"].language) == (
+        "count.txt",
+        "bash",
+    )
 
 
 def test_the_conda_environments_and_docker_images_as_data_survive_the_round_trip():

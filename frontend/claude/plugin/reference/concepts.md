@@ -151,7 +151,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   name of the program, nor that name followed by the suffix of a module
   method (`_document`, `_program`, `_shared_dirs`, `_program_type`): its
   function would be a method of the module, and the save refuses it.
-- **Language.** `bash`, `python`, `perl`, `r` or `groovy`.
+- **Language.** `bash`, `python`, `perl`, `r` or `groovy`. The extension of
+  the process file or the script says it (`.sh` Bash, `.py` Python, `.pl`
+  Perl, `.R` or `.r` R, `.groovy` Groovy), since the engine runs a file by its
+  extension: a save writes a process whose language changed under a file of
+  the new extension, `program.yaml` gives `language` only as `bash`, for a
+  Bash process file whose extension says no language, and a load refuses a
+  `language` that contradicts the extension, or a script without one.
 - **Code.** In Bash, the whole function `name() { ... }`, called with the
   option list of its task: read a value with
   `local x=$(read_opt_value_from_func_args "-label" "$@")`, a flag with
@@ -264,9 +270,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 
 ## Options
 
-- **Label** starting with `-`, unique in its process. A label starting with
-  `-out` is an output; any other is an input. A change of label that changes
-  the direction drops the connections of the option.
+- **Label**: `-` or `--` followed by an ASCII letter or `_` (`-1x`, `-` and `--`
+  are not labels: the engine refuses them), unique in its process. A label
+  starting with `-out` or `--out` is an output; any other is an input. A change
+  of label that changes the direction drops the connections of the option.
 - **dataType**, the type of the data that the option carries: `int`,
   `float`, `string` (the default), `file`, `dir`, or `None` for a flag
   (always an input, on channel `none`). An input of type `file` or `dir`,

@@ -137,9 +137,10 @@ A process is written in three parts, as a module keeps them apart (the
   of them takes its code from a module that the preamble of the program
   loads (``Program(..., preamble="load_debasher_module ...")``). The data
   types are those of the editor (``int``, ``float``, ``string``,
-  ``file``, ``dir``), and the direction of an option comes from its
-  label, as the engine reads it: an output starts with ``-out`` or
-  ``--out``. An
+  ``file``, ``dir``). A label is ``-`` or ``--`` followed by an ASCII
+  letter or an underscore, as the engine requires, and the SDK refuses
+  any other. The direction of an option comes from its label, as the
+  engine reads it: an output starts with ``-out`` or ``--out``. An
   option is reached again by its label, ``generate["-outf"]``.
 * **What comes from outside: the interface.** ``interface`` names the
   options whose value comes from the command line of the run, each

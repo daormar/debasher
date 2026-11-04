@@ -144,9 +144,11 @@ keys of a process are:
     process to the one that the code expects.
 
 ``language``
-    The language of the process (``bash``, ``python``, ``perl``, ``r``
-    or ``groovy``), given only when the extension of its file does not
-    say it.
+    Only ``bash``, for a process file in Bash whose extension says no
+    language. The engine runs a file by its extension, so a file of
+    another language, and a script, need the extension of their
+    language, and a ``language`` that contradicts the extension is
+    refused.
 
 ``description``
     The description of the process.

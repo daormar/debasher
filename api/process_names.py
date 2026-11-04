@@ -1,8 +1,11 @@
 """
-The rule of the engine for a process name (debasher::_is_valid_processname
-in engine/debasher_lib_programs.sh), in one place for every door that
-checks one: the router of the editor (routers/processes.py) and the Python
-SDK, which does not import the routers since they need FastAPI.
+The rules of the engine for the name of a process
+(debasher::_is_valid_processname in engine/debasher_lib_programs.sh) and
+for the label of an option (debasher::_optname_is_correct in
+engine/debasher_lib_opts.sh), in one place for the doors that check them:
+the router of the editor (routers/processes.py), for the name, and the
+Python SDK, for both, which does not import the routers since they need
+FastAPI.
 """
 
 import re
@@ -11,6 +14,10 @@ from .debasher_constants import RESERVED_HEREDOC_SUFFIXES, RESERVED_PROCESS_METH
 
 # Parts of letters, digits and underscores, separated by dots
 _PROCESS_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*$")
+
+# "-" or "--" followed by an ASCII letter or an underscore
+# (debasher::_str_is_option in engine/debasher_lib_utils.sh)
+_OPTION_LABEL_RE = re.compile(r"^--?[A-Za-z_]")
 
 # The marker with which the engine turns a qualified name into the name of
 # a variable
@@ -45,4 +52,15 @@ def process_name_problem(name: str) -> str | None:
             return f'it ends in "{ending}", which the engine reserves for a method of a process.'
     if NSSEP_MARKER in name:
         return f'"{NSSEP_MARKER}" is a marker of the engine.'
+    return None
+
+
+def option_label_problem(label: str) -> str | None:
+    """
+    Why the engine would refuse `label` as the label of an option, or None
+    when it would take it. The reason is a clause that follows a message
+    that names the option.
+    """
+    if not _OPTION_LABEL_RE.match(label):
+        return 'a label is "-" or "--" followed by an ASCII letter or an underscore.'
     return None

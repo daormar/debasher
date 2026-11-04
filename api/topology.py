@@ -217,7 +217,8 @@ class TopologyProcess(_Strict):
     script: Optional[str] = None
     alias: Optional[str] = None
     alias_opt_map: dict[str, str] = {}
-    # Given when the extension of the file does not say it.
+    # Only `bash`, for a code file whose extension says no language: the
+    # engine runs any other file by its extension (see _language_of).
     language: Optional[Language] = None
     # The options handler: absent for the standard mode.
     mode: Optional[Literal["array", "generator", "manual"]] = None
@@ -437,9 +438,22 @@ def _default_code_path(program_name: str, process_name: str, language: str) -> s
 
 def code_file_path(program_name: str, process) -> str:
     """The path of the process file of a process, or of a sequential
-    process, in the artifact: the one it was loaded with, or the default
-    name that saving chooses for it (see _default_code_path)."""
-    return process.files.code or _default_code_path(program_name, process.name, process.language)
+    process, in the artifact: the one it was loaded with, while its
+    extension still says the language of the process (or says none, for a
+    Bash process), or else the default name that saving chooses for it (see
+    _default_code_path). A process whose language changed so gets a file
+    of the new extension, since the engine runs a file by its extension."""
+    path = process.files.code
+    says = _extension_language(path) if path else None
+    if path and (says == process.language or (says is None and process.language == "bash")):
+        return path
+    return _default_code_path(program_name, process.name, process.language)
+
+
+def _extension_language(path: str) -> str | None:
+    """The language that the extension of `path` says, or None."""
+    name = path.rsplit("/", 1)[-1]
+    return LANGUAGE_BY_EXTENSION.get(name.rsplit(".", 1)[-1]) if "." in name else None
 
 
 def _func_language_of(path: str) -> FuncLanguage:
@@ -519,12 +533,9 @@ def _join_group(group: TopologyGroup | None) -> GroupSource | None:
 
 
 def _language_key(path: str, language: str) -> dict:
-    """`language` for the file, only when the extension of `path` does not
-    give it."""
-    extension = path.rsplit(".", 1)[-1] if "." in path.rsplit("/", 1)[-1] else ""
-    if LANGUAGE_BY_EXTENSION.get(extension) == language:
-        return {}
-    return {"language": language}
+    """`language` for a process file, only when the extension of `path`
+    does not give it, which code_file_path leaves to a Bash file."""
+    return {} if _extension_language(path) == language else {"language": language}
 
 
 def _split_code(split: SplitProgram, program_name: str, process) -> dict:
@@ -535,11 +546,8 @@ def _split_code(split: SplitProgram, program_name: str, process) -> dict:
     if specs.alias:
         return {"alias": specs.alias, "alias_opt_map": _alias_opt_map_dict(specs.aliasOptMap)}
     if specs.externalAlias:
-        return {
-            "script": specs.externalAlias,
-            "alias_opt_map": _alias_opt_map_dict(specs.aliasOptMap),
-            **_language_key(specs.externalAlias, process.language),
-        }
+        # The extension of a script says its language, which loading reads
+        return {"script": specs.externalAlias, "alias_opt_map": _alias_opt_map_dict(specs.aliasOptMap)}
     if getattr(process, "nodeKind", None) == "Supervisor":
         return {}
     if getattr(process, "nodeKind", None):
@@ -548,7 +556,7 @@ def _split_code(split: SplitProgram, program_name: str, process) -> dict:
         text = process.code
     if not text:
         return {}
-    path = process.files.code or _default_code_path(program_name, process.name, process.language)
+    path = code_file_path(program_name, process)
     split.files[path] = _file_text(text)
     return {"code": path, **_language_key(path, process.language)}
 
@@ -708,14 +716,37 @@ def _read_file(files: Mapping[str, str], path: str, what: str) -> str:
     return files[path].rstrip("\n")
 
 
-def _language_of(path: str, language: str | None, what: str) -> str:
-    if language:
-        return language
+def _language_of(path: str, language: str | None, what: str, script: bool) -> str:
+    """
+    The language of the file at `path`, the code file or the script of a
+    process. The engine runs a file by its extension, so the extension says
+    the language, and `language` may not say another. A code file whose
+    extension says none may be Bash only, with `language: bash`: the module
+    embeds a Bash function, while it runs a file of another language as it
+    is, by its extension; a script, which the module always runs as it is,
+    needs an extension that says its language.
+    """
     name = path.rsplit("/", 1)[-1]
     extension = name.rsplit(".", 1)[-1] if "." in name else ""
-    if extension not in LANGUAGE_BY_EXTENSION:
-        raise TopologyError(f"{what}: the extension of {path} says no language; give one with `language`")
-    return LANGUAGE_BY_EXTENSION[extension]
+    by_extension = LANGUAGE_BY_EXTENSION.get(extension)
+    if by_extension is not None:
+        if language and language != by_extension:
+            raise TopologyError(
+                f"{what}: the extension of {path} says {by_extension}, and `language` says {language}; the engine "
+                "runs the file by its extension: remove `language`, or rename the file"
+            )
+        return by_extension
+    if script:
+        raise TopologyError(
+            f"{what}: the extension of {path} says no language, and the engine runs a script by its extension: "
+            "rename the script with the extension of its language"
+        )
+    if language != "bash":
+        raise TopologyError(
+            f"{what}: the extension of {path} says no language; a file of a language other than Bash needs the "
+            "extension of its language, and one in Bash `language: bash`"
+        )
+    return language
 
 
 def _join_code(files: Mapping[str, str], process_name: str, topology_process, is_node: bool) -> tuple[dict, dict]:
@@ -735,11 +766,11 @@ def _join_code(files: Mapping[str, str], process_name: str, topology_process, is
         path = topology_process.script
         specs |= {"externalAlias": path, "aliasOptMap": _alias_opt_map_list(topology_process.alias_opt_map)}
         # The copy of the script that the editor shows, when it is at hand.
-        fields |= {"language": _language_of(path, topology_process.language, what), "code": files.get(path, "").rstrip("\n")}
+        fields |= {"language": _language_of(path, topology_process.language, what, script=True), "code": files.get(path, "").rstrip("\n")}
     elif topology_process.code:
         path = topology_process.code
         fields |= {
-            "language": _language_of(path, topology_process.language, what),
+            "language": _language_of(path, topology_process.language, what, script=False),
             "code": _read_file(files, path, what),
             "files": ProcessFiles(code=path),
         }

@@ -527,9 +527,15 @@ def test_an_option_is_listed_once(tmp_path):
         _bash_process(tmp_path, "work", options=[opt("-n", "int"), opt("-n", "int")])
 
 
-def test_a_label_starts_with_a_dash(tmp_path):
-    with pytest.raises(DefinitionError, match='a label starts with "-"'):
-        _bash_process(tmp_path, "work", options=[opt("n", "int")])
+# The rule is that of the API, which follows that of the engine; each case
+# of the rule is tested in test/api/test_process_names.py
+@pytest.mark.parametrize("label", ["n", "-1n", "-é", "---x", "-"])
+def test_a_label_the_engine_would_refuse_is_refused_with_the_reason_of_the_api(tmp_path, label):
+    from api.process_names import option_label_problem
+
+    with pytest.raises(DefinitionError) as refusal:
+        _bash_process(tmp_path, "work", options=[opt(label, "int")])
+    assert str(refusal.value) == f'Option "{label}" of process "work": {option_label_problem(label)}'
 
 
 def test_an_unknown_data_type_is_refused(tmp_path):
@@ -700,7 +706,7 @@ def test_a_script_whose_extension_tells_no_language_is_refused():
         ({"shaping": {"-w": "int"}}, "given as its data type and its description"),
         ({"shaping": {"-w": ("None", "x")}}, 'unknown data type "None"'),
         ({"shaping": {"-outw": ("int", "x")}}, "a task shaping option is an input"),
-        ({"shaping": {"w": ("int", "x")}}, 'a label starts with "-"'),
+        ({"shaping": {"w": ("int", "x")}}, 'a label is "-" or "--" followed by'),
     ],
 )
 def test_what_the_interface_refuses(tmp_path, arguments, message):

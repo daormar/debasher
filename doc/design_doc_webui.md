@@ -1585,8 +1585,12 @@ What the program metadata holds and the topology file does not, and why:
   which the SDK shares), so that two loads of the same program give the same
   ids and nothing reads an id as a name.
 - `direction`, which the label gives, and `language`, which the extension of
-  the process file gives (`language` is written only when the extension does
-  not say).
+  the process file gives, since the engine runs a file by its extension.
+  `language` is written only when the extension does not say it, and loading
+  accepts it only as `bash` for a process file, whose function the module
+  embeds; a process file of another language and a script need the extension
+  of their language, and a `language` that contradicts the extension is
+  refused.
 - The code of a process, of its options handler, of its additional methods and
   of a node: in the process files. The copy of the text of an external alias:
   in the script file, which the editor shows and does not write.
@@ -1690,17 +1694,19 @@ frontend and the backend, which never see YAML, and the language of the schema.
 The code of a process is in a file named by `code`, a path relative to the
 topology file, normally inside the home directory; a path that leaves it is
 allowed, as an absolute external alias is today, and makes the program as
-portable as that path. The extension says the language, as the engine reads
-it for an external alias: `.sh` Bash, `.py` Python, `.pl` Perl, `.r` or `.R`
-R, `.groovy` Groovy. A Bash process file holds the function named as the
-process with its helper functions, as the code box of the editor holds it; a
-file of another language holds the whole script; the process file of a node of
-a resident program holds the whole class file, which the editor splits into
-the parts of a node when it loads the program and writes back from them when
-it saves, with the code of import and of script generation for the heredoc of
-a node. The process file of a node edited outside the editor into something
-the parts cannot hold is refused when the program is loaded, with the problems
-that import reports, each with its line.
+portable as that path. The extension says the language, as the engine reads it
+for an external alias: `.sh` Bash, `.py` Python, `.pl` Perl, `.r` or `.R` R,
+`.groovy` Groovy. A Bash process file whose extension says no language carries
+`language: bash` in the topology file; any other file needs the extension of its
+language. A Bash process file holds the function named as the process with its
+helper functions, as the code box of the editor holds it; a file of another
+language holds the whole script; the process file of a node of a resident
+program holds the whole class file, which the editor splits into the parts of a
+node when it loads the program and writes back from them when it saves, with the
+code of import and of script generation for the heredoc of a node. The process
+file of a node edited outside the editor into something the parts cannot hold is
+refused when the program is loaded, with the problems that import reports, each
+with its line.
 
 The tasks file (`tasks`) holds the code of the options handler as the editor
 keeps it: the code that builds the array of an `array` process, that prints
