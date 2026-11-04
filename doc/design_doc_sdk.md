@@ -139,6 +139,10 @@ entries below that refer to them.
 - **library process**: a process created in a Python module of the user
   and imported by the descriptions that add it, which give it its
   variable part.
+- **library program**: a program whose processes other programs reuse,
+  distributed as its artifact beside its description (see the item on
+  library programs in "Future work"). Not to be confused with the library
+  of the SDK itself.
 - **options handler**: how a process of the program model defines the
   options of its tasks, in one of the options handler modes of the design
   of the web UI: the standard mode, one task from the received options
@@ -939,7 +943,8 @@ kind of a node file.
   processes of another description as it uses any Python object: it
   imports them, gives each its interface and its task options, and adds
   it, which covers a program made only of the processes of another (the
-  namespaces that such reuse lacks are in "Future work").
+  library programs distributed apart, and the namespaces that such reuse
+  lacks, are in "Future work").
 
 # Future work
 
@@ -958,6 +963,36 @@ kind of a node file.
   translate it, as one more object of a description beside its
   processes: a name, a file with its code and the specifications that
   the engine accepts on it.
+- **Library programs.** Processes meant for reuse are distributed as a
+  library program: a description with its processes and a program that uses
+  them, which serves as its example and holds its tests, built and
+  distributed as its artifact (the topology file, the files of its processes
+  and its generated module) beside its description. A program reuses the
+  processes of a library program as a module reuses those of another: its
+  preamble loads the module of the library program (`load_debasher_module`,
+  found through `DEBASHER_MOD_DIR`), its description imports the processes
+  for their invariant part and gives each its interface and its task
+  options, the process takes its code from the loaded module, and nothing of
+  the library program is copied into the program. A library program is thus
+  one more program, not a new kind of artifact, and it is found by name
+  along a search path: today as a module, and, once the engine reads the
+  artifact itself instead of the generated module, as an artifact. It
+  replaces the copy of the files of a library process into the home
+  directory of the program, which the SDK writes there by their paths
+  relative to the base directory of the process: a copy written again by
+  every build looks editable and is not, and two files of library processes
+  that land on one path of the artifact with different texts are refused
+  (see "Writing the program"). Left open: how the topology file of a program
+  refers to a library program (a line of its preamble, or a key of its own);
+  how a run from the command line finds it (today only through a
+  `DEBASHER_MOD_DIR` that the user sets); what the module of the program
+  writes for a library process (only its variable part, defined again after
+  the module of the library program is loaded); how the editor shows a
+  library process (read only, as a process of a loaded module); how a Python
+  package carries the description and the built artifact, and checks that
+  both come from the same source (a digest of the description); and how
+  `debasher_build` treats a description that imports the program of a
+  library program beside its own.
 - **Namespaces of library processes.** A process defined in a Python module of
   the user is added to several programs as a process of a loaded module is, but
   gets no namespace. The namespace of DeBasher is a naming convention kept in
