@@ -75,7 +75,7 @@ const computationalSpecs = z.object({
 }).strict();
 
 const processNameRule =
-  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _reset_outfiles, _slurm_sigterm_handler, ...), with _outdir_basename, or with that of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes. Not the name of the program, nor that name followed by _document, _program, _shared_dirs or _program_type: the save refuses it, since its function would be a method of the module.";
+  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _reset_outfiles, _slurm_sigterm_handler, ...), with _outdir_basename, or with that of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes. Not the name of the program, nor that name followed by _document, _program, _shared_dirs or _program_type: the save refuses it, since its function would be a method of the module. Nor a name whose file another file of the program already holds: command_line for a Bash process, the old name of a renamed process (which keeps its file), or <process>_tasks beside a process with a tasks file; the save refuses two files at one path.";
 
 const aliasOptMap = z.array(z.object({ fromLabel: z.string(), toLabel: z.string() }).strict());
 

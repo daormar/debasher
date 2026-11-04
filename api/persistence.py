@@ -63,6 +63,29 @@ def is_reserved_name(name: str) -> bool:
     )
 
 
+_WAY_OUT = "rename the process, or give the file another path"
+
+
+def check_artifact_path(program_name: str, path: str, what: str) -> None:
+    """
+    Refuses a path of a file of the artifact (a process file, a tasks file,
+    a method file, a script copied beside the module) that saving writes
+    something else at: the generated module `<program>.sh`, the topology
+    file, or a name that DeBasher manages (see is_reserved_name). `what`
+    names the file for the error. Raises ValueError.
+    """
+    normalized = Path(os.path.normpath(path))
+    if normalized.is_absolute() or normalized.parts[0] == "..":
+        # Outside the home directory, where saving writes nothing else
+        return
+    if normalized.as_posix() == f"{program_name}.sh":
+        raise ValueError(f"{what} is written at {path}, which is the generated module of the program: {_WAY_OUT}")
+    if normalized.as_posix() == TOPOLOGY_FILENAME:
+        raise ValueError(f"{what} is written at {path}, which is the topology file of the program: {_WAY_OUT}")
+    if any(is_reserved_name(part) for part in normalized.parts):
+        raise ValueError(f"{what} is written at {path}, a name that DeBasher manages: {_WAY_OUT}")
+
+
 def same_dir(a: str, b: str) -> bool:
     """
     True when both non-blank paths resolve to the same directory.
@@ -423,6 +446,11 @@ def save(home_dir: str, program: Program) -> SavedProgram:
     taken_apart = topology.split(program)
     topology_text = topology.dumps(taken_apart.topology)
     files = taken_apart.files
+    for path in files:
+        check_artifact_path(program.name, path, taken_apart.owners[path])
+    for member in [*program.processes, *program.seqProcesses]:
+        if member.additionalSpecs.externalAlias:
+            check_artifact_path(program.name, member.additionalSpecs.externalAlias, f'The script of "{member.name}"')
 
     home = _home(home_dir)
     home.mkdir(parents=True, exist_ok=True)

@@ -1727,7 +1727,14 @@ and `<process>_<method>.sh` for a method file, with `.py` for a tasks file or a
 skip file in Python, which is also the name a file gets when its language
 changes and the name it was loaded with no longer says it. The name of a process
 file is never that of the generated script, since script generation refuses a
-process named as its program (see "What script generation refuses").
+process named as its program (see "What script generation refuses"). Because a
+user may name a file as they like, saving refuses, before it writes anything,
+two different texts at one path (`topology.split`), which would leave one file
+with the text of another, and a process file, a tasks file, a method file or a
+script at the path of the generated script or of the topology file, or at a
+reserved name (`persistence.check_artifact_path`, see "Reserved names and user
+files"), which the save or the engine would write over; an absolute path, or one
+that leaves the home directory, is not checked against those names.
 
 Two keys say where the code of a process is, by who owns the file. `code`
 names a process file that the editor owns: it writes the file from the code of

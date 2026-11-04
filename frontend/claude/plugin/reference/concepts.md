@@ -54,7 +54,18 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   options, the connections, the specifications) is changed with the tools,
   which keep the editor in step, or by hand in `program.yaml`, whose keys
   are described one by one in
-  https://debasher.readthedocs.io/en/latest/api_program_yaml.html.
+  https://debasher.readthedocs.io/en/latest/api_program_yaml.html. A save
+  refuses, and writes nothing, two different texts at one path (a renamed
+  process keeps its file, so a new process given its old name would get the
+  same file; so would a Bash process `a_tasks` beside the tasks file of a
+  process `a`), and a file at the path of the generated script `<name>.sh`,
+  of `program.yaml`, or of a name that DeBasher manages (a name starting
+  with `.`, a `__dunder__` directory, `command_line.sh`); a path outside the
+  home directory is not checked against those names. Give the new process
+  another name, or change the path in `program.yaml` and move the file with
+  it. A file that two processes share in `program.yaml` is changed with
+  `write_program_file`, which changes it for both: `update_process` on one
+  of them makes the two texts differ, and the save refuses them.
 - **The generated script is never edited by hand.** Every save writes it
   again from the saved program, so a change made to it is lost: change the
   code of a process instead. `debasher_build` given the home directory or
@@ -150,7 +161,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   ignoring case, among processes and sequential processes. It may not be the
   name of the program, nor that name followed by the suffix of a module
   method (`_document`, `_program`, `_shared_dirs`, `_program_type`): its
-  function would be a method of the module, and the save refuses it.
+  function would be a method of the module, and the save refuses it. Nor may
+  its file land where another file is: `command_line` for a Bash process,
+  the old name of a renamed process (which keeps its file), or
+  `<process>_tasks` beside a process with a tasks file.
 - **Language.** `bash`, `python`, `perl`, `r` or `groovy`. The extension of
   the process file or the script says it (`.sh` Bash, `.py` Python, `.pl`
   Perl, `.R` or `.r` R, `.groovy` Groovy), since the engine runs a file by its

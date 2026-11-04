@@ -68,6 +68,9 @@ entries below that refer to them.
   the topology file `program.yaml` and the files it names, in its home
   directory (see "The artifact: the topology file and the process files"
   in `doc/design_doc_webui.md`).
+- **reserved name**: as in the design of the web UI: a file or directory
+  name that the engine or the web UI manages in a home directory (see
+  "Reserved names and user files" in `doc/design_doc_webui.md`).
 - **home directory**: as in the design of the web UI: the directory where
   a program lives, with its artifact, its generated module and its user
   files. The SDK writes a program into one, by default the directory of
@@ -709,16 +712,22 @@ in the editor: it builds the program model, calls `persistence.save` of the API,
 which generates the module and writes the artifact and the module under the lock
 and with the digest that the design of the web UI describes (see "The digest of
 the artifact" there), copies the scripts, and returns the path of the module. It
-raises `DefinitionError`, the one error of the SDK, for what it, loading or
-script generation refuses, and nothing is written then: the model is built and
-the scripts are checked before anything touches the directory, and
+raises `DefinitionError`, the one error of the SDK, for what it, loading, saving
+or script generation refuses, and nothing is written then: the model is built
+and the scripts are checked before anything touches the directory, and
 `persistence.save` generates the module before it writes. The files of the
 artifact are written where the description had them, by the paths of the process
 files, the tasks files and the method files relative to the base directory of
 each process (a file outside it gives the name of the file alone), each only
 when its content differs from the file there, so that a program written into the
 directory of the description leaves its files as they are, and a program written
-elsewhere gets a copy of each.
+elsewhere gets a copy of each. Two files whose paths in the artifact are the
+same (two files named `post.sh` in two directories outside the base directory)
+are refused when the model is built if their texts differ, as saving refuses
+them (see "The process files" in `doc/design_doc_webui.md`). When the program is
+written, a file, or a script copied beside the module, whose path is that of the
+module or of the topology file, or holds a reserved name, is refused before
+anything is written.
 
 The external alias of a process names its script as the path was given, when it
 is relative and stays below the base directory of the process
@@ -889,8 +898,8 @@ kind of a node file.
 - **No Bash of its own.** The SDK writes no line of the module: every rule
   of the translation lives in script generation, and what it refuses it
   refuses for the SDK with the same message.
-- **Nothing half written.** A program refused by the SDK or by script
-  generation leaves the home directory as it was.
+- **Nothing half written.** A program refused by the SDK, by saving or by
+  script generation leaves the home directory as it was.
 
 ## Non-goals
 

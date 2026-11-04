@@ -82,7 +82,13 @@ it, and the module ``sdk_hello_world_py.sh``, exactly what the "Save"
 button of the editor writes (``-o <dir>`` writes them elsewhere, with a
 copy of each process file). The file is named after its program, as a
 module is, and defines one program; anything else is an error that says
-so. From here the program is one more: it runs with ``debasher_exec``,
+so. A file of a process is written where the description has it,
+relative to its directory, and a file outside that directory by its
+name alone; ``debasher_build`` refuses, before writing anything, two
+files of the program with different contents that end up at one path
+(two ``run.sh`` from different directories), and a file, or a script
+that it copies beside the module, at the path of the module, of
+``program.yaml``, or of a name that DeBasher manages. From here the program is one more: it runs with ``debasher_exec``,
 its state is followed with ``debasher_status``, and its directory opens
 in the web interface with "Load program", where it shows on the canvas
 with its processes laid out as those of an imported module are.

@@ -88,8 +88,15 @@ A program built with the web interface uses two directories:
   ``worker_tasks.py`` or ``count_skip.py`` for the tasks or the
   ``skip`` method written as a Python function (see
   :ref:`tasks_in_python`), and the whole class file of a node of a
-  resident program. The extension of a file says its language. The
-  "Program files" panel shows and edits these files as any user file,
+  resident program. The extension of a file says its language. Since
+  these names come from the names of the processes, two processes may
+  want the same file (an array ``worker`` and a process named
+  ``worker_tasks`` both want ``worker_tasks.sh``); "Save" then refuses
+  the program, naming the file, until one of them is renamed. It also
+  refuses a file of a process at the path of the generated script, of
+  ``program.yaml``, or of a name that DeBasher manages (a name that
+  starts with a dot, a ``__dunder__`` directory, ``command_line.sh``).
+  The "Program files" panel shows and edits these files as any user file,
   and a change to one is a change to the program. The panel also
   manages the other files that the program needs.
 

@@ -411,6 +411,22 @@ def dumps(topology: Topology) -> str:
 # --- from the program model to the artifact ----------------------------------
 
 
+def add_file(files: dict[str, str], owners: dict[str, str], path: str, text: str, what: str) -> None:
+    """
+    Puts the file `path` with `text` among the files of an artifact, and
+    `what`, which names it, among their `owners`, refusing a path that
+    already holds another text: two files of a program written at one path
+    would leave one of them with the text of the other.
+    """
+    if path in files and files[path] != text:
+        raise TopologyError(
+            f"{what} is written at {path}, where {owners[path][0].lower()}{owners[path][1:]} already is: rename "
+            "one of the processes, or give one of the files another path"
+        )
+    files[path] = text
+    owners.setdefault(path, what)
+
+
 @dataclass
 class SplitProgram:
     """A program model taken apart: its topology, and the text of every file
@@ -421,6 +437,8 @@ class SplitProgram:
 
     topology: Topology
     files: dict[str, str] = field(default_factory=dict)
+    # What each file is, by its path, for the errors that name it
+    owners: dict[str, str] = field(default_factory=dict)
 
 
 def _file_text(code: str) -> str:
@@ -557,7 +575,7 @@ def _split_code(split: SplitProgram, program_name: str, process) -> dict:
     if not text:
         return {}
     path = code_file_path(program_name, process)
-    split.files[path] = _file_text(text)
+    add_file(split.files, split.owners, path, _file_text(text), f'The code of process "{process.name}"')
     return {"code": path, **_language_key(path, process.language)}
 
 
@@ -619,14 +637,14 @@ def _split_process(split: SplitProgram, program: Program, process: ProgramProces
             "manual": handler.manualCode,
         }[handler.mode]
         tasks = tasks_file_path(process)
-        split.files[tasks] = _file_text(code or "")
+        add_file(split.files, split.owners, tasks, _file_text(code or ""), f'The tasks file of process "{process.name}"')
 
     methods = {}
     for method, field_name in METHOD_FIELDS.items():
         code = getattr(process.additionalMethods, field_name)
         if code:
             path = method_file_path(process, method)
-            split.files[path] = _file_text(code)
+            add_file(split.files, split.owners, path, _file_text(code), f'The {method} method of process "{process.name}"')
             methods[method] = path
 
     return TopologyProcess(

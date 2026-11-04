@@ -136,8 +136,14 @@ that name:
     name and options.
 
 The extension of a file says its language: ``.sh`` Bash, ``.py``
-Python, ``.pl`` Perl, ``.r`` or ``.R`` R, ``.groovy`` Groovy. The other
-keys of a process are:
+Python, ``.pl`` Perl, ``.r`` or ``.R`` R, ``.groovy`` Groovy. The files
+that ``code``, ``tasks`` and ``methods`` name are written by every
+save, so none of them may be at the path of the module, ``<name>.sh``,
+of ``program.yaml``, or of a name that DeBasher manages: a name that
+starts with a dot, a directory named ``__name__``, or
+``command_line.sh``. A save or ``debasher_build`` refuses such a
+program before writing anything; a path that leaves the home directory
+is not checked against these names. The other keys of a process are:
 
 ``alias_opt_map``
     With ``script`` or ``alias``: the name of each option of this

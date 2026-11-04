@@ -772,3 +772,54 @@ def test_a_process_named_as_a_method_of_the_module_is_refused_when_the_program_i
     with pytest.raises(DefinitionError, match='is named as the method "_program" of the module of program "prg"'):
         prg.write(tmp_path / "home")
     assert not (tmp_path / "home").exists()
+
+
+def test_a_file_of_a_process_at_the_path_of_the_module_is_refused(tmp_path):
+    work = Process("work", code=_code(tmp_path, "prg.sh", "work()\n{\n    :\n}\n"))
+    prg = Program("prg")
+    prg.add(work)
+
+    with pytest.raises(DefinitionError, match="prg.sh, which is the generated module"):
+        prg.write(tmp_path)
+    assert (tmp_path / "prg.sh").read_text() == "work()\n{\n    :\n}\n"
+    assert not (tmp_path / "program.yaml").exists()
+
+
+def test_two_files_that_climb_out_with_one_name_are_refused(tmp_path):
+    (tmp_path / "x").mkdir()
+    (tmp_path / "y").mkdir()
+    base = tmp_path / "base"
+    base.mkdir()
+    a = Process("a", code=_code(base, "a.sh", "a()\n{\n    :\n}\n"), post=_code(tmp_path / "x", "post.sh", "echo x\n"))
+    b = Process("b", code=_code(base, "b.sh", "b()\n{\n    :\n}\n"), post=_code(tmp_path / "y", "post.sh", "echo y\n"))
+    prg = Program("prg")
+    prg.add(a)
+    prg.add(b)
+
+    with pytest.raises(DefinitionError, match='The post method of process "b" is written at post.sh, where the post method of process "a" already is'):
+        prg.write(tmp_path / "home")
+    assert not (tmp_path / "home").exists()
+
+
+def test_two_scripts_that_climb_out_with_one_name_are_refused(tmp_path):
+    for directory, text in (("x", "echo x\n"), ("y", "echo y\n")):
+        (tmp_path / directory).mkdir()
+        _code(tmp_path / directory, "tool.sh", text)
+    base = tmp_path / "base"
+    base.mkdir()
+    prg = Program("prg")
+    prg.add(Process("a", script="../x/tool.sh", base_dir=base))
+    prg.add(Process("b", script="../y/tool.sh", base_dir=base))
+
+    with pytest.raises(DefinitionError, match='The script of process "b" is written at tool.sh'):
+        prg.write(tmp_path / "home")
+
+
+def test_a_script_copied_over_the_module_is_refused(tmp_path):
+    _code(tmp_path, "prg.sh", "echo hi\n")
+    prg = Program("prg")
+    prg.add(Process("tool", script="prg.sh", base_dir=tmp_path))
+
+    with pytest.raises(DefinitionError, match="which is the generated module"):
+        prg.write(tmp_path / "home")
+    assert not (tmp_path / "home").exists()

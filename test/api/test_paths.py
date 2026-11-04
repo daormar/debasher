@@ -2,6 +2,9 @@ import paths
 
 
 def test_find_bin_tool_finds_uninstalled_dev_build(tmp_path, monkeypatch):
+    # The SDK, imported by other tests of the same run, sets the variable
+    # from its installation module
+    monkeypatch.delenv("DEBASHER_WEBUI_BIN_DIR", raising=False)
     monkeypatch.setattr(paths, "_REPO_ROOT", tmp_path)
     engine_dir = tmp_path / "engine"
     engine_dir.mkdir()

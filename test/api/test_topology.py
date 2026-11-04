@@ -668,3 +668,69 @@ def test_the_published_schema_is_the_one_of_the_model():
 
     assert json.loads(published.read_text()) == topology.json_schema()
     assert topology.SCHEMA_URL.endswith(f"/_static/schema/program-{topology.SCHEMA_VERSION}.json")
+
+
+# --- paths of the artifact ------------------------------------------------------
+
+
+def test_two_texts_at_one_path_of_the_artifact_are_refused():
+    first = _process("a", additionalMethods=AdditionalMethods(postCode="echo a"))
+    second = _process("b", additionalMethods=AdditionalMethods(postCode="echo b"))
+    first.files.methods = {"post": "post.sh"}
+    second.files.methods = {"post": "post.sh"}
+
+    with pytest.raises(TopologyError, match='The post method of process "b" is written at post.sh, where the post method of process "a" already is'):
+        split(_program("prg", [first, second]))
+
+
+def test_a_process_given_the_old_name_of_a_renamed_one_is_refused_its_file():
+    # A renamed process keeps its file, which a new process of the old
+    # name would be given too
+    renamed = _process("count_lines", code="count_lines()\n{\n    :\n}")
+    renamed.files.code = "count.sh"
+
+    with pytest.raises(TopologyError, match='The code of process "count" is written at count.sh, where the code of process "count_lines" already is'):
+        split(_program("prg", [renamed, _process("count")]))
+
+
+def test_one_text_at_one_path_of_the_artifact_is_written_once():
+    first = _process("a", additionalMethods=AdditionalMethods(postCode="echo done"))
+    second = _process("b", additionalMethods=AdditionalMethods(postCode="echo done"))
+    first.files.methods = {"post": "post.sh"}
+    second.files.methods = {"post": "post.sh"}
+
+    assert split(_program("prg", [first, second])).files["post.sh"] == "echo done\n"
+
+
+# A file of the artifact may not be written where saving writes something
+# else, nor into what DeBasher manages in the home directory
+@pytest.mark.parametrize(
+    "path, message",
+    [
+        ("prg.sh", "the generated module"),
+        ("./prg.sh", "the generated module"),
+        ("program.yaml", "the topology file"),
+        (".debasher/work.sh", "a name that DeBasher manages"),
+        ("__exec__/work.sh", "a name that DeBasher manages"),
+        ("command_line.sh", "a name that DeBasher manages"),
+    ],
+)
+def test_a_file_written_where_saving_writes_something_else_is_refused(tmp_path, path, message):
+    process = _process("work")
+    process.files.code = path
+
+    with pytest.raises(ValueError, match=message):
+        persistence.save(str(tmp_path / "home"), _program("prg", [process]))
+    assert not (tmp_path / "home").exists()
+
+
+def test_a_script_at_the_path_of_the_module_is_refused(tmp_path):
+    process = _process("tool", code="", additionalSpecs=AdditionalSpecs(force=False, externalAlias="prg.sh"))
+
+    with pytest.raises(ValueError, match='The script of "tool" is written at prg.sh, which is the generated module'):
+        persistence.save(str(tmp_path / "home"), _program("prg", [process]))
+
+
+def test_a_file_outside_the_home_directory_is_not_checked_against_its_names():
+    persistence.check_artifact_path("prg", "../shared/.tools/work.sh", "A file")
+    persistence.check_artifact_path("prg", "/opt/tools/prg.sh", "A file")

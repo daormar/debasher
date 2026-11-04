@@ -296,6 +296,15 @@ class Program:
             return Path(given).name
         return given
 
+    @staticmethod
+    def _add_file(files: dict[str, str], owners: dict[str, str], path: str, text: str, process: Process, what: str) -> None:
+        """Puts a file of `process` among the files of the artifact, refusing
+        a path that holds another file of the program, as saving does."""
+        try:
+            topology.add_file(files, owners, path, text, f'The {what} of process "{process.name}"')
+        except topology.TopologyError as error:
+            raise DefinitionError(str(error)) from None
+
     def _node_kind(self, process: Process, text: str) -> str | None:
         """The node kind of a node, read from its file, which has to fit the
         parts of a node of the web UI; None for a process of a general
@@ -324,7 +333,7 @@ class Program:
             )
         return decomposed.kind
 
-    def _process(self, member: _Member, files: dict[str, str]) -> topology.TopologyProcess:
+    def _process(self, member: _Member, files: dict[str, str], owners: dict[str, str]) -> topology.TopologyProcess:
         """The process of `member` as the topology file keeps it, adding the
         texts of the files it names to `files`."""
         process = member.process
@@ -335,23 +344,24 @@ class Program:
             keys |= {"alias": process.alias, "alias_opt_map": dict(process.alias_opt_map)}
         elif process.script_path is not None:
             path = self._script_relative(process)
-            files[path] = self._read(process, process.script_path, "script")
+            self._add_file(files, owners, path, self._read(process, process.script_path, "script"), process, "script")
             keys |= {"script": path, "alias_opt_map": dict(process.alias_opt_map)}
         elif process.code_path is not None:
             path = self._file_relative(process, process.code_path)
-            files[path] = self._read(process, process.code_path, "node file" if isinstance(process, Node) else "code file")
+            what = "node file" if isinstance(process, Node) else "code file"
+            self._add_file(files, owners, path, self._read(process, process.code_path, what), process, what)
             keys["code"] = path
             kind = self._node_kind(process, files[path])
         else:
             kind = self._node_kind(process, "")
         if process.tasks_path is not None:
             path = self._file_relative(process, process.tasks_path)
-            files[path] = self._read(process, process.tasks_path, "tasks file")
+            self._add_file(files, owners, path, self._read(process, process.tasks_path, "tasks file"), process, "tasks file")
             keys |= {"mode": process.mode, "tasks": path}
         methods = {}
         for method, method_path in process.method_paths.items():
             path = self._file_relative(process, method_path)
-            files[path] = self._read(process, method_path, "method file")
+            self._add_file(files, owners, path, self._read(process, method_path, "method file"), process, f"{method} method")
             methods[method] = path
         options = {option.label: self._option(process, option) for option in process.options}
         options |= {
@@ -380,7 +390,8 @@ class Program:
         Raises DefinitionError for what the SDK refuses.
         """
         files: dict[str, str] = {}
-        processes = {member.process.name: self._process(member, files) for member in self._members}
+        owners: dict[str, str] = {}
+        processes = {member.process.name: self._process(member, files, owners) for member in self._members}
         return (
             topology.Topology(
                 schema_version=topology.SCHEMA_VERSION,
@@ -430,8 +441,11 @@ class Program:
         differs, so a program written into the directory of the description
         leaves its files as they are), the generated module `<name>.sh`,
         and a copy of every script (external alias), replacing an older
-        copy. Returns the path of the module. A program that the SDK or
-        script generation refuses leaves the directory as it was.
+        copy. Returns the path of the module. It refuses two files of the
+        program with different contents at one path, and a file or a
+        copied script at the path of the module, of `program.yaml` or of a
+        name that DeBasher manages. A program that the SDK or script
+        generation refuses leaves the directory as it was.
         """
         from api import persistence
 
@@ -441,6 +455,10 @@ class Program:
         for copy in copies:
             if not copy.source.is_file():
                 raise DefinitionError(f"Script {copy.source} does not exist.")
+            try:
+                persistence.check_artifact_path(self.name, str(copy.relative), f"Script {copy.source}")
+            except ValueError as error:
+                raise DefinitionError(str(error)) from None
         try:
             saved = persistence.save(str(home), model)
         except (ValueError, NotImplementedError) as error:
