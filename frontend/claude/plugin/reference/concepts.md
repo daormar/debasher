@@ -37,10 +37,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   and the tasks file of a manual process and the other method files are
   always Bash; a whole class file for a node; those are the names
   chosen when a file is first written, `program.yaml` is what says which
-  file holds the code of a process, a renamed process keeps its file, and a
-  Bash process named as its program gets `<process>_process.sh`, since
-  `<name>.sh` is the generated script), the generated
-  script `<name>.sh`, the user files, such as `test/`, and, in
+  file holds the code of a process, and a renamed process keeps its file),
+  the generated script `<name>.sh`, the user files, such as `test/`, and, in
   `.debasher/`, what the editor keeps for this machine. A program saved by
   an older version holds `.debasher/program.json` instead, which the next
   save replaces. A run writes into the output directory (`outputDir`).
@@ -106,7 +104,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `name`, `description`, `preamble`, `sharedDirs`, `outputDir`,
   `executionOptions` and `programOptions`; the environment variables, such
   as `DEBASHER_MOD_DIR`, are set with the `env_vars` of
-  `set_program_settings` or the `setEnvVar` edit.
+  `set_program_settings` or the `setEnvVar` edit. The `name` cannot be the
+  name of a process or sequential process of the program, nor that name
+  without a final `_document`, `_program`, `_shared_dirs` or
+  `_program_type`.
 - **Execution options.** `scheduler` is `BUILTIN` (the default, on this
   machine) or `SLURM`; `builtinSchedCpus` and `builtinSchedMem` bound the
   built-in scheduler; `dfltThrottle` bounds the tasks of an array running at
@@ -146,7 +147,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   method (`_define_opts`, `_post`, `_skip`, `_reset_outfiles`,
   `_slurm_sigterm_handler`, ...), with `_outdir_basename`, or with that of a
   language (`_py`, `_r`, `_perl`, `_groovy`), nor contain `__NSSEP__`. Unique,
-  ignoring case, among processes and sequential processes.
+  ignoring case, among processes and sequential processes. It may not be the
+  name of the program, nor that name followed by the suffix of a module
+  method (`_document`, `_program`, `_shared_dirs`, `_program_type`): its
+  function would be a method of the module, and the save refuses it.
 - **Language.** `bash`, `python`, `perl`, `r` or `groovy`.
 - **Code.** In Bash, the whole function `name() { ... }`, called with the
   option list of its task: read a value with

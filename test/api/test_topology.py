@@ -237,15 +237,6 @@ def test_the_code_goes_to_files_named_after_the_processes():
     assert worker.language is None  # the extension says it
 
 
-def test_a_bash_process_named_as_its_program_does_not_take_the_name_of_the_script():
-    program = _program("count", [_process("count")])
-
-    taken_apart = split(program)
-
-    assert taken_apart.topology.processes["count"].code == "count_process.sh"
-    assert list(taken_apart.files) == ["count_process.sh"]
-
-
 def test_the_paths_a_process_was_loaded_with_are_kept():
     program = _program("prg", [_process("count")])
     text = (

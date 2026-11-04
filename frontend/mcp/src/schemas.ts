@@ -75,7 +75,7 @@ const computationalSpecs = z.object({
 }).strict();
 
 const processNameRule =
-  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _reset_outfiles, _slurm_sigterm_handler, ...), with _outdir_basename, or with that of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes.";
+  "The name of the process: letters, digits and _, not starting with a digit, in dot-separated parts (org.ns.name); not ending with the suffix of a method (_define_opts, _post, _skip, _reset_outfiles, _slurm_sigterm_handler, ...), with _outdir_basename, or with that of a language (_py, _r, _perl, _groovy), and without __NSSEP__. Unique, ignoring case, among processes and sequential processes. Not the name of the program, nor that name followed by _document, _program, _shared_dirs or _program_type: the save refuses it, since its function would be a method of the module.";
 
 const aliasOptMap = z.array(z.object({ fromLabel: z.string(), toLabel: z.string() }).strict());
 
@@ -159,7 +159,9 @@ export const executionOptions = z.object({
 }).strict();
 
 export const programFields = z.object({
-  name: z.string().optional(),
+  name: z.string().optional().describe(
+    "The name of the program, which names its generated script <name>.sh. It cannot be the name of one of its processes or sequential processes, nor that name without a final _document, _program, _shared_dirs or _program_type.",
+  ),
   description: z.string().optional(),
   preamble: z.string().optional().describe("Bash code run before the program, which loads the modules it uses."),
   sharedDirs: z.array(z.string()).optional()

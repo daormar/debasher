@@ -190,7 +190,8 @@ edits the selected process, and a toolbar above:
 * **Add process**: adds a process, by name. The names of the processes
   that the modules of the preamble define are suggested, and choosing
   one brings its options and code in. A name follows the rules of
-  :ref:`process-naming`, which the dialog checks.
+  :ref:`process-naming`, which the dialog checks, except the one that
+  ties it to the name of the program, which "Save" checks.
 * **Add program**: brings every process of another program saved with
   the web interface into this one (see `Groups`_ below).
 * **Save**, **Run** (the menu described in `Running a General Program`_
@@ -386,7 +387,9 @@ Bash or in another language. A new one starts with a Bash function of
 its name that does nothing. Saving the dialog checks the names (not
 blank, not that of a process or of another sequential process, valid as
 a process name) and that the Bash code of each one defines a function of
-its name, which the step runs.
+its name, which the step runs. Saving the program also refuses a
+sequential process named as the program or as one of the methods of its
+module (see :ref:`process-naming`).
 
 The web interface does not read the code of the processes: renaming or
 removing a sequential process does not change the calls to

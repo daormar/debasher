@@ -10,6 +10,7 @@ from .debasher_constants import (
     MODULE_PROGRAM_SUFFIX,
     MODULE_PROGRAM_TYPE_SUFFIX,
     MODULE_SHARED_DIRS_SUFFIX,
+    RESERVED_MODULE_METHOD_SUFFIXES,
     PROCESS_METHOD_DOCUMENT_SUFFIX,
     PROCESS_METHOD_EXPLAIN_OPTS_SUFFIX,
     PROCESS_METHOD_EXPLAIN_TASK_SHAPING_OPTS_SUFFIX,
@@ -1212,6 +1213,31 @@ def _check_seq_processes(program: Program) -> None:
         seen.add(seq_process.name)
 
 
+def _check_module_method_names(program: Program) -> None:
+    """
+    Refuses a process or a sequential process whose function would be a
+    method of the module of the program: one named as the program, whose
+    `_document` method would be that of the module, or as the program
+    followed by the suffix of a module method (`<program>_program`). The
+    rule of the engine for a process name does not see it, since it
+    depends on the name of the module and not on the process alone.
+    """
+    module_methods = {program.name + suffix: suffix for suffix in RESERVED_MODULE_METHOD_SUFFIXES}
+    members = [("Process", p) for p in program.processes] + [("Sequential process", p) for p in program.seqProcesses]
+    for kind, member in members:
+        if member.name == program.name:
+            raise ValueError(
+                f'{kind} "{member.name}" has the name of its program, and its method '
+                f'"{member.name}{MODULE_DOCUMENT_SUFFIX}" would be that of the module: rename the process or '
+                "the program."
+            )
+        if member.name in module_methods:
+            raise ValueError(
+                f'{kind} "{member.name}" is named as the method "{module_methods[member.name]}" of the module '
+                f'of program "{program.name}": rename the process or the program.'
+            )
+
+
 def _defines_bash_function(code: str, name: str) -> bool:
     """
     Whether Bash `code` defines a function named `name`, in either form
@@ -1631,6 +1657,7 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     concern _find_redundant_exec_funcs exists for doesn't apply.
     """
     _check_seq_processes(program)
+    _check_module_method_names(program)
     if program.programType == "resident":
         # The code of every node is assembled from its parts, never taken
         # from a module that the preamble loads, so there is nothing

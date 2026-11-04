@@ -339,6 +339,28 @@ def test_two_sequential_processes_with_one_name_are_refused():
         generate_script(_seq_program([first, second]), skip_redundant_check=True)
 
 
+# The function of a process named as its program, or as the program
+# followed by the suffix of a module method, would be a method of the
+# module: the _document of the process would replace that of the module,
+# and a second "<program>_program" stops the run
+@pytest.mark.parametrize("name", ["prog", "prog_program", "prog_document", "prog_shared_dirs", "prog_program_type"])
+def test_a_process_named_as_a_method_of_the_module_is_refused(name):
+    process = _make_process([]).model_copy(update={"name": name})
+    with pytest.raises(ValueError, match="rename the process or the program"):
+        generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+
+def test_a_sequential_process_named_as_a_method_of_the_module_is_refused():
+    step = SeqProcess(id="s", name="prog_program")
+    with pytest.raises(ValueError, match='Sequential process "prog_program" is named as the method "_program"'):
+        generate_script(_seq_program([step]), skip_redundant_check=True)
+
+
+def test_a_process_whose_name_only_starts_with_the_program_name_is_written():
+    process = _make_process([]).model_copy(update={"name": "prog_step"})
+    assert 'add_debasher_process "prog_step"' in generate_script(_seq_program([], [process]), skip_redundant_check=True)
+
+
 def test_a_resident_program_with_a_sequential_process_is_refused():
     step = SeqProcess(id="s", name="step")
     with pytest.raises(ValueError, match="resident program"):

@@ -1085,17 +1085,22 @@ and is not connected to exactly one process, in `array` or `generator` mode, at
 the other end of its connections, whose output is the target of a connection,
 mirrored or uses an option channel other than `none` or `fifo`, or whose input
 is not connected to a process in `array` or `generator` mode; a connection to a
-fanout family from a process in another mode; and a sequential process in a
-resident program, or with the name of a process or of another sequential process
-(see "Generating and importing a sequential process"); an options handler in
-`manual` mode whose language is Python; Conda environments or Docker images
-given both as data and as the body of their method; and a path of a Python tasks
-file or skip file, the name or the YAML file of a Conda environment, or a Docker
-image that is empty or holds a double quote, `$`, a backquote, a backslash or a
-newline, which the module could not write as a word. The save generates the
-script before it writes anything, so a program that script generation refuses
-leaves the home directory as it was. The save answers with the reason of the
-refusal, which the frontend shows.
+fanout family from a process in another mode; a process or a sequential process
+named as its program, whose `_document` method would be that of the module, or
+as its program followed by the suffix of a module method (`_document`,
+`_program`, `_shared_dirs`, `_program_type`), whose function would be that
+module method (the rule of a process name does not see it, since it depends on
+the name of the module); a sequential process in a resident program, or with the
+name of a process or of another sequential process (see "Generating and
+importing a sequential process"); an options handler in `manual` mode whose
+language is Python; Conda environments or Docker images given both as data and
+as the body of their method; and a path of a Python tasks file or skip file, the
+name or the YAML file of a Conda environment, or a Docker image that is empty or
+holds a double quote, `$`, a backquote, a backslash or a newline, which the
+module could not write as a word. The save generates the script before it writes
+anything, so a program that script generation refuses leaves the home directory
+as it was. The save answers with the reason of the refusal, which the frontend
+shows.
 
 ## Environment variables of a program
 
@@ -1714,9 +1719,9 @@ name a file as they like. What the editor and import choose when they create a
 file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks file
 and `<process>_<method>.sh` for a method file, with `.py` for a tasks file or a
 skip file in Python, which is also the name a file gets when its language
-changes and the name it was loaded with no longer says it; and, for a Bash
-process named as its program, whose file would otherwise be the generated
-script, `<process>_process.sh`.
+changes and the name it was loaded with no longer says it. The name of a process
+file is never that of the generated script, since script generation refuses a
+process named as its program (see "What script generation refuses").
 
 Two keys say where the code of a process is, by who owns the file. `code`
 names a process file that the editor owns: it writes the file from the code of

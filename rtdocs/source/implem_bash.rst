@@ -305,6 +305,16 @@ method of a process ``a``, nor with that of a language (``_py``, ``_r``,
 not contain ``__NSSEP__``, which the engine uses internally. DeBasher
 and the web interface refuse such a name.
 
+A process, or a sequential process, may not be named as its program
+either, nor as the program followed by the suffix of a method of the
+module (``_document``, ``_program``, ``_shared_dirs``,
+``_program_type``): its function would be a method of the module, so
+that in a program ``count`` a process ``count`` would define
+``count_document``, the documentation of the module. Saving a program
+in the web interface, or writing it with the Python SDK, refuses such a
+name; the engine does not see it, since the rule depends on the name of
+the module, so avoid it in a module written by hand too.
+
 **If you are implementing a module that you plan to share with other
 people, it is strongly recommended that you qualify all of its process
 names with a namespace of your own** (for instance, the name of your

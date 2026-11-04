@@ -430,12 +430,9 @@ def _file_text(code: str) -> str:
 
 def _default_code_path(program_name: str, process_name: str, language: str) -> str:
     """The name of the process file that saving chooses: the process name
-    with the extension of its language, or, for a Bash process named as its
-    program, whose file would be the generated script, with `_process`."""
-    path = f"{process_name}.{EXTENSION_BY_LANGUAGE[language]}"
-    if path == f"{program_name}.sh":
-        path = f"{process_name}_process.sh"
-    return path
+    with the extension of its language. It is never the generated script,
+    since script generation refuses a process named as its program."""
+    return f"{process_name}.{EXTENSION_BY_LANGUAGE[language]}"
 
 
 def code_file_path(program_name: str, process) -> str:

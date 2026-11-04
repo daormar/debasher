@@ -57,7 +57,10 @@ The program
 ``name``
     The name of the program, which also names its module,
     ``<name>.sh``: letters, digits and underscores, starting with a
-    letter or an underscore.
+    letter or an underscore. No process of the program may be named as
+    it, nor as ``<name>_document``, ``<name>_program``,
+    ``<name>_shared_dirs`` or ``<name>_program_type`` (see
+    :ref:`process-naming`).
 
 ``type``
     ``resident`` for a resident program (see the :ref:`resident`

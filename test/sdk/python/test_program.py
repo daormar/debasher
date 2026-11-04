@@ -757,3 +757,12 @@ def test_a_refused_program_leaves_the_home_directory_as_it_was(tmp_path):
         bad.write(home)
 
     assert {path.relative_to(home): path.read_bytes() for path in home.rglob("*") if path.is_file()} == before
+
+
+def test_a_process_named_as_a_method_of_the_module_is_refused_when_the_program_is_written(tmp_path):
+    prg = Program("prg")
+    prg.add(_bash_process(tmp_path, "prg_program"))
+
+    with pytest.raises(DefinitionError, match='is named as the method "_program" of the module of program "prg"'):
+        prg.write(tmp_path / "home")
+    assert not (tmp_path / "home").exists()

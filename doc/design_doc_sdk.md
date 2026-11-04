@@ -232,16 +232,19 @@ prg.add(count, cpus=1, mem=32, time="00:01:00")
 
 ## Processes
 
-A process (`Process`, `sdk/python/debasher/process.py`) is defined on its
-own, outside any program, as a process of a module is: a program adds it,
-and the same process can be added to several programs. Its name follows
-the rule of the engine for a process name, parts of letters, digits and
-underscores separated by dots, which may not end in a suffix that the
-engine reserves for a method (`_define_opts`, `_py`, ...) nor contain the
-marker `__NSSEP__` of its qualified names. The SDK checks the name when
-the process is created, so that an error is reported at the line that
-gives the name. It checks it with the same function as the backend of
-the web UI (`api/process_names.py`), which does not need FastAPI.
+A process (`Process`, `sdk/python/debasher/process.py`) is defined on its own,
+outside any program, as a process of a module is: a program adds it, and the
+same process can be added to several programs. Its name follows the rule of the
+engine for a process name, parts of letters, digits and underscores separated by
+dots, which may not end in a suffix that the engine reserves for a method
+(`_define_opts`, `_py`, ...) nor contain the marker `__NSSEP__` of its qualified
+names. The SDK checks the name when the process is created, so that an error is
+reported at the line that gives the name. It checks it with the same function as
+the backend of the web UI (`api/process_names.py`), which does not need FastAPI.
+A name that clashes with the module, the name of the program or that name
+followed by the suffix of a module method (`prg` or `prg_program` in a program
+`prg`), is refused by script generation when the program is written (see "What
+script generation refuses" in `doc/design_doc_webui.md`).
 
 A process has the three groups of parts of "What a program may give
 again" in `doc/design_doc_engine.md`, each given by a call of its own:
