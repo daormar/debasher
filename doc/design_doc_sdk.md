@@ -200,11 +200,12 @@ A process (`Process`, `sdk/python/debasher/process.py`) is defined on its
 own, outside any program, as a process of a module is: a program adds it,
 and the same process can be added to several programs. Its name follows
 the rule of the engine for a process name, parts of letters, digits and
-underscores separated by dots, and may not end in a suffix that the
-engine reserves for a method (`_define_opts`, `_py`, ...); the SDK checks
-the name when the process is created, with the same rule as the backend
-of the web UI, so that an error is reported at the line that gives the
-name.
+underscores separated by dots, which may not end in a suffix that the
+engine reserves for a method (`_define_opts`, `_py`, ...) nor contain the
+marker `__NSSEP__` of its qualified names. The SDK checks the name when
+the process is created, so that an error is reported at the line that
+gives the name. It checks it with the same function as the backend of
+the web UI (`api/process_names.py`), which does not need FastAPI.
 
 Where the code of a process is comes with the process, in one of four
 ways, which the process may not combine:
@@ -674,8 +675,11 @@ installation module when they are not set and the directories exist, so
 that script generation finds `debasher_get_proc_info` in an installation
 as it does under the web UI. Nothing of the library imports the routers
 of the API or FastAPI: it uses `api.models`, `api.persistence` (and
-through it script generation), `api.debasher_constants`, `api.layout` for
-the positions and `api.topology` for the ids derived from names.
+through it script generation), `api.debasher_constants`,
+`api.process_names` for the rule of a process name, `api.layout` for the
+positions, `api.resident_node_code` for the parts of a node file and
+`api.topology` for the ids derived from names and the languages of the
+extensions.
 
 # Guarantees and non-goals
 

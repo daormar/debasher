@@ -25,50 +25,25 @@ import re
 from pathlib import Path
 from typing import Union
 
+from api.process_names import process_name_problem
+from api.topology import LANGUAGE_BY_EXTENSION
+
 from .errors import DefinitionError
 
 DATA_TYPES = ("int", "float", "string", "file", "dir")
 
-# The language of a code file, from its extension: the same rule by which
-# the engine chooses the interpreter of an external alias.
-LANGUAGES_BY_EXTENSION = {
-    ".sh": "bash",
-    ".py": "python",
-    ".pl": "perl",
-    ".r": "r",
-    ".R": "r",
-    ".groovy": "groovy",
-}
-
-# The rule of the engine for a process name (debasher::_is_valid_processname
-# in engine/debasher_lib_programs.sh, mirrored by the backend): parts of
-# letters, digits and underscores, separated by dots.
-_PROCESS_NAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z_0-9]*(\.[a-zA-Z_][a-zA-Z_0-9]*)*$")
+# The languages of a process: those of the table with which the topology
+# file of the API tells the language of a code file by its extension, the
+# rule by which the engine chooses the interpreter of an external alias.
+_LANGUAGES = sorted(set(LANGUAGE_BY_EXTENSION.values()))
 
 
 def check_process_name(name: str) -> None:
-    """Refuses a name that the engine would refuse."""
-    from api.debasher_constants import RESERVED_HEREDOC_SUFFIXES, RESERVED_PROCESS_METHOD_SUFFIXES
-
-    if not _PROCESS_NAME_RE.match(name):
-        raise DefinitionError(
-            f'"{name}" cannot name a process: a name is made of letters, digits and '
-            "underscores, starts with a letter or an underscore, and may be qualified "
-            'with dot-separated namespaces ("org.mymodule.name").'
-        )
-    # The suffixes of the methods carry their underscore ("_define_opts");
-    # those of the heredoc languages do not ("py"). The empty suffix of
-    # the exec method, which every name ends with, is skipped as the
-    # engine skips it.
-    suffixes = [s for s in RESERVED_PROCESS_METHOD_SUFFIXES if s] + [f"_{s}" for s in RESERVED_HEREDOC_SUFFIXES]
-    for suffix in suffixes:
-        if name.endswith(suffix):
-            raise DefinitionError(
-                f'"{name}" cannot name a process: it ends in "{suffix}", which the engine '
-                "reserves for a method of a process."
-            )
-    if "__NSSEP__" in name:
-        raise DefinitionError(f'"{name}" cannot name a process: "__NSSEP__" is a marker of the engine.')
+    """Refuses a name that the engine would refuse, with the rule that the
+    editor checks too."""
+    problem = process_name_problem(name)
+    if problem is not None:
+        raise DefinitionError(f'"{name}" cannot name a process: {problem}')
 
 
 # A program name is the name of its module and the prefix of the module
@@ -273,12 +248,8 @@ class Process:
             )
         if alias_opt_map and not (script or alias):
             raise DefinitionError(f'Process "{name}" has an alias_opt_map without a script or an alias.')
-        if language is not None and language not in LANGUAGES_BY_EXTENSION.values():
-            raise DefinitionError(
-                f'Process "{name}": unknown language "{language}" (one of '
-                + ", ".join(sorted(set(LANGUAGES_BY_EXTENSION.values())))
-                + ")."
-            )
+        if language is not None and language not in _LANGUAGES:
+            raise DefinitionError(f'Process "{name}": unknown language "{language}" (one of {", ".join(_LANGUAGES)}).')
         self.name = name
         self.description = description
         self.base_dir = Path(base_dir) if base_dir is not None else _caller_dir()
@@ -327,7 +298,7 @@ class Process:
     def _language_of(self, path: Path | None) -> str | None:
         if path is None:
             return None
-        language = LANGUAGES_BY_EXTENSION.get(path.suffix)
+        language = LANGUAGE_BY_EXTENSION.get(path.suffix[1:])
         if language is None:
             raise DefinitionError(
                 f'Process "{self.name}": the extension of {path.name} tells no language; give '
