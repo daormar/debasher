@@ -4,14 +4,14 @@
 # which the module writes the line that creates it, on a run with conda
 # support, from py27.yml.
 
-from debasher import Process, Program, in_outdir
+from debasher import Process, Program, in_outdir, opt
 
 python_version = Process("python_version", code="python_version.sh",
                          conda_envs={"py27": "py27.yml"},
                          description="Activates the conda environment py27 and writes the version "
-                         "of its Python into a file.")
-python_version.output("-outf", "file", "file with the version of the Python of py27",
-                      in_outdir("python_version.txt"))
+                         "of its Python into a file.",
+                         options=[opt("-outf", "file", "file with the version of the Python of py27")])
+python_version.task_options(values={"-outf": in_outdir("python_version.txt")})
 
 prg = Program(
     "sdk_conda_envs",

@@ -2,10 +2,12 @@
 A program as the SDK describes it: the processes it adds, each with the
 specifications of its use there, as the `_program` method of a module
 adds them with `add_debasher_process`, and what the program is run with.
-`write()` turns it into the program model of the web UI (`api/models.py`)
-and saves it as the editor does (`api/persistence.py`): the artifact, the
-topology file `program.yaml` and the files of the processes where the
-description has them, and the generated module beside it.
+`to_model()` writes the topology file that the editor would save for the
+program, with the texts of the files it names, and loads it as the web UI
+loads an artifact (`api.topology.join`); `write()` saves the program model
+as the editor does (`api/persistence.py`): the artifact, the topology
+file `program.yaml` and the files of the processes where the description
+has them, and the generated module beside it.
 """
 
 from __future__ import annotations
@@ -14,25 +16,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from api import topology
+from api.script_generation import RESIDENT_COMP_SPEC_NAMES as NODE_SPECS
+
 from .errors import DefinitionError
-from api.layout import layout
-from api.topology import element_id as _id
 from .process import Node, Option, Process, Source, Supervisor, check_program_name
-
-
-# The computational specifications that only a node of a resident program
-# reads, under the names of the engine: its limits (see "Limits of a node"
-# in doc/design_doc_resident.md) and the other specifications of a node.
-NODE_SPECS = (
-    "input_log_max_mb",
-    "out_backlog_max_mb",
-    "out_backlog_fail_mb",
-    "gil_switch_interval_ms",
-    "startup_timeout_s",
-    "max_concurrent_runs",
-    "batch_sched",
-    "heartbeat_timeout_s",
-)
 
 
 @dataclass
@@ -46,14 +34,8 @@ class _Member:
     processdeps: str | None = None
     force: bool = False
     position: tuple[float, float] | None = None
+    initiator: bool = False
     node_specs: dict[str, float | int | str] | None = None
-
-
-@dataclass
-class _Edge:
-    source: Option
-    target: Option
-    display: str
 
 
 @dataclass
@@ -72,14 +54,15 @@ class Program:
     command line that a run is given (`program_options`, label to value,
     what "Set program options" of the editor holds), and what a module
     holds beside its processes: the `preamble` (Bash before the functions,
-    such as `load_debasher_module` lines), the environment variables
-    (`env_vars`, of which only `DEBASHER_MOD_DIR` is read) and the
-    shared directories. The execution options of the
-    editor are given by name: scheduler, builtin_sched_cpus,
-    builtin_sched_mem, dflt_nodes, dflt_throttle, rerun_outdated_procs,
-    conda_support, docker_support. A resident program (`resident=True`)
-    adds nodes and a Supervisor instead of processes, and may ask for
-    periodic snapshots of its runs (`snapshot_every_secs`).
+    such as `load_debasher_module` lines), the environment that the
+    backend gives the tools of the engine (`env_vars`, of which only
+    `DEBASHER_MOD_DIR` is read) and the shared directories. The execution
+    options of the editor are given by name: scheduler,
+    builtin_sched_cpus, builtin_sched_mem, dflt_nodes, dflt_throttle,
+    rerun_outdated_procs, conda_support, docker_support. A resident
+    program (`resident=True`) adds nodes and a Supervisor instead of
+    processes, and may ask for periodic snapshots of its runs
+    (`snapshot_every_secs`).
     """
 
     def __init__(
@@ -109,17 +92,17 @@ class Program:
         self.preamble = preamble
         self.env_vars = dict(env_vars or {})
         self.shared_dirs = list(shared_dirs or [])
-        self.execution_options = {
-            "scheduler": scheduler,
-            "builtinSchedCpus": builtin_sched_cpus,
-            "builtinSchedMem": builtin_sched_mem,
-            "dfltNodes": dflt_nodes,
-            "dfltThrottle": dflt_throttle,
-            "rerunOutdatedProcs": rerun_outdated_procs,
-            "condaSupport": conda_support,
-            "dockerSupport": docker_support,
-            "snapshotEverySecs": snapshot_every_secs,
-        }
+        self.execution = topology.TopologyExecution(
+            scheduler=scheduler,
+            builtin_sched_cpus=builtin_sched_cpus,
+            builtin_sched_mem=builtin_sched_mem,
+            dflt_nodes=dflt_nodes,
+            dflt_throttle=dflt_throttle,
+            rerun_outdated_procs=rerun_outdated_procs,
+            conda_support=conda_support,
+            docker_support=docker_support,
+            snapshot_every_secs=snapshot_every_secs,
+        )
         self._members: list[_Member] = []
 
     def __repr__(self) -> str:
@@ -140,6 +123,7 @@ class Program:
         processdeps: str | None = None,
         force: bool = False,
         position: tuple[float, float] | None = None,
+        initiator: bool = False,
         **node_specs,
     ) -> Process:
         """
@@ -152,8 +136,9 @@ class Program:
         run (`force`), and where it goes on the canvas (`position`, else
         the layout of the editor). A node of a resident program takes the
         specifications of a node too, under the names of the engine
-        (`input_log_max_mb`, `heartbeat_timeout_s`, ...). Returns the
-        process.
+        (`input_log_max_mb`, `heartbeat_timeout_s`, ...), and whether it is
+        an initiator, where a round starts (`initiator`), which depends on
+        how the program connects it. Returns the process.
         """
         is_node = isinstance(process, (Node, Supervisor))
         if self.resident and not is_node:
@@ -164,6 +149,10 @@ class Program:
         if is_node and not self.resident:
             raise DefinitionError(
                 f'"{process.name}" is a node, which only a resident program adds (Program(..., resident=True)).'
+            )
+        if initiator and not isinstance(process, Node):
+            raise DefinitionError(
+                f'Process "{process.name}" is not a Node: only a node of a resident program is an initiator.'
             )
         unknown = sorted(set(node_specs) - set(NODE_SPECS))
         if unknown:
@@ -183,20 +172,22 @@ class Program:
                 raise DefinitionError(
                     f'Program "{self.name}" already has a process named "{process.name}".'
                 )
-        self._members.append(_Member(process, cpus, mem, time, processdeps, force, position, node_specs or None))
+        self._members.append(
+            _Member(process, cpus, mem, time, processdeps, force, position, initiator, node_specs or None)
+        )
         return process
 
-    # --- the model -----------------------------------------------------------
+    # --- the topology file ---------------------------------------------------
 
     def _member_by_name(self, name: str) -> _Member | None:
         return next((member for member in self._members if member.process.name == name), None)
 
-    def _resolve_source(self, target: Option, source: Source) -> Option:
-        """The output that `source` names, which has to be an output of a
+    def _source_name(self, target: Option, source: Source) -> str:
+        """The source `source` of the input `target` as the topology file
+        names it, "<process>.<label>", which has to be an output of a
         process of the program."""
         if isinstance(source, Option):
-            member = next((m for m in self._members if m.process is source.process), None)
-            if member is None:
+            if not any(member.process is source.process for member in self._members):
                 raise DefinitionError(
                     f'Option "{target.label}" of process "{target.process.name}" reads '
                     f'"{source.label}" of process "{source.process.name}", which program '
@@ -212,147 +203,79 @@ class Program:
                     f'"{label}" of process "{process_name}", which program "{self.name}" '
                     "does not add."
                 )
-            try:
-                output = member.process[label]
-            except KeyError:
+            output = member.process._find(label)
+            if output is None:
                 raise DefinitionError(
                     f'Option "{target.label}" of process "{target.process.name}" reads '
                     f'"{label}" of process "{process_name}", which has no such option.'
-                ) from None
+                )
         if output.direction != "output":
             raise DefinitionError(
                 f'Option "{target.label}" of process "{target.process.name}" reads '
                 f'"{output.label}" of process "{output.process.name}", which is an input.'
             )
-        return output
+        return f"{output.process.name}.{output.label}"
 
-    def _edges(self) -> list[_Edge]:
-        edges = []
-        for member in self._members:
-            for option in member.process.options:
-                for source in option.sources:
-                    edges.append(_Edge(self._resolve_source(option, source), option, option.display))
-        return edges
-
-    def _positions(self) -> dict[str, tuple[float, float]]:
-        names = [member.process.name for member in self._members]
-        connections = [(edge.source.process.name, edge.target.process.name) for edge in self._edges()]
-        positions = layout(names, connections)
-        for member in self._members:
-            if member.position is not None:
-                positions[member.process.name] = (float(member.position[0]), float(member.position[1]))
-        return positions
-
-    def _option_model(self, member: _Member, option: Option):
-        from api.models import ProgramOption
-
-        process = member.process
-        count_source_id = None
-        if option.count_source is not None:
-            count_source = option.count_source
-            if isinstance(count_source, str):
-                try:
-                    count_source = process[count_source]
-                except KeyError:
-                    raise DefinitionError(
-                        f'Option "{option.label}" of process "{process.name}" is counted by '
-                        f'"{option.count_source}", which the process does not declare.'
-                    ) from None
-            if count_source.process is not process:
-                raise DefinitionError(
-                    f'Option "{option.label}" of process "{process.name}" is counted by '
-                    f'"{count_source.label}" of process "{count_source.process.name}": the count '
-                    "source of a family is an option of the same process."
-                )
-            count_source_id = _id(self.name, process.name, count_source.label)
-        return ProgramOption(
-            id=_id(self.name, process.name, option.label),
-            label=option.label,
-            direction=option.direction,
-            dataType=option.data_type,
-            channel=option.channel,
-            subpath=option.subpath,
-            mirror=option.mirror,
-            fifoTag=option.fifo_tag,
-            description=option.description,
-            value=option.value,
-            commandLine=option.command_line,
-            mandatory=option.mandatory,
-            fromProcessSpec=option.from_process_spec,
-            countSourceOptionId=count_source_id,
-            taskShaping=option.task_shaping,
-        )
+    def _option(self, process: Process, option: Option) -> topology.TopologyOption:
+        """A received option as the topology file keeps it, with the keys of
+        its place in the interface or of its kind of value."""
+        interface, task_options = process._interface, process._task_options
+        keys: dict = {"type": "flag" if option.data_type == "None" else option.data_type,
+                      "description": option.description}
+        if option.label in interface.cmdline:
+            keys |= {"cmdline": True, "mandatory": interface.cmdline[option.label]}
+        elif option.label in interface.external:
+            keys |= {"value": interface.external[option.label], "channel": "fifo", "fifo_tag": "external"}
+        else:
+            value = task_options.values[option.label]
+            if isinstance(value, str):
+                keys["value"] = value
+            elif value is not True:
+                keys |= {
+                    "value": value.value,
+                    "channel": value.channel,
+                    "subpath": value.subpath,
+                    "mirror": value.mirror,
+                    "from_spec": value.from_spec,
+                }
+                if value.sources:
+                    sources = [self._source_name(option, source) for source in value.sources]
+                    keys["from"] = sources[0] if len(sources) == 1 else sources
+                    if value.display == "label":
+                        keys["display"] = "label"
+        if option.label in task_options.count:
+            keys["count_source"] = task_options.count[option.label]
+        return topology.TopologyOption(**keys)
 
     @staticmethod
-    def _read(process: Process, path: Path | None, what: str) -> str | None:
-        """The text of a file of `process` as the program model keeps it,
-        without the newlines that end it, as import keeps the code it
-        reads from a module; `what` says which file for the error. None
-        for no file."""
-        if path is None:
-            return None
+    def _shaping_option(data_type: str, description: str) -> topology.TopologyOption:
+        return topology.TopologyOption(type=data_type, description=description, cmdline=True, shaping=True)
+
+    @staticmethod
+    def _read(process: Process, path: Path, what: str) -> str:
+        """The text of a file of `process`; `what` says which file for the
+        error."""
         try:
-            return path.read_text().rstrip("\n")
+            return path.read_text()
         except OSError as error:
             raise DefinitionError(f'Process "{process.name}": cannot read its {what} {path}: {error.strerror}.')
 
-    def _read_code(self, process: Process) -> str:
-        if process.script_path is not None:
-            return self._read(process, process.script_path, "script") or ""
-        return self._read(process, process.code_path, "code file") or ""
-
-    def _options_handler(self, process: Process):
-        from api.models import OptionsHandler
-
-        tasks = self._read(process, process.tasks_path, "tasks file")
-        if process.mode == "array":
-            return OptionsHandler(mode="array", arrayCode=tasks, language=process.tasks_language)
-        if process.mode == "generator":
-            return OptionsHandler(mode="generator", generatorSizeCode=tasks, language=process.tasks_language)
-        return OptionsHandler(mode=process.mode)
-
-    def _additional_methods(self, process: Process):
-        from api.models import AdditionalMethods, CondaEnv
-
-        return AdditionalMethods(
-            **{field: self._read(process, path, "method file") for field, path in process.method_paths.items()},
-            skipLanguage=process.skip_language,
-            condaEnvs=[CondaEnv(name=name, file=file) for name, file in process.conda_envs.items()],
-            dockerImgs=process.docker_imgs,
-        )
-
     @staticmethod
-    def _file_relative(process: Process, path: Path | None) -> str:
+    def _file_relative(process: Process, path: Path) -> str:
         """
         Where the artifact keeps a file of `process` that the SDK read
         (its process file, its tasks file, a method file): the path
-        relative to the directory of the description when it stays below
+        relative to the base directory of the process (the directory of
+        the file that creates it, or its base_dir) when the file is below
         it, which the program written into that directory leaves as it is,
-        and the name of the file alone when the path climbs out of it or
-        is absolute, so that the program written is self-contained.
+        and the name of the file alone when it is outside it, so that the
+        program written is self-contained.
         """
-        if path is None:
-            return ""
         try:
             relative = path.resolve().relative_to(process.base_dir.resolve())
         except ValueError:
             return path.name
         return str(relative)
-
-    def _files(self, process: Process):
-        """The paths of the files of `process` in the artifact (see
-        _file_relative), for saving to write each where it was read."""
-        from api.models import ProcessFiles
-        from api.topology import METHOD_FIELDS
-
-        method_names = {field: method for method, field in METHOD_FIELDS.items()}
-        return ProcessFiles(
-            code=self._file_relative(process, process.code_path),
-            tasks=self._file_relative(process, getattr(process, "tasks_path", None)),
-            methods={
-                method_names[field]: self._file_relative(process, path) for field, path in process.method_paths.items()
-            },
-        )
 
     @staticmethod
     def _script_relative(process: Process) -> str | None:
@@ -373,17 +296,17 @@ class Program:
             return Path(given).name
         return given
 
-    def _node_parts(self, process: Process):
-        """The node kind and the parts of the code of a node, from its file;
-        None for a Supervisor and for a process of a general program."""
+    def _node_kind(self, process: Process, text: str) -> str | None:
+        """The node kind of a node, read from its file, which has to fit the
+        parts of a node of the web UI; None for a process of a general
+        program."""
         from api.resident_node_code import decompose_heredoc
 
         if isinstance(process, Supervisor):
-            return "Supervisor", None
+            return "Supervisor"
         if not isinstance(process, Node):
-            return None, None
-        source = self._read(process, process.code_path, "node file")
-        decomposed = decompose_heredoc(source)
+            return None
+        decomposed = decompose_heredoc(text.rstrip("\n"))
         if decomposed.misfits:
             problems = "\n".join(
                 f"  line {misfit.line}: {misfit.problem}; {misfit.fix}" if misfit.line is not None
@@ -399,78 +322,94 @@ class Program:
                 f'Node "{process.name}": its file defines a Supervisor; a Supervisor is added with '
                 "Supervisor(name), without a file."
             )
-        return decomposed.kind, decomposed.code
+        return decomposed.kind
 
-    def _process_model(self, member: _Member, positions):
-        from api.models import AdditionalSpecs, AliasOptMapping, ComputationalSpecs, Position, ProgramProcess
-
+    def _process(self, member: _Member, files: dict[str, str]) -> topology.TopologyProcess:
+        """The process of `member` as the topology file keeps it, adding the
+        texts of the files it names to `files`."""
         process = member.process
-        x, y = positions[process.name]
-        kind, node_code = self._node_parts(process)
-        return ProgramProcess(
-            id=_id(self.name, process.name),
-            name=process.name,
-            description=process.description,
-            position=Position(x=x, y=y),
-            options=[self._option_model(member, option) for option in process.options],
-            optionsHandler=self._options_handler(process),
-            language=process.language,
-            # The code of a node is its parts; script generation writes the
-            # heredoc from them
-            code="" if kind else self._read_code(process),
-            computationalSpecs=ComputationalSpecs(
-                cpus=member.cpus, mem=member.mem, time=member.time, **(member.node_specs or {})
+        process.check_parts()
+        keys: dict = {"description": process.description}
+        kind = None
+        if process.alias:
+            keys |= {"alias": process.alias, "alias_opt_map": dict(process.alias_opt_map)}
+        elif process.script_path is not None:
+            path = self._script_relative(process)
+            files[path] = self._read(process, process.script_path, "script")
+            keys |= {"script": path, "alias_opt_map": dict(process.alias_opt_map)}
+        elif process.code_path is not None:
+            path = self._file_relative(process, process.code_path)
+            files[path] = self._read(process, process.code_path, "node file" if isinstance(process, Node) else "code file")
+            keys["code"] = path
+            kind = self._node_kind(process, files[path])
+        else:
+            kind = self._node_kind(process, "")
+        if process.tasks_path is not None:
+            path = self._file_relative(process, process.tasks_path)
+            files[path] = self._read(process, process.tasks_path, "tasks file")
+            keys |= {"mode": process.mode, "tasks": path}
+        methods = {}
+        for method, method_path in process.method_paths.items():
+            path = self._file_relative(process, method_path)
+            files[path] = self._read(process, method_path, "method file")
+            methods[method] = path
+        options = {option.label: self._option(process, option) for option in process.options}
+        options |= {
+            label: self._shaping_option(data_type, description)
+            for label, (data_type, description) in process._interface.shaping.items()
+        }
+        specs = {name: value for name, value in (("cpus", member.cpus), ("mem", member.mem), ("time", member.time)) if value is not None}
+        return topology.TopologyProcess(
+            **keys,
+            methods=methods,
+            conda_envs=dict(process.conda_envs),
+            docker_imgs=list(process.docker_imgs),
+            specs=topology.TopologySpecs(
+                **specs, processdeps=member.processdeps, force=member.force, **(member.node_specs or {})
             ),
-            additionalSpecs=AdditionalSpecs(
-                force=member.force,
-                processdeps=member.processdeps,
-                alias=process.alias,
-                aliasOptMap=[AliasOptMapping(fromLabel=a, toLabel=b) for a, b in process.alias_opt_map.items()],
-                externalAlias=self._script_relative(process),
+            kind=kind,
+            initiator=member.initiator,
+            position=topology.TopologyPosition(x=member.position[0], y=member.position[1]) if member.position else None,
+            options=options,
+        )
+
+    def to_topology(self) -> tuple[topology.Topology, dict[str, str]]:
+        """
+        The topology file that the editor would save for the program, and
+        the texts of the files it names, by their paths in the artifact.
+        Raises DefinitionError for what the SDK refuses.
+        """
+        files: dict[str, str] = {}
+        processes = {member.process.name: self._process(member, files) for member in self._members}
+        return (
+            topology.Topology(
+                schema_version=topology.SCHEMA_VERSION,
+                name=self.name,
+                type="resident" if self.resident else None,
+                description=self.description,
+                preamble=self.preamble,
+                env=self.env_vars,
+                shared_dirs=self.shared_dirs,
+                execution=self.execution,
+                program_options=self.program_options,
+                processes=processes,
             ),
-            additionalMethods=self._additional_methods(process),
-            nodeKind=kind,
-            initiator=getattr(process, "initiator", False),
-            nodeCode=node_code,
-            files=self._files(process),
+            files,
         )
 
     def to_model(self):
         """
         The program as the program model of the web UI (`api.models.Program`),
-        as `write()` saves it. Raises DefinitionError for what the SDK
-        refuses; what script generation refuses is found when the program
-        is written.
+        as `write()` saves it: the topology file of the program loaded as the
+        web UI loads an artifact. Raises DefinitionError for what the SDK or
+        loading refuses; what script generation refuses is found when the
+        program is written.
         """
-        from api.models import ExecutionOptions, Program as ProgramModel, ProgramEdge
-
-        positions = self._positions()
-        processes = [self._process_model(member, positions) for member in self._members]
-        edges = [
-            ProgramEdge(
-                id=_id(self.name, "edge", edge.source.process.name, edge.source.label, edge.target.process.name, edge.target.label),
-                sourceProcessId=_id(self.name, edge.source.process.name),
-                sourceOptionId=_id(self.name, edge.source.process.name, edge.source.label),
-                targetProcessId=_id(self.name, edge.target.process.name),
-                targetOptionId=_id(self.name, edge.target.process.name, edge.target.label),
-                display=edge.display,
-            )
-            for edge in self._edges()
-        ]
-        return ProgramModel(
-            id=_id(self.name),
-            name=self.name,
-            programType="resident" if self.resident else "general",
-            description=self.description,
-            preamble=self.preamble,
-            envVars=self.env_vars,
-            outputDir="",
-            executionOptions=ExecutionOptions(**self.execution_options),
-            programOptions=self.program_options,
-            sharedDirs=self.shared_dirs,
-            processes=processes,
-            edges=edges,
-        )
+        top, files = self.to_topology()
+        try:
+            return topology.join(top, files)
+        except topology.TopologyError as error:
+            raise DefinitionError(str(error)) from error
 
     def _script_copies(self) -> list[_ScriptCopy]:
         """The scripts to copy beside the module: those the module refers

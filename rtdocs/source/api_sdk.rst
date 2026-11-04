@@ -6,12 +6,12 @@ Python SDK
 .. default-role:: literal
 
 A program described in Python (see the :ref:`implem_python` Section)
-is made of the classes below, which the file of the description
+is made of the classes and functions below, which the file of the description
 imports from the package ``debasher``:
 
 .. code-block:: python
 
-    from debasher import Process, Program, in_outdir
+    from debasher import Process, Program, connect, in_outdir, opt
 
 Only what a description uses is listed: the classes it creates, the
 methods it calls and the functions it uses. ``debasher_build`` (see the
@@ -29,44 +29,47 @@ Program
 Processes
 ---------
 
-.. autoclass:: debasher.Process
+A process is created with what does not change (its code, its
+description, the options that its tasks receive, its environments and
+the methods of a task); ``interface`` gives what it receives from
+outside the program, and ``task_options`` the shape of its tasks and
+the value of each option.
+
+.. autoclass:: debasher.Process(name, code=None, script=None, alias=None, description="", options=(), alias_opt_map=None, base_dir=None, skip=None, post=None, reset_outfiles=None, conda_envs=None, docker_imgs=None)
+
+.. automethod:: debasher.Process.interface(cmdline=None, shaping=None, external=None)
+
+.. automethod:: debasher.Process.task_options(values=None, array=None, generator=None, count=None)
 
 .. automethod:: debasher.Process.__getitem__
-
-.. autoclass:: debasher.Array
-
-.. autoclass:: debasher.Generator
 
 Options
 -------
 
-Every option is declared by a method of its process, which returns it.
+The options that the tasks of a process receive, for its ``options=``:
 
-.. automethod:: debasher.Process.cmdline_opt
+.. autofunction:: debasher.opt(label, data_type, description="")
 
-.. automethod:: debasher.Process.cmdline_flag
-
-.. automethod:: debasher.Process.input
-
-.. automethod:: debasher.Process.output
-
-.. automethod:: debasher.Process.fifo_output
-
-.. automethod:: debasher.Process.fifo_input
-
-.. automethod:: debasher.Process.outdir_opt
-
-.. automethod:: debasher.Process.shared_dir_opt
-
-.. automethod:: debasher.Process.procspec_opt
-
-.. automethod:: debasher.Process.value_desc_output
-
-.. automethod:: debasher.Process.opt
-
-.. autofunction:: debasher.in_outdir
+.. autofunction:: debasher.flag(label, description="")
 
 .. autoclass:: debasher.Option()
+
+The values of the options in ``task_options(values=...)``, besides a
+string (a literal value) and ``True`` (a flag set in every task):
+
+.. autofunction:: debasher.connect(source, display="line")
+
+.. autofunction:: debasher.fifo(name, mirror=False)
+
+.. autofunction:: debasher.outdir(subpath="")
+
+.. autofunction:: debasher.shared_dir(name, subpath="", source=None)
+
+.. autofunction:: debasher.procspec(attribute)
+
+.. autofunction:: debasher.value_desc()
+
+.. autofunction:: debasher.in_outdir
 
 Resident programs
 -----------------
@@ -74,9 +77,9 @@ Resident programs
 A resident program (``Program(..., resident=True)``) adds nodes and a
 ``Supervisor`` instead of processes.
 
-.. autoclass:: debasher.Node
+.. autoclass:: debasher.Node(name, code, description="", options=(), base_dir=None)
 
-.. autoclass:: debasher.Supervisor
+.. autoclass:: debasher.Supervisor(name, description="", base_dir=None)
 
 Errors
 ------

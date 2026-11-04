@@ -66,7 +66,7 @@ def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) 
     # the names of the engine (see "Limits of a node" in
     # doc/design_doc_resident.md), none of them set for a general program
     # and none held by the specifications of a sequential process.
-    for name in _RESIDENT_COMP_SPEC_NAMES:
+    for name in RESIDENT_COMP_SPEC_NAMES:
         value = getattr(specs, name, None)
         if value is None:
             continue
@@ -74,7 +74,10 @@ def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) 
     return " ".join(parts)
 
 
-_RESIDENT_COMP_SPEC_NAMES = (
+# The computational specifications that only a node of a resident program
+# reads, under the names of the engine, which the Python SDK takes by the
+# same names.
+RESIDENT_COMP_SPEC_NAMES = (
     "input_log_max_mb",
     "out_backlog_max_mb",
     "out_backlog_fail_mb",

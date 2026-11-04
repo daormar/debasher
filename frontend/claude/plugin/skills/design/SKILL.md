@@ -95,7 +95,9 @@ connections of the data over ordering by hand.
   with `dry_run` first when the change is large, and show the user the
   proposal. The single tools (`add_process`, `add_option`, `connect`, ...)
   are fine for small changes. For a program described in Python, build it in
-  its description instead, and have it built again with `debasher_build`.
+  its description instead (see "Programs described in Python" in the
+  reference for where each part goes), and have it built again with
+  `debasher_build`.
 - Lay the processes out with `move_process` and `layout`, unless the user
   placed them by hand and wants them kept. Draw as a label edge
   (`set_connection_display`) a connection whose line would cross others.

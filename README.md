@@ -60,15 +60,19 @@ reads that file, writes it in capitals. Connecting the input of `shout`
 to the output of `write` is all it takes for `shout` to run after it:
 
 ```python
-from debasher import Process, Program, in_outdir
+from debasher import Process, Program, connect, in_outdir, opt
 
-write = Process("write", code="write.sh", description="Writes a greeting.")
-write.cmdline_opt("-name", "string", "who to greet")
-write.output("-outf", "file", "the greeting", value=in_outdir("greeting.txt"))
+write = Process("write", code="write.sh", description="Writes a greeting.",
+                options=[opt("-name", "string", "who to greet"),
+                         opt("-outf", "file", "the greeting")])
+write.interface(cmdline={"-name": "mandatory"})
+write.task_options(values={"-outf": in_outdir("greeting.txt")})
 
-shout = Process("shout", code="shout.py", description="Turns it into capitals.")
-shout.input("-inf", "file", "the greeting", source=write["-outf"])
-shout.output("-outf", "file", "the result", value=in_outdir("shout.txt"))
+shout = Process("shout", code="shout.py", description="Turns it into capitals.",
+                options=[opt("-inf", "file", "the greeting"),
+                         opt("-outf", "file", "the result")])
+shout.task_options(values={"-inf": connect(write["-outf"]),
+                           "-outf": in_outdir("shout.txt")})
 
 prg = Program("greet")
 prg.add(write, cpus=1, mem=32, time="00:01:00")

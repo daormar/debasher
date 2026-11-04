@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("pydantic")
 
-from debasher import DefinitionError, Node, Process, Program, Supervisor  # noqa: E402
+from debasher import DefinitionError, Node, Process, Program, Supervisor, fifo, opt, value_desc  # noqa: E402
 
 from examples import SDK_PROGRAMS_DIR  # noqa: E402
 
@@ -35,9 +35,9 @@ Launch().run()
 
 
 def test_a_node_is_split_into_the_parts_of_its_class(tmp_path):
-    acc = Node("Accumulate", code=_ACCUMULATE, initiator=True)
+    acc = Node("Accumulate", code=_ACCUMULATE)
     prg = Program("prg", resident=True)
-    prg.add(acc)
+    prg.add(acc, initiator=True)
 
     process = prg.to_model().processes[0]
     assert process.nodeKind == "FBPProcess"
@@ -94,11 +94,11 @@ def test_the_specifications_of_a_node_go_with_its_computational_specifications(t
 
 
 def test_the_module_of_a_resident_program_is_written(tmp_path):
-    acc = Node("Accumulate", code=_ACCUMULATE, initiator=True)
-    acc.fifo_input("-numbers", "string", "", "numbers", external=True)
-    acc.fifo_output("-outsum", "string", "", "sum")
+    acc = Node("Accumulate", code=_ACCUMULATE, options=[opt("-numbers", "string"), opt("-outsum", "string")])
+    acc.interface(external={"-numbers": "numbers"})
+    acc.task_options(values={"-outsum": fifo("sum")})
     prg = Program("prg", resident=True)
-    prg.add(acc)
+    prg.add(acc, initiator=True)
     prg.add(Supervisor("Sup"))
 
     module = prg.write(tmp_path / "home").read_text()
@@ -176,10 +176,23 @@ def test_the_specifications_of_a_node_are_known_names_and_for_nodes_only(tmp_pat
         general.add(Process("work", code="work.sh"), heartbeat_timeout_s=5)
 
 
+def test_a_supervisor_has_no_interface_and_no_task_options():
+    sup = Supervisor("Sup")
+    with pytest.raises(DefinitionError, match="no interface"):
+        sup.interface()
+    with pytest.raises(DefinitionError, match="no task options"):
+        sup.task_options()
+
+
+def test_only_a_node_is_an_initiator(tmp_path):
+    resident = Program("prg", resident=True)
+    with pytest.raises(DefinitionError, match="only a node of a resident program is an initiator"):
+        resident.add(Supervisor("Sup"), initiator=True)
+
+
 def test_what_resident_generation_refuses_is_refused_with_its_message(tmp_path):
-    acc = Node("Acc", code=_ACCUMULATE)
-    acc.output("-outf", "file", "a file", "x.txt")
-    acc["-outf"].channel = "value_desc"
+    acc = Node("Acc", code=_ACCUMULATE, options=[opt("-outf", "file", "a file")])
+    acc.task_options(values={"-outf": value_desc()})
     prg = Program("prg", resident=True)
     prg.add(acc)
 

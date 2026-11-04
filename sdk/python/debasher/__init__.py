@@ -4,10 +4,11 @@ as the web UI saves it, the topology file `program.yaml` with the files
 of its processes, and the generated module, which `debasher_exec` runs as
 any other program.
 
-A file of the user defines processes, with their options and their
-connections, and one Program that adds them with the specifications of
-their use; it calls nothing, as a hand-written module calls nothing. The
-tool `debasher_build` loads the file and writes the program. The SDK
+A file of the user defines processes, each with its invariant part, its
+interface and its task options, and one Program that adds them with the
+specifications of their use; it calls nothing, as a hand-written module
+calls nothing. The tool `debasher_build` loads the file and writes the
+program. The SDK
 executes nothing itself: what runs the program is `debasher_exec`.
 """
 
@@ -16,7 +17,37 @@ from ._paths import locate_api as _locate_api
 _locate_api()
 
 from .errors import DefinitionError  # noqa: E402
-from .process import Array, Generator, Node, Option, Process, Supervisor, in_outdir  # noqa: E402
+from .process import (  # noqa: E402
+    Node,
+    Option,
+    Process,
+    Supervisor,
+    connect,
+    fifo,
+    flag,
+    in_outdir,
+    opt,
+    outdir,
+    procspec,
+    shared_dir,
+    value_desc,
+)
 from .program import Program  # noqa: E402
 
-__all__ = ["Array", "DefinitionError", "Generator", "Node", "Option", "Process", "Program", "Supervisor", "in_outdir"]
+__all__ = [
+    "DefinitionError",
+    "Node",
+    "Option",
+    "Process",
+    "Program",
+    "Supervisor",
+    "connect",
+    "fifo",
+    "flag",
+    "in_outdir",
+    "opt",
+    "outdir",
+    "procspec",
+    "shared_dir",
+    "value_desc",
+]

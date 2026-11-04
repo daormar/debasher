@@ -149,6 +149,18 @@ relative to the output directory of the run.
 - **task options**: the part of the process contract that gives the number of
   tasks of a process and the option list of each; in the module form,
   `_define_opts` or an option generator.
+- **invariant part**, **interface**: two of the three groups into which the
+  parts of a process other than its name and its specification fall, by what
+  a program that adds the process may give otherwise than another program,
+  the third being the task options with the dependency types. The invariant
+  part goes with the code: the body and where it is taken from (an alias or an
+  external alias), the options that a task receives with their placeholders
+  and descriptions, the documentation, the environments and the rules and
+  hooks of a task. The interface is what the process receives from outside the
+  program: which of those options are command line options, mandatory or
+  optional, the task shaping options, and the FIFOs fed from outside. The
+  interface, the task options and the dependency types form the **variable
+  part**. See "What a program may give again".
 - **body**: the part of the process contract that does the work of a task, in
   any language; in the module form, the process function.
 - **skip rule**, **reset rule**, **post hook**, **termination handler**: the
@@ -3358,8 +3370,9 @@ process has to honor for the engine to run it as it runs a process of a
 module, and what any implementation of the engine has to expect from a
 process and give it. This section lists the parts of the contract, describes
 each one with its obligations and the sections where the engine's side of it
-is described, and then says what the module form gives a process beyond the
-contract, which another form would not.
+is described, then divides the parts by what a program that adds the process
+may give otherwise than another, and then says what the module form gives a
+process beyond the contract, which another form would not.
 
 ## The parts of a process
 
@@ -3387,6 +3400,53 @@ The name, the specification, the declared options, the task options and the
 body are required. Every other part is optional, and a process without it
 gets the behavior that "Processes and their methods" gives to the absent
 method, whatever the form in which the process is written.
+
+## What a program may give again
+
+The kinds of the table say whether a part depends on the run. A second division
+says which parts a program that adds a process may give otherwise than another
+program that adds the same process, and groups them in three:
+
+- the **invariant part**: the body and where it is taken from, the options that
+  a task receives, each with its placeholder and its description, the
+  documentation, the environments, and the skip rule, the reset rule, the post
+  hook and the termination handler. It goes with the code: the body uses the
+  environments by name and reads its options by their labels, and the rules and
+  hooks are code of the process, so a program could not change any of them
+  without changing what the body does.
+- the **interface**: which of the options that a task receives are command line
+  options, mandatory or optional, the task shaping options, and the FIFOs that
+  the process owns and that are fed from outside the program (the tags
+  `--external` and `--control` of a resident program, see "Declaring and
+  owning a FIFO"): what the program receives from outside, at launch or during
+  the run.
+- the **task options** and the **dependency types**: the shape of the tasks and
+  the value of each option of a task, among them the connections to the outputs
+  of other processes.
+
+The interface, the task options and the dependency types are the variable part:
+one program may make an option a command line option that another connects to a
+process, or have a task shaping option that another does without. The name and
+the specification are of no group: the name identifies the process, and the
+specification is what the program gives when it adds the process
+(`add_debasher_process`). An alias, an external alias and their option map
+(`alias_opt_map`) are the exception: they are written in the specification, but
+name where the body is taken from and how its options are passed to it (see "The
+static parts"), so a program that changed them would change what the process
+runs, and they go with the body in the invariant part. The declared options fall
+across the first two groups, the options that a task receives in the invariant
+part and which of them come from outside in the interface, since the axis of the
+table, whether a part depends on the run, is not this one.
+
+In the module form the groups are different methods, which a program that loads
+the module can define again after loading it, touching nothing else: the
+invariant part is the process function, `_explain_opts`, `_document`, the
+methods of the environments and those of a task; the interface is
+`_identify_cmdline_opts` and `_explain_task_shaping_opts`, and the tag of a FIFO
+fed from outside, which the module form writes in the task options; the task
+options are `_define_opts`, or `_generate_opts_size` and `_generate_opts`, and
+the dependency types `_define_opt_deps`. The Python SDK gives each group by a
+call of its own (see `doc/design_doc_sdk.md`).
 
 ## The static parts
 

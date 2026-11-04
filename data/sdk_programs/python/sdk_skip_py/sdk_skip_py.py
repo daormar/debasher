@@ -3,21 +3,25 @@
 # and another reads the sum and writes it plus one, unless the sum is
 # odd, which a skip rule in Python decides (value_reader_skip.py).
 
-from debasher import Process, Program, in_outdir
+from debasher import Process, Program, connect, in_outdir, opt, value_desc
 
 SPECS = dict(cpus=1, mem=32, time="00:01:00")
 
 value_writer = Process("value_writer", code="value_writer.sh",
-                       description="Takes two numbers and produces their sum as output.")
-value_writer.cmdline_opt("-num-a", "int", "First number to be summed")
-value_writer.cmdline_opt("-num-b", "int", "Second number to be summed")
-value_writer.value_desc_output("-outv", "int", "output value descriptor")
+                       description="Takes two numbers and produces their sum as output.",
+                       options=[opt("-num-a", "int", "First number to be summed"),
+                                opt("-num-b", "int", "Second number to be summed"),
+                                opt("-outv", "int", "output value descriptor")])
+value_writer.interface(cmdline={"-num-a": "mandatory", "-num-b": "mandatory"})
+value_writer.task_options(values={"-outv": value_desc()})
 
 value_reader = Process("value_reader", code="value_reader.sh", skip="value_reader_skip.py",
                        description="Reads the sum, increases it by one and writes it into a file; "
-                       "skipped when the sum is odd.")
-value_reader.input("-val-desc", "int", "value descriptor", source=value_writer["-outv"])
-value_reader.output("-outf", "file", "output file", in_outdir("value_reader.out"))
+                       "skipped when the sum is odd.",
+                       options=[opt("-val-desc", "int", "value descriptor"),
+                                opt("-outf", "file", "output file")])
+value_reader.task_options(values={"-val-desc": connect(value_writer["-outv"]),
+                                  "-outf": in_outdir("value_reader.out")})
 
 prg = Program(
     "sdk_skip_py",

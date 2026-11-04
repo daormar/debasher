@@ -76,14 +76,22 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `debasher_build <name>.py` writes `program.yaml` again from the
   description, so a change made with the tools to the options, the
   connections, the specifications, the Conda environments and Docker images
-  given as data (`conda_envs=`, `docker_imgs=`), or the language of a tasks
-  file or a skip file (which file `tasks=` or `skip=` names), is lost then.
-  Change the topology of such a program in its description, and have it
-  built again with `debasher_build <name>.py` in the home directory (no
-  tool runs it; the file is never run with `python` nor given to
-  `debasher_exec`), then read it again. How a description is written:
-  https://debasher.readthedocs.io/en/latest/implem_python.html; every class
-  and method of the SDK:
+  given as data (`conda_envs=`, `docker_imgs=`), or the mode of a process
+  and the language of its tasks file or skip file (which file `array=` or
+  `generator=` of `task_options(...)`, or `skip=`, names), is lost then.
+  Change the topology of such a program in its description, where each
+  process is created with what does not change (`Process(...)` with its
+  name, its code and `options=`, the options being `opt(label, data_type)`
+  and `flag(label)`), its interface gives what comes from outside the program
+  (`interface(cmdline=, shaping=, external=)`), its task options give the
+  values and connections of its options, its tasks file and the counts of
+  its fanout families (`task_options(values=, array=, generator=, count=)`),
+  and `add(...)` of the `Program` gives its specifications and, for a node,
+  `initiator=`. Have it built again with `debasher_build <name>.py` in the
+  home directory (no tool runs it; the file is never run with `python` nor
+  given to `debasher_exec`), then read it again. How a description is
+  written: https://debasher.readthedocs.io/en/latest/implem_python.html;
+  every class and function of the SDK:
   https://debasher.readthedocs.io/en/latest/api_sdk.html.
 - **Preamble.** Bash code at the top of the generated script, mostly
   `load_debasher_module "<module>"` lines, which bring in the processes that

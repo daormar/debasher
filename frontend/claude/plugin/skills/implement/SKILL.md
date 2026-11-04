@@ -40,8 +40,9 @@ which one you start with.
    `<name>.py` beside `<name>.sh`, see "Programs described in Python" in the
    reference) the description names the same file, so the code needs no rebuild;
    only a change of the options, the connections, the specifications, the Conda
-   environments and Docker images given as data, or the language of a tasks file
-   or a skip file (which file `tasks=` or `skip=` names), goes into the
+   environments and Docker images given as data, or the mode of a process and
+   the language of its tasks file or skip file (which file `array=` or
+   `generator=` of `task_options(...)`, or `skip=`, names), goes into the
    description and needs `debasher_build <name>.py` again. Keep it small and
    readable, and make it fail loudly (a non-zero exit) on bad input rather than
    produce a wrong output. Comment it as the code prompt asks under "How to

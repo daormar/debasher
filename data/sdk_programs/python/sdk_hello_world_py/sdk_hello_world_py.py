@@ -8,10 +8,11 @@
 #
 #     debasher_exec --pfile sdk_hello_world_py.sh --outdir out --wait
 
-from debasher import Process, Program
+from debasher import Process, Program, opt
 
-hello = Process("hello_world", code="hello_world.py", description="Prints a greeting.")
-hello.cmdline_opt("-s", "string", "string to print ('Hello World!' by default)", mandatory=False)
+hello = Process("hello_world", code="hello_world.py", description="Prints a greeting.",
+                options=[opt("-s", "string", "string to print ('Hello World!' by default)")])
+hello.interface(cmdline={"-s": "optional"})
 
 prg = Program("sdk_hello_world_py")
 prg.add(hello, cpus=1, mem=256, time="01:00:00")

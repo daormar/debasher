@@ -1,7 +1,8 @@
 """
-The option channels, the processes with several tasks (Array, Generator)
-and the additional methods of a process, as the SDK puts them into the
-program model, and what it refuses of them.
+The kinds of value of the task options, the fanout families, the
+processes with several tasks (an array, a generator) and the additional
+methods of a process, as the SDK puts them into the program model, and
+what it refuses of them.
 """
 
 from pathlib import Path
@@ -10,7 +11,24 @@ import pytest
 
 pytest.importorskip("pydantic")
 
-from debasher import Array, DefinitionError, Generator, Process, Program  # noqa: E402
+from debasher import (  # noqa: E402
+    DefinitionError,
+    Node,
+    Process,
+    Program,
+    connect,
+    fifo,
+    opt,
+    outdir,
+    procspec,
+    shared_dir,
+    value_desc,
+)
+
+
+from examples import SDK_PROGRAMS_DIR  # noqa: E402
+
+_ACCUMULATE = SDK_PROGRAMS_DIR / "sdk_running_sum" / "accumulate.py"
 
 
 def _file(tmp_path: Path, name: str, text: str) -> Path:
@@ -19,8 +37,8 @@ def _file(tmp_path: Path, name: str, text: str) -> Path:
     return path
 
 
-def _work(tmp_path: Path) -> Process:
-    return Process("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"))
+def _work(tmp_path: Path, options=()) -> Process:
+    return Process("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"), options=options)
 
 
 def _model_options(process: Process, program: Program | None = None):
@@ -29,31 +47,33 @@ def _model_options(process: Process, program: Program | None = None):
     return program.to_model().processes[-1].options
 
 
-# --- channels ----------------------------------------------------------------
+# --- kinds of value ------------------------------------------------------------
 
 
 def test_a_fifo_output_is_a_fifo_channel_with_its_name(tmp_path):
-    work = _work(tmp_path)
-    work.fifo_output("-outf", "file", "the stream", "work_fifo", mirror=True)
+    work = _work(tmp_path, options=[opt("-outf", "file", "the stream")])
+    work.task_options(values={"-outf": fifo("work_fifo", mirror=True)})
 
     (option,) = _model_options(work)
     assert (option.direction, option.channel, option.value, option.mirror) == ("output", "fifo", "work_fifo", True)
 
 
-def test_a_fifo_input_is_a_fifo_channel_external_if_said(tmp_path):
-    work = _work(tmp_path)
-    work.fifo_input("-inf", "string", "what comes in", "numbers", external=True)
-    work.fifo_input("-other", "string", "what else comes in", "other")
+def test_an_external_fifo_is_an_input_of_the_interface(tmp_path):
+    node = Node("work", code=_ACCUMULATE,
+                options=[opt("-inf", "string", "what comes in"), opt("-other", "string", "what else")])
+    node.interface(external={"-inf": "numbers"})
+    node.task_options(values={"-other": fifo("other")})
+    prg = Program("prg", resident=True)
+    prg.add(node)
 
-    external, plain = _model_options(work)
-    assert (external.direction, external.channel, external.value, external.fifoTag) == ("input", "fifo", "numbers", "external")
-    assert plain.fifoTag is None
+    external, plain = prg.to_topology()[0].processes["work"].options.values()
+    assert (external.channel, external.value, external.fifo_tag) == ("fifo", "numbers", "external")
+    assert (plain.channel, plain.value, plain.fifo_tag) == ("fifo", "other", None)
 
 
 def test_an_outdir_option_names_the_process_output_directory_or_a_task_subdirectory(tmp_path):
-    work = _work(tmp_path)
-    work.outdir_opt("-outd", "the directory")
-    work.outdir_opt("-outtask", "the task's", subpath="${task_idx}")
+    work = _work(tmp_path, options=[opt("-outd", "dir", "the directory"), opt("-outtask", "dir", "the task's")])
+    work.task_options(values={"-outd": outdir(), "-outtask": outdir(subpath="${task_idx}")})
 
     whole, task = _model_options(work)
     assert (whole.direction, whole.dataType, whole.channel, whole.subpath) == ("output", "dir", "process_outdir", "")
@@ -61,10 +81,11 @@ def test_an_outdir_option_names_the_process_output_directory_or_a_task_subdirect
 
 
 def test_a_shared_dir_option_names_the_shared_directory(tmp_path):
-    writer = _work(tmp_path)
-    writer.shared_dir_opt("-outd", "dir", "where it writes", "shared", subpath="part_${task_idx}")
-    reader = Process("reader", code=_file(tmp_path, "reader.sh", "reader()\n{\n    :\n}\n"))
-    reader.shared_dir_opt("-ind", "dir", "where it reads", "shared", source=writer["-outd"])
+    writer = _work(tmp_path, options=[opt("-outd", "dir", "where it writes")])
+    writer.task_options(values={"-outd": shared_dir("shared", subpath="part_${task_idx}")})
+    reader = Process("reader", code=_file(tmp_path, "reader.sh", "reader()\n{\n    :\n}\n"),
+                     options=[opt("-ind", "dir", "where it reads")])
+    reader.task_options(values={"-ind": shared_dir("shared", source=writer["-outd"])})
     prg = Program("prg", shared_dirs=["shared"])
     prg.add(writer)
     prg.add(reader)
@@ -77,89 +98,72 @@ def test_a_shared_dir_option_names_the_shared_directory(tmp_path):
 
 
 def test_a_procspec_option_takes_an_attribute_of_the_specifications(tmp_path):
-    work = _work(tmp_path)
-    work.procspec_opt("-cpus", "int", "the cpus", "cpus")
+    work = _work(tmp_path, options=[opt("-cpus", "int", "the cpus")])
+    work.task_options(values={"-cpus": procspec("cpus")})
 
     (option,) = _model_options(work)
     assert (option.fromProcessSpec, option.value, option.commandLine) == (True, "cpus", False)
 
 
 def test_a_value_desc_output_uses_the_value_desc_channel(tmp_path):
-    work = _work(tmp_path)
-    work.value_desc_output("-outv", "string", "a value")
+    work = _work(tmp_path, options=[opt("-outv", "string", "a value")])
+    work.task_options(values={"-outv": value_desc()})
 
     (option,) = _model_options(work)
     assert (option.direction, option.channel, option.value) == ("output", "value_desc", "")
 
 
-@pytest.mark.parametrize("method", ["fifo_output", "outdir_opt", "value_desc_output"])
-def test_an_output_method_wants_an_output_label(tmp_path, method):
-    work = _work(tmp_path)
-    args = {"fifo_output": ("-f", "file", "", "x"), "outdir_opt": ("-d", ""), "value_desc_output": ("-v", "string", "")}
-    with pytest.raises(DefinitionError, match='starts with "-out"'):
-        getattr(work, method)(*args[method])
+@pytest.mark.parametrize("value", [outdir(), value_desc()])
+def test_an_output_kind_wants_an_output_label(tmp_path, value):
+    work = _work(tmp_path, options=[opt("-d", "dir")])
+    with pytest.raises(DefinitionError, match="is an input, and a .* is an output"):
+        work.task_options(values={"-d": value})
 
 
-def test_an_input_method_wants_an_input_label(tmp_path):
-    work = _work(tmp_path)
-    with pytest.raises(DefinitionError, match="is an output for the engine"):
-        work.fifo_input("-outf", "file", "", "x")
-    with pytest.raises(DefinitionError, match="is an output for the engine"):
-        work.procspec_opt("-outf", "int", "", "cpus")
+def test_an_input_kind_wants_an_input_label(tmp_path):
+    work = _work(tmp_path, options=[opt("-outf", "int")])
+    with pytest.raises(DefinitionError, match="is an output, and a specification attribute is an input"):
+        work.task_options(values={"-outf": procspec("cpus")})
+
+
+def test_a_connection_is_displayed_as_a_line_or_a_label():
+    with pytest.raises(DefinitionError, match='displayed as "line" or "label"'):
+        connect(("writer", "-outf"), display="dashed")
 
 
 # --- fanout families -----------------------------------------------------------
 
 
-def test_a_family_is_counted_by_an_option_of_the_same_process_given_as_object_or_label(tmp_path):
-    work = _work(tmp_path)
-    n = work.cmdline_opt("-n", "int", "how many")
-    work.fifo_output("-outf-ith", "file", "the i'th", "fifo_${i}", count_source=n)
-    work.output("-outd-ith", "dir", "the i'th dir", "${process_outdir}/${i}", count_source="-n")
+def test_a_family_is_counted_by_a_command_line_option_of_the_same_process(tmp_path):
+    work = _work(tmp_path, options=[opt("-n", "int", "how many"), opt("-outf-ith", "file", "the i'th")])
+    work.interface(cmdline={"-n": "mandatory"})
+    work.task_options(values={"-outf-ith": fifo("fifo_${i}")}, count={"-outf-ith": "-n"})
 
-    n_opt, by_object, by_label = _model_options(work)
-    assert by_object.countSourceOptionId == n_opt.id
-    assert by_label.countSourceOptionId == n_opt.id
+    n_opt, family = _model_options(work)
+    assert family.countSourceOptionId == n_opt.id
 
 
-def test_a_family_without_a_count_source_has_none_in_the_model(tmp_path):
-    work = _work(tmp_path)
-    work.output("-outf-ith", "file", "the i'th", "${process_outdir}/${i}")
+def test_a_family_without_a_count_has_none_in_the_model(tmp_path):
+    work = _work(tmp_path, options=[opt("-outf-ith", "file", "the i'th")])
+    work.task_options(values={"-outf-ith": "${process_outdir}/${i}"})
 
     (option,) = _model_options(work)
     assert option.countSourceOptionId is None
 
 
-def test_a_count_source_of_another_process_is_refused(tmp_path):
-    other = Process("other", code=_file(tmp_path, "other.sh", "other()\n{\n    :\n}\n"))
-    n = other.cmdline_opt("-n", "int", "")
-    work = _work(tmp_path)
-    work.output("-outf-ith", "file", "", "${process_outdir}/${i}", count_source=n)
-    prg = Program("prg")
-    prg.add(other)
-    prg.add(work)
-
-    with pytest.raises(DefinitionError, match="an option of the same process"):
-        prg.to_model()
-
-
-def test_a_count_source_the_process_does_not_declare_is_refused(tmp_path):
-    work = _work(tmp_path)
-    work.output("-outf-ith", "file", "", "${process_outdir}/${i}", count_source="-n")
-    prg = Program("prg")
-    prg.add(work)
-
-    with pytest.raises(DefinitionError, match='counted by "-n", which the process does not declare'):
-        prg.to_model()
+def test_a_count_that_the_process_does_not_receive_is_refused(tmp_path):
+    work = _work(tmp_path, options=[opt("-outf-ith", "file")])
+    with pytest.raises(DefinitionError, match='names "-n", which is not an option that the process receives'):
+        work.task_options(values={"-outf-ith": "x"}, count={"-n": "-n"})
 
 
 # --- arrays and generators -------------------------------------------------------
 
 
 def test_an_array_carries_the_tasks_file_as_its_array_code(tmp_path):
-    tasks = _file(tmp_path, "tasks.sh", 'local array=(a b c)\n')
-    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"), tasks=tasks)
-    work.output("-outf", "file", "", "${process_outdir}/${array[$task_idx]}.txt")
+    work = _work(tmp_path, options=[opt("-outf", "file")])
+    work.task_options(array=_file(tmp_path, "tasks.sh", "local array=(a b c)\n"),
+                      values={"-outf": "${process_outdir}/${array[$task_idx]}.txt"})
     prg = Program("prg")
     prg.add(work)
 
@@ -170,8 +174,8 @@ def test_an_array_carries_the_tasks_file_as_its_array_code(tmp_path):
 
 
 def test_a_generator_carries_the_tasks_file_as_its_size_code(tmp_path):
-    tasks = _file(tmp_path, "size.sh", "echo 3\n")
-    work = Generator("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"), tasks=tasks)
+    work = _work(tmp_path)
+    work.task_options(generator=_file(tmp_path, "size.sh", "echo 3\n"))
     prg = Program("prg")
     prg.add(work)
 
@@ -181,14 +185,9 @@ def test_a_generator_carries_the_tasks_file_as_its_size_code(tmp_path):
     assert process.optionsHandler.arrayCode is None
 
 
-@pytest.mark.parametrize("cls, what", [(Array, "an array"), (Generator, "a generator")])
-def test_a_tasked_process_needs_its_tasks_file(tmp_path, cls, what):
-    with pytest.raises(DefinitionError, match=f"is {what} and gives no tasks= file"):
-        cls("work", code="work.sh")
-
-
 def test_a_missing_tasks_file_is_reported_when_the_program_is_written(tmp_path):
-    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"), tasks=tmp_path / "none.sh")
+    work = _work(tmp_path)
+    work.task_options(array=tmp_path / "none.sh")
     prg = Program("prg")
     prg.add(work)
 
@@ -196,15 +195,10 @@ def test_a_missing_tasks_file_is_reported_when_the_program_is_written(tmp_path):
         prg.to_model()
 
 
-def test_a_standard_process_takes_no_tasks_file(tmp_path):
-    with pytest.raises(TypeError):
-        Process("work", code="work.sh", tasks="tasks.sh")
-
-
 def test_the_module_of_an_array_loops_over_its_array(tmp_path):
-    tasks = _file(tmp_path, "tasks.sh", "local array=(a b c)")
-    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"), tasks=tasks)
-    work.output("-outf", "file", "", "${process_outdir}/${array[$task_idx]}.txt")
+    work = _work(tmp_path, options=[opt("-outf", "file")])
+    work.task_options(array=_file(tmp_path, "tasks.sh", "local array=(a b c)"),
+                      values={"-outf": "${process_outdir}/${array[$task_idx]}.txt"})
     prg = Program("prg")
     prg.add(work)
 
@@ -214,15 +208,15 @@ def test_the_module_of_an_array_loops_over_its_array(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "cls, field, code",
+    "shape, field, code",
     [
-        (Array, "arrayCode", "def tasks(run):\n    return ['a', 'b']"),
-        (Generator, "generatorSizeCode", "def tasks(run):\n    return 2"),
+        ("array", "arrayCode", "def tasks(run):\n    return ['a', 'b']"),
+        ("generator", "generatorSizeCode", "def tasks(run):\n    return 2"),
     ],
 )
-def test_a_tasks_file_in_python_gives_a_handler_in_python(tmp_path, cls, field, code):
-    work = cls("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
-               tasks=_file(tmp_path, "work_tasks.py", code + "\n"))
+def test_a_tasks_file_in_python_gives_a_handler_in_python(tmp_path, shape, field, code):
+    work = _work(tmp_path)
+    work.task_options(**{shape: _file(tmp_path, "work_tasks.py", code + "\n")})
     prg = Program("prg")
     prg.add(work)
 
@@ -233,8 +227,8 @@ def test_a_tasks_file_in_python_gives_a_handler_in_python(tmp_path, cls, field, 
 
 
 def test_a_tasks_file_of_another_extension_is_bash(tmp_path):
-    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
-                 tasks=_file(tmp_path, "tasks.txt", "local array=(a)\n"))
+    work = _work(tmp_path)
+    work.task_options(array=_file(tmp_path, "tasks.txt", "local array=(a)\n"))
     prg = Program("prg")
     prg.add(work)
 
@@ -242,8 +236,8 @@ def test_a_tasks_file_of_another_extension_is_bash(tmp_path):
 
 
 def test_the_module_of_an_array_in_python_calls_its_tasks_file(tmp_path):
-    work = Array("work", code=_file(tmp_path, "work.sh", "work()\n{\n    :\n}\n"),
-                 tasks=_file(tmp_path, "work_tasks.py", "def tasks(run):\n    return ['a']\n"))
+    work = _work(tmp_path)
+    work.task_options(array=_file(tmp_path, "work_tasks.py", "def tasks(run):\n    return ['a']\n"))
     prg = Program("prg")
     prg.add(work)
 
