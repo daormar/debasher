@@ -149,3 +149,32 @@ def test_the_schema_of_the_topology_file_is_printed(capsys):
     assert main(["--schema"]) == 0
 
     assert json.loads(capsys.readouterr().out) == json_schema()
+
+
+# The launcher is built by make beside its source; a source tree that has
+# not been built has none
+_LAUNCHER = Path(__file__).resolve().parents[3] / "sdk" / "python" / "debasher_build"
+
+
+@pytest.mark.skipif(not _LAUNCHER.is_file(), reason="the launcher debasher_build is not built")
+@pytest.mark.parametrize("name", ["debasher", "yaml"])
+def test_a_description_named_as_a_module_that_the_sdk_imports_builds_from_its_directory(tmp_path, name):
+    # Run from the directory of the description, `python -m` would import
+    # the description in place of the module of that name
+    import os
+    import subprocess
+    import sys
+
+    (tmp_path / "a.sh").write_text("a()\n{\n    :\n}\n")
+    _program_file(tmp_path, name, f'prg = Program("{name}")\nprg.add(Process("a", code="a.sh"))\n')
+
+    result = subprocess.run(
+        [str(_LAUNCHER), f"{name}.py"],
+        cwd=tmp_path,
+        env={**os.environ, "DEBASHER_WEBUI_PYTHON": sys.executable},
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / f"{name}.sh").is_file()

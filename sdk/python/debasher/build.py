@@ -16,7 +16,8 @@ Schema of the topology file.
 
 The installed `debasher_build` is a launcher (sdk/python/debasher_build.sh)
 that chooses the Python to run this module with, as `debasher_webui`
-does, and runs it as `python -m debasher.build`.
+does, and runs it as `python -m debasher.build` does, without the current
+directory at the front of `sys.path`.
 """
 
 import argparse

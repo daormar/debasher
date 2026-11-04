@@ -191,8 +191,9 @@ entries below that refer to them.
   `startup_timeout_s`, `max_concurrent_runs`, `batch_sched` and
   `heartbeat_timeout_s`, given with the specifications of its use.
 - **launcher**: `debasher_build`, a Bash script built by `make` that
-  chooses the Python to run the tool with and runs
-  `python -m debasher.build`.
+  chooses the Python to run the tool with and runs the Python module
+  `debasher.build` as `python -m` does, without the current directory at
+  the front of `sys.path` (see "Installation").
 - **installation module**: `debasher/_install.py`, a Python module that
   `make` writes with the directories of the installation, with which the
   library finds the API of the web UI and the tools of the engine once
@@ -838,17 +839,23 @@ the environment is activated, through a script in its `activate.d`
 the web UI (pydantic 2, `api/requirements.txt`), as the web UI does.
 
 The tool is the launcher `debasher_build`, built from
-`sdk/python/debasher_build.sh` with the directories of the installation
-in front, as `api/Makefile.am` builds `debasher_webui`, and installed in
-`bindir`. It chooses the Python as `debasher_webui` does: the one that
+`sdk/python/debasher_build.sh` with the directories of the installation in
+front, as `api/Makefile.am` builds `debasher_webui`, and installed in `bindir`.
+It chooses the Python as `debasher_webui` does: the one that
 `DEBASHER_WEBUI_PYTHON` names, else `python3` on the `PATH` (that of an
-activated environment), else the Python of `configure`; when that Python
-lacks pydantic 2 it says so and prints what to install, instead of
-failing inside the library. It runs `python -m debasher.build` with
-`$(pythondir)` in `PYTHONPATH`, and, in the source tree before any
-installation, with its own directory first, where the package is beside
-it. A description that the tool loads therefore imports `debasher`
-without the user setting anything.
+activated environment), else the Python of `configure`; when that Python lacks
+pydantic 2 it says so and prints what to install, instead of failing inside the
+library. It runs the Python module `debasher.build` with `$(pythondir)` in
+`PYTHONPATH`, and, in the source tree before any installation, with its own
+directory first, where the package is beside it. A description that the tool
+loads therefore imports `debasher` without the user setting anything. The
+launcher runs the module as `python -m` does (`runpy.run_module`), but with the
+current directory taken off the front of `sys.path`, where `python -m` puts it:
+a description named as a Python module that the SDK imports (`debasher.py`,
+`yaml.py`), built from its own directory, would otherwise be imported in its
+place, and the tool would fail before it reads the description. The tool puts
+the directory of the description on `sys.path` while it loads it, so a
+description still imports the files beside it.
 
 ## Finding the API and the engine
 
