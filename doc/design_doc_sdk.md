@@ -381,9 +381,12 @@ beside the processes: its description text, the program options (label to
 value, what "Set program options" of the editor holds, given to
 `debasher_exec` by whoever runs the program), the preamble of the module
 (Bash before the functions, such as `load_debasher_module` lines), the
-environment variables of the runs, the shared directories it declares, and
-the execution options of the editor, given by name (`scheduler`,
-`conda_support`, `docker_support`, ...). The name follows the rule of a
+environment that the backend gives the tools of the engine (`env_vars`),
+the shared directories it declares, and the execution options of the
+editor, given by name (`scheduler`, `conda_support`, `docker_support`,
+...). Of `env_vars` only `DEBASHER_MOD_DIR` is read: where to look for the
+modules that the preamble loads. A run launched with `debasher_exec` from
+the command line does not get it. The name follows the rule of a
 process name without namespaces, since it names the `_program` method of
 the module.
 
@@ -732,6 +735,14 @@ the positions and `api.topology` for the ids derived from names.
   manual mode of the options handler of the editor, is not offered: it
   is the method of a module, and a description that needs it is a
   module.
+- **Subprograms.** A description does not add the processes of another
+  module with `add_debasher_program`, and the SDK does not produce the
+  groups of the editor (an "Add program" that script generation writes
+  back as one `add_debasher_program` call). A description reuses the
+  processes of another description as it uses any Python object: it
+  imports them and adds each one, which covers a program made only of
+  the processes of another (the namespaces that such reuse lacks are in
+  "Future work").
 
 # Future work
 
@@ -741,6 +752,15 @@ the positions and `api.topology` for the ids derived from names.
   for them. When the program model gives them one, as it does for the
   environments, the SDK takes them as an argument and script generation
   writes the body.
+- **Sequential processes.** The code that a process runs as a step with
+  `seq_execute`, with a name and specifications of its own (see
+  "Sequential processes" in `doc/design_doc_engine.md`), is not offered
+  by the SDK. The program model already holds it (`seqProcesses`, see
+  "Sequential processes in the program model" in the design of the web
+  UI) and script generation already writes it, so the SDK would only
+  translate it, as one more object of a description beside its
+  processes: a name, a file with its code and the specifications that
+  the engine accepts on it.
 - **Processes as a library, and namespaces.** A process defined in a
   Python module of the user and added to several programs, as a process
   of a loaded module is. The namespace of DeBasher is a naming convention
