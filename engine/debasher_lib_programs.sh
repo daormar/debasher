@@ -467,17 +467,19 @@ debasher::_is_heredoc_process()
 ########
 # Python heredoc processes only: source prepended ahead of the
 # heredoc's own text so it can "import debasher_runtime_lib" (and
-# anything else installed alongside it). It mirrors the
-# sys.path.append(...) lines the ".py:" suffix rule in
+# anything else installed alongside it, in the Python directory). It
+# mirrors the sys.path.append(...) line the ".py:" suffix rule in
 # engine/Makefile.am already adds for standalone installed Python
 # tools, which a "python -c ..." heredoc invocation would otherwise
-# never get. Single-quoted Python string literals, deliberately, so
+# never get. The Python directory of the package is left out: it holds
+# the SDK, whose files would become top-level modules of the code of
+# the user. Single-quoted Python string literals, deliberately, so
 # this can be embedded as-is inside the outer double-quoted "-c"
 # argument built by debasher::_create_heredoc_func_body below without
 # any quote-escaping gymnastics.
 debasher::_python_heredoc_sys_path_prelude()
 {
-    echo "import sys"$'\n'"sys.path.append('${debasher_pythondir}')"$'\n'"sys.path.append('${debasher_pkgpythondir}')"
+    echo "import sys"$'\n'"sys.path.append('${debasher_pythondir}')"
 }
 
 ########

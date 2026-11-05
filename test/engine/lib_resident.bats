@@ -33,9 +33,8 @@ setup() {
     # debasher::_classify_resident_process_role shells out to "${PYTHON}".
     PYTHON="$(command -v python3)"
 
-    # debasher::_python_heredoc_sys_path_prelude reads these two.
+    # debasher::_python_heredoc_sys_path_prelude reads it.
     debasher_pythondir="/fake/pythondir"
-    debasher_pkgpythondir="/fake/pkgpythondir"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
 

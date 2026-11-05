@@ -77,34 +77,39 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   Python") is refused that build, which would ignore the description:
   build it with `debasher_build <name>.py`.
 - **Programs described in Python.** A home directory that holds `<name>.py`
-  beside `<name>.sh` (unless `program.yaml` names that file as the code of
-  a process) was written by `debasher_build` from that file, a
-  description of the Python SDK: the processes, their options and their
-  connections are defined there, and the code of each process is in the
-  file the description names, the same file that the topology file names,
-  so a change to the code of a process, or to its tasks file or a method
-  file, with `update_process` or as a file, is a change to what both read.
-  The topology is another matter: a save, from the tools or the editor,
-  changes `program.yaml` and leaves the description as it was, and the next
-  `debasher_build <name>.py` writes `program.yaml` again from the
-  description, so a change made with the tools to the options, the
-  connections, the specifications, the Conda environments and Docker images
-  given as data (`conda_envs=`, `docker_imgs=`), or the mode of a process
-  and the language of its tasks file or skip file (which file `array=` or
-  `generator=` of `task_options(...)`, or `skip=`, names), is lost then.
-  Change the topology of such a program in its description, where each
-  process is created with what does not change (`Process(...)` with its
-  name, its code and `options=`, the options being `opt(label, data_type)`
-  and `flag(label)`), its interface gives what comes from outside the program
+  beside `<name>.sh` (unless `program.yaml` names that file as the code of a
+  process) was written by `debasher_build` from that file, a description of
+  the Python SDK: the processes, their options and their connections are
+  defined there, and the code of each process is in the file the description
+  names, the same file that the topology file names, so a change to the code
+  of a process, or to its tasks file or a method file, with `update_process`
+  or as a file, is a change to what both read. The topology is another matter:
+  a save, from the tools or the editor, changes `program.yaml` and leaves the
+  description as it was, and the next `debasher_build <name>.py` writes
+  `program.yaml` again from the description, so a change made with the tools
+  to the options, the connections, the specifications, the Conda environments
+  and Docker images given as data (`conda_envs=`, `docker_imgs=`), or the mode
+  of a process and the language of its tasks file or skip file (which file
+  `array=` or `generator=` of `task_options(...)`, or `skip=`, names), is lost
+  then. Change the topology of such a program in its description, where each
+  process is created with what does not change (`Process(...)` with its name,
+  its code and `options=`, the options being `opt(label, data_type)` and
+  `flag(label)`), its interface gives what comes from outside the program
   (`interface(cmdline=, shaping=, external=)`), its task options give the
-  values and connections of its options, its tasks file and the counts of
-  its fanout families (`task_options(values=, array=, generator=, count=)`),
-  and `add(...)` of the `Program` gives its specifications and, for a node,
-  `initiator=`. Have it built again with `debasher_build <name>.py` in the
-  home directory (no tool runs it; the file is never run with `python` nor
-  given to `debasher_exec`), then read it again. How a description is
-  written: https://debasher.readthedocs.io/en/latest/implem_python.html;
-  every class and function of the SDK:
+  values and connections of its options, its tasks file and the counts of its
+  fanout families (`task_options(values=, array=, generator=, count=)`), and
+  `add(...)` of the `Program` gives its specifications and, for a node,
+  `initiator=`. The description may import the files beside it
+  (`import helpers` for a `helpers.py` in the home directory), except a file
+  named as a Python module that `debasher_build` has already loaded
+  (`debasher`, `api`, `yaml`, `pydantic`, `json`, `argparse` and other modules
+  of the standard library), which Python takes from those already loaded, in
+  silence: give such a file another name. Have it built again with
+  `debasher_build <name>.py` in the home directory (no tool runs it; the file
+  is never run with `python` nor given to `debasher_exec`), then read it
+  again. How a description is written:
+  https://debasher.readthedocs.io/en/latest/implem_python.html; every class
+  and function of the SDK:
   https://debasher.readthedocs.io/en/latest/api_sdk.html.
 - **Preamble.** Bash code at the top of the generated script, mostly
   `load_debasher_module "<module>"` lines, which bring in the processes that

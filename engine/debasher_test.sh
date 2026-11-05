@@ -166,7 +166,7 @@ export DEBASHER_BATS_HELPERS="${debasher_pkglibdir}/debasher_bats_helpers"
 export PATH="${debasher_bindir}:${PATH}"
 export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"
 export DEBASHER_CONDA="${CONDA_CMD}"
-export PYTHONPATH="${debasher_pythondir}:${debasher_pkgpythondir}${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${debasher_pythondir}${PYTHONPATH:+:${PYTHONPATH}}"
 export PYTHONDONTWRITEBYTECODE=1
 
 if [ ${conda_support} -eq 1 ] || [ ${docker_support} -eq 1 ]; then

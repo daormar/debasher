@@ -27,15 +27,16 @@ found in two ways:
 * ``debasher_build`` finds it on its own: it runs with the Python that
   ``DEBASHER_WEBUI_PYTHON`` names, else with ``python3`` on the ``PATH``
   (that of an activated virtual environment), as ``debasher_webui``
-  does, and puts the directory of the package on its path, so that the
-  description it loads imports ``debasher`` with nothing more. This is
-  all that is needed to build a program.
+  does, and puts the Python directory of the installation, which holds
+  the package, on its path, so that the description it loads imports
+  ``debasher`` with nothing more. This is all that is needed to build a
+  program.
 * To use the library by hand, in a Python session or a test, ``import
   debasher`` works as it is when DeBasher was configured with the prefix
   of the Python itself (a virtual environment, or a conda environment
   with its own Python). The conda package of DeBasher keeps the package
-  in a directory of its own and puts it in ``PYTHONPATH`` when the
-  environment is activated. With another prefix, put the Python
+  in a Python directory of its own and puts that directory in
+  ``PYTHONPATH`` when the environment is activated. With another prefix, put the Python
   directory of the installation in ``PYTHONPATH``
   (``<prefix>/lib/python3.X/site-packages``).
 
@@ -111,6 +112,18 @@ directory that holds the description of its program, as the one written
 beside the file does, is not built this way, since the build would
 ignore a change to the description: the tool refuses it and names the
 command to run.
+
+A description may import the Python files beside it: while
+``debasher_build`` loads the file, it puts the directory of the file
+first on ``sys.path``, so that ``import helpers`` imports the
+``helpers.py`` of that directory. A file named as a module that the tool
+has already loaded is the exception: the SDK (``debasher``), the API of
+the web interface (``api``), ``yaml``, ``pydantic`` and their
+dependencies, and the modules of the standard library that they use
+(``json``, ``argparse`` and others). Python takes such a module from
+those it has loaded and does not look for it again, so ``import api``
+gets the API of the web interface, not the ``api.py`` beside the
+description, and nothing says so. Give such a file another name.
 
 Processes, options and connections
 ----------------------------------

@@ -21,7 +21,6 @@ setup() {
     MV="$(command -v mv)"
     PS="$(command -v ps)"
     debasher_pythondir="/fake/pythondir"
-    debasher_pkgpythondir="/fake/pkgpythondir"
     debasher_libexecdir="/fake/libexecdir"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"

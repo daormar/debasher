@@ -887,52 +887,68 @@ when the Python of `debasher_build` lacks the dependencies of the SDK, and
 
 The library is the package `debasher` in `sdk/python/debasher`, and
 `sdk/python/Makefile.am` installs it as a Python package, with
-`pkgpython_PYTHON`, into `$(pkgpythondir)`, which is
-`$(pythondir)/debasher`, the directory that automake reserves for the
-Python package of the project and that the Python tools of the engine
-already put on `sys.path`. When the prefix of the installation is that
-of the Python itself (a virtual environment, a conda environment with its
-Python), `$(pythondir)` is its `site-packages` and `import debasher`
-works with nothing more; otherwise the user puts `$(pythondir)` in
-`PYTHONPATH`. The conda package, whose Python directory is one of its
-own under the prefix of the environment, puts it in `PYTHONPATH` when
-the environment is activated, through a script in its `activate.d`
-(`conda/build.sh`). The library needs the dependencies of the API of
-the web UI (pydantic 2, `api/requirements.txt`), as the web UI does.
+`pkgpython_PYTHON`, into `$(pkgpythondir)`, which is `$(pythondir)/debasher`,
+the directory that automake reserves for the Python package of the project. What
+makes `import debasher` work is `$(pythondir)` on `sys.path`. When the prefix of
+the installation is that of the Python itself (a virtual environment, a conda
+environment with its Python), `$(pythondir)` is its `site-packages` and
+`import debasher` works with nothing more; otherwise the user puts
+`$(pythondir)` in `PYTHONPATH`. The conda package, whose Python directory is one
+of its own under the prefix of the environment, puts it in `PYTHONPATH` when the
+environment is activated, through a script in its `activate.d`
+(`conda/build.sh`). The library needs the dependencies of the API of the web UI
+(pydantic 2, `api/requirements.txt`), as the web UI does.
 
-The tool is the launcher `debasher_build`, built from
-`sdk/python/debasher_build.sh` with the directories of the installation in
-front, as `api/Makefile.am` builds `debasher_webui`, and installed in `bindir`.
-It chooses the Python as `debasher_webui` does: the one that
-`DEBASHER_WEBUI_PYTHON` names, else `python3` on the `PATH` (that of an
-activated environment), else the Python of `configure`; when that Python lacks
-pydantic 2 it says so and prints what to install, instead of failing inside the
-library. It runs the Python module `debasher.build` with `$(pythondir)` in
-`PYTHONPATH`, and, in the source tree before any installation, with its own
-directory first, where the package is beside it. A description that the tool
-loads therefore imports `debasher` without the user setting anything. The
-launcher runs the module as `python -m` does (`runpy.run_module`), but with the
-current directory taken off the front of `sys.path`, where `python -m` puts it:
-a description named as a Python module that the SDK imports (`debasher.py`,
-`yaml.py`), built from its own directory, would otherwise be imported in its
-place, and the tool would fail before it reads the description. The tool puts
-the directory of the description on `sys.path` while it loads it, so a
-description still imports the files beside it.
+The tool is the launcher `debasher_build`. `make` builds it from
+`sdk/python/debasher_build.sh`, with the directories of the installation in
+front, as `api/Makefile.am` builds `debasher_webui`, and installs it in
+`bindir`. The launcher:
+
+- chooses the Python as `debasher_webui` does: the one that
+  `DEBASHER_WEBUI_PYTHON` names, else `python3` on the `PATH` (that of an
+  activated environment), else the Python of `configure`;
+- stops, and prints what to install, when that Python lacks pydantic 2, instead
+  of failing inside the library;
+- puts `$(pythondir)` in `PYTHONPATH`, and, when it runs from the source tree,
+  its own directory, where the package is, in front of it, so that a description
+  imports `debasher` without the user setting anything;
+- runs the Python module `debasher.build` as `python -m` does
+  (`runpy.run_module`), but without the current directory at the front of
+  `sys.path`, where `python -m` puts it. A description named as a Python module
+  that the SDK imports (`debasher.py`, `yaml.py`), built from its own directory,
+  would otherwise be imported in place of that module, and the tool would fail
+  before it reads the description.
+
+**The files beside a description.** While the tool loads a description, it puts
+the directory of the description first on `sys.path`, so a description imports
+the files beside it: `import helpers` for a file `helpers.py` in its own
+directory. The exception is a file named as a Python module that the tool has
+already loaded: the SDK (`debasher`), `api`, `yaml`, `pydantic` and their
+dependencies, and the Python modules of the standard library that they use
+(`json`, `argparse` and others). Python takes it from the Python modules already
+loaded and does not look for it again, so `import api` in a description gets the
+API of the web UI, not the `api.py` beside it, in silence. Such a file needs
+another name. A file named as a Python module of the standard library that is
+not loaded yet, such as `csv.py`, is imported in place of that module, as in any
+Python program.
 
 ## Finding the API and the engine
 
 The library builds on the API of the web UI, the package `api`, which is
 installed as data under `$(pkgdatadir)/api`, not as a Python package:
-`debasher_webui` imports it by putting `$(pkgdatadir)` in `PYTHONPATH`.
-The library does the same on import (`sdk/python/debasher/_paths.py`):
-when `api` is not importable already, it appends the root of the
-repository to `sys.path` when the library is in a source tree (found from
-its own file), else the package data directory that the installation
-module names. The installation module, `debasher/_install.py`, is written
-by `make` from the directories of the installation (`pkgdatadir`,
-`bindir`, `libexecdir`, `pythondir`) and installed with the package; it
-is not a source, git ignores it, and in a source tree the library works
-without it, since the root of the repository is tried first.
+`debasher_webui` imports it by putting `$(pkgdatadir)` in `PYTHONPATH`. The
+library does the same on import (`sdk/python/debasher/_paths.py`): when `api` is
+not importable already, it appends the root of the repository to `sys.path` when
+the library is in a source tree (found from its own file), else the package data
+directory that the installation module names.
+
+The installation module, `debasher/_install.py`, is written by `make` from the
+directories of the installation (`pkgdatadir`, `bindir`, `libexecdir`,
+`pythondir`) and installed with the package. It is not a source, and git ignores
+it. `make` writes it into the build directory: in a build in the tree that is
+the source tree, so the source tree lacks it only before the first `make`, or
+when the build is out of the tree. In a source tree the library does not need it
+to find `api`, since the root of the repository is tried first.
 
 The API finds the tools of the engine through the environment variables that
 `debasher_webui` sets for it (`DEBASHER_WEBUI_BIN_DIR`,
@@ -940,12 +956,17 @@ The API finds the tools of the engine through the environment variables that
 the source tree. The library sets the same variables from the installation
 module when they are not set and the directories exist, so that script
 generation finds `debasher_get_proc_info` in an installation as it does under
-the web UI. Nothing of the library imports the routers of the API or FastAPI: it
-uses `api.topology` for the topology file, its loading and the languages of the
-extensions, `api.persistence` to save the program, `api.script_generation` for
-the names of the specifications of a node, `api.process_names` for the rules of
-a process name and of an option label and `api.resident_node_code` for the node
-kind of a node file.
+the web UI.
+
+Nothing of the library imports the routers of the API or FastAPI. It uses:
+
+- `api.topology` for the topology file, its loading and the languages of the
+  extensions;
+- `api.persistence` to save the program;
+- `api.script_generation` for the names of the specifications of a node;
+- `api.process_names` for the rules of a process name and of an option label;
+- `api.resident_node_code` for the node kind of a node file and the parts it
+  splits it into.
 
 # Guarantees and non-goals
 

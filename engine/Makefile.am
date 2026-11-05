@@ -80,7 +80,6 @@ $(bin_SCRIPTS) $(libexec_SCRIPTS) $(mypkglib_DATA): Makefile
 	echo "debasher_libexecdir=\"$(libexecdir)\"" >> $@
 	echo "debasher_datadir=\"$(datadir)/$(PACKAGE_NAME)\"" >> $@
 	echo "debasher_pkglibdir=\"$(libdir)/$(PACKAGE_NAME)\"" >> $@
-	echo "debasher_pkgpythondir=\"$(pkgpythondir)\"" >> $@
 	echo "debasher_pythondir=\"$(pythondir)\"" >> $@
 	echo "BASH=\"$(BASH)\"" >> $@
 	echo "ECHO=\"$(ECHO)\"" >> $@
@@ -248,7 +247,6 @@ debasher_bats_helpers: debasher_bats_helpers.sh
 	echo "#! " $(PYTHON) > $@
 	echo "import sys" >> $@
 	echo "sys.path.append(\"$(pythondir)\")" >> $@
-	echo "sys.path.append(\"$(pkgpythondir)\")" >> $@
 	cat $< >> $@
 	chmod ugo+x $@
 

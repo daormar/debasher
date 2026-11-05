@@ -8,10 +8,12 @@ The package `api` is installed as data under the package data directory
 from a directory on `sys.path`: in the source tree, the root of the
 repository, found from this file; once installed, the directory that
 `_install.py` names, a module that `make` writes with the directories of
-the installation and that the source tree does not have. The tools of the
-engine are found by `api.paths` through the environment variables that
-the installed `debasher_webui` sets; the SDK sets them the same way from
-`_install.py`, when they are not set already.
+the installation (into the build directory, which in a build in the tree
+is the source tree; there the library tries the root first, so it does
+not need it). The tools of the engine are found by `api.paths` through the
+environment variables that the installed `debasher_webui` sets; the SDK
+sets them the same way from `_install.py`, when they are not set
+already.
 """
 
 import os

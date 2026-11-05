@@ -31,7 +31,8 @@ setup() {
     # debasher::_classify_resident_process_role shells out to "${PYTHON}".
     PYTHON="$(command -v python3)"
 
-    # debasher::_python_heredoc_sys_path_prelude reads these two.
+    # debasher::_python_heredoc_sys_path_prelude reads the first; the
+    # second, the Python directory of the package (the SDK), it must not
     debasher_pythondir="/fake/pythondir"
     debasher_pkgpythondir="/fake/pkgpythondir"
 
@@ -86,11 +87,11 @@ setup() {
 
 # --- debasher::_python_heredoc_sys_path_prelude / _create_heredoc_func_body --
 
-@test "debasher::_python_heredoc_sys_path_prelude emits sys.path.append lines for both directories" {
+@test "debasher::_python_heredoc_sys_path_prelude puts the Python directory on sys.path and not the SDK" {
     result=$(debasher::_python_heredoc_sys_path_prelude)
     [[ "${result}" == *"import sys"* ]]
     [[ "${result}" == *"sys.path.append('/fake/pythondir')"* ]]
-    [[ "${result}" == *"sys.path.append('/fake/pkgpythondir')"* ]]
+    [[ "${result}" != *"/fake/pkgpythondir"* ]]
 }
 
 @test "debasher::_create_heredoc_func_body includes the sys.path prelude for a Python heredoc process" {
@@ -101,7 +102,7 @@ EOF
 
     result=$(debasher::_create_heredoc_func_body "pyprelproc")
     [[ "${result}" == *"sys.path.append('/fake/pythondir')"* ]]
-    [[ "${result}" == *"sys.path.append('/fake/pkgpythondir')"* ]]
+    [[ "${result}" != *"/fake/pkgpythondir"* ]]
 }
 
 @test "debasher::_create_heredoc_func_body does not add a sys.path prelude for a non-Python heredoc process" {
@@ -114,7 +115,7 @@ EOF
     [[ "${result}" != *"sys.path.append"* ]]
 }
 
-@test "a generated Python heredoc process function actually has the fake dirs on sys.path at run time" {
+@test "a generated Python heredoc process function has the Python directory on sys.path at run time, not the SDK" {
     realpyproc_heredoc_py() { cat <<'EOF'
 import sys
 print('/fake/pythondir' in sys.path)
@@ -126,7 +127,7 @@ EOF
     run realpyproc
     [ "${status}" -eq 0 ]
     [ "${lines[0]}" = "True" ]
-    [ "${lines[1]}" = "True" ]
+    [ "${lines[1]}" = "False" ]
 }
 
 # --- debasher::_add_sched_to_serialized_cmdline ----------------------------
