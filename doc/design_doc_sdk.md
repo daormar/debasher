@@ -77,6 +77,9 @@ entries below that refer to them.
 - **reserved name**: as in the design of the web UI: a file or directory
   name that the engine or the web UI manages in a home directory (see
   "Reserved names and user files" in `doc/design_doc_webui.md`).
+- **user file**: as in the design of the web UI: a file or directory of the home
+  directory whose path has no reserved name, which the user manages through the
+  program files panel; the description is one.
 - **home directory**: as in the design of the web UI: the directory where
   a program lives, with its artifact, its generated module and its user
   files. The SDK writes a program into one, by default the directory of
@@ -788,35 +791,60 @@ engine").
 
 # The tool: `debasher_build`
 
-`debasher_build <description>.py [-o <dir>]`,
-`debasher_build [<home directory> | <home directory>/program.yaml]` or
-`debasher_build --schema` (`sdk/python/debasher/build.py`). Given a description,
-the tool loads it, finds the program it defines and writes it. It is the
-equivalent of Save in the editor, and it is where `write()` is called: a
-description calls nothing, as a module calls nothing. The tool is also the
-regeneration tool of the artifact (see "The doors and the regeneration tool" in
-`doc/design_doc_webui.md`): given a home directory, its topology file, or
-nothing in a home directory, it loads the program saved there and saves it back
-as it is, which writes the module again and leaves the artifact as it was (a
-topology file not in the form the backend writes is written again in that form),
-so that a program kept in a repository as its artifact is built without the
-editor; `-o` goes with a description only. `--schema` prints the JSON Schema of
-the topology file.
+The tool (`sdk/python/debasher/build.py`) has three forms:
 
-- The description is run as a Python module with its own directory first
-  on `sys.path`, so that it can import files beside it. Among its global
-  names there has to be exactly one `Program`; none or several is an
-  error.
-- The description is named after its program, as a module is named after
-  the program it defines (`align_all.py` defines `Program("align_all")`);
-  a mismatch is an error that names both, since the name of the program
-  is the name of the module and the editor looks for `<name>.sh`.
-- The program is written into the directory of the description unless
-  `-o` names another: beside the description and the process files, which
-  is the home directory as the editor keeps it, with the user files of
-  the program beside the artifact.
-- The path of the module is printed, and an error of the SDK is printed
-  with the prefix `debasher_build:` and exits with status 1.
+```
+debasher_build <description>.py [-o <dir>]
+debasher_build [<home directory> | <home directory>/program.yaml]
+debasher_build --schema
+```
+
+The first builds a description. It is the equivalent of Save in the editor, and
+it is where `write()` is called: a description calls nothing, as a module calls
+nothing. The second builds a program again from its artifact. The third prints
+the JSON Schema of the topology file. In the first two, the path of the module
+is printed on success, and an error of the SDK is printed to standard error with
+the prefix `debasher_build:`, and the tool exits with status 1.
+
+**Building a description.** The tool loads the description, finds the program it
+defines and writes it:
+
+- The tool executes the description inside the tool's own Python process, as an
+  import would (`exec_module`), not as `python <name>.py` would run it: the file
+  is loaded under its own name as the name of the module, so its `__name__` is
+  not `"__main__"` and a block guarded by it does not run, and what the tool
+  needs are the objects it leaves among its global names. While it runs, the
+  directory of the description is first on `sys.path`, so that it can import
+  files beside it.
+- Among its global names there has to be exactly one `Program`; none or several
+  is an error.
+- The description is named after its program, as a module is named after the
+  program it defines (`align_all.py` defines `Program("align_all")`), since the
+  name of the program is the name of the module and the editor looks for
+  `<name>.sh`. A mismatch is an error that names both and says how to make them
+  agree: rename one of them, or only the file when its name cannot name a
+  program (`hello-world.py`).
+- The program is written into the directory of the description unless `-o` names
+  another: beside the description and the process files, which is the home
+  directory as the editor keeps it, with the user files of the program beside
+  the artifact.
+
+**Building again from the artifact.** Given a home directory, its topology file,
+or nothing (the current directory), the tool loads the program saved there and
+saves it back as it is:
+
+- That writes the module again and leaves the artifact as it was; a topology
+  file not in the form the backend writes is written again in that form. A
+  program kept in a repository as its artifact is thus built without the editor:
+  this is the regeneration tool of the artifact (see "The doors and the
+  regeneration tool" in `doc/design_doc_webui.md`).
+- `-o` goes with a description only.
+- The tool refuses a home directory that holds a file `<name>.py`, named after
+  its program, that the artifact does not name (a process file of that name is
+  named, and does not stop the build). Such a file is usually the description of
+  the program, and a build from the artifact would ignore a change made to it,
+  in silence; the error says how to build the description instead. In a program
+  made in the editor it is a user file, which has to be renamed.
 
 Running the program is then the same as for any program:
 `debasher_exec --pfile <name>.sh --outdir <dir> ...`, `debasher_status`,

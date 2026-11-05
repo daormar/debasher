@@ -31,8 +31,9 @@ it in this session.
   design lives in that file: change it with `write_program_file`, following
   https://debasher.readthedocs.io/en/latest/implem_python.html (every class
   and method: https://debasher.readthedocs.io/en/latest/api_sdk.html), and
-  have the program built again, rather than editing the saved program with
-  the tools, which the next build overwrites.
+  have the program built again with `debasher_build <name>.py`, rather
+  than editing the saved program with the tools, which the next build
+  overwrites.
 - Ask what the program has to do, if the user has not said: what comes in, what
   comes out, the steps in between, how much data, whether it runs once or keeps
   running (a resident program), where it runs (the built-in scheduler or Slurm;
@@ -97,7 +98,7 @@ connections of the data over ordering by hand.
   are fine for small changes. For a program described in Python, build it in
   its description instead (see "Programs described in Python" in the
   reference for where each part goes), and have it built again with
-  `debasher_build`.
+  `debasher_build <name>.py`.
 - Lay the processes out with `move_process` and `layout`, unless the user
   placed them by hand and wants them kept. Draw as a label edge
   (`set_connection_display`) a connection whose line would cross others.

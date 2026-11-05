@@ -36,17 +36,22 @@ the web interface like any other. Given a home directory, its
 module again from the program saved there, whoever saved it, so that a
 program kept in a repository as its ``program.yaml`` and the files of
 its processes is built without the web interface (``-o`` goes with a
-Python file only). It refuses, before writing anything, a program with
-two different files of its processes at one path, or a file at the path
-of the module, of ``program.yaml``, or of a name that DeBasher manages
-(see the :ref:`program-yaml` Section). ``--schema`` prints the JSON Schema of
-``program.yaml`` (see the :ref:`program-yaml` Section), which editors
-use to check the file as it is written. The tool runs with the Python
-that ``DEBASHER_WEBUI_PYTHON`` names, else with ``python3`` on the
-``PATH`` (that of an activated virtual environment), else with the
-Python found when DeBasher was configured. That Python has to have the
-dependencies of the web interface installed (see the :ref:`webui`
-Section); when it does not, the tool says what to install.
+Python file only). A home directory that holds the description of its
+program, ``<name>.py`` (as one written beside the file does), is refused
+with status 1, since a build from ``program.yaml`` would ignore a change
+to the description, and the error names the command that builds it; a
+file of a process with that name is no description. It refuses, before
+writing anything, a program with two different files of its processes at
+one path, or a file at the path of the module, of ``program.yaml``, or
+of a name that DeBasher manages (see the :ref:`program-yaml` Section).
+``--schema`` prints the JSON Schema of ``program.yaml`` (see the
+:ref:`program-yaml` Section), which editors use to check the file as it
+is written. The tool runs with the Python that ``DEBASHER_WEBUI_PYTHON``
+names, else with ``python3`` on the ``PATH`` (that of an activated
+virtual environment), else with the Python found when DeBasher was
+configured. That Python has to have the dependencies of the web
+interface installed (see the :ref:`webui` Section); when it does not,
+the tool says what to install.
 
 Program Execution
 ------------------

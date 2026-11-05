@@ -65,6 +65,16 @@ def test_the_file_can_import_files_beside_it(tmp_path):
     assert load_program(path).processes[0].name == "work"
 
 
+def test_a_file_whose_name_cannot_name_a_program_is_told_to_take_the_name_of_the_program(tmp_path):
+    path = _program_file(tmp_path, "hello-world", 'prg = Program("hello_world")\n')
+
+    with pytest.raises(DefinitionError) as refusal:
+        load_program(path)
+
+    assert "rename the file to hello_world.py" in str(refusal.value)
+    assert 'Program("hello-world")' not in str(refusal.value)
+
+
 def test_the_tool_writes_the_program_into_the_directory_of_the_file(tmp_path, capsys):
     path = _program_file(tmp_path, "prg", 'prg = Program("prg")\nprg.add(Process("work", code="work.sh"))\n')
     (tmp_path / "work.sh").write_text("work()\n{\n    :\n}\n")
@@ -129,6 +139,85 @@ def test_the_topology_file_or_the_current_directory_names_the_program_to_build_a
     monkeypatch.chdir(home)
     assert main([]) == 0
     assert module.is_file()
+
+
+def _target(home: Path, form: str, monkeypatch) -> list[str]:
+    """The arguments of a rebuild of `home` in one of its three forms."""
+    if form == "directory":
+        return [str(home)]
+    if form == "topology file":
+        return [str(home / "program.yaml")]
+    monkeypatch.chdir(home)
+    return []
+
+
+@pytest.mark.parametrize("form", ["directory", "topology file", "no target"])
+def test_a_rebuild_of_a_directory_that_holds_the_description_of_its_program_is_refused(
+    tmp_path, capsys, monkeypatch, form
+):
+    # Built from the artifact, a change to the description would be ignored
+    path = _program_file(tmp_path, "prg", 'prg = Program("prg", description="one")\nprg.add(Process("work", code="work.sh"))\n')
+    (tmp_path / "work.sh").write_text("work()\n{\n    :\n}\n")
+    main([str(path)])
+    path.write_text(path.read_text().replace('"one"', '"two"'))
+    module = (tmp_path / "prg.sh").read_text()
+    capsys.readouterr()
+
+    assert main(_target(tmp_path, form, monkeypatch)) == 1
+
+    assert "holds prg.py, the description of its program" in capsys.readouterr().err
+    assert (tmp_path / "prg.sh").read_text() == module
+
+
+def test_a_file_of_the_artifact_named_as_the_description_does_not_stop_a_rebuild(tmp_path):
+    # The code of a process outside the directory of the description goes
+    # into the home directory under its name alone, here prg.py
+    (tmp_path / "src").mkdir()
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "lib" / "prg.py").write_text("print('work')\n")
+    path = _program_file(tmp_path / "src", "prg", 'prg = Program("prg")\nprg.add(Process("work", code="../lib/prg.py"))\n')
+    home = tmp_path / "home"
+    main([str(path), "-o", str(home)])
+    assert (home / "prg.py").is_file()
+
+    assert main([str(home)]) == 0
+
+
+def test_a_topology_file_edited_by_hand_is_written_again_in_the_form_of_the_backend(tmp_path):
+    import yaml
+
+    home = _saved_program(tmp_path)
+    topology_file = home / "program.yaml"
+    written = topology_file.read_text()
+    module = (home / "sdk_hello_world_py.sh").read_text()
+    topology_file.write_text("# edited by hand\n" + yaml.safe_dump(yaml.safe_load(written), sort_keys=True, indent=4))
+
+    assert main([str(home)]) == 0
+
+    assert topology_file.read_text() == written
+    assert (home / "sdk_hello_world_py.sh").read_text() == module
+
+
+def test_a_topology_file_that_cannot_be_read_is_reported(tmp_path, capsys):
+    home = _saved_program(tmp_path)
+    (home / "program.yaml").write_text("name: [unclosed\n")
+    capsys.readouterr()
+
+    assert main([str(home)]) == 1
+
+    assert "debasher_build: cannot read the program in" in capsys.readouterr().err
+
+
+def test_a_program_that_script_generation_refuses_is_reported_on_a_rebuild(tmp_path, capsys):
+    home = _saved_program(tmp_path)
+    topology_file = home / "program.yaml"
+    # A process named as the method "_program" of the module
+    topology_file.write_text(topology_file.read_text().replace("  hello_world:\n", "  sdk_hello_world_py_program:\n"))
+    capsys.readouterr()
+
+    assert main([str(home)]) == 1
+
+    assert 'is named as the method "_program"' in capsys.readouterr().err
 
 
 def test_a_directory_with_no_program_and_an_outdir_with_a_directory_are_refused(tmp_path, capsys):

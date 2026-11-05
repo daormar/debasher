@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 from .errors import DefinitionError
+from .process import check_program_name
 from .program import Program
 
 
@@ -58,9 +59,14 @@ def load_program(path: str | Path) -> Program:
         raise DefinitionError(f"{path.name} defines more than one Program ({names}): a file defines one.")
     program = programs[0]
     if program.name != path.stem:
+        try:
+            check_program_name(path.stem)
+            way_out = f'rename one of them ({program.name}.py, or Program("{path.stem}"))'
+        except DefinitionError:
+            # The name of the file cannot name a program
+            way_out = f"rename the file to {program.name}.py"
         raise DefinitionError(
-            f'{path.name} defines Program("{program.name}"): the file is named after its program, '
-            f"so rename one of them ({program.name}.py, or Program(\"{path.stem}\"))."
+            f'{path.name} defines Program("{program.name}"): the file is named after its program, so {way_out}.'
         )
     return program
 
@@ -72,7 +78,8 @@ def rebuild(home_dir: str | Path) -> Path:
     saved back as it is, which regenerates the module and leaves the
     artifact as it was. Raises DefinitionError when the directory holds
     no program, or one that cannot be read or that script generation
-    refuses.
+    refuses, and when it holds the description of its program, which a
+    rebuild would ignore.
     """
     from api import persistence
     from api.topology import TopologyError
@@ -84,6 +91,18 @@ def rebuild(home_dir: str | Path) -> Path:
         raise DefinitionError(str(error)) from error
     except TopologyError as error:
         raise DefinitionError(f"cannot read the program in {home}: {error}") from error
+    # The description is where the program is defined: built from the
+    # artifact beside it, a change to it would be ignored in silence. A
+    # file of the artifact with that name is no description, and a program
+    # still saved as program metadata has no artifact
+    description = f"{program.name}.py"
+    artifact = persistence.read_artifact(str(home))
+    artifact_files = persistence.named_files(artifact.topology) if artifact else []
+    if (home / description).is_file() and description not in artifact_files:
+        raise DefinitionError(
+            f"{home} holds {description}, the description of its program, which a build from the artifact "
+            f"would ignore: build it with debasher_build {home / description}."
+        )
     try:
         return persistence.save(str(home), program).script_path
     except (ValueError, NotImplementedError) as error:

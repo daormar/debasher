@@ -67,8 +67,9 @@ the web UI shows them.
   guessing; the page on the web UI is
   https://debasher.readthedocs.io/en/latest/webui.html, and the one on
   describing a program in Python with the SDK (`debasher_build`, which,
-  given the home directory, also writes the generated script of any saved
-  program again) is
+  given the home directory, also writes the generated script of a saved
+  program again, unless the directory holds the Python description of the
+  program, which is built with `debasher_build <name>.py`) is
   https://debasher.readthedocs.io/en/latest/implem_python.html, with every
   class and method of the SDK in
   https://debasher.readthedocs.io/en/latest/api_sdk.html; every key of

@@ -135,7 +135,9 @@ that nobody's work is overwritten without your knowing. Outside the
 web interface, ``debasher_build`` given the home directory (or its
 ``program.yaml``) writes the module again from what is saved there
 (see the :ref:`tools` Section), which is how a program kept in a
-repository as its ``program.yaml`` and process files is built.
+repository as its ``program.yaml`` and process files is built; a
+directory that also holds the Python description of its program,
+``<name>.py``, is built from that file instead.
 
 The Home Screen
 ---------------

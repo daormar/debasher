@@ -88,8 +88,9 @@ name alone; ``debasher_build`` refuses, before writing anything, two
 files of the program with different contents that end up at one path
 (two ``run.sh`` from different directories), and a file, or a script
 that it copies beside the module, at the path of the module, of
-``program.yaml``, or of a name that DeBasher manages. From here the program is one more: it runs with ``debasher_exec``,
-its state is followed with ``debasher_status``, and its directory opens
+``program.yaml``, or of a name that DeBasher manages. From here the
+program is one more: it runs with ``debasher_exec``, its state is
+followed with ``debasher_status``, and its directory opens
 in the web interface with "Load program", where it shows on the canvas
 with its processes laid out as those of an imported module are.
 
@@ -101,11 +102,15 @@ with its processes laid out as those of an imported module are.
 
 The Python file is never run with ``python`` and never given to
 ``debasher_exec``; after a change to it, ``debasher_build`` is run
-again. Given the directory of a saved program instead, or its
-``program.yaml``, or nothing inside it, ``debasher_build`` writes the
-module again from ``program.yaml`` and the files of the processes,
-whoever saved them (see the :ref:`tools` Section); ``-o`` goes with a
-Python file only.
+again with the file, ``debasher_build sdk_hello_world_py.py``. Given the
+directory of a saved program instead, or its ``program.yaml``, or
+nothing inside it, ``debasher_build`` writes the module again from
+``program.yaml`` and the files of the processes, whoever saved them (see
+the :ref:`tools` Section); ``-o`` goes with a Python file only. A
+directory that holds the description of its program, as the one written
+beside the file does, is not built this way, since the build would
+ignore a change to the description: the tool refuses it and names the
+command to run.
 
 Processes, options and connections
 ----------------------------------

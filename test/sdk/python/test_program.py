@@ -690,6 +690,15 @@ def test_a_source_by_name_has_to_exist(tmp_path):
         prg.to_model()
 
 
+def test_a_source_by_name_has_to_be_a_process_of_the_program(tmp_path):
+    _, reader = _writer_and_reader(tmp_path, source=("writer", "-outf"))
+    prg = Program("prg")
+    prg.add(reader)
+
+    with pytest.raises(DefinitionError, match='"-outf" of process "writer", which program "prg" does not add'):
+        prg.to_model()
+
+
 def test_a_source_is_an_output(tmp_path):
     writer = _bash_process(tmp_path, "writer", options=[opt("-n", "int")])
     writer.interface(cmdline={"-n": "mandatory"})

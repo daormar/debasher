@@ -72,9 +72,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   its `program.yaml`, or run in the home directory with no argument, writes
   it again too: that is how a program kept in a repository as its
   `program.yaml` and process files is built, and how the script follows a
-  change made to `program.yaml` by hand.
+  change made to `program.yaml` by hand. A home directory that holds the
+  description of its program (`<name>.py`, see "Programs described in
+  Python") is refused that build, which would ignore the description:
+  build it with `debasher_build <name>.py`.
 - **Programs described in Python.** A home directory that holds `<name>.py`
-  beside `<name>.sh` was written by `debasher_build` from that file, a
+  beside `<name>.sh` (unless `program.yaml` names that file as the code of
+  a process) was written by `debasher_build` from that file, a
   description of the Python SDK: the processes, their options and their
   connections are defined there, and the code of each process is in the
   file the description names, the same file that the topology file names,
