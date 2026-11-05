@@ -25,15 +25,14 @@ it in this session.
   preamble, its processes and connections. Look at `search_library` too: a
   process that a module of the preamble already defines is better reused than
   written again.
-- Look at `list_program_files` too: a `<name>.py` beside `<name>.sh` is a
-  description of the Python SDK, from which `debasher_build` writes the saved
-  program (see "Programs described in Python" in the reference). Then the
+- Look at `list_program_files` too: a `<name>.py` beside `<name>.sh` is a Python
+  description, written with the SDK, from which `debasher_build` writes the
+  saved program (see "Programs described in Python" in the reference). Then the
   design lives in that file: change it with `write_program_file`, following
-  https://debasher.readthedocs.io/en/latest/implem_python.html (every class
-  and method: https://debasher.readthedocs.io/en/latest/api_sdk.html), and
-  have the program built again with `debasher_build <name>.py`, rather
-  than editing the saved program with the tools, which the next build
-  overwrites.
+  https://debasher.readthedocs.io/en/latest/implem_python.html (every class and
+  method: https://debasher.readthedocs.io/en/latest/api_sdk.html), and have the
+  program built again with `debasher_build <name>.py`, rather than editing the
+  saved program with the tools, which the next build overwrites.
 - Ask what the program has to do, if the user has not said: what comes in, what
   comes out, the steps in between, how much data, whether it runs once or keeps
   running (a resident program), where it runs (the built-in scheduler or Slurm;
@@ -96,7 +95,7 @@ connections of the data over ordering by hand.
   with `dry_run` first when the change is large, and show the user the
   proposal. The single tools (`add_process`, `add_option`, `connect`, ...)
   are fine for small changes. For a program described in Python, build it in
-  its description instead (see "Programs described in Python" in the
+  its Python description instead (see "Programs described in Python" in the
   reference for where each part goes), and have it built again with
   `debasher_build <name>.py`.
 - Lay the processes out with `move_process` and `layout`, unless the user

@@ -61,12 +61,13 @@ if [ -f "${tool_dir}/debasher/__init__.py" ]; then
 fi
 
 # Run as "python -m debasher.build" does, but without the current
-# directory at the front of sys.path, where "-m" puts it: a description
-# named as a Python module that the SDK imports (debasher.py, yaml.py),
-# built from its own directory, would otherwise be imported in its place.
-# With "-c" that entry is the empty string, at the front, unless
-# PYTHONSAFEPATH keeps it out, so only an empty first entry is removed.
-# The tool puts the directory of the description on sys.path while it
-# loads it, so a description still imports the files beside it.
+# directory at the front of sys.path, where "-m" puts it: a Python
+# description named as a Python module that the SDK imports (debasher.py,
+# yaml.py), built from its own directory, would otherwise be imported in
+# its place. With "-c" that entry is the empty string, at the front,
+# unless PYTHONSAFEPATH keeps it out, so only an empty first entry is
+# removed. The tool puts the directory of the Python description on
+# sys.path while it loads it, so a Python description still imports the
+# files beside it.
 PYTHONPATH="${sdk_pythonpath}${PYTHONPATH:+:${PYTHONPATH}}" \
     exec "${PYTHON}" -c 'import runpy, sys; sys.path[:1] = [entry for entry in sys.path[:1] if entry]; runpy.run_module("debasher.build", run_name="__main__", alter_sys=True)' "$@"

@@ -38,14 +38,14 @@ which one you start with.
    file that `program.yaml` names; writing that file with `write_program_file`
    or an editor is the same change. In a program described in Python (a
    `<name>.py` beside `<name>.sh`, see "Programs described in Python" in the
-   reference) the description names the same file, so the code needs no rebuild;
-   only a change of the options, the connections, the specifications, the Conda
-   environments and Docker images given as data, or the mode of a process and
-   the language of its tasks file or skip file (which file `array=` or
-   `generator=` of `task_options(...)`, or `skip=`, names), goes into the
-   description and needs `debasher_build <name>.py` again. Keep it small and
-   readable, and make it fail loudly (a non-zero exit) on bad input rather than
-   produce a wrong output. Comment it as the code prompt asks under "How to
+   reference) the Python description names the same file, so the code needs no
+   rebuild; only a change of the options, the connections, the specifications,
+   the Conda environments and Docker images given as data, or the mode of a
+   process and the language of its tasks file or skip file (which file `array=`
+   or `generator=` of `task_options(...)`, or `skip=`, names), goes into the
+   Python description and needs `debasher_build <name>.py` again. Keep it small
+   and readable, and make it fail loudly (a non-zero exit) on bad input rather
+   than produce a wrong output. Comment it as the code prompt asks under "How to
    comment the code": what each function, and each hook a node redefines, does
    and why, the reason of each step that the code does not show, and what the
    node state holds, never what the code already says. Read each option as what

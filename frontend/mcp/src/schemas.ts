@@ -124,7 +124,7 @@ export const processChanges = z.object({
     observe: z.string().optional(),
   }).strict().optional().describe("In a resident program: the parts of the code of the node, each a body without its def line."),
 }).strict().describe(
-  "Of a field that holds an object, give only the fields that change. The code of a tasks file or a skip file in Python is the whole file, which defines tasks(run) or skip(task). In a program described in Python, the Conda environments and Docker images given as data and the language of a tasks file or skip file belong to its description (then debasher_build <name>.py)."
+  "Of a field that holds an object, give only the fields that change. The code of a tasks file or a skip file in Python is the whole file, which defines tasks(run) or skip(task). In a program described in Python, the Conda environments and Docker images given as data and the language of a tasks file or skip file belong to its Python description (then debasher_build <name>.py)."
 );
 
 export const seqProcessChanges = z.object({

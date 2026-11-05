@@ -19,7 +19,7 @@ debasher_build
 
 ::
 
-    $ debasher_build <description>.py [-o <dir>]
+    $ debasher_build <name>.py [-o <dir>]
     $ debasher_build [<home directory> | <home directory>/program.yaml]
     $ debasher_build --schema
 
@@ -36,11 +36,12 @@ the web interface like any other. Given a home directory, its
 module again from the program saved there, whoever saved it, so that a
 program kept in a repository as its ``program.yaml`` and the files of
 its processes is built without the web interface (``-o`` goes with a
-Python file only). A home directory that holds the description of its
-program, ``<name>.py`` (as one written beside the file does), is refused
-with status 1, since a build from ``program.yaml`` would ignore a change
-to the description, and the error names the command that builds it; a
-file of a process with that name is no description. It refuses, before
+Python description only). A home directory that holds the Python
+description of its program, ``<name>.py`` (as one written beside the
+file does), is refused with status 1, since a build from
+``program.yaml`` would ignore a change to the Python description, and
+the error names the command that builds it; a file of a process that has
+that name is not taken for a Python description. It refuses, before
 writing anything, a program with two different files of its processes at
 one path, or a file at the path of the module, of ``program.yaml``, or
 of a name that DeBasher manages (see the :ref:`program-yaml` Section).

@@ -5,19 +5,19 @@ Python SDK
 
 .. default-role:: literal
 
-A program described in Python (see the :ref:`implem_python` Section)
-is made of the classes and functions below, which the file of the description
+A program described in Python (see the :ref:`implem_python` Section) is
+made of the classes and functions below, which a Python description
 imports from the package ``debasher``:
 
 .. code-block:: python
 
     from debasher import Process, Program, connect, in_outdir, opt
 
-Only what a description uses is listed: the classes it creates, the
-methods it calls and the functions it uses. ``debasher_build`` (see the
-:ref:`tools` Section) loads the file and writes the program; the last
-section describes what the Python functions of a process (the tasks of
-an array or a generator, and the ``skip`` method) receive when the
+Only what a Python description uses is listed: the classes it creates,
+the methods it calls and the functions it uses. ``debasher_build`` (see
+the :ref:`tools` Section) loads the file and writes the program; the
+last section describes what the Python functions of a process (the tasks
+of an array or a generator, and the ``skip`` method) receive when the
 engine calls them.
 
 Program

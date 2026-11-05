@@ -6,8 +6,8 @@ adds them with `add_debasher_process`, and what the program is run with.
 program, with the texts of the files it names, and loads it as the web UI
 loads an artifact (`api.topology.join`); `write()` saves the program model
 as the editor does (`api/persistence.py`): the artifact, the topology
-file `program.yaml` and the files of the processes where the description
-has them, and the generated module beside it.
+file `program.yaml` and the files of the processes where the Python
+description has them, and the generated module beside it.
 """
 
 from __future__ import annotations
@@ -50,18 +50,18 @@ class _ScriptCopy:
 class Program:
     """
     A program: its name, which names its module (`<name>.sh`) and the file
-    that defines it (`<name>.py`), its description, the options of its
-    command line that a run is given (`program_options`, label to value,
-    what "Set program options" of the editor holds), and what a module
-    holds beside its processes: the `preamble` (Bash before the functions,
-    such as `load_debasher_module` lines), the environment that the
-    backend gives the tools of the engine (`env_vars`, of which only
-    `DEBASHER_MOD_DIR` is read) and the shared directories. The execution
-    options of the editor are given by name: scheduler,
-    builtin_sched_cpus, builtin_sched_mem, dflt_nodes, dflt_throttle,
-    rerun_outdated_procs, conda_support, docker_support. A resident
-    program (`resident=True`) adds nodes and a Supervisor instead of
-    processes, and may ask for periodic snapshots of its runs
+    that defines it, its Python description (`<name>.py`), its description
+    text, the options of its command line that a run is given
+    (`program_options`, label to value, what "Set program options" of the
+    editor holds), and what a module holds beside its processes: the
+    `preamble` (Bash before the functions, such as `load_debasher_module`
+    lines), the environment that the backend gives the tools of the engine
+    (`env_vars`, of which only `DEBASHER_MOD_DIR` is read) and the shared
+    directories. The execution options of the editor are given by name:
+    scheduler, builtin_sched_cpus, builtin_sched_mem, dflt_nodes,
+    dflt_throttle, rerun_outdated_procs, conda_support, docker_support. A
+    resident program (`resident=True`) adds nodes and a Supervisor instead
+    of processes, and may ask for periodic snapshots of its runs
     (`snapshot_every_secs`).
     """
 
@@ -280,12 +280,12 @@ class Program:
     @staticmethod
     def _script_relative(process: Process) -> str | None:
         """
-        How the module refers to the script of `process`: the path as it
-        was given when it is relative and stays below the directory of the
-        description (it is copied under that same path beside the module),
-        the name of the script alone when the path climbs out of it, and
-        an absolute path as it is (which the engine takes with a warning
-        about portability, and which is not copied).
+        How the module refers to the script of `process`: the path as it was
+        given when it is relative and stays below the directory of the
+        Python description (it is copied under that same path beside the
+        module), the name of the script alone when the path climbs out of
+        it, and an absolute path as it is (which the engine takes with a
+        warning about portability, and which is not copied).
         """
         given = process.script_given
         if given is None:
@@ -436,15 +436,15 @@ class Program:
         """
         Writes the program into `home_dir`, as Save does in the editor: its
         artifact, the topology file `program.yaml` and the process files,
-        the tasks files and the method files where the description had
-        them, relative to its directory (each written only when its content
-        differs, so a program written into the directory of the description
-        leaves its files as they are), the generated module `<name>.sh`,
-        and a copy of every script (external alias), replacing an older
-        copy. Returns the path of the module. It refuses two files of the
-        program with different contents at one path, and a file or a
-        copied script at the path of the module, of `program.yaml` or of a
-        name that DeBasher manages. A program that the SDK or script
+        the tasks files and the method files where the Python description
+        had them, relative to its directory (each written only when its
+        content differs, so a program written into the directory of the
+        Python description leaves its files as they are), the generated
+        module `<name>.sh`, and a copy of every script (external alias),
+        replacing an older copy. Returns the path of the module. It refuses
+        two files of the program with different contents at one path, and a
+        file or a copied script at the path of the module, of `program.yaml`
+        or of a name that DeBasher manages. A program that the SDK or script
         generation refuses leaves the directory as it was.
         """
         from api import persistence

@@ -104,7 +104,7 @@ with open(args.inf) as inf, open(args.outf, "w") as outf:
     outf.write(inf.read().upper())
 ```
 
-`debasher_build` writes the program beside the description, as the
+`debasher_build` writes the program beside the Python description, as the
 editor saves it, and `debasher_exec` runs it:
 
 ```bash

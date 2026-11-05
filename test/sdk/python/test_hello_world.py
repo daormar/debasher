@@ -27,7 +27,7 @@ def comparable(program) -> dict:
     option_labels = {option.id: option.label for process in program.processes for option in process.options}
     for process in data["processes"]:
         del process["id"]
-        # The paths of the files of a process are the description's own
+        # The paths of the files of a process are the Python description's own
         del process["files"]
         for option in process["options"]:
             del option["id"]

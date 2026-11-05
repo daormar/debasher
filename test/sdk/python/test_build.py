@@ -155,7 +155,7 @@ def _target(home: Path, form: str, monkeypatch) -> list[str]:
 def test_a_rebuild_of_a_directory_that_holds_the_description_of_its_program_is_refused(
     tmp_path, capsys, monkeypatch, form
 ):
-    # Built from the artifact, a change to the description would be ignored
+    # Built from the artifact, a change to the Python description would be ignored
     path = _program_file(tmp_path, "prg", 'prg = Program("prg", description="one")\nprg.add(Process("work", code="work.sh"))\n')
     (tmp_path / "work.sh").write_text("work()\n{\n    :\n}\n")
     main([str(path)])
@@ -165,12 +165,12 @@ def test_a_rebuild_of_a_directory_that_holds_the_description_of_its_program_is_r
 
     assert main(_target(tmp_path, form, monkeypatch)) == 1
 
-    assert "holds prg.py, the description of its program" in capsys.readouterr().err
+    assert "holds prg.py, the Python description of its program" in capsys.readouterr().err
     assert (tmp_path / "prg.sh").read_text() == module
 
 
 def test_a_file_of_the_artifact_named_as_the_description_does_not_stop_a_rebuild(tmp_path):
-    # The code of a process outside the directory of the description goes
+    # The code of a process outside the directory of the Python description goes
     # into the home directory under its name alone, here prg.py
     (tmp_path / "src").mkdir()
     (tmp_path / "lib").mkdir()
@@ -248,8 +248,8 @@ _LAUNCHER = Path(__file__).resolve().parents[3] / "sdk" / "python" / "debasher_b
 @pytest.mark.skipif(not _LAUNCHER.is_file(), reason="the launcher debasher_build is not built")
 @pytest.mark.parametrize("name", ["debasher", "yaml"])
 def test_a_description_named_as_a_module_that_the_sdk_imports_builds_from_its_directory(tmp_path, name):
-    # Run from the directory of the description, `python -m` would import
-    # the description in place of the module of that name
+    # Run from the directory of the Python description, `python -m` would import
+    # the Python description in place of the module of that name
     import os
     import subprocess
     import sys

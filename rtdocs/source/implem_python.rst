@@ -3,17 +3,20 @@
 Describing a Program in Python
 ==============================
 
-This section explains how to describe a program in Python with the SDK of
-DeBasher, for whoever prefers code to a canvas and Python to Bash. The SDK is a
-library with which processes are defined, with their code, their options and
-their connections, and a program that adds them; the tool ``debasher_build``
-turns the description into the same saved program and the same module that the
-web interface saves, so that the program opens in the editor and runs with
-``debasher_exec`` like any other. The SDK executes nothing itself and generates
-no Bash of its own: what it writes is what the editor would write for the same
-program, and the code of each process stays in a file of its own language beside
-the description. Read the :ref:`concepts` Section first for what a program is
-made of; this section says how each piece is written in Python.
+This section explains how to describe a program in Python with the SDK
+of DeBasher, for whoever prefers code to a canvas and Python to Bash.
+The SDK is a library with which processes are defined, with their code,
+their options and their connections, and a program that adds them; the
+tool ``debasher_build`` turns the Python description of a program, the
+Python file named after it (``<name>.py``) that defines its processes
+and the program, into the same saved program and the same module that
+the web interface saves, so that the program opens in the editor and
+runs with ``debasher_exec`` like any other. The SDK executes nothing
+itself and generates no Bash of its own: what it writes is what the
+editor would write for the same program, and the code of each process
+stays in a file of its own language beside the Python description. Read
+the :ref:`concepts` Section first for what a program is made of; this
+section says how each piece is written in Python.
 
 Installing and importing the SDK
 --------------------------------
@@ -28,9 +31,9 @@ found in two ways:
   ``DEBASHER_WEBUI_PYTHON`` names, else with ``python3`` on the ``PATH``
   (that of an activated virtual environment), as ``debasher_webui``
   does, and puts the Python directory of the installation, which holds
-  the package, on its path, so that the description it loads imports
-  ``debasher`` with nothing more. This is all that is needed to build a
-  program.
+  the package, on its path, so that the Python description it loads
+  imports ``debasher`` with nothing more. This is all that is needed to
+  build a program.
 * To use the library by hand, in a Python session or a test, ``import
   debasher`` works as it is when DeBasher was configured with the prefix
   of the Python itself (a virtual environment, or a conda environment
@@ -47,7 +50,7 @@ The hello world of the :ref:`quickstart` Section, with its process in
 Python, is shipped as ``sdk_hello_world_py`` among the examples of the
 SDK (the ``data/sdk_programs/python`` folder of the repository,
 installed under ``<prefix>/share/debasher/sdk_programs/python``), a
-directory with the description and the code of the process:
+directory with the Python description and the code of the process:
 
 .. literalinclude:: ../../data/sdk_programs/python/sdk_hello_world_py/sdk_hello_world_py.py
    :language: python
@@ -78,22 +81,22 @@ Building and running
 ``debasher_build`` loads the file, finds the program it defines and
 writes it beside the file: the program as the web interface saves it,
 the topology file ``program.yaml`` (see the :ref:`program-yaml`
-Section), which names the file of each process where the description has
-it, and the module ``sdk_hello_world_py.sh``, exactly what the "Save"
-button of the editor writes (``-o <dir>`` writes them elsewhere, with a
-copy of each process file). The file is named after its program, as a
-module is, and defines one program; anything else is an error that says
-so. A file of a process is written where the description has it,
-relative to its directory, and a file outside that directory by its
-name alone; ``debasher_build`` refuses, before writing anything, two
-files of the program with different contents that end up at one path
-(two ``run.sh`` from different directories), and a file, or a script
-that it copies beside the module, at the path of the module, of
+Section), which names the file of each process where the Python
+description has it, and the module ``sdk_hello_world_py.sh``, exactly
+what the "Save" button of the editor writes (``-o <dir>`` writes them
+elsewhere, with a copy of each process file). The file is named after
+its program, as a module is, and defines one program; anything else is
+an error that says so. A file of a process is written where the Python
+description has it, relative to its directory, and a file outside that
+directory by its name alone; ``debasher_build`` refuses, before writing
+anything, two files of the program with different contents that end up
+at one path (two ``run.sh`` from different directories), and a file, or
+a script that it copies beside the module, at the path of the module, of
 ``program.yaml``, or of a name that DeBasher manages. From here the
 program is one more: it runs with ``debasher_exec``, its state is
-followed with ``debasher_status``, and its directory opens
-in the web interface with "Load program", where it shows on the canvas
-with its processes laid out as those of an imported module are.
+followed with ``debasher_status``, and its directory opens in the web
+interface with "Load program", where it shows on the canvas with its
+processes laid out as those of an imported module are.
 
 ::
 
@@ -101,19 +104,19 @@ with its processes laid out as those of an imported module are.
     $ debasher_get_stdout -d out -p hello_world
     Hello from Python
 
-The Python file is never run with ``python`` and never given to
-``debasher_exec``; after a change to it, ``debasher_build`` is run
-again with the file, ``debasher_build sdk_hello_world_py.py``. Given the
+The Python description is never run with ``python`` and never given to
+``debasher_exec``; after a change to it, ``debasher_build`` is run again
+with the file, ``debasher_build sdk_hello_world_py.py``. Given the
 directory of a saved program instead, or its ``program.yaml``, or
 nothing inside it, ``debasher_build`` writes the module again from
 ``program.yaml`` and the files of the processes, whoever saved them (see
-the :ref:`tools` Section); ``-o`` goes with a Python file only. A
-directory that holds the description of its program, as the one written
-beside the file does, is not built this way, since the build would
-ignore a change to the description: the tool refuses it and names the
-command to run.
+the :ref:`tools` Section); ``-o`` goes with a Python description only. A
+directory that holds the Python description of its program, as the one
+written beside the file does, is not built this way, since the build
+would ignore a change to the Python description: the tool refuses it and
+names the command to run.
 
-A description may import the Python files beside it: while
+A Python description may import the Python files beside it: while
 ``debasher_build`` loads the file, it puts the directory of the file
 first on ``sys.path``, so that ``import helpers`` imports the
 ``helpers.py`` of that directory. A file named as a module that the tool
@@ -123,7 +126,7 @@ dependencies, and the modules of the standard library that they use
 (``json``, ``argparse`` and others). Python takes such a module from
 those it has loaded and does not look for it again, so ``import api``
 gets the API of the web interface, not the ``api.py`` beside the
-description, and nothing says so. Give such a file another name.
+Python description, and nothing says so. Give such a file another name.
 
 Processes, options and connections
 ----------------------------------
@@ -142,29 +145,29 @@ counts.
 A process is written in three parts, as a module keeps them apart (the
 :ref:`sdk-api` Section lists every class and function):
 
-* **What does not change: the constructor.** ``Process`` takes the
-  name, the code, the description, the options that its tasks receive
+* **What does not change: the constructor.** ``Process`` takes the name,
+  the code, the description, the options that its tasks receive
   (``options=[opt(...), flag(...)]``), the environments and the methods
   of a task. Nothing changes them once the process is created: they go
   with the code, which reads its options by their labels. ``code=``
   names the file of the process, which the topology file names in turn,
-  where the description has it: the module embeds it when it is Bash,
-  and runs it as it is, as an external alias of the file, in any other
-  language. ``script=`` names a file that the module runs as it is too,
-  an executable with the interpreter of its extension, but that the user
-  owns: the editor shows a ``code=`` file as the code of the process and
-  writes it when it saves, and leaves a ``script=`` file alone (the
-  dispatcher); the external alias of the :ref:`implem_bash` Section.
-  ``alias=`` runs the code of another process under this one's name and
-  options (``alias_opt_map={"-x": "-y"}`` renames the options it passes
-  on, as the alias option map of a module does), and a process with none
-  of them takes its code from a module that the preamble of the program
-  loads (``Program(..., preamble="load_debasher_module ...")``). The data
-  types are those of the editor (``int``, ``float``, ``string``,
-  ``file``, ``dir``). A label is ``-`` or ``--`` followed by an ASCII
-  letter or an underscore, as the engine requires, and the SDK refuses
-  any other. The direction of an option comes from its label, as the
-  engine reads it: an output starts with ``-out`` or ``--out``. An
+  where the Python description has it: the module embeds it when it is
+  Bash, and runs it as it is, as an external alias of the file, in any
+  other language. ``script=`` names a file that the module runs as it is
+  too, an executable with the interpreter of its extension, but that the
+  user owns: the editor shows a ``code=`` file as the code of the
+  process and writes it when it saves, and leaves a ``script=`` file
+  alone (the dispatcher); the external alias of the :ref:`implem_bash`
+  Section. ``alias=`` runs the code of another process under this one's
+  name and options (``alias_opt_map={"-x": "-y"}`` renames the options
+  it passes on, as the alias option map of a module does), and a process
+  with none of them takes its code from a module that the preamble of
+  the program loads (``Program(..., preamble="load_debasher_module
+  ...")``). The data types are those of the editor (``int``, ``float``,
+  ``string``, ``file``, ``dir``). A label is ``-`` or ``--`` followed by
+  an ASCII letter or an underscore, as the engine requires, and the SDK
+  refuses any other. The direction of an option comes from its label, as
+  the engine reads it: an output starts with ``-out`` or ``--out``. An
   option is reached again by its label, ``generate["-outf"]``.
 * **What comes from outside: the interface.** ``interface`` names the
   options whose value comes from the command line of the run, each
@@ -227,15 +230,16 @@ these rules. The example shows, besides these three parts:
   only the shape of the tasks comes from it: the values of the options
   of each task are still the Bash words of ``values=``, such as
   ``outdir(subpath="${task_idx}")`` or ``fifo("dispatch_fifo_${i}")``.
-* **The program.** ``Program`` takes the description, the program
-  options that a run is given (what "Set program options" of the editor
-  holds), the preamble, the environment that the web interface gives the
-  tools of the engine (``env_vars``, of which only ``DEBASHER_MOD_DIR``
-  is read), the shared directories and the execution options of the
-  editor by name (``scheduler``, ``conda_support``, ...); ``add`` takes
-  the process and the specifications of its use there: ``cpus``,
-  ``mem``, ``time`` (1 CPU, 256 megabytes and ``01:00:00`` for those not
-  given, as the editor gives a new process), the explicit dependencies
+* **The program.** ``Program`` takes the description text of the
+  program, the program options that a run is given (what "Set program
+  options" of the editor holds), the preamble, the environment that the
+  web interface gives the tools of the engine (``env_vars``, of which
+  only ``DEBASHER_MOD_DIR`` is read), the shared directories and the
+  execution options of the editor by name (``scheduler``,
+  ``conda_support``, ...); ``add`` takes the process and the
+  specifications of its use there: ``cpus``, ``mem``, ``time`` (1 CPU,
+  256 megabytes and ``01:00:00`` for those not given, as the editor
+  gives a new process), the explicit dependencies
   (``processdeps="afterok:count"``), ``force``, and ``position`` on the
   canvas when the layout of the editor is not wanted.
 
@@ -274,7 +278,7 @@ lines that prepare them when the run has conda or docker support
 ``--conda-support`` or ``--docker-support`` given to ``debasher_exec``).
 The yml file is found in the directories that ``DEBASHER_YML_DIR``
 lists, else among those installed with DeBasher, where ``py27.yml`` is,
-and not beside the description. ``sdk_conda_envs`` activates the
+and not beside the Python description. ``sdk_conda_envs`` activates the
 environment ``py27``, which its runs create if it does not exist:
 
 .. literalinclude:: ../../data/sdk_programs/python/sdk_conda_envs/sdk_conda_envs.py
@@ -325,11 +329,11 @@ What the SDK does not do
   it.
 * It does not read a program: the way from a module or from the editor
   into Python does not exist. A program edited and saved in the editor
-  keeps its Python file as it was; the code of a process edited there
-  goes into the file that the description names, since the topology
-  file names the same file, and survives the next build, while a change
-  to the options, the connections or the specifications goes into
-  ``program.yaml`` only and is written over by the next build.
+  keeps its Python description as it was; the code of a process edited
+  there goes into the file that the Python description names, since the
+  topology file names the same file, and survives the next build, while
+  a change to the options, the connections or the specifications goes
+  into ``program.yaml`` only and is written over by the next build.
 * It shapes no tasks itself: a tasks file in Python is run by the
   engine when it prepares a run, and only shapes the tasks; the values
   of the options, the preamble and the bodies of ``post`` and

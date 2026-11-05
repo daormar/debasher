@@ -32,16 +32,15 @@ single program can mix languages (see the :ref:`implem_bash` Section).
 
 A program is saved as a topology file, ``program.yaml``, which declares
 its processes and the options that connect them, and one file per
-process with its code, in its own language. These files are the
-program: readable, reviewed in a diff and versioned with git, and
-written alike by the web interface from a drawing (see the
-:ref:`webui` Section), by the SDK from a description in Python, by an
-AI agent or by hand. What DeBasher runs is a Bash module built from
-them, since Bash is the native glue of Unix: it strings programs
-together, passes the environment on, activates a Conda environment or
-starts a container, and is on every machine. A module can also be
-written by hand, as a few Bash functions for each process (see the
-:ref:`implem` Section).
+process with its code, in its own language. These files are the program:
+readable, reviewed in a diff and versioned with git, and written alike
+by the web interface from a drawing (see the :ref:`webui` Section), by
+the SDK from a Python description, by an AI agent or by hand. What
+DeBasher runs is a Bash module built from them, since Bash is the native
+glue of Unix: it strings programs together, passes the environment on,
+activates a Conda environment or starts a container, and is on every
+machine. A module can also be written by hand, as a few Bash functions
+for each process (see the :ref:`implem` Section).
 
 DeBasher runs two types of program. A general program processes a
 batch of inputs: each of its processes runs once, as soon as its

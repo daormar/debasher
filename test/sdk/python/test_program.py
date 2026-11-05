@@ -1,5 +1,5 @@
 """
-What the SDK writes from a description, and what it refuses: the
+What the SDK writes from a Python description, and what it refuses: the
 processes and the program as the user gives them, each process with its
 invariant part, its interface and its task options, the connections from
 the sources of the task options, the ids from the names, the positions
@@ -436,7 +436,7 @@ def test_writing_the_same_program_again_keeps_its_digest(tmp_path):
 
 def test_writing_keeps_the_output_directory_that_the_editor_recorded(tmp_path):
     # The output directory is local state of the editor, not part of the
-    # program that the description defines
+    # program that the Python description defines
     prg = Program("prg")
     prg.add(_bash_process(tmp_path, "work"))
     home = tmp_path / "home"

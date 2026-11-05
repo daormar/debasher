@@ -5,15 +5,14 @@ Writing a Module in Bash
 
 This section explains how to write the module of a program by hand,
 which the web interface does for you from a drawing (see the
-:ref:`webui` Section) and which the Python SDK writes from a
-description in Python (see the :ref:`implem_python` Section): read it
-to write a module without either, or to read the one that they wrote.
-There are four main aspects
-involved. First, creating and configuring a new module to store the
-program and the different processes it executes. Second, implementing
-the processes themselves. Third, handling command-line and process
-options for the processes. And finally, incorporating the processes
-into the program.
+:ref:`webui` Section) and which the Python SDK writes from a Python
+description (see the :ref:`implem_python` Section): read it to write a
+module without either, or to read the one that they wrote. There are
+four main aspects involved. First, creating and configuring a new module
+to store the program and the different processes it executes. Second,
+implementing the processes themselves. Third, handling command-line and
+process options for the processes. And finally, incorporating the
+processes into the program.
 
 More specifically, the implementation of a DeBasher program can be
 carried out in a process-wise manner. For each process, we will define a

@@ -12,7 +12,7 @@ library with which a program is described in Python and written as the
 program that the web UI saves, and the guarantees it gives. It is organized
 as follows: a glossary; what the user writes (the processes, with their
 invariant part, their interface and their task options, the program, a
-resident program); how the description becomes the program model; how
+resident program); how the Python description becomes the program model; how
 the program is written; the tool that writes it and the examples; how
 the library is installed and found; the guarantees and what the SDK
 deliberately is not; and the future work.
@@ -31,7 +31,7 @@ without a difference. The SDK executes nothing itself and generates no
 Bash of its own: the module comes from the one script generation of the
 project, and what runs the program is the engine.
 
-The description is divided as a module is. A hand-written module keeps
+The Python description is divided as a module is. A hand-written module keeps
 apart what describes a process and never varies, its body and the
 explanation of the options it receives (`_explain_opts`), from what wires
 it into a program and gives it its shape: which options come from outside
@@ -43,11 +43,11 @@ and touches nothing of the first, in the module itself or by defining the
 method again after the module is loaded. A process of the SDK keeps them
 apart in the same way: the first is its invariant part, and the second is
 split into its interface and its task options, each given by a call of its
-own (see "Processes"). A description, like a module, defines
+own (see "Processes"). A Python description, like a module, defines
 processes and one program that adds them, and calls nothing, since the
 tool `debasher_build` loads it and writes the program. The one thing the user
 does differently is to keep the code of each process in a file of its own
-language beside the description, instead of inside the module.
+language beside the Python description, instead of inside the module.
 
 # Glossary
 
@@ -79,11 +79,11 @@ entries below that refer to them.
   "Reserved names and user files" in `doc/design_doc_webui.md`).
 - **user file**: as in the design of the web UI: a file or directory of the home
   directory whose path has no reserved name, which the user manages through the
-  program files panel; the description is one.
+  program files panel; the Python description is one.
 - **home directory**: as in the design of the web UI: the directory where
   a program lives, with its artifact, its generated module and its user
   files. The SDK writes a program into one, by default the directory of
-  the description.
+  the Python description.
 - **local state**: as in the design of the web UI: what the editor keeps
   on this machine for a program and the artifact does not hold: the lock
   and the output directory, in `.debasher/`. A write of the SDK keeps the
@@ -95,13 +95,13 @@ entries below that refer to them.
 - **door**: a way of producing the program model: the editor, the import
   of a hand-written module, and the SDK. The engine runs the result of
   any of them without a difference.
-- **description**: the Python file of the user that defines the processes
+- **Python description**: the Python file of the user that defines the processes
   and the program, named after the program (`<name>.py`). It calls
   nothing; `debasher_build` loads it. The free text that a program or a
   process carries (`description=`) is called its **description text**
   here, to tell the two apart.
 - **process file**: the file that holds the code of a process beside the
-  description, in its own language, which the editor owns: a Bash
+  Python description, in its own language, which the editor owns: a Bash
   function named as the process, or the whole script of another
   language. It is given to the process as its code (`code=`), and the SDK
   puts its text in the program model when the program is written.
@@ -150,10 +150,10 @@ entries below that refer to them.
   relative paths of its files are taken: that of the Python file that
   creates the process, or the one that `base_dir=` names.
 - **library process**: a process created in a Python module of the user
-  and imported by the descriptions that add it, which give it its
+  and imported by the Python descriptions that add it, which give it its
   variable part.
 - **library program**: a program whose processes other programs reuse,
-  distributed as its artifact beside its description (see the item on
+  distributed as its artifact beside its Python description (see the item on
   library programs in "Future work"). Not to be confused with the library
   of the SDK itself.
 - **options handler**: how a process of the program model defines the
@@ -225,7 +225,7 @@ entries below that refer to them.
 
 # What the user writes
 
-A description is a Python file that imports the library and defines
+A Python description is a file that imports the library and defines
 processes and one program, as the sketch below does. The same file,
 indented and commented as the user likes, is all there is: no call to
 write or to run anything.
@@ -569,12 +569,12 @@ display other than `"line"` and `"label"`.
 ## The program
 
 A program (`Program`, `sdk/python/debasher/program.py`) has a name, which names
-its module and its description, and carries what the editor keeps beside the
-processes: its description text, the program options (label to value, what "Set
-program options" of the editor holds, given to `debasher_exec` by whoever runs
-the program), the preamble of the module (Bash before the functions, such as
-`load_debasher_module` lines), the environment that the backend gives the tools
-of the engine (`env_vars`), the shared directories it declares, and the
+its module and its Python description, and carries what the editor keeps beside
+the processes: its description text, the program options (label to value, what
+"Set program options" of the editor holds, given to `debasher_exec` by whoever
+runs the program), the preamble of the module (Bash before the functions, such
+as `load_debasher_module` lines), the environment that the backend gives the
+tools of the engine (`env_vars`), the shared directories it declares, and the
 execution options of the editor, given by name (`scheduler`, `conda_support`,
 `docker_support`, ...). Of `env_vars` only `DEBASHER_MOD_DIR` is read: where to
 look for the modules that the preamble loads. A run launched with
@@ -609,7 +609,7 @@ periodic snapshots of its runs (`snapshot_every_secs`, the period that
 the editor starts once the program is launched), and adds nodes instead
 of processes: a `Node`, or the `Supervisor`. It refuses a `Process`, and
 a general program refuses a node, when they are added, so that a
-description that mixes them is reported at that line rather than by
+Python description that mixes them is reported at that line rather than by
 script generation later.
 
 A `Node(name, code=<node file>, description="", options=[...], base_dir=)` is a
@@ -645,7 +645,7 @@ node may be an initiator in one program and not in another. An unknown name, or
 one of them on a process of a general program, is refused, and so is
 `initiator=True` on anything but a `Node`, the Supervisor among them.
 
-# From the description to the program model
+# From the Python description to the program model
 
 `Program.to_model()` builds the `Program` of `api/models.py` that `write()`
 saves, as the web UI builds it when it loads an artifact: it writes, with
@@ -657,14 +657,13 @@ saving and the local state" in `doc/design_doc_webui.md`). The rules of the
 translation are therefore those of loading, and a program of the SDK and the
 same program loaded from its artifact are the same program model:
 
-- **Ids.** Every id (the program, each process, each option, each
-  connection) is a UUID derived from the names (`uuid5` of the program
-  name, the process name and the label), so that building the same
-  description twice gives the same artifact, and a description kept in a
-  repository with its built program gives no spurious diff. The editor
-  draws the id of a process it creates at random, and loading assigns
-  them from the names (see "The topology file" in
-  `doc/design_doc_webui.md`); nothing reads an id as a name.
+- **Ids.** Every id (the program, each process, each option, each connection) is
+  a UUID derived from the names (`uuid5` of the program name, the process name
+  and the label), so that building the same Python description twice gives the
+  same artifact, and a Python description kept in a repository with its built
+  program gives no spurious diff. The editor draws the id of a process it
+  creates at random, and loading assigns them from the names (see "The topology
+  file" in `doc/design_doc_webui.md`); nothing reads an id as a name.
 - **Code.** The process file, the script, the tasks file and the method
   files of a process are read at this moment, and a file that cannot be
   read is refused. A process with no code has an empty one, which script
@@ -737,29 +736,30 @@ program model is built, and every file of the processes and every script is
 read, before anything touches the directory. `save` generates the module and
 checks every path of the artifact before it writes.
 
-The files of the artifact are written where the description had them, by the
-paths of the process files, the tasks files and the method files relative to the
-base directory of each process. A file outside that base directory is written at
-the top of the home directory, under its name alone. Each file is written only
-when its content differs from the file already at that path: a program written
-into the directory of the description leaves its files as they are, and a
-program written elsewhere gets a copy of each. Two files whose paths in the
-artifact are the same (two files named `post.sh` in two directories outside the
-base directory) are refused when the model is built if their texts differ, as
-saving refuses them (see "The process files" in `doc/design_doc_webui.md`).
-Before anything is written, a file or a script copied beside the module is
-refused when its path is that of the module or of the topology file, or holds a
-reserved name.
+The files of the artifact are written where the Python description had them, by
+the paths of the process files, the tasks files and the method files relative to
+the base directory of each process. A file outside that base directory is
+written at the top of the home directory, under its name alone. Each file is
+written only when its content differs from the file already at that path: a
+program written into the directory of the Python description leaves its files as
+they are, and a program written elsewhere gets a copy of each. Two files whose
+paths in the artifact are the same (two files named `post.sh` in two directories
+outside the base directory) are refused when the model is built if their texts
+differ, as saving refuses them (see "The process files" in
+`doc/design_doc_webui.md`). Before anything is written, a file or a script
+copied beside the module is refused when its path is that of the module or of
+the topology file, or holds a reserved name.
 
-The description is the one place where the program is defined. The program model
-that the SDK builds names no digest and no home directory, so `save` takes each
-write as a save into another directory and replaces what the artifact holds.
-Only the output directory is kept: it is local state, not part of the program,
-so `write` gives `save` the one recorded there. A program built from a
-description, changed in the editor and built again loses the change made in the
-editor, in silence; an editor tab still open on the program gets a conflict on
-its next Save (see "The digest of the artifact" in `doc/design_doc_webui.md`). A
-change to a program built from a description is made in the description.
+The Python description is the one place where the program is defined. The
+program model that the SDK builds names no digest and no home directory, so
+`save` takes each write as a save into another directory and replaces what the
+artifact holds. Only the output directory is kept: it is local state, not part
+of the program, so `write` gives `save` the one recorded there. A program built
+from a Python description, changed in the editor and built again loses the
+change made in the editor, in silence; an editor tab still open on the program
+gets a conflict on its next Save (see "The digest of the artifact" in
+`doc/design_doc_webui.md`). A change to a program built from a Python
+description is made there.
 
 The scripts are files of the artifact, and part of its digest, but `write`
 copies them after `save` has returned, outside its lock. `save` cannot copy them
@@ -785,7 +785,7 @@ warning about portability, which is the user's choice.
 Script generation needs `debasher_get_proc_info` of the engine for one
 thing only, to leave out the code of a process that a module loaded by
 the preamble already provides; without the tool every process is written
-with its code, which is right for a description with no preamble. The
+with its code, which is right for a Python description with no preamble. The
 SDK tells the API where the tools are (see "Finding the API and the
 engine").
 
@@ -799,33 +799,33 @@ debasher_build [<home directory> | <home directory>/program.yaml]
 debasher_build --schema
 ```
 
-The first builds a description. It is the equivalent of Save in the editor, and
-it is where `write()` is called: a description calls nothing, as a module calls
-nothing. The second builds a program again from its artifact. The third prints
-the JSON Schema of the topology file. In the first two, the path of the module
-is printed on success, and an error of the SDK is printed to standard error with
-the prefix `debasher_build:`, and the tool exits with status 1.
+The first builds a Python description. It is the equivalent of Save in the
+editor, and it is where `write()` is called: a Python description calls nothing,
+as a module calls nothing. The second builds a program again from its artifact.
+The third prints the JSON Schema of the topology file. In the first two, the
+path of the module is printed on success; on an error of the SDK, the tool
+prints it to standard error with the prefix `debasher_build:` and exits with
+status 1.
 
-**Building a description.** The tool loads the description, finds the program it
+**Building a Python description.** The tool loads it, finds the program it
 defines and writes it:
 
-- The tool executes the description inside the tool's own Python process, as an
-  import would (`exec_module`), not as `python <name>.py` would run it: the file
-  is loaded under its own name as the name of the module, so its `__name__` is
-  not `"__main__"` and a block guarded by it does not run, and what the tool
-  needs are the objects it leaves among its global names. While it runs, the
-  directory of the description is first on `sys.path`, so that it can import
-  files beside it.
+- s own's own Python process, as an import would (`exec_module`), not as
+  `python <name>.py` would run it: the file is loaded under its own name as the
+  name of the module, so its `__name__` is not `"__main__"` and a block guarded
+  by it does not run, and what the tool needs are the objects it leaves among
+  its global names. While it runs, its directory is first on `sys.path`, so that
+  it can import files beside it.
 - Among its global names there has to be exactly one `Program`; none or several
   is an error.
-- The description is named after its program, as a module is named after the
-  program it defines (`align_all.py` defines `Program("align_all")`), since the
-  name of the program is the name of the module and the editor looks for
+- The Python description is named after its program, as a module is named after
+  the program it defines (`align_all.py` defines `Program("align_all")`), since
+  the name of the program is the name of the module and the editor looks for
   `<name>.sh`. A mismatch is an error that names both and says how to make them
   agree: rename one of them, or only the file when its name cannot name a
   program (`hello-world.py`).
-- The program is written into the directory of the description unless `-o` names
-  another: beside the description and the process files, which is the home
+- The program is written into the directory of the Python description unless
+  `-o` names another: beside it and the process files, which is the home
   directory as the editor keeps it, with the user files of the program beside
   the artifact.
 
@@ -838,25 +838,25 @@ saves it back as it is:
   program kept in a repository as its artifact is thus built without the editor:
   this is the regeneration tool of the artifact (see "The doors and the
   regeneration tool" in `doc/design_doc_webui.md`).
-- `-o` goes with a description only.
+- `-o` goes with a Python description only.
 - The tool refuses a home directory that holds a file `<name>.py`, named after
   its program, that the artifact does not name (a process file of that name is
-  named, and does not stop the build). Such a file is usually the description of
-  the program, and a build from the artifact would ignore a change made to it,
-  in silence; the error says how to build the description instead. In a program
-  made in the editor it is a user file, which has to be renamed.
+  named, and does not stop the build). Such a file is usually the Python
+  description of the program, and a build from the artifact would ignore a
+  change made to it, in silence; the error says how to build it instead. In a
+  program made in the editor it is a user file, which has to be renamed.
 
 Running the program is then the same as for any program:
 `debasher_exec --pfile <name>.sh --outdir <dir> ...`, `debasher_status`,
 or the Run of the editor once the home directory is opened in it. The
-description is never run with `python` nor given to `debasher_exec`, and
+Python description is never run with `python` nor given to `debasher_exec`, and
 a change to it is followed by another `debasher_build`.
 
 ## The examples
 
-Five descriptions ship under `data/sdk_programs/python/`, installed
+Five Python descriptions ship under `data/sdk_programs/python/`, installed
 under `sdk_programs/python` of `$(pkgdatadir)`, one directory per program
-with the description named after it and the files of its processes
+with the Python description named after it and the files of its processes
 beside it:
 
 - `sdk_hello_world_py`, the hello world of the quickstart with its
@@ -910,27 +910,26 @@ front, as `api/Makefile.am` builds `debasher_webui`, and installs it in
 - stops, and prints what to install, when that Python lacks pydantic 2, instead
   of failing inside the library;
 - puts `$(pythondir)` in `PYTHONPATH`, and, when it runs from the source tree,
-  its own directory, where the package is, in front of it, so that a description
-  imports `debasher` without the user setting anything;
+  its own directory, where the package is, in front of it, so that a Python
+  description imports `debasher` without the user setting anything;
 - runs the Python module `debasher.build` as `python -m` does
   (`runpy.run_module`), but without the current directory at the front of
-  `sys.path`, where `python -m` puts it. A description named as a Python module
-  that the SDK imports (`debasher.py`, `yaml.py`), built from its own directory,
-  would otherwise be imported in place of that module, and the tool would fail
-  before it reads the description.
+  `sys.path`, where `python -m` puts it. A Python description named as a Python
+  module that the SDK imports (`debasher.py`, `yaml.py`), built from its own
+  directory, would otherwise be imported in place of that module, and the tool
+  would fail before it reads the file.
 
-**The files beside a description.** While the tool loads a description, it puts
-the directory of the description first on `sys.path`, so a description imports
-the files beside it: `import helpers` for a file `helpers.py` in its own
-directory. The exception is a file named as a Python module that the tool has
-already loaded: the SDK (`debasher`), `api`, `yaml`, `pydantic` and their
-dependencies, and the Python modules of the standard library that they use
-(`json`, `argparse` and others). Python takes it from the Python modules already
-loaded and does not look for it again, so `import api` in a description gets the
-API of the web UI, not the `api.py` beside it, in silence. Such a file needs
-another name. A file named as a Python module of the standard library that is
-not loaded yet, such as `csv.py`, is imported in place of that module, as in any
-Python program.
+**The files beside a Python description.** While the tool loads a Python
+description, it puts its directory first on `sys.path`, so the file imports the
+files beside it: `import helpers` for a file `helpers.py` in its own directory.
+The exception is a file named as a Python module that the tool has already
+loaded: the SDK (`debasher`), `api`, `yaml`, `pydantic` and their dependencies,
+and the Python modules of the standard library that they use (`json`, `argparse`
+and others). Python takes it from the Python modules already loaded and does not
+look for it again, so `import api` in a Python description gets the API of the
+web UI, not the `api.py` beside it, in silence. Such a file needs another name.
+A file named as a Python module of the standard library that is not loaded yet,
+such as `csv.py`, is imported in place of that module, as in any Python program.
 
 ## Finding the API and the engine
 
@@ -972,7 +971,7 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
 
 ## Guarantees
 
-- **What the editor saves.** A description written with the SDK gives the
+- **What the editor saves.** A Python description written with the SDK gives the
   program that the editor would save for the same program, apart from
   the ids, the digest and home directory of the save and the names of the
   files of the artifact, and the module that script generation writes
@@ -981,7 +980,7 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   the tests with `webui_hello_world_py`, `webui_dynamic_fanout_fifos`,
   `webui_running_sum`, `webui_skip_py` and `webui_conda_envs` of
   `data/webui_programs/` (see "The examples").
-- **Deterministic.** Two builds of the same description give the same
+- **Deterministic.** Two builds of the same Python description give the same
   artifact: ids come from names, positions from the layout, and nothing
   from the clock or from randomness.
 - **No process runs.** Building a program runs no process, no code of a process
@@ -995,8 +994,8 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   sources the Bash process file, which runs the Bash outside its functions. All
   of it runs anyway when the program runs, and a preamble that only loads
   modules and defines functions, of modules that only define functions, has no
-  effect at build time. The description is loaded as a Python module, so the
-  code it holds runs as any Python file does.
+  effect at build time. The Python description is loaded as a Python module, so
+  the code it holds runs as any Python file does.
 - **No Bash of its own.** The SDK writes no line of the module: every rule
   of the translation lives in script generation, and what it refuses it
   refuses for the SDK with the same message.
@@ -1010,7 +1009,7 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   from the editor, so that building never executes and the runner is the
   same whatever door the program came through.
 - **Reading a program.** The library builds a program model and never
-  reads one: the way from a module or from an artifact into a description
+  reads one: the way from a module or from an artifact into a Python description
   does not exist, and import stays what it is in the web UI. The tool,
   when it rebuilds a program from its artifact, loads the program model
   through the persistence of the API and gives it back to it unchanged,
@@ -1021,8 +1020,8 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   file in Python is run by the engine, through its own functions, when
   the module would run the Bash it replaces.
 - **Bash where the engine reads Bash.** What the engine itself takes as Bash
-  stays Bash in a description: the preamble of the program; the value of an
-  option, a Bash word that the engine expands when the option is defined
+  stays Bash in a Python description: the preamble of the program; the value of
+  an option, a Bash word that the engine expands when the option is defined
   (`${process_outdir}/name`, `${array[$task_idx]}`), so that the per-task values
   of an array or a generator are Bash words even when a Python function shapes
   the tasks; and the bodies of `post` and `reset_outfiles` (a reset rule also
@@ -1031,13 +1030,13 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   language.
 - **The manual mode.** A whole `_define_opts` written by hand, the
   manual mode of the options handler of the editor, is not offered: it
-  is the method of a module, and a description that needs it is a
+  is the method of a module, and a Python description that needs it is a
   module.
-- **Subprograms.** A description does not add the processes of another
+- **Subprograms.** A Python description does not add the processes of another
   module with `add_debasher_program`, and the SDK does not produce the
   groups of the editor (an "Add program" that script generation writes
-  back as one `add_debasher_program` call). A description reuses the
-  processes of another description as it uses any Python object: it
+  back as one `add_debasher_program` call). A Python description reuses the
+  processes of another Python description as it uses any Python object: it
   imports them, gives each its interface and its task options, and adds
   it, which covers a program made only of the processes of another (the
   library programs distributed apart, and the namespaces that such reuse
@@ -1064,23 +1063,23 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   by the SDK. The program model already holds it (`seqProcesses`, see
   "Sequential processes in the program model" in the design of the web
   UI) and script generation already writes it, so the SDK would only
-  translate it, as one more object of a description beside its
+  translate it, as one more object of a Python description beside its
   processes: a name, a file with its code and the specifications that
   the engine accepts on it.
 - **Library programs.** Processes meant for reuse are distributed as a library
-  program: a description with its processes and a program that uses them, which
-  serves as its example and holds its tests, built and distributed as its
+  program: a Python description with its processes and a program that uses them,
+  which serves as its example and holds its tests, built and distributed as its
   artifact (the topology file, the files of its processes and its generated
-  module) beside its description. A program reuses the processes of a library
-  program as a module reuses those of another: its preamble loads the module of
-  the library program (`load_debasher_module`, found through
-  `DEBASHER_MOD_DIR`), its description imports the processes for their invariant
-  part and gives each its interface and its task options, the process takes its
-  code from the loaded module, and nothing of the library program is copied into
-  the program. A library program is thus one more program, not a new kind of
-  artifact, and it is found by name along a search path: today as a module, and,
-  once the engine reads the artifact itself instead of the generated module, as
-  an artifact.
+  module) beside its Python description. A program reuses the processes of a
+  library program as a module reuses those of another: its preamble loads the
+  module of the library program (`load_debasher_module`, found through
+  `DEBASHER_MOD_DIR`), its Python description imports the processes for their
+  invariant part and gives each its interface and its task options, the process
+  takes its code from the loaded module, and nothing of the library program is
+  copied into the program. A library program is thus one more program, not a new
+  kind of artifact, and it is found by name along a search path: today as a
+  module, and, once the engine reads the artifact itself instead of the
+  generated module, as an artifact.
 
   It replaces the copy of the files of a library process into the home directory
   of the program, which the SDK writes there by their paths relative to the base
@@ -1099,30 +1098,31 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
     loaded);
   - how the editor shows a library process (read only, as a process of a loaded
     module);
-  - how a Python package carries the description and the built artifact, and
-    checks that both come from the same source (a digest of the description);
-  - how `debasher_build` treats a description that imports the program of a
-    library program beside its own.
+  - how a Python package carries the Python description and the built artifact,
+    and checks that both come from the same source (a digest of the Python
+    description);
+  - how `debasher_build` treats a Python description that imports the program of
+    a library program beside its own.
 - **Namespaces of library processes.** A process defined in a Python module of
   the user is added to several programs as a process of a loaded module is, but
   gets no namespace. The namespace of DeBasher is a naming convention kept in
   the program model, where the dotted name is what the engine and every other
-  door see, while a namespace of Python exists only while the description runs:
-  the relation is a projection when the program model is built, and a library
-  process gets its prefix from an explicit namespace object, never from the path
-  of the Python module that defines it, which is a detail of the installation
-  and not a name.
-- **Tasks and skip functions in the description.** A tasks file and a skip file
-  in Python each hold one function with a contract: `tasks(run)` returns the
-  elements of the array or the number of tasks of a generator, and `skip(task)`
-  says whether a task is skipped. Such a function could be written in the
-  description itself, for one too small for a file of its own, and given as the
-  function (`array=`, `generator=`, `skip=`) instead of a file; the build would
-  write its source as the file that the engine already reads. The function has
-  to be self-contained, with its imports inside it and no name of the
-  description, since the engine runs it (when it prepares the run, or a task)
-  and the build does not. The body of a process is left out: a process file in
-  Python is a whole script that reads its options from its arguments, and a
-  function would need a contract that does not exist. `post` and
+  door see, while a namespace of Python exists only while the Python description
+  runs: the relation is a projection when the program model is built, and a
+  library process gets its prefix from an explicit namespace object, never from
+  the path of the Python module that defines it, which is a detail of the
+  installation and not a name.
+- **Tasks and skip functions in the Python description.** A tasks file and a
+  skip file in Python each hold one function with a contract: `tasks(run)`
+  returns the elements of the array or the number of tasks of a generator, and
+  `skip(task)` says whether a task is skipped. Such a function could be written
+  in the Python description itself, for one too small for a file of its own, and
+  given as the function (`array=`, `generator=`, `skip=`) instead of a file; the
+  build would write its source as the file that the engine already reads. The
+  function has to be self-contained, with its imports inside it and no name of
+  the Python description, since the engine runs it (when it prepares the run, or
+  a task) and the build does not. The body of a process is left out: a process
+  file in Python is a whole script that reads its options from its arguments,
+  and a function would need a contract that does not exist. `post` and
   `reset_outfiles` stay Bash, which is what the engine runs them as (see "Bash
   where the engine reads Bash").

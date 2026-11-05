@@ -1724,11 +1724,11 @@ extension of the file gives the language, `.py` Python and any other Bash, and
 a Python file named as the tasks file of a `manual` process or as another
 method file is refused when the program is loaded.
 
-The paths are free: the SDK writes what the description gave, and a user may
-name a file as they like. What the editor and import choose when they create a
-file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks file
-and `<process>_<method>.sh` for a method file, with `.py` for a tasks file or a
-skip file in Python, which is also the name a file gets when its language
+The paths are free: the SDK writes what the Python description gave, and a user
+may name a file as they like. What the editor and import choose when they create
+a file is `<process>.<ext>` for the code, `<process>_tasks.sh` for the tasks
+file and `<process>_<method>.sh` for a method file, with `.py` for a tasks file
+or a skip file in Python, which is also the name a file gets when its language
 changes and the name it was loaded with no longer says it. The name of a process
 file is never that of the generated script, since script generation refuses a
 process named as its program (see "What script generation refuses"). Because a
@@ -1862,16 +1862,16 @@ but the engine:
   refers to, with the same behavior and another shape of the module, and
   import stays a fixed point.
 - `debasher_build`, the tool of the SDK, regenerates the script from the
-  artifact: given the Python file of the SDK that describes a program (a
-  description, in `doc/design_doc_sdk.md`) it writes the artifact and then
-  the script; given a topology file, a home directory, or nothing in a home
-  directory, it loads the program saved there and saves it back as it is,
-  which writes the script and leaves the artifact as it was (a topology file
-  not in the form the backend writes is written again in that form, see
-  "Comments in the topology file" in "Future work"), so that the
-  artifact is usable without the editor, in a repository and in a pipeline,
-  and a program deleted down to its artifact is built again identically.
-  What script generation refuses it refuses, with the same message.
+  artifact: given the Python file of the SDK that describes a program (a Python
+  description, in `doc/design_doc_sdk.md`) it writes the artifact and then the
+  script; given a topology file, a home directory, or nothing in a home
+  directory, it loads the program saved there and saves it back as it is, which
+  writes the script and leaves the artifact as it was (a topology file not in
+  the form the backend writes is written again in that form, see "Comments in
+  the topology file" in "Future work"), so that the artifact is usable without
+  the editor, in a repository and in a pipeline, and a program deleted down to
+  its artifact is built again identically. What script generation refuses it
+  refuses, with the same message.
 
 # Execution and observation
 

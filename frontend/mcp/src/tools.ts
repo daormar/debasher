@@ -265,7 +265,7 @@ const readingTools = [
       if (listed?.length) {
         const field = method.key === "condaEnvsCode" ? "condaEnvs" : "dockerImgs";
         throw new Refusal(
-          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments as data (a name and a YAML file each)" : "Docker images as data (a list of images)"}, from which the method is written, and data has no code prompt: change them with update_process (additionalMethods.${field}), or, in a program described in Python (a <name>.py beside <name>.sh), in ${method.name}= of its description, then run debasher_build <name>.py.`
+          `${name} gives its ${method.key === "condaEnvsCode" ? "Conda environments as data (a name and a YAML file each)" : "Docker images as data (a list of images)"}, from which the method is written, and data has no code prompt: change them with update_process (additionalMethods.${field}), or, in a program described in Python (a <name>.py beside <name>.sh), in ${method.name}= of its Python description, then run debasher_build <name>.py.`
         );
       }
       const language = method.key === "skipCode" ? methods.skipLanguage ?? "bash" : "bash";

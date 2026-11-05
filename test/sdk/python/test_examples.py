@@ -1,6 +1,6 @@
 """
 The examples that ship under data/sdk_programs/python, as they are: each
-is a description named after its program that debasher_build writes into
+is a Python description named after its program that debasher_build writes into
 a home directory the web UI loads, with the files of its processes beside
 it. What each one reproduces of the web UI is checked by its own test
 module (test_hello_world, test_dynamic_fanout_fifos, test_running_sum,
