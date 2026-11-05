@@ -419,6 +419,49 @@ class SavedProgram:
     digest: str
 
 
+def _check_paths(program: Program, files: dict[str, str], owners: dict[str, str]) -> None:
+    """
+    Refuses, with ValueError, a path of the artifact that the module, the
+    topology file or a reserved name holds: those of the files that the
+    program is taken apart into, and those of its external aliases, which
+    the module names and a save copies beside it.
+    """
+    for path in files:
+        check_artifact_path(program.name, path, owners[path])
+    for member in [*program.processes, *program.seqProcesses]:
+        if member.additionalSpecs.externalAlias:
+            check_artifact_path(program.name, member.additionalSpecs.externalAlias, f'The script of "{member.name}"')
+
+
+def _write_artifact(home: Path, program: Program, topology_text: str, files: dict[str, str]) -> None:
+    """
+    Writes the artifact into `home`: the files that changed, the topology
+    file, and the local state when the output directory changed; removes
+    the module of an old name and the program metadata of before the
+    artifact.
+    """
+    # Before the topology file is replaced, since it is the only record of
+    # the old name
+    delete_stale_script(str(home), program.name)
+
+    for path, text in files.items():
+        if not _same_text(home / path, text):
+            _write_text(home / path, text)
+    _write_text(home / TOPOLOGY_FILENAME, topology_text)
+
+    state = read_local_state(str(home))
+    if str(state.get("outputDir") or "") != (program.outputDir or ""):
+        _write_text(
+            home / METADATA_DIRNAME / LOCAL_FILENAME,
+            json.dumps(state | {"outputDir": program.outputDir or ""}, indent=2) + "\n",
+        )
+
+    # The home directory never holds both forms
+    old_metadata = home / METADATA_DIRNAME / PROGRAM_FILENAME
+    if old_metadata.is_file():
+        old_metadata.unlink()
+
+
 def save(home_dir: str, program: Program) -> SavedProgram:
     """
     Save `program` into `home_dir`: its artifact (the topology file, and
@@ -442,47 +485,28 @@ def save(home_dir: str, program: Program) -> SavedProgram:
     and the writes happen under a lock on the home directory, so that two
     saves arriving together cannot both pass the comparison.
     """
+    # Everything that can refuse the program comes before the home
+    # directory is touched: script generation, taking the program apart and
+    # the paths of the artifact
     script = script_generation.generate_script(program)
     taken_apart = topology.split(program)
     topology_text = topology.dumps(taken_apart.topology)
-    files = taken_apart.files
-    for path in files:
-        check_artifact_path(program.name, path, taken_apart.owners[path])
-    for member in [*program.processes, *program.seqProcesses]:
-        if member.additionalSpecs.externalAlias:
-            check_artifact_path(program.name, member.additionalSpecs.externalAlias, f'The script of "{member.name}"')
+    _check_paths(program, taken_apart.files, taken_apart.owners)
 
     home = _home(home_dir)
     home.mkdir(parents=True, exist_ok=True)
 
-    topology_path = home / TOPOLOGY_FILENAME
-
     with _metadata_lock(home):
+        # Compared under the lock, so that two saves arriving together
+        # cannot both pass. A save that changes nothing overwrites nobody's
+        # work; any other one into the program's own home directory needs
+        # the digest the program was loaded with
         current = saved_digest(home_dir)
 
-        if current is None or not _same_artifact(home, topology_text, files, program.outputDir):
+        if current is None or not _same_artifact(home, topology_text, taken_apart.files, program.outputDir):
             if current is not None and same_dir(home_dir, program.homeDir) and current != program.digest:
                 raise DigestConflict(current)
-
-            # Before the topology file is replaced, since it is the only
-            # record of the old name.
-            delete_stale_script(home_dir, program.name)
-
-            for path, text in files.items():
-                if not _same_text(home / path, text):
-                    _write_text(home / path, text)
-            _write_text(topology_path, topology_text)
-
-            state = read_local_state(home_dir)
-            if str(state.get("outputDir") or "") != (program.outputDir or ""):
-                _write_text(
-                    home / METADATA_DIRNAME / LOCAL_FILENAME,
-                    json.dumps(state | {"outputDir": program.outputDir or ""}, indent=2) + "\n",
-                )
-
-            old_metadata = home / METADATA_DIRNAME / PROGRAM_FILENAME
-            if old_metadata.is_file():
-                old_metadata.unlink()
+            _write_artifact(home, program, topology_text, taken_apart.files)
 
         # The scripts are part of the digest, so they are copied before it
         # is read: a copy that brings a script the artifact lacked changes it
@@ -492,4 +516,4 @@ def save(home_dir: str, program: Program) -> SavedProgram:
         script_path = home / f"{program.name}.sh"
         script_path.write_text(script)
 
-    return SavedProgram(program_path=topology_path, script_path=script_path, digest=digest)
+    return SavedProgram(program_path=home / TOPOLOGY_FILENAME, script_path=script_path, digest=digest)
