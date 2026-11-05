@@ -481,6 +481,15 @@ class Process:
         cmdline = dict(cmdline or {})
         shaping = dict(shaping or {})
         external = dict(external or {})
+        mandatory = self._checked_cmdline(cmdline)
+        self._check_shaping(shaping)
+        self._check_external(external, cmdline)
+        self._interface = _Interface(mandatory, shaping, external)
+        return self
+
+    def _checked_cmdline(self, cmdline: dict[str, str]) -> dict[str, bool]:
+        """The command line options of an interface, checked, each with
+        whether it is mandatory."""
         mandatory: dict[str, bool] = {}
         for label, kind in cmdline.items():
             option = self._received(label, "the command line of its interface")
@@ -496,6 +505,11 @@ class Process:
                     f'Option "{label}" of process "{self.name}" is an output, which the command line does not give.'
                 )
             mandatory[label] = kind == "mandatory"
+        return mandatory
+
+    def _check_shaping(self, shaping: dict[str, tuple[str, str]]) -> None:
+        """Checks the task shaping options of an interface: new labels of
+        inputs, each with its data type and its description."""
         for label, spec in shaping.items():
             if any(option.label == label for option in self.options):
                 raise DefinitionError(
@@ -514,6 +528,10 @@ class Process:
                     f'Option "{label}" of process "{self.name}": a task shaping option is an input, and the '
                     'engine takes a label that starts with "-out" or "--out" as an output.'
                 )
+
+    def _check_external(self, external: dict[str, str], cmdline: dict[str, str]) -> None:
+        """Checks the external FIFOs of an interface: received inputs, each
+        named, none also on the command line."""
         for label, name in external.items():
             option = self._received(label, "the external FIFOs of its interface")
             if option.direction != "input":
@@ -529,8 +547,6 @@ class Process:
                 raise DefinitionError(
                     f'Option "{label}" of process "{self.name}" is both on the command line and fed from outside.'
                 )
-        self._interface = _Interface(mandatory, shaping, external)
-        return self
 
     # --- the task options ----------------------------------------------------
 

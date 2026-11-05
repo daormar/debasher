@@ -451,14 +451,9 @@ class Program:
 
         home = Path(home_dir)
         model = self.to_model()
+        # to_model has read every script, and save checks the path of each
+        # one before it writes anything
         copies = self._script_copies()
-        for copy in copies:
-            if not copy.source.is_file():
-                raise DefinitionError(f"Script {copy.source} does not exist.")
-            try:
-                persistence.check_artifact_path(self.name, str(copy.relative), f"Script {copy.source}")
-            except ValueError as error:
-                raise DefinitionError(str(error)) from None
         try:
             saved = persistence.save(str(home), model)
         except (ValueError, NotImplementedError) as error:
