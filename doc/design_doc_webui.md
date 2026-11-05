@@ -1322,10 +1322,14 @@ generated script, and copies the file of each `ext_alias` given as a relative
 path from the program's `sourceDir` into the home directory, at the same
 relative path: the engine resolves such a path against the directory of the
 module that declares it, so without the copy a program imported and saved
-elsewhere would lose its aliased scripts. When the program has been renamed
-since the last save, the backend deletes the script with the old name before it
-writes the topology file, from which it reads that name; the process files keep
-their names, since the topology file names them by path.
+elsewhere would lose its aliased scripts. A relative path with a `..` in it is
+not copied: its copy could land outside the home directory, over whatever is
+there. The program saved elsewhere then looks for the script at that path from
+its new home directory, and its run stops with an error when no file is there.
+When the program has been renamed since the last save, the backend deletes the
+script with the old name before it writes the topology file, from which it reads
+that name; the process files keep their names, since the topology file names
+them by path.
 
 A save is refused while there is a run in progress on the output directory. The
 engine reads the generated script again each time it starts a process, so
@@ -2366,8 +2370,8 @@ process and a process, or two sequential processes, share a name. When the
 module is generated to read its environment variables (see "Environment
 variables of a program"), a sequential process without code gets a function that
 does nothing, like a process. Saving copies the file of a relative
-`externalAlias` of a sequential process into the home directory, as it copies
-that of a process (see "The home directory").
+`externalAlias` of a sequential process into the home directory, under the same
+conditions as that of a process (see "The home directory").
 
 **The module documentation.** `debasher_doc_mod` has the flag
 `--show-seq-procs`, which import adds to the flags it always gives. With it,

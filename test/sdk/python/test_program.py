@@ -464,6 +464,20 @@ def test_what_script_generation_refuses_is_refused_with_its_message(tmp_path):
     assert not (tmp_path / "home").exists()
 
 
+def test_a_fanout_family_that_script_generation_refuses_is_refused_with_its_message(tmp_path):
+    # The SDK checks only the count of a family; the rest of its rules are
+    # those of script generation
+    writer = _bash_process(tmp_path, "writer", options=[flag("-outv-ith"), opt("-n", "int")])
+    writer.interface(cmdline={"-n": "mandatory"})
+    writer.task_options(values={"-outv-ith": True}, count={"-outv-ith": "-n"})
+    prg = Program("prg")
+    prg.add(writer)
+
+    with pytest.raises(DefinitionError, match='Fanout option "-outv-ith" on "writer" can\'t be a flag'):
+        prg.write(tmp_path / "home")
+    assert not (tmp_path / "home").exists()
+
+
 # --- what the SDK refuses ------------------------------------------------------
 
 

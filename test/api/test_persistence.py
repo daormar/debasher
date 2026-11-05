@@ -5,8 +5,9 @@ program renamed loses the module of its old name, whether the old name
 comes from the topology file or from the program metadata of before the
 artifact, and nothing is deleted when the old name cannot be read; the
 scripts of an imported program are copied beside its module, except
-those that are missing, absolute or already in place; a file that cannot
-be read never counts as holding the text a save would write.
+those that are missing, absolute, outside the home directory or already
+in place; a file that cannot be read never counts as holding the text a
+save would write.
 """
 
 import os
@@ -120,6 +121,21 @@ def test_a_missing_or_absolute_script_is_not_copied_and_stops_nothing(tmp_path):
     persistence.copy_ext_alias_files(program, str(home))
 
     assert list(home.iterdir()) == []
+
+
+def test_a_script_that_climbs_out_of_the_home_directory_is_not_copied(tmp_path):
+    source = tmp_path / "source"
+    (source / "home").mkdir(parents=True)
+    (source / "tools").mkdir()
+    (source / "tools" / "t.sh").write_text("echo source\n")
+    (tmp_path / "out" / "home").mkdir(parents=True)
+    (tmp_path / "out" / "tools").mkdir()
+    (tmp_path / "out" / "tools" / "t.sh").write_text("echo theirs\n")
+    program = _program("prg", [_process("t", "../tools/t.sh")], str(source / "home"))
+
+    persistence.copy_ext_alias_files(program, str(tmp_path / "out" / "home"))
+
+    assert (tmp_path / "out" / "tools" / "t.sh").read_text() == "echo theirs\n"
 
 
 def test_a_script_saved_back_into_its_own_directory_is_left_as_it_is(tmp_path):

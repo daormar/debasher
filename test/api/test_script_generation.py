@@ -668,6 +668,39 @@ def test_an_output_family_without_count_source_read_by_two_processes_is_refused(
         generate_script(_family_program("output", ["generator", "generator"]), skip_redundant_check=True)
 
 
+def _family_option(program):
+    return program.processes[0].options[0]
+
+
+def _connect_to_the_family(program):
+    # An edge whose target is the output family of fam
+    program.edges.append(ProgramEdge(id="into", sourceProcessId="partner0", sourceOptionId="t",
+                                     targetProcessId="f", targetOptionId="fam"))
+
+
+@pytest.mark.parametrize(
+    "family_direction, change, reason",
+    [
+        ("output", lambda p: setattr(_family_option(p), "dataType", "None"), "can't be a flag"),
+        ("output", lambda p: setattr(_family_option(p), "commandLine", True), "can't itself be command-line"),
+        ("output", lambda p: setattr(_family_option(p), "fromProcessSpec", True), "can't be sourced from process spec"),
+        ("output", lambda p: setattr(_family_option(p), "channel", "value_desc"), 'must use channel "none" or "fifo"'),
+        ("output", lambda p: setattr(_family_option(p), "mirror", True), "can't be mirrored"),
+        ("output", _connect_to_the_family, "can't be connected"),
+        # A connected input on a channel is refused by the rule of every
+        # connected input, before this one
+        ("input", lambda p: (setattr(_family_option(p), "channel", "fifo"), p.edges.clear()), 'must use channel "none"'),
+        ("input", lambda p: p.edges.clear(), "must be connected"),
+    ],
+)
+def test_a_fanout_family_that_its_loop_cannot_define_is_refused(family_direction, change, reason):
+    program = _family_program(family_direction, ["generator"], count_source=True)
+    change(program)
+
+    with pytest.raises(ValueError, match=reason):
+        generate_script(program, skip_redundant_check=True)
+
+
 def test_a_family_whose_count_source_option_is_gone_is_refused_with_the_way_out():
     program = _family_program("input", ["generator"])
     program.processes[0].options[0].countSourceOptionId = "removed"

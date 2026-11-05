@@ -328,7 +328,9 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
 
     A missing source file, an absolute externalAlias (already a fixed,
     non-portable path per the engine's own warning when it's used), a
-    program with no recorded sourceDir (not imported), or source and
+    relative one that climbs out with ".." (its copy would land outside
+    the home directory, over whatever is there), a program with no
+    recorded sourceDir (not imported), or source and
     destination resolving to the same file (saving back into the
     program's own original directory) are all silently skipped rather
     than treated as an error: Save should never fail just because an
@@ -343,7 +345,7 @@ def copy_ext_alias_files(program: Program, output_dir: str) -> None:
     # A sequential process may have an external alias too
     for process in [*program.processes, *program.seqProcesses]:
         external_alias = process.additionalSpecs.externalAlias
-        if not external_alias or Path(external_alias).is_absolute():
+        if not external_alias or Path(external_alias).is_absolute() or ".." in Path(external_alias).parts:
             continue
 
         source_file = source_root / external_alias
