@@ -1020,15 +1020,14 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   does for a program of the SDK as for any other. A tasks file or a skip
   file in Python is run by the engine, through its own functions, when
   the module would run the Bash it replaces.
-- **Bash where the engine reads Bash.** What the engine itself takes as
-  Bash stays Bash in a description: the preamble of the program; the
-  value of an option, a Bash word that the engine expands when the
-  option is defined (`${process_outdir}/name`, `${array[$task_idx]}`),
-  so that the per-task values of an array or a generator are Bash words
-  even when a Python function shapes the tasks; and the bodies of `post`
-  and `reset_outfiles`, the last until the program model has a field for
-  it (see "Future work"). `post` runs inside the task after the process
-  and belongs with the code of the process, which may be in any
+- **Bash where the engine reads Bash.** What the engine itself takes as Bash
+  stays Bash in a description: the preamble of the program; the value of an
+  option, a Bash word that the engine expands when the option is defined
+  (`${process_outdir}/name`, `${array[$task_idx]}`), so that the per-task values
+  of an array or a generator are Bash words even when a Python function shapes
+  the tasks; and the bodies of `post` and `reset_outfiles` (a reset rule also
+  given as data is proposed in "Future work"). `post` runs inside the task after
+  the process and belongs with the code of the process, which may be in any
   language.
 - **The manual mode.** A whole `_define_opts` written by hand, the
   manual mode of the options handler of the editor, is not offered: it
@@ -1046,12 +1045,19 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
 
 # Future work
 
-- **The reset rule as data.** The files that a process
-  removes before a rerun are data (a list of paths) that the editor and
-  the SDK carry as a Bash body because the program model has no field
-  for them. When the program model gives them one, as it does for the
-  environments, the SDK takes them as an argument and script generation
-  writes the body.
+- **The reset rule as data.** The reset rule of a process reads the paths of the
+  files it removes from the options of the task, since the task options fix
+  their names (see "The invariant part of a process"). As data, it would be the
+  list of the labels of the output options whose files are removed. Labels do
+  not vary, so the list stays in the invariant part; script generation would
+  write the body that reads each option, and the build could check that every
+  label names an output of the process. The data would be a second way to give
+  the rule, beside the Bash body and not instead of it, as the environments are
+  given as data or as a body: a body still removes what a list of labels cannot
+  name (a directory, a pattern, the task subdirectories, a file that no option
+  names). The program model needs a field for it first. A reset rule in Python,
+  as the skip file is, is not proposed: removing files is work that Bash does
+  well.
 - **Sequential processes.** The code that a process runs as a step with
   `seq_execute`, with a name and specifications of its own (see
   "Sequential processes" in `doc/design_doc_engine.md`), is not offered
@@ -1061,36 +1067,42 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   translate it, as one more object of a description beside its
   processes: a name, a file with its code and the specifications that
   the engine accepts on it.
-- **Library programs.** Processes meant for reuse are distributed as a
-  library program: a description with its processes and a program that uses
-  them, which serves as its example and holds its tests, built and
-  distributed as its artifact (the topology file, the files of its processes
-  and its generated module) beside its description. A program reuses the
-  processes of a library program as a module reuses those of another: its
-  preamble loads the module of the library program (`load_debasher_module`,
-  found through `DEBASHER_MOD_DIR`), its description imports the processes
-  for their invariant part and gives each its interface and its task
-  options, the process takes its code from the loaded module, and nothing of
-  the library program is copied into the program. A library program is thus
-  one more program, not a new kind of artifact, and it is found by name
-  along a search path: today as a module, and, once the engine reads the
-  artifact itself instead of the generated module, as an artifact. It
-  replaces the copy of the files of a library process into the home
-  directory of the program, which the SDK writes there by their paths
-  relative to the base directory of the process: a copy written again by
-  every build looks editable and is not, and two files of library processes
-  that land on one path of the artifact with different texts are refused
-  (see "Writing the program"). Left open: how the topology file of a program
-  refers to a library program (a line of its preamble, or a key of its own);
-  how a run from the command line finds it (today only through a
-  `DEBASHER_MOD_DIR` that the user sets); what the module of the program
-  writes for a library process (only its variable part, defined again after
-  the module of the library program is loaded); how the editor shows a
-  library process (read only, as a process of a loaded module); how a Python
-  package carries the description and the built artifact, and checks that
-  both come from the same source (a digest of the description); and how
-  `debasher_build` treats a description that imports the program of a
-  library program beside its own.
+- **Library programs.** Processes meant for reuse are distributed as a library
+  program: a description with its processes and a program that uses them, which
+  serves as its example and holds its tests, built and distributed as its
+  artifact (the topology file, the files of its processes and its generated
+  module) beside its description. A program reuses the processes of a library
+  program as a module reuses those of another: its preamble loads the module of
+  the library program (`load_debasher_module`, found through
+  `DEBASHER_MOD_DIR`), its description imports the processes for their invariant
+  part and gives each its interface and its task options, the process takes its
+  code from the loaded module, and nothing of the library program is copied into
+  the program. A library program is thus one more program, not a new kind of
+  artifact, and it is found by name along a search path: today as a module, and,
+  once the engine reads the artifact itself instead of the generated module, as
+  an artifact.
+
+  It replaces the copy of the files of a library process into the home directory
+  of the program, which the SDK writes there by their paths relative to the base
+  directory of the process. A copy written again by every build looks editable
+  and is not, and two files of library processes that land on one path of the
+  artifact with different texts are refused (see "Writing the program").
+
+  Left open:
+
+  - how the topology file of a program refers to a library program (a line of
+    its preamble, or a key of its own);
+  - how a run from the command line finds it (today only through a
+    `DEBASHER_MOD_DIR` that the user sets);
+  - what the module of the program writes for a library process (only its
+    variable part, defined again after the module of the library program is
+    loaded);
+  - how the editor shows a library process (read only, as a process of a loaded
+    module);
+  - how a Python package carries the description and the built artifact, and
+    checks that both come from the same source (a digest of the description);
+  - how `debasher_build` treats a description that imports the program of a
+    library program beside its own.
 - **Namespaces of library processes.** A process defined in a Python module of
   the user is added to several programs as a process of a loaded module is, but
   gets no namespace. The namespace of DeBasher is a naming convention kept in
@@ -1100,6 +1112,17 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
   process gets its prefix from an explicit namespace object, never from the path
   of the Python module that defines it, which is a detail of the installation
   and not a name.
-- **Processes as decorated functions.** A Python function in the
-  description itself, whose source the build extracts to a process file,
-  for a process too small for a file of its own.
+- **Tasks and skip functions in the description.** A tasks file and a skip file
+  in Python each hold one function with a contract: `tasks(run)` returns the
+  elements of the array or the number of tasks of a generator, and `skip(task)`
+  says whether a task is skipped. Such a function could be written in the
+  description itself, for one too small for a file of its own, and given as the
+  function (`array=`, `generator=`, `skip=`) instead of a file; the build would
+  write its source as the file that the engine already reads. The function has
+  to be self-contained, with its imports inside it and no name of the
+  description, since the engine runs it (when it prepares the run, or a task)
+  and the build does not. The body of a process is left out: a process file in
+  Python is a whole script that reads its options from its arguments, and a
+  function would need a contract that does not exist. `post` and
+  `reset_outfiles` stay Bash, which is what the engine runs them as (see "Bash
+  where the engine reads Bash").
