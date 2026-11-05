@@ -68,6 +68,12 @@ entries below that refer to them.
   the topology file `program.yaml` and the files it names, in its home
   directory (see "The artifact: the topology file and the process files"
   in `doc/design_doc_webui.md`).
+- **digest**: as in the design of the web UI: a hash of the topology file
+  and of every file it names, which loading returns with the program and
+  which a write names back, so that a write over an artifact changed since
+  it was loaded is refused (see "The digest of the artifact" in
+  `doc/design_doc_webui.md`). The program model that the SDK builds names
+  none.
 - **reserved name**: as in the design of the web UI: a file or directory
   name that the engine or the web UI manages in a home directory (see
   "Reserved names and user files" in `doc/design_doc_webui.md`).
@@ -75,6 +81,10 @@ entries below that refer to them.
   a program lives, with its artifact, its generated module and its user
   files. The SDK writes a program into one, by default the directory of
   the description.
+- **local state**: as in the design of the web UI: what the editor keeps
+  on this machine for a program and the artifact does not hold: the lock
+  and the output directory, in `.debasher/`. A write of the SDK keeps the
+  output directory recorded there.
 - **module**: as in the design of the engine: the Bash file with the
   processes as suffixed functions and the program as its `_program`
   method. The SDK never writes one itself: script generation writes it
@@ -712,27 +722,51 @@ period of snapshots given to a general program is kept, and read by nobody.
 
 # Writing the program
 
-`Program.write(home_dir)` writes the program into a home directory as Save does
-in the editor: it builds the program model, calls `persistence.save` of the API,
-which generates the module and writes the artifact and the module under the lock
-and with the digest that the design of the web UI describes (see "The digest of
-the artifact" there), copies the scripts, and returns the path of the module. It
-raises `DefinitionError`, the one error of the SDK, for what it, loading, saving
-or script generation refuses, and nothing is written then: the model is built
-and the scripts are checked before anything touches the directory, and
-`persistence.save` generates the module before it writes. The files of the
-artifact are written where the description had them, by the paths of the process
-files, the tasks files and the method files relative to the base directory of
-each process (a file outside it gives the name of the file alone), each only
-when its content differs from the file there, so that a program written into the
-directory of the description leaves its files as they are, and a program written
-elsewhere gets a copy of each. Two files whose paths in the artifact are the
-same (two files named `post.sh` in two directories outside the base directory)
-are refused when the model is built if their texts differ, as saving refuses
-them (see "The process files" in `doc/design_doc_webui.md`). When the program is
-written, a file, or a script copied beside the module, whose path is that of the
-module or of the topology file, or holds a reserved name, is refused before
-anything is written.
+`Program.write(home_dir)` writes the program into a home directory, as Save does
+in the editor, and returns the path of the module. It builds the program model
+and gives it to `persistence.save` of the API. `save` generates the module, then
+writes the artifact and the module under the lock of the home directory. `write`
+then copies the scripts beside the module.
+
+What the SDK, loading, saving or script generation refuses is raised as
+`DefinitionError`, the one error of the SDK, and nothing is written then. The
+program model is built, and every file of the processes and every script is
+read, before anything touches the directory. `save` generates the module and
+checks every path of the artifact before it writes.
+
+The files of the artifact are written where the description had them, by the
+paths of the process files, the tasks files and the method files relative to the
+base directory of each process. A file outside that base directory is written at
+the top of the home directory, under its name alone. Each file is written only
+when its content differs from the file already at that path: a program written
+into the directory of the description leaves its files as they are, and a
+program written elsewhere gets a copy of each. Two files whose paths in the
+artifact are the same (two files named `post.sh` in two directories outside the
+base directory) are refused when the model is built if their texts differ, as
+saving refuses them (see "The process files" in `doc/design_doc_webui.md`).
+Before anything is written, a file or a script copied beside the module is
+refused when its path is that of the module or of the topology file, or holds a
+reserved name.
+
+The description is the one place where the program is defined. The program model
+that the SDK builds names no digest and no home directory, so `save` takes each
+write as a save into another directory and replaces what the artifact holds.
+Only the output directory is kept: it is local state, not part of the program,
+so `write` gives `save` the one recorded there. A program built from a
+description, changed in the editor and built again loses the change made in the
+editor, in silence; an editor tab still open on the program gets a conflict on
+its next Save (see "The digest of the artifact" in `doc/design_doc_webui.md`). A
+change to a program built from a description is made in the description.
+
+The scripts are files of the artifact, and part of its digest, but `write`
+copies them after `save` has returned, outside its lock. `save` cannot copy them
+itself: it takes every script from the directory that an imported program came
+from (`sourceDir`, which the SDK leaves blank), while a script of the SDK is
+relative to the base directory of its process. The digest that `save` returns is
+thus computed before the scripts are copied: it lacks a script copied for the
+first time, and holds the old text of one copied over an older copy. Nothing
+uses it: the SDK drops it, and the digest of an artifact is always computed
+again from its files when the program is loaded.
 
 The external alias of a process names its script as the path was given, when it
 is relative and stays below the base directory of the process

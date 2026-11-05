@@ -451,6 +451,9 @@ class Program:
 
         home = Path(home_dir)
         model = self.to_model()
+        # The output directory is local state of the editor on this machine,
+        # not part of the program: a write keeps the one recorded there
+        model.outputDir = persistence.saved_output_dir(str(home))
         # to_model has read every script, and save checks the path of each
         # one before it writes anything
         copies = self._script_copies()

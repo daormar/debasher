@@ -434,6 +434,22 @@ def test_writing_the_same_program_again_keeps_its_digest(tmp_path):
     assert persistence.load_program(str(home)).digest == digest
 
 
+def test_writing_keeps_the_output_directory_that_the_editor_recorded(tmp_path):
+    # The output directory is local state of the editor, not part of the
+    # program that the description defines
+    prg = Program("prg")
+    prg.add(_bash_process(tmp_path, "work"))
+    home = tmp_path / "home"
+    prg.write(home)
+    in_the_editor = persistence.load_program(str(home))
+    in_the_editor.outputDir = str(tmp_path / "out")
+    persistence.save(str(home), in_the_editor)
+
+    prg.write(home)
+
+    assert persistence.saved_output_dir(str(home)) == str(tmp_path / "out")
+
+
 def test_writing_a_changed_program_changes_its_digest(tmp_path):
     prg = Program("prg")
     work = prg.add(_bash_process(tmp_path, "work", options=[opt("-n", "int", "how many")]))
