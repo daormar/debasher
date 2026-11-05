@@ -784,6 +784,30 @@ def test_building_runs_none_of_the_code_of_the_processes(tmp_path):
     assert not marker.exists()
 
 
+def _proc_info_tool():
+    from api import paths
+
+    return paths.find_libexec_tool("debasher_get_proc_info")
+
+
+@pytest.mark.skipif(_proc_info_tool() is None, reason="the engine tool debasher_get_proc_info is not found")
+def test_building_runs_the_bash_of_the_preamble_and_of_a_process_file_it_defines_outside_functions(tmp_path):
+    # The exception to the guarantee: to leave out the code that a loaded
+    # module provides, script generation sources the preamble and, when it
+    # defines the process, the Bash process file. Bash outside functions
+    # runs, as it does when the program runs; the code of a process does not.
+    preamble_ran, file_ran, body_ran = tmp_path / "preamble_ran", tmp_path / "file_ran", tmp_path / "body_ran"
+    code = _code(tmp_path, "work.sh", f"touch {file_ran}\nwork()\n{{\n    touch {body_ran}\n}}\n")
+    prg = Program("prg", preamble=f"touch {preamble_ran}\nwork()\n{{\n    :\n}}")
+    prg.add(Process("work", code=code))
+
+    prg.write(tmp_path / "home")
+
+    assert preamble_ran.exists()
+    assert file_ran.exists()
+    assert not body_ran.exists()
+
+
 def test_a_refused_program_leaves_the_home_directory_as_it_was(tmp_path):
     home = tmp_path / "home"
     good = Program("prg")

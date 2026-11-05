@@ -984,11 +984,19 @@ Nothing of the library imports the routers of the API or FastAPI. It uses:
 - **Deterministic.** Two builds of the same description give the same
   artifact: ids come from names, positions from the layout, and nothing
   from the clock or from randomness.
-- **Nothing runs.** Building a program runs no process and no engine
-  tool but `debasher_get_proc_info`, which reads a module and runs
-  nothing of it. The description is loaded as a Python module, so the
-  code it holds runs as any Python file does; the code of the processes
-  is read, never run.
+- **No process runs.** Building a program runs no process, no code of a process
+  (its body, its tasks file, its skip file, its methods) and no engine tool but
+  `debasher_get_proc_info`. The one exception is the Bash outside functions of
+  the preamble and of a Bash process file. To leave out the code of a process
+  that a module loaded by the preamble provides, script generation has
+  `debasher_get_proc_info` source the preamble once for each process with code,
+  which runs the Bash outside functions of the preamble and of the modules it
+  loads; when the preamble or a module it loads defines the process, it also
+  sources the Bash process file, which runs the Bash outside its functions. All
+  of it runs anyway when the program runs, and a preamble that only loads
+  modules and defines functions, of modules that only define functions, has no
+  effect at build time. The description is loaded as a Python module, so the
+  code it holds runs as any Python file does.
 - **No Bash of its own.** The SDK writes no line of the module: every rule
   of the translation lives in script generation, and what it refuses it
   refuses for the SDK with the same message.
