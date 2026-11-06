@@ -1460,6 +1460,13 @@ if [ ${builtin_sched_oneshot_given} -eq 1 ]; then
     check_oneshot_precondition || exit 1
 fi
 
+# A fifo between two tasks of an array that its throttle cannot launch
+# together would hang the built-in scheduler (see
+# debasher::_check_task_fifos_fit_throttle)
+if [ "$(debasher::_get_scheduler)" = "${DEBASHER_BUILTIN_SCHEDULER}" ]; then
+    debasher::_check_task_fifos_fit_throttle || exit 1
+fi
+
 # Generate graphs
 if [ "${gen_proc_graph_given}" -eq 1 ]; then
     gen_process_graph "${prg_file_pref}" "${procgraph_file_prefix}" || exit 1

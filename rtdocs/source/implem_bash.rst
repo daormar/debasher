@@ -1505,7 +1505,14 @@ pairs, second argument):
   attributes (number of nodes, billing account, and partition/queue to
   submit to), only meaningful when running under the SLURM scheduler.
 * ``throttle``: caps how many tasks of an array/generator process are
-  scheduled at the same time.
+  scheduled at the same time (``--dflt-throttle`` of ``debasher_exec``
+  gives it to every process whose specifications give none). Under the
+  built-in scheduler, an array with a FIFO between two of its own tasks
+  needs every task running at once: a throttle below its number of
+  tasks stops the run when it is prepared, since a task waiting on that
+  FIFO for a task held back would never end. A task that reads a FIFO
+  it writes itself is not concerned, and nothing is checked between two
+  different arrays.
 * ``batch_sched`` and the limits of a node (``input_log_max_mb``,
   ``out_backlog_max_mb``, ``out_backlog_fail_mb``,
   ``gil_switch_interval_ms``, ``heartbeat_timeout_s``,

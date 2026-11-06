@@ -2110,6 +2110,22 @@ other end needs, the other end never fits: with 2 CPUs, a writer that asks for
 1 and a reader that asks for 2 and depends on it with `after`, the reader never
 starts and the run does not end.
 
+The rule that keeps an end out of a round looks at the throttle of an array
+(its own, or the one given with `--dflt-throttle`) only to see whether it leaves
+room for one more task, not whether it lets the other end through before this
+one ends: the throttle holds back the tasks of the array beyond its value until
+one of those launched ends, whatever their FIFOs. Between two tasks of the same
+array, a FIFO and a throttle smaller than the number of tasks can hang the run,
+when the task launched first waits on a FIFO whose other end the throttle holds
+back; such a program is refused under the built-in scheduler when the run is
+prepared, whichever tasks the FIFO joins. Between an array and another process,
+nothing is checked: the throttles hang a run only when the processes form a
+cycle through FIFOs whose ends the throttles keep apart, for example a FIFO
+from task 0 of `a` to task 1 of `b` and another from task 0 of `b` to task 1 of
+`a`, with a throttle of 1 on each. That is a limit of the design, and the
+throttle of an array whose tasks meet another process through FIFOs is best
+left out, or set to the number of its tasks.
+
 The Slurm scheduler cannot run both ends together: it places each job on a node
 of its own choosing, and the two ends of a FIFO only meet on the same machine. A
 program that uses FIFOs is refused under the Slurm scheduler when the run is
@@ -3671,9 +3687,11 @@ leaves, by design, to the program or to whoever runs it.
    round, or one once the other runs, or once the other only waits for processes
    to start or to have every task cancelled, or both are cancelled; a
    dependency other than `none` or `after` between them, or between two
-   processes of a chain of FIFOs, is refused when the run is prepared, and a
-   program with FIFOs is refused under the Slurm scheduler (see "Running both
-   ends together" and "Tasks that will not be launched").
+   processes of a chain of FIFOs, is refused when the run is prepared, and so
+   is an array process with a FIFO between two of its tasks and a throttle
+   smaller than its number of tasks; a program with FIFOs is refused under the
+   Slurm scheduler (see "Running both ends together" and "Tasks that will not
+   be launched").
 10. At the start of a run, the two ends of every FIFO are in the same state:
     no run launches an end whose other end has finished and will not run again
     (see "Running both ends together").
@@ -3759,7 +3777,9 @@ leaves, by design, to the program or to whoever runs it.
   rerun.
 - **Cycles through FIFOs.** Whether a loop through FIFOs ends, and whether its
   processes can block waiting for each other, is decided by the protocol
-  between the processes, not by the engine (see "Cycles through FIFOs").
+  between the processes, not by the engine (see "Cycles through FIFOs"). The
+  throttles of its arrays can also keep two ends of its FIFOs apart and hang
+  it; the engine does not check it (see "Running both ends together").
 - **When one end of a FIFO fails.** The engine does not watch the other end,
   which can block for good; stopping it is left to `debasher_stop` (see "When
   one end fails").

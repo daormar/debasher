@@ -626,6 +626,38 @@ debasher::_check_fifos_read_alike()
 }
 
 ########
+# Refuses an array with a fifo between two of its own tasks and a throttle
+# smaller than its number of tasks, which the built-in scheduler would run
+# into a hang: it launches the two ends of a fifo together, but the
+# throttle holds back the tasks of an array beyond its value until one of
+# those launched ends, and a task that waits on a fifo whose other end is
+# held back never ends. A task that reads a fifo it writes itself is its
+# own other end, and is not refused. Between two arrays a throttle hangs a
+# run only on a circular wait, which this check leaves out.
+debasher::_check_task_fifos_fit_throttle()
+{
+    local sep="${DEBASHER_ASSOC_ARRAY_ELEM_SEP}"
+
+    local -a pairs=()
+    debasher::_get_fifo_end_pairs pairs
+
+    local pair owner reader augm_fifoname
+    for pair in "${pairs[@]}"; do
+        read -r owner reader augm_fifoname <<< "${pair}"
+        local processname="${owner%%${sep}*}"
+        [ "${processname}" = "${reader%%${sep}*}" ] || continue
+        local process_spec="${DEBASHER_FINAL_PROCESS_SPEC[${processname}]}"
+        debasher::_throttle_lets_all_tasks_run "${processname}" "${process_spec}" && continue
+
+        local throttle=$(debasher::_get_scheduler_throttle "$(debasher::_extract_throttle_from_process_spec "${process_spec}")")
+        local num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
+        # The first such fifo stops the check
+        echo "Error: process ${processname} has a fifo between two of its tasks (${augm_fifoname}, written by task ${owner##*${sep}} and read by task ${reader##*${sep}}) and a throttle of ${throttle} for its ${num_tasks} tasks: a task that waits on that fifo for a task that the throttle holds back would never end; remove the throttle (the throttle of its specifications, or --dflt-throttle) or raise it to the number of tasks" >&2
+        return 1
+    done
+}
+
+########
 # Fills an associative array, keyed by <process><sep><producer>, with the
 # dependency types of the final process specification other than none and
 # after, those that wait for the producer to end. With two elements on the

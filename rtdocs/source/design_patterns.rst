@@ -323,5 +323,12 @@ consumer gives ``after`` for that file (see the
 ``debasher_define_opt_deps_example`` example). A program with FIFOs
 runs under the built-in scheduler.
 
+The tasks of a single array can also stream to each other, one task
+declaring a FIFO that another task of the same array reads. Both ends
+have to run together, so such an array cannot have a throttle below its
+number of tasks: the engine refuses it when the run is prepared.
+Between two different arrays the engine checks nothing, and a throttle
+there hangs the run when the tasks wait on each other in a circle.
+
 In the web interface, the output of the producer is given the FIFO
 channel, and its connection to the consumer is drawn dashed.

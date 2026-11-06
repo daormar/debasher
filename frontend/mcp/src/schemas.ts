@@ -151,7 +151,7 @@ export const executionOptions = z.object({
   builtinSchedCpus: z.string().optional(),
   builtinSchedMem: z.string().optional(),
   dfltNodes: z.string().optional(),
-  dfltThrottle: z.string().optional(),
+  dfltThrottle: z.string().optional().describe("The most tasks of a process of several tasks that run at once, empty for no bound. Under BUILTIN, a process with a FIFO between two of its own tasks needs it empty or no smaller than its number of tasks, or the preparation of the run stops."),
   rerunOutdatedProcs: z.boolean().optional(),
   condaSupport: z.boolean().optional(),
   dockerSupport: z.boolean().optional(),

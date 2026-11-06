@@ -109,8 +109,10 @@ are useful for that purpose:
   ``define_opt_deps`` method in the :ref:`implem_bash` Section), a
   ``define_opt_deps`` method that ends with a status other than 0, and an
   attribute in the specifications of a process that the engine does not
-  read, or one written in the other part. The
-  files that describe an
+  read, or one written in the other part. With the built-in scheduler,
+  it also refuses an array with a FIFO between two of its own tasks and
+  a throttle below its number of tasks (see ``throttle`` in the
+  :ref:`implem_bash` Section). The files that describe an
   execution (see :ref:`outdstruct`) go into a temporary directory, which
   it removes, so it leaves those of an earlier execution as they were,
   and it leaves no graph in ``__graphs__``.

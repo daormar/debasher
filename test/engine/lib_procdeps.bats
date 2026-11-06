@@ -463,6 +463,57 @@ setup() {
     [ -z "${output}" ]
 }
 
+# --- a fifo between two tasks of an array and its throttle --------------
+
+# $1: process, $2: number of tasks, $3: its throttle (none if omitted)
+set_up_array() {
+    add_process "$1" fbpprocess "$2"
+    # debasher_lib.sh declares them, but inside setup() they stay local
+    declare -g DEBASHER_ARRAY_TASK_NOTHROTTLE=0
+    declare -g DEBASHER_DEFAULT_ARRAY_TASK_THROTTLE=0
+    declare -gA DEBASHER_FINAL_PROCESS_SPEC
+    DEBASHER_FINAL_PROCESS_SPEC["$1"]="$1 cpus=1 mem=32 time=00:01:00${3:+ throttle=$3}"
+}
+
+@test "debasher::_check_task_fifos_fit_throttle refuses a fifo between two tasks of an array whose throttle cannot launch them together" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    set_up_array p 2 1
+    add_fifo p/p_0 "$(end_of p 0)" "$(end_of p 1)" "" -outf
+    add_fifo p/p_1 "$(end_of p 1)" "$(end_of p 0)" "" -outf
+
+    run debasher::_check_task_fifos_fit_throttle
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: process p has a fifo between two of its tasks"* ]]
+    [[ "${output}" == *"a throttle of 1 for its 2 tasks"* ]]
+}
+
+@test "debasher::_check_task_fifos_fit_throttle accepts a fifo between two tasks of an array with no throttle, or one as large as its tasks" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    set_up_array p 2
+    set_up_array q 2 2
+    add_fifo p/p_0 "$(end_of p 0)" "$(end_of p 1)" "" -outf
+    add_fifo q/q_0 "$(end_of q 0)" "$(end_of q 1)" "" -outf
+
+    run debasher::_check_task_fifos_fit_throttle
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_task_fifos_fit_throttle accepts a task that reads its own fifo, and a fifo between two arrays" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    set_up_array p 2 1
+    set_up_array c 2 1
+    add_fifo p/p_0 "$(end_of p 0)" "$(end_of p 0)" "" -outf
+    add_fifo p/p_1 "$(end_of p 1)" "$(end_of c 1)" "" -outf
+
+    run debasher::_check_task_fifos_fit_throttle
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
 # --- dependencies between the two ends of a fifo --------------------------
 
 # Registers a process whose final specification has the dependencies $2;

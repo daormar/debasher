@@ -130,10 +130,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Execution options.** `scheduler` is `BUILTIN` (the default, on this
   machine) or `SLURM`; `builtinSchedCpus` and `builtinSchedMem` bound the
   built-in scheduler; `dfltThrottle` bounds the tasks of an array running at
-  once; `condaSupport` and `dockerSupport` enable the environments that
-  processes declare; `rerunOutdatedProcs` runs again the processes that
-  finished before the last change of the generated script (see "Running and
-  following").
+  once (not below the number of tasks of a process with a FIFO between two of
+  its own tasks, see "FIFOs between processes of several tasks");
+  `condaSupport` and `dockerSupport` enable the environments that processes
+  declare; `rerunOutdatedProcs` runs again the processes that finished before
+  the last change of the generated script (see "Running and following").
 - **Program options.** The values of the command-line options for the next
   run, by label; setting them replaces them all. An empty value leaves the
   option out, as not given. A value cannot start with `-` or `--` followed by
@@ -386,6 +387,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   task or for none: a reader with fewer tasks than the writer would leave the
   extra writers blocked, so the preparation of the run stops instead. Give
   the reader the number of tasks of the writer with `get_process_num_tasks`.
+  A FIFO between two tasks of the same process (only a `manual` handler makes
+  one; a task that reads its own FIFO excepted) needs all its tasks running at
+  once: under the built-in scheduler, a `dfltThrottle` smaller than its number
+  of tasks stops the preparation of the run. Between two processes nothing is
+  checked, and a throttle can hang a run whose tasks wait on each other in a
+  circle.
 - **How the canvas draws it** (`display` of `connect`, or
   `set_connection_display`): a line, or a label edge, a stub at each end that
   names the other. Use a label edge for a connection whose line would cross
