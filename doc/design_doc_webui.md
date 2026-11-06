@@ -3515,17 +3515,17 @@ a reader takes a line that is not JSON for the fragment of a writer that died in
 the middle of a message, and a second one in a row kills its thread, and with it
 the node.
 
-For the same reason a line is never written in part. The backend writes it
-with a single `write()` on a FIFO opened without blocking, which POSIX makes
-atomic up to `PIPE_BUF` bytes (at least 512, 4096 on Linux): the whole line
-goes into the pipe or nothing does, even when the attempt is given up, and it
-never interleaves with a line of another writer of the same input. A message
-whose line is longer than that is refused. The open and the write are tried
-again for eight seconds, and what makes them fail says what is wrong: nothing
-holds the read end of the FIFO (its node is down, and no `Supervisor` holds
-it), or the pipe is full (its node is not reading it). A write ends once the
-line is in the pipe, not once the node has logged it, which its input log
-shows afterwards.
+For the same reason a line is never written in part. The backend writes it with
+a single `write()` on a FIFO opened without blocking, which POSIX makes atomic
+up to `PIPE_BUF` bytes (at least 512, 4096 on Linux): the whole line goes into
+the pipe or nothing does, even when the attempt is given up, and it never
+interleaves with a line of another writer of the same input. A message whose
+line is longer than that is refused. The open and the write are tried again for
+eight seconds, and what makes them fail says what is wrong: nothing holds the
+read end of the FIFO (its node is down: the `Supervisor` holds only the business
+channels between two nodes, never an external input), or the pipe is full (its
+node is not reading it). A write ends once the line is in the pipe, not once the
+node has logged it, which its input log shows afterwards.
 
 The web UI never writes a `CLOSE` into an external input. A `CLOSE` closes the
 port for good, across every resume until the program state is reset, and the
@@ -3542,12 +3542,12 @@ replacement characters where it is not UTF-8). The frontend shows the payload of
 a `DATA`, with its sequence number, marks a `BARRIER` as the marker of a round
 and a `CLOSE` as the end of the writer. The backend opens the FIFO without
 blocking, so opening it never waits, and a read sees no end of file while the
-node or the `Supervisor` holds the FIFO (see "Ghost connections" in
-`doc/design_doc_resident.md`); with neither, a read finds nothing, as when
-nothing has been written. A read waits two seconds for the first byte of a line,
-and the frontend reads again at once. A line started is read to its end, within
-thirty seconds: its writer writes it whole, and only a writer that died in the
-middle of it leaves it cut, which the dialog reports, pausing the reading.
+node holds the FIFO (see "Ghost connections" in `doc/design_doc_resident.md`);
+without it, a read finds nothing, as when nothing has been written. A read waits
+two seconds for the first byte of a line, and the frontend reads again at once.
+A line started is read to its end, within thirty seconds: its writer writes it
+whole, and only a writer that died in the middle of it leaves it cut, which the
+dialog reports, pausing the reading.
 
 Reading takes the message from the channel, as it does for a general program,
 and so competes with any other reader outside the program. The user can pause

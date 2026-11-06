@@ -109,8 +109,7 @@ def write_line(path: Path, line: bytes, timeout_secs: float = WRITE_TIMEOUT_SECS
                 raise FifoError(f"Cannot open {path}: {exc.strerror}") from None
             if time.monotonic() >= deadline:
                 raise FifoError(
-                    "Nothing holds the read end of the FIFO: its node is down, "
-                    "and no Supervisor holds it."
+                    "Nothing holds the read end of the FIFO: its node is down."
                 ) from None
             time.sleep(_RETRY_SECS)
     try:

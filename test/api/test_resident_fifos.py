@@ -91,7 +91,9 @@ def test_a_line_reaches_the_reader_whole(fifo):
 
 
 def test_a_fifo_with_nothing_on_its_read_end_is_reported(fifo):
-    with pytest.raises(FifoError, match="Nothing holds the read end"):
+    # An external input is held by its node alone: the Supervisor holds only
+    # the channels between two nodes.
+    with pytest.raises(FifoError, match="Nothing holds the read end of the FIFO: its node is down.$"):
         resident_fifos.write_line(fifo, resident_fifos.data_line(1), timeout_secs=0.3)
 
 
