@@ -734,6 +734,14 @@ class FBPProcess(_PortWorker):
         # what it sends then must be heard.
         return tag not in self.CONTROL_PORTS
 
+    def _types_of_port(self, tag):
+        # A control port carries only commands; a business port, and an
+        # external one (whose source may write the marker of a round),
+        # messages and markers.
+        if tag in self.CONTROL_PORTS:
+            return (TYPE_INTERACT,)
+        return (TYPE_DATA, TYPE_BARRIER)
+
     def _on_arrival(self, tag, envelope, line):
         self._on_arrivals(tag, [(envelope, line)])
 

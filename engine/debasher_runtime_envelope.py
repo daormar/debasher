@@ -131,7 +131,8 @@ def decode_envelope(line):
     Envelope(type, payload, seq) namedtuple ("seq" is None unless the line
     carries one, which only a numbered DATA does). Raises
     json.JSONDecodeError on malformed JSON, ValueError if "type"/"payload"
-    is missing or "type" is not one of the valid envelope types.
+    is missing, "type" is not one of the valid envelope types, or a field
+    has the wrong type for its envelope (see _check_fields).
     """
     return _envelope_from_obj(json.loads(line), line)
 
@@ -150,4 +151,40 @@ def _envelope_from_obj(obj, what):
     if envelope_type not in _VALID_TYPES:
         raise ValueError(f"unknown envelope type: {envelope_type!r}")
 
+    problem = _check_fields(envelope_type, obj["payload"], obj.get("seq"))
+    if problem is not None:
+        raise ValueError(f"malformed {envelope_type} envelope, {problem}: {what!r}")
+
     return Envelope(type=envelope_type, payload=obj["payload"], seq=obj.get("seq"))
+
+
+def _is_int(value):
+    # A bool is an int to Python, never to the protocol.
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _check_fields(envelope_type, payload, seq):
+    """
+    What is wrong with the fields of an envelope of `envelope_type`, or
+    None: the fields that the engine reads, with the types that the
+    encoders above give them. The arguments of an INTERACT are left to the
+    handler of its command, since the catalog of commands is open.
+    """
+    if seq is not None and not _is_int(seq):
+        return f"its seq {seq!r} is not an integer"
+    if envelope_type == TYPE_DATA:
+        return None
+    if not isinstance(payload, dict):
+        return f"its payload {payload!r} is not an object"
+    if envelope_type == TYPE_BARRIER:
+        if not _is_int(payload.get("epoch")):
+            return f"its epoch {payload.get('epoch')!r} is not an integer"
+        if not isinstance(payload.get("halt"), bool):
+            return f"its halt {payload.get('halt')!r} is not a boolean"
+    elif envelope_type == TYPE_INTERACT:
+        if not isinstance(payload.get("command"), str):
+            return f"its command {payload.get('command')!r} is not a string"
+    elif envelope_type == TYPE_CLOSE:
+        if "last_seq" in payload and not _is_int(payload["last_seq"]):
+            return f"its last_seq {payload['last_seq']!r} is not an integer"
+    return None

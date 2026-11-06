@@ -108,6 +108,7 @@ describe("buildNodeCodePrompt", () => {
     expect(prompt).toContain("- `-label` (configuration option, string)\n  Its value, a string, is `self.opts[\"label\"]`.\n  Its value: `sum`.");
     expect(prompt).toContain("- `-verbose` (flag)\n  `self.opts[\"verbose\"]` is True when the flag is given; list `\"verbose\"` in the class attribute `FLAGS`.");
     expect(prompt).toContain("- `-ext` (external input, port `ext`)\n  resets from outside\n  Written by someone outside the program");
+    expect(prompt).toContain("so `process_data` only receives the payload of a `DATA`: any JSON value that the writer chose, whose shape the code checks itself.");
     expect(prompt).toContain("- `-outsum` (business output, port `outsum`)\n  the running sum\n  Send on it with `self.send_data(\"outsum\", payload)`, from `process_data` only.\n  Nothing in the program reads it: someone outside the program reads it.");
   });
 

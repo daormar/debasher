@@ -101,8 +101,10 @@ do the entries below that refer to it.
 - **channel**: the one-way connection from an output port of one node to an
   input port of another, made of a FIFO (a named pipe created by the engine). A
   **self-loop** joins two ports of the same node. A channel delivers envelopes
-  in the order in which they were sent. Business channels carry `DATA` and
-  `BARRIER`; the channels to and from the `Supervisor` carry only `INTERACT`.
+  in the order in which they were sent. Besides `HELLO` and `CLOSE`, which
+  every writer of the engine sends, business channels and channels to an
+  external port carry `DATA` and `BARRIER`, and the heartbeat channels and the
+  channels of commands carry only `INTERACT` (see "Channel topology").
 - **fifo owner**: the FIFO owner, as defined in the design of the engine: the
   process whose `define_fifo_opt` (or `define_fifo_opt_generator`) creates a
   FIFO. It is the process that writes it, except for a fifo tagged `--control`
@@ -383,7 +385,9 @@ do the entries below that refer to it.
 ## Threads of a node
 
 - **reader thread**: one per input port. It reads and decodes lines, consumes
-  `HELLO`, and hands everything else to the inbound queue (with the input-log
+  `HELLO`, drops with a warning an envelope that is malformed or of a type its
+  port does not carry (see "Fields of each type" and "Channel topology"), and
+  hands everything else to the inbound queue (with the input-log
   redesign, after appending the record to the log). After a `CLOSE` it goes on
   reading but drops everything that follows; only `stop_threads()` ends it.
 - **writer thread**: one per output port, with its own outbound queue. It sends
@@ -890,8 +894,7 @@ interpreting `payload`):
 - `INTERACT.payload.command`/`args`: an open catalog, extended as needed by
   whichever sections trigger it (`start_snapshot`, `shutdown`, `heartbeat`,
   `checkpoint_saved`, ...). `start_snapshot` and `shutdown` take an optional
-  `args.epoch`, an integer (see numbered trigger in the Glossary); a trigger
-  whose epoch is not an integer is ignored with a warning.
+  `args.epoch`, an integer (see numbered trigger in the Glossary).
 - `CLOSE.payload.last_seq`: the sender's last `out_seq` for that channel, left
   out when the sender does not number what it sends (see `CLOSE` in the
   Glossary). Sent by a writer when it has finished for good; a halt sends
@@ -906,6 +909,20 @@ interpreting `payload`):
   dedicated to that FIFO); it gets attached once the message enters the
   in-memory internal queue, not in the wire format.
 
+The reader thread checks these fields before anything else sees the envelope:
+`seq` and `last_seq` are integers when present, `epoch` is an integer and
+`halt` a boolean, `command` is a string, and the payload of every type but
+`DATA` is an object. An envelope that is JSON but malformed (a field of the
+wrong type, a missing key, an unknown type) is dropped with a warning, and the
+reader goes on, unless it follows the fragment of a dead writer, which only a
+`HELLO` excuses. Only a writer outside the program can send one, and nothing of
+it can be recovered: what it meant to say is lost, with the warning as its only
+trace. A line that is not JSON is another matter: it is dropped only as the
+fragment of a dead writer before a `HELLO`, and otherwise ends the reader (see
+"Wire format"). The arguments of a command are checked by its handler, since
+the catalog is open: a trigger whose epoch is not an integer is ignored with a
+warning.
+
 ## Channel topology
 
 Which types a channel carries depends on its kind (see "Channel kinds declared
@@ -915,7 +932,12 @@ of channel: every writer thread of the engine sends `HELLO` when it starts and
 the program may leave both out). The other three types split by kind: `DATA`
 and `BARRIER` travel only on business channels and on channels to an external
 port, `INTERACT` only on the heartbeat channels and on the channels of
-commands, so the two never share a channel:
+commands, so the two never share a channel. The engine and the runtime write
+them so, and the reader thread of each port checks it, since a writer outside
+the program may not: a control port, and every channel of the `Supervisor`,
+takes only `INTERACT`; a business port and an external port take `DATA` and
+`BARRIER`. Any other type is dropped with a warning, as a malformed envelope
+is (see "Fields of each type"). Channel by channel:
 
 - Between business processes (`FBPProcess`), the normal FBP graph channels
   carry `DATA`/`CLOSE`/`HELLO` in normal operation, and `BARRIER` interleaved
@@ -951,7 +973,7 @@ commands, so the two never share a channel:
 - The supervisor never sees a `BARRIER`: it does not take part in the barrier
   protocol (see "Chandy-Lamport barrier propagation"), it only speaks
   `INTERACT`. A `DATA` or `BARRIER` that reaches one of its channels anyway is
-  ignored with a warning.
+  dropped by the reader with a warning.
 
 # `FBPProcess` class
 
@@ -2059,12 +2081,12 @@ one that resets a program, in "Tools for resident programs".
   one. Any `INTERACT` envelope arriving there is relayed to every configured
   `TRIGGER_PORT` initiator, with an epoch added to its `args` when they carry
   none (see numbered trigger in the Glossary), so that every initiator opens
-  the same round; a command that starts no round never reads it. `Supervisor`
-  does not validate or interpret `command`, matching the deliberately
-  open-ended `INTERACT` catalog convention used everywhere else in this design
-  (see "Control envelope"). Whatever ends up unrecognized is still handled
-  safely at the far end, by the initiator's own `_on_interact` (logs a warning
-  and ignores it, never aborts).
+  the same round; a command that starts no round never reads it. Beyond its
+  being a string (see "Fields of each type"), `Supervisor` does not validate or
+  interpret `command`, matching the deliberately open-ended `INTERACT` catalog
+  convention used everywhere else in this design (see "Control envelope").
+  Whatever ends up unrecognized is still handled safely at the far end, by the
+  initiator's own `_on_interact` (logs a warning and ignores it, never aborts).
 
 ## Holding the business channels
 
@@ -2197,6 +2219,17 @@ with it the trace is exact.
   against any node. A node whose process is gone is still declared down at
   once, by the PID-based fast path below, which does not depend on elapsed
   time.
+- **A thread of the `Supervisor` that dies**: nothing supervises the
+  `Supervisor` (see "Failure model"), so it must not live on without its brain
+  thread, deaf to the heartbeats while its checker thread declares healthy
+  nodes down, or without its checker thread, blind to nodes that do go down. An
+  exception that ends either thread is logged and ends the `Supervisor` with an
+  error (its `run()` raises one that carries it), which then counts as a
+  `Supervisor` that died: the nodes keep running, unsupervised, until it is
+  relaunched by hand (see "Failure model"). What a writer of its
+  channels can get wrong, a malformed command or a type that does not belong
+  there, is dropped by the reader before it reaches the brain thread (see
+  "Fields of each type").
 - **PID-based fast path**: every BUILTIN-scheduler process gets a `.id` file
   holding the PID of its script with the time at which that PID's process
   started (written by `debasher_builtin_sched::_launch`, for every process, not
@@ -2785,8 +2818,9 @@ follows from them and from the tags, with nothing read from Python.
 `define_fifo_opt` and `define_fifo_opt_generator` take an optional tag, the same
 way as `--mirror`, stored in a registry of its own:
 
-- no tag: a business channel, written by its owner and read by the process at
-  the other end, whose end is an input port;
+- no tag: written by its owner, and read by the process at the other end, if
+  any, through an input port: a heartbeat channel when the `Supervisor` reads
+  it, and otherwise a business channel;
 - `--control`: a channel of commands, whose reader's end is a control port. Its
   writer is the `Supervisor`, which owns it (a trigger port), or someone outside
   the program, and then the reader owns it;

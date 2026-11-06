@@ -518,6 +518,15 @@ class _PortWorker:
         """
         return True
 
+    def _types_of_port(self, tag):
+        """
+        The envelope types that the input port `tag` carries, besides HELLO
+        and CLOSE, which every writer of the engine sends on any channel; a
+        reader drops any other with a warning. None, the default, takes
+        every type: a plain _PortWorker gives its ports no kind.
+        """
+        return None
+
     def _closed_at_start(self, tag):
         """
         Whether the reader of `tag` starts already past a CLOSE, that is,
@@ -567,6 +576,13 @@ class _PortWorker:
         # HELLO: it is then the fragment left by a writer that died in the
         # middle of a message (see encode_hello). Anything else is a corrupt
         # stream, never skipped silently.
+        #
+        # A line that is JSON but not a well-formed envelope (a missing key,
+        # an unknown type, a field of the wrong type), or whose type this
+        # port does not carry (see _types_of_port), is a wrong message, not a
+        # broken line: it is dropped with a warning. Only a writer outside the
+        # program can send one, and nothing of it can be recovered: what it
+        # meant to say is lost, with the warning as its only trace.
         fragment = None
         # Set once the writer has sent CLOSE and this class drops what
         # follows it (see _drops_after_close). From then on the loop only
@@ -631,6 +647,14 @@ class _PortWorker:
                             ) from None
                         fragment = line
                         continue
+                    except ValueError as exc:
+                        if fragment is not None:
+                            raise ValueError(
+                                f"{type(self).__name__}: unparsable line on {tag!r} not "
+                                f"followed by HELLO: {fragment[:60]!r}"
+                            ) from None
+                        self.log.warning("reader for %r dropped a malformed envelope: %s", tag, exc)
+                        continue
 
                     if envelope.type == TYPE_HELLO:
                         if fragment is not None:
@@ -648,6 +672,17 @@ class _PortWorker:
                             f"{type(self).__name__}: unparsable line on {tag!r} not followed "
                             f"by HELLO: {fragment[:60]!r}"
                         )
+
+                    types = self._types_of_port(tag)
+                    if envelope.type != TYPE_CLOSE and types is not None and envelope.type not in types:
+                        self.log.warning(
+                            "reader for %r dropped a %s envelope, which this port does not "
+                            "carry (only %s)",
+                            tag,
+                            envelope.type,
+                            ", ".join(types),
+                        )
+                        continue
 
                     items.append((envelope, line))
                     if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):

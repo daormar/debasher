@@ -365,6 +365,72 @@ def test_reader_thread_drops_a_fragment_cut_in_the_middle_of_a_character(fifo_pa
         proc.stop_threads(timeout=2)
 
 
+def test_reader_thread_drops_a_malformed_envelope_and_delivers_what_follows(fifo_path, caplog):
+    # Written by hand from outside the program: each is JSON, but not an
+    # envelope that the engine writes, and none may end the reader.
+    proc = _BrainRecorder(opts={"inf": fifo_path})
+    proc.log.addHandler(caplog.handler)
+    proc.start_threads()
+    try:
+        with caplog.at_level("WARNING", logger=proc.log.name):
+            with open(fifo_path, "w") as w:
+                w.write('{"type": "DATA", "seq": "1", "payload": 1}\n')
+                w.write('{"type": "BARRIER", "payload": {"epoch": "7", "halt": false}}\n')
+                w.write('{"type": "CLOSE", "payload": []}\n')
+                w.write('{"type": "NOISE", "payload": {}}\n')
+                w.write('{"payload": 1}\n')
+                w.write(lib.encode_data(2) + "\n")
+
+            assert _wait_until(lambda: len(proc.items) == 1)
+        assert proc.items == [(1, "inf", "DATA", 2, None)]
+        assert proc._reader_threads["inf"].is_alive()
+        assert caplog.text.count("dropped a malformed envelope") == 5
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_a_fragment_followed_by_a_malformed_envelope_is_still_a_corrupt_stream(fifo_path):
+    proc = _BrainRecorder(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            w.write("not a json line\n")
+            w.write('{"type": "DATA", "seq": "1", "payload": 1}\n')
+
+        assert _wait_until(lambda: not proc._reader_threads["inf"].is_alive())
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+@pytest.mark.parametrize(
+    "kind, wrong, right",
+    [
+        ("CONTROL_PORTS", [lib.encode_data(1), lib.encode_barrier(3)], lib.encode_interact("noop")),
+        ("EXTERNAL_PORTS", [lib.encode_interact("start_snapshot")], lib.encode_data(1)),
+        (None, [lib.encode_interact("start_snapshot")], lib.encode_barrier(3)),
+    ],
+)
+def test_reader_thread_drops_a_type_that_its_port_does_not_carry(fifo_path, caplog, kind, wrong, right):
+    # A control port carries only commands, and a business or an external
+    # port data and markers: what a writer outside the program puts on the
+    # wrong one never reaches the node.
+    attributes = {kind: ["inf"]} if kind else {}
+    proc = type("_Kind", (_BrainRecorder,), attributes)(opts={"inf": fifo_path})
+    proc.log.addHandler(caplog.handler)
+    proc.start_threads()
+    try:
+        with caplog.at_level("WARNING", logger=proc.log.name):
+            with open(fifo_path, "w") as w:
+                for line in wrong + [right]:
+                    w.write(line + "\n")
+
+            assert _wait_until(lambda: len(proc.items) == 1)
+        assert proc.items[0][2] == lib.decode_envelope(right).type
+        assert caplog.text.count("which this port does not carry") == len(wrong)
+    finally:
+        proc.stop_threads(timeout=2)
+
+
 def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_path):
     proc = _ReaderOnly(opts={"inf": fifo_path})
     proc.start_threads()

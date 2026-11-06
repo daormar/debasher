@@ -176,25 +176,72 @@ def test_unrecognized_node_command_is_logged_and_ignored(caplog):
     assert "not_a_real_command" in caplog.text
 
 
-def test_brain_loop_ignores_unexpected_envelope_types(caplog):
+def test_every_channel_of_a_supervisor_carries_only_commands():
     proc = _Sup(opts=_FAKE_OPTS)
+    assert proc._types_of_port("a") == (lib.TYPE_INTERACT,)
+    assert proc._types_of_port("manual") == (lib.TYPE_INTERACT,)
+
+
+def test_a_malformed_manual_trigger_is_dropped_and_heartbeats_are_still_heard(execdir, tmp_path, caplog):
+    # A slip of whoever writes the trigger by hand, with no "command": it
+    # used to end the brain thread, which then heard no heartbeat at all.
+    hb = tmp_path / "hb_a.fifo"
+    manual = tmp_path / "manual.fifo"
+    os.mkfifo(hb)
+    os.mkfifo(manual)
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {"a": "hb_a"}
+        MANUAL_TRIGGER_PORT = "manual"
+
+    proc = Sup(opts={"hb_a": str(hb), "manual": str(manual)})
     proc.log.addHandler(caplog.handler)
-    before = proc._last_heartbeat["a"]
-    proc._inbound_queue.put(("a", lib.TYPE_DATA, {"x": 1}))
-    proc._inbound_queue.put(lib._STOP)
+    proc.start_threads()
     try:
         with caplog.at_level("WARNING", logger=proc.log.name):
-            proc._brain_loop()
+            with open(manual, "w") as w:
+                w.write('{"type": "INTERACT", "payload": {"args": {}}}\n')
+                w.write(lib.encode_data(1) + "\n")
+            assert _wait_until(lambda: caplog.text.count("dropped") == 2)
+        with open(hb, "w") as w:
+            w.write(lib.encode_interact("heartbeat") + "\n")
+
+        assert _wait_until(lambda: proc._last_heartbeat["a"] > 0)
+        assert proc._brain_thread.is_alive()
     finally:
-        proc.log.removeHandler(caplog.handler)
-
-    assert "DATA" in caplog.text
-    # A DATA envelope is a protocol violation on a Supervisor channel,
-    # not something that should be mistaken for a heartbeat.
-    assert proc._last_heartbeat["a"] == before
+        proc.stop_threads(timeout=2)
 
 
-# --- manual trigger relay ------------------------------------------------
+def test_a_supervisor_whose_brain_thread_dies_stops_with_an_error(execdir, tmp_path):
+    # Nothing supervises the Supervisor: rather than live on, deaf to the
+    # heartbeats, it ends, and the run fails.
+    hb = tmp_path / "hb_a.fifo"
+    os.mkfifo(hb)
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {"a": "hb_a"}
+
+        def _on_node_interact(self, node_name, payload):
+            raise KeyError("a bug")
+
+    proc = Sup(opts={"hb_a": str(hb)})
+    errors = []
+
+    def run():
+        try:
+            proc.run()
+        except RuntimeError as exc:
+            errors.append(exc)
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    with open(hb, "w") as w:
+        w.write(lib.encode_interact("heartbeat") + "\n")
+    runner.join(timeout=5)
+
+    assert not runner.is_alive()
+    assert len(errors) == 1 and "a thread of its own died" in str(errors[0])
+    assert isinstance(errors[0].__cause__, KeyError)
 
 
 def test_manual_trigger_relays_the_command_to_every_trigger_port():

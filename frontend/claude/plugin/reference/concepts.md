@@ -425,7 +425,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `None` or a string); `process_data` is deterministic;
   the node state is complete and serializable as JSON; effects outside the
   program are idempotent. Read options from `self.opts` (labels without the
-  dash), log with `self.log`, wait with `self.sleep()`.
+  dash), log with `self.log` (its lines, and the warnings of the runtime,
+  such as a dropped envelope, are in the scheduler output of the node:
+  `get_process_output` with `kind: scheduler`), wait with `self.sleep()`.
 - **Methods that a node calls**, on top of `send_data` and `sleep`:
   - `self.inject(payload)`, from `observe`: `observe` looks at the world
     outside (a directory, a queue) on a thread of its own, every
@@ -457,7 +459,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its
   checkpoint and replays its input log. The Supervisor wiring (heartbeats,
-  triggers) is generated, not edited.
+  triggers) is generated, not edited. Start a round with `snapshot`, never by
+  writing a control port or the manual trigger port from a script: they take
+  only `INTERACT` commands, and the reader drops anything else written there,
+  with a warning in the scheduler output. A Supervisor that fails (a thread of
+  its own died) leaves its traceback in its scheduler output; the nodes go on
+  running unsupervised: stop the program and launch it again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the
   launch and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
@@ -479,8 +486,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   programs only. A script that writes into an external input itself writes
   one line per message, `{"type": "DATA", "payload": <value>}`, in one write,
   as strict JSON in UTF-8 (no NaN or Infinity): a line that is not UTF-8 or not
-  JSON stops the reader of the node. `read_fifo` shows such a line as not an
-  envelope.
+  JSON stops the reader of the node, and `read_fifo` shows such a line as not
+  an envelope. A line that is JSON but not such an envelope (a missing key, an
+  unknown type, a `seq` that is not an integer, or a type other than `DATA`
+  and `BARRIER`) is dropped by the reader, with a warning, "reader for
+  '<port>' dropped ...", in the scheduler output of the node
+  (`get_process_output`, `kind: scheduler`); it never reaches `process_data`
+  or the input log, so `inspect_node` (`log`) does not show it.
 
 ## Business tests
 

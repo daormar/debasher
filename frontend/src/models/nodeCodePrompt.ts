@@ -212,6 +212,7 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
     case "externalInput":
       heading = `external input, port \`${name}\``;
       notes.push(`Written by someone outside the program; what arrives on it reaches \`process_data\` with \`port_name\` \`"${name}"\`.`);
+      notes.push("The reader drops, with a warning in the log, a line that is JSON but not a well-formed `DATA` or `BARRIER` envelope, so `process_data` only receives the payload of a `DATA`: any JSON value that the writer chose, whose shape the code checks itself.");
       break;
     default:
       heading = option.dataType === "None" ? "flag" : `configuration option, ${option.dataType}`;

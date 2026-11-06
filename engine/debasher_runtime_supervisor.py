@@ -201,6 +201,9 @@ class Supervisor(_PortWorker):
         # unlike FBPProcess, nothing else here needs to tell "resolved
         # naturally" apart from "told to stop", so one event covers both.
         self._all_resolved = threading.Event()
+        # The exception that ended the brain thread or the checker thread,
+        # if one did (see _guarded): run() raises it.
+        self._thread_error = None
 
     def _port_field_value(self, attribute, items):
         """
@@ -283,6 +286,11 @@ class Supervisor(_PortWorker):
         self.start_threads()
         self._all_resolved.wait()
         self.stop_threads()
+        if self._thread_error is not None:
+            raise RuntimeError(
+                f"{type(self).__name__}: a thread of its own died, so it stopped "
+                f"supervising: {self._thread_error!r}"
+            ) from self._thread_error
 
     def _on_stop_signal(self, signum, frame):
         """
@@ -294,7 +302,9 @@ class Supervisor(_PortWorker):
 
     def start_threads(self):
         super().start_threads()
-        self._checker_thread = threading.Thread(target=self._check_loop, name="checker")
+        self._checker_thread = threading.Thread(
+            target=self._guarded, args=(self._check_loop,), name="checker"
+        )
         self._checker_thread.start()
 
     def stop_threads(self, timeout=None, close=True):
@@ -354,7 +364,30 @@ class Supervisor(_PortWorker):
 
     # -- brain loop: heartbeat/checkpoint_saved from nodes, manual trigger --
 
+    def _guarded(self, loop):
+        """
+        Runs `loop`, the body of the brain thread or of the checker thread.
+        Nothing supervises the Supervisor, so if either dies it must not
+        live on without it, deaf to the heartbeats and relaunching healthy
+        nodes as if they were down: the exception is logged and ends run(),
+        which raises it, and the run fails.
+        """
+        try:
+            loop()
+        except BaseException as exc:
+            self.log.exception("thread %r died", threading.current_thread().name)
+            self._thread_error = exc
+            self._all_resolved.set()
+
     def _brain_loop(self):
+        self._guarded(self._dispatch_loop)
+
+    def _types_of_port(self, tag):
+        # Every channel of a Supervisor, a node's heartbeat or the manual
+        # trigger, carries only commands.
+        return (TYPE_INTERACT,)
+
+    def _dispatch_loop(self):
         while True:
             item = self._inbound_queue.get()
             if item is _STOP:
@@ -362,18 +395,6 @@ class Supervisor(_PortWorker):
             tag, envelope_type, payload = item
             if envelope_type == TYPE_CLOSE:
                 self.log.debug("%r closed its channel", tag)
-                continue
-            if envelope_type != TYPE_INTERACT:
-                # Every Supervisor channel (node heartbeat or manual
-                # trigger) only ever carries INTERACT by design, so a
-                # DATA/BARRIER here is a protocol violation, not something
-                # to crash the process over.
-                self.log.warning(
-                    "ignoring unexpected %r envelope on %r (Supervisor channels "
-                    "only ever carry INTERACT)",
-                    envelope_type,
-                    tag,
-                )
                 continue
 
             if tag == _MANUAL_TRIGGER_TAG:

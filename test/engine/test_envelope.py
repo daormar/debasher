@@ -26,6 +26,33 @@ def test_encode_refuses_nan_and_infinity_which_json_does_not_have():
         lib.encode_interact("start_snapshot", {"x": float("nan")})
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        '{"type": "DATA", "seq": "1", "payload": 1}',
+        '{"type": "DATA", "seq": true, "payload": 1}',
+        '{"type": "BARRIER", "payload": {"epoch": "7", "halt": false}}',
+        '{"type": "BARRIER", "payload": {"epoch": true, "halt": false}}',
+        '{"type": "BARRIER", "payload": {"epoch": 7}}',
+        '{"type": "BARRIER", "payload": 7}',
+        '{"type": "INTERACT", "payload": {"args": {}}}',
+        '{"type": "INTERACT", "payload": {"command": 3}}',
+        '{"type": "INTERACT", "payload": "start_snapshot"}',
+        '{"type": "CLOSE", "payload": []}',
+        '{"type": "CLOSE", "payload": {"last_seq": "3"}}',
+        '{"type": "HELLO", "payload": null}',
+    ],
+)
+def test_decode_envelope_rejects_a_field_of_the_wrong_type(line):
+    with pytest.raises(ValueError, match="malformed"):
+        lib.decode_envelope(line)
+
+
+def test_decode_envelope_leaves_the_arguments_of_a_command_to_its_handler():
+    envelope = lib.decode_envelope('{"type": "INTERACT", "payload": {"command": "x", "args": 5}}')
+    assert envelope.payload == {"command": "x", "args": 5}
+
+
 def test_encode_data_with_a_seq_adds_it_as_a_sibling_of_type_and_payload():
     line = lib.encode_data({"a": 1}, seq=5)
     assert json.loads(line) == {"type": "DATA", "seq": 5, "payload": {"a": 1}}
