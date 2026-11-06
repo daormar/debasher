@@ -3503,15 +3503,17 @@ happened.
 
 **Writing.** The user gives the payload, and the backend wraps it in a `DATA`
 envelope with no sequence number, since what comes from outside the program is
-not numbered, and writes it as one line: `{"type": "DATA", "payload": ...}`.
-The dialog has two modes. In JSON mode, the default, the user writes any JSON
-value, over several lines if need be, which the backend parses and serializes
-again on one line, and `process_data` receives it with its type: an object, a
-list, a number. Text that does not parse is refused, and nothing is written. In
-text mode what the user writes is sent as a JSON string. A raw line is never
-written: a reader takes a line that is not JSON for the fragment of a writer
-that died in the middle of a message, and a second one in a row kills its
-thread, and with it the node.
+not numbered, and writes it as one line: `{"type": "DATA", "payload": ...}`. The
+dialog has two modes. In JSON mode, the default, the user writes any JSON value,
+over several lines if need be, which the backend parses and serializes again on
+one line, and `process_data` receives it with its type: an object, a list, a
+number. Text that is not strict JSON is refused (also `NaN`, `Infinity`, or a
+number too large for a float such as `1e999`, which Python's parser takes), and
+so is a payload that cannot be written in UTF-8; nothing is written. In text
+mode what the user writes is sent as a JSON string. A raw line is never written:
+a reader takes a line that is not JSON for the fragment of a writer that died in
+the middle of a message, and a second one in a row kills its thread, and with it
+the node.
 
 For the same reason a line is never written in part. The backend writes it
 with a single `write()` on a FIFO opened without blocking, which POSIX makes
@@ -3532,20 +3534,20 @@ work" in `doc/design_doc_resident.md`). A source that wants to tell a node that
 it has finished sends a `DATA` with a payload that the node understands.
 
 **Reading.** The backend reads the FIFO one byte at a time, so that it never
-takes anything past the line it reads, and decodes each line as an envelope.
-It skips the blank lines and the `HELLO` with which every incarnation of a
-writer starts, and answers with the type, the sequence number and the payload
-of the first other envelope, or with a line that is not one, as it was read.
-The frontend shows the payload of a `DATA`, with its sequence number, marks a
-`BARRIER` as the marker of a round and a `CLOSE` as the end of the writer. The
-backend opens the FIFO without blocking, so opening it never waits, and a read
-sees no end of file while the node or the `Supervisor` holds the FIFO (see
-"Ghost connections" in `doc/design_doc_resident.md`); with neither, a read
-finds nothing, as when nothing has been written. A read waits two seconds for
-the first byte of a line, and the frontend reads again at once. A line started
-is read to its end, within thirty seconds: its writer writes it whole, and
-only a writer that died in the middle of it leaves it cut, which the dialog
-reports, pausing the reading.
+takes anything past the line it reads, and decodes each line as an envelope. It
+skips the blank lines and the `HELLO` with which every incarnation of a writer
+starts, and answers with the type, the sequence number and the payload of the
+first other envelope, or with a line that is not one, as it was read (with
+replacement characters where it is not UTF-8). The frontend shows the payload of
+a `DATA`, with its sequence number, marks a `BARRIER` as the marker of a round
+and a `CLOSE` as the end of the writer. The backend opens the FIFO without
+blocking, so opening it never waits, and a read sees no end of file while the
+node or the `Supervisor` holds the FIFO (see "Ghost connections" in
+`doc/design_doc_resident.md`); with neither, a read finds nothing, as when
+nothing has been written. A read waits two seconds for the first byte of a line,
+and the frontend reads again at once. A line started is read to its end, within
+thirty seconds: its writer writes it whole, and only a writer that died in the
+middle of it leaves it cut, which the dialog reports, pausing the reading.
 
 Reading takes the message from the channel, as it does for a general program,
 and so competes with any other reader outside the program. The user can pause

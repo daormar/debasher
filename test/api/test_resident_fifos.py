@@ -63,6 +63,24 @@ def test_text_that_is_not_json_is_refused_in_json_mode():
         resident_fifos.payload_of("hello", "json")
 
 
+def test_nan_and_infinity_are_refused_in_json_mode():
+    # Python's parser takes them, but they are not JSON, and a reader that
+    # is not Python may refuse the line or turn them into null.
+    for text in ("NaN", "[1, Infinity]", '{"x": -Infinity}', "1e999"):
+        with pytest.raises(FifoError, match="Not JSON"):
+            resident_fifos.payload_of(text, "json")
+
+
+def test_a_payload_that_has_no_form_in_utf8_is_refused():
+    for text, mode in (('"\\ud800"', "json"), ("\ud800", "text")):
+        with pytest.raises(FifoError, match="Not UTF-8"):
+            resident_fifos.payload_of(text, mode)
+
+
+def test_a_payload_is_written_in_utf8():
+    assert resident_fifos.data_line("café") == '{"type": "DATA", "payload": "café"}\n'.encode("utf-8")
+
+
 def test_a_line_reaches_the_reader_whole(fifo):
     reader = _reader(fifo)
     try:
@@ -148,6 +166,18 @@ def test_a_line_that_is_not_an_envelope_is_given_as_it_was_read(fifo):
 
         assert resident_fifos.read_envelope(fifo).unparsable == "not json"
         assert resident_fifos.read_envelope(fifo).unparsable == "[1, 2]"
+    finally:
+        os.close(writer)
+        os.close(reader)
+
+
+def test_a_line_that_is_not_utf8_is_not_an_envelope(fifo):
+    reader = _reader(fifo)
+    writer = _writer(fifo, reader)
+    try:
+        os.write(writer, '{"type": "DATA", "payload": "café"}\n'.encode("latin-1"))
+
+        assert resident_fifos.read_envelope(fifo).unparsable == '{"type": "DATA", "payload": "caf\ufffd"}'
     finally:
         os.close(writer)
         os.close(reader)

@@ -55,7 +55,8 @@ Envelope = namedtuple("Envelope", ["type", "payload", "seq"], defaults=[None])
 def encode_data(payload, seq=None):
     """
     Encodes a DATA envelope. `payload` is free-form, whatever the
-    business logic wants to send; must be JSON-serializable. `seq` is the
+    business logic wants to send; must be JSON-serializable, with no NaN
+    or infinity, which JSON does not have (ValueError). `seq` is the
     sender's per-channel counter for this message; omitted (not even the
     key) when the sender is not one that numbers what it sends.
     """
@@ -63,7 +64,7 @@ def encode_data(payload, seq=None):
     if seq is not None:
         obj["seq"] = seq
     obj["payload"] = payload
-    return json.dumps(obj)
+    return json.dumps(obj, allow_nan=False)
 
 
 def encode_barrier(epoch, halt=False):
@@ -119,7 +120,8 @@ def encode_hello():
 def _encode(envelope_type, payload):
     # No trailing newline: writing one (one write per line to the FIFO)
     # is the caller's job, keeping this symmetric with json.dumps itself.
-    return json.dumps({"type": envelope_type, "payload": payload})
+    # Strict JSON, as in encode_data: no NaN or infinity on the wire.
+    return json.dumps({"type": envelope_type, "payload": payload}, allow_nan=False)
 
 
 def decode_envelope(line):

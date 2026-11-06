@@ -16,6 +16,16 @@ def test_encode_data_accepts_any_json_value():
         assert json.loads(line) == {"type": "DATA", "payload": payload}
 
 
+def test_encode_refuses_nan_and_infinity_which_json_does_not_have():
+    # Python's json.dumps would write them as NaN and Infinity, which are
+    # not JSON: a reader that is not Python may refuse the line.
+    for payload in [float("nan"), [1, float("inf")], {"x": float("-inf")}]:
+        with pytest.raises(ValueError):
+            lib.encode_data(payload)
+    with pytest.raises(ValueError):
+        lib.encode_interact("start_snapshot", {"x": float("nan")})
+
+
 def test_encode_data_with_a_seq_adds_it_as_a_sibling_of_type_and_payload():
     line = lib.encode_data({"a": 1}, seq=5)
     assert json.loads(line) == {"type": "DATA", "seq": 5, "payload": {"a": 1}}

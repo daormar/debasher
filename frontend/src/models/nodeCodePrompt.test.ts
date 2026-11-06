@@ -133,6 +133,11 @@ describe("buildNodeCodePrompt", () => {
     expect(prompt).toContain("set again in `restore_node_state` when it follows from the node state");
   });
 
+  it("says that what a node sends is strict JSON", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("send is strict JSON: a payload holding NaN or an infinity raises ValueError");
+  });
+
   describe("a watcher, a launcher and the node that reads the ends of the batch runs", () => {
     const watch = node("Watch", "DirectoryWatcher", [
       createOption("watchdir", "-watchdir", { commandLine: true, mandatory: true }),

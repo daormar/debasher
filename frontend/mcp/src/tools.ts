@@ -903,7 +903,7 @@ const residentTools = [
       home_dir: schemas.homeDir,
       process: schemas.processName,
       option: schemas.optionLabel,
-      message: z.string().describe("In json mode, any JSON value; in text mode, the text sent as a string."),
+      message: z.string().describe("In json mode, any JSON value, strict: NaN, Infinity and a number too large for a float (1e999) are refused; in text mode, the text sent as a string."),
       mode: z.enum(["json", "text"]).optional().describe("json by default."),
     },
     EDITS,

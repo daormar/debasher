@@ -320,6 +320,51 @@ def test_reader_thread_drops_a_fragment_left_by_a_writer_that_died_mid_message(f
         proc.stop_threads(timeout=2)
 
 
+def test_reader_thread_delivers_a_utf8_payload_unchanged(fifo_path):
+    proc = _ReaderOnly(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "wb") as w:  # as the API writes it, not escaped
+            w.write('{"type": "DATA", "payload": "café"}\n'.encode("utf-8"))
+
+        assert _wait_until(lambda: proc.received == [("inf", "café")])
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_reader_thread_dies_on_a_line_that_is_not_utf8(fifo_path):
+    proc = _ReaderOnly(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        # Never handed to the node altered: a line in another encoding is as
+        # unparsable as one that is not JSON.
+        with open(fifo_path, "wb") as w:
+            w.write('{"type": "DATA", "payload": "café"}\n'.encode("latin-1"))
+            w.write((lib.encode_data(1) + "\n").encode("utf-8"))
+
+        assert _wait_until(lambda: not proc._reader_threads["inf"].is_alive())
+        assert proc.received == []
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_reader_thread_drops_a_fragment_cut_in_the_middle_of_a_character(fifo_path):
+    proc = _ReaderOnly(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        line = (lib.encode_data("x") + "\n").encode("utf-8")
+        cut = '{"type": "DATA", "payload": "é'.encode("utf-8")[:-1]
+        with open(fifo_path, "wb") as w:  # dies half way through "é"
+            w.write(cut)
+        with open(fifo_path, "wb") as w:  # its relaunched incarnation
+            w.write(("\n" + lib.encode_hello() + "\n").encode("utf-8") + line)
+
+        assert _wait_until(lambda: proc.received == [("inf", "x")])
+        assert proc._reader_threads["inf"].is_alive()
+    finally:
+        proc.stop_threads(timeout=2)
+
+
 def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_path):
     proc = _ReaderOnly(opts={"inf": fifo_path})
     proc.start_threads()

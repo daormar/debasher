@@ -420,7 +420,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   other kinds inherit them, and a body replaces the inherited one (call
   `super()` to keep it).
 - **Rules of the hooks.** Send only from `process_data`, with
-  `self.send_data(port, payload)`, as JSON; `process_data` is deterministic;
+  `self.send_data(port, payload)`, as strict JSON (a payload with NaN or an
+  infinity raises ValueError, so a float result that can be one is sent as
+  `None` or a string); `process_data` is deterministic;
   the node state is complete and serializable as JSON; effects outside the
   program are idempotent. Read options from `self.opts` (labels without the
   dash), log with `self.log`, wait with `self.sleep()`.
@@ -474,7 +476,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Talking to a live program.** An external input (`fifoTag: "external"`)
   and a business output with no connection are written and read from
   outside with `list_fifos`, `write_fifo` and `read_fifo`, in resident
-  programs only.
+  programs only. A script that writes into an external input itself writes
+  one line per message, `{"type": "DATA", "payload": <value>}`, in one write,
+  as strict JSON in UTF-8 (no NaN or Infinity): a line that is not UTF-8 or not
+  JSON stops the reader of the node. `read_fifo` shows such a line as not an
+  envelope.
 
 ## Business tests
 

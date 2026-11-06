@@ -58,7 +58,9 @@ its code. Offer to run the tests when what they do matters to a finding.
   ask), and does the options handler (array or generator) read only inputs that
   stay unchanged during the run?
 - **Nodes** of a resident program: is `process_data` deterministic, does it
-  send only from there, is the node state complete and serializable as JSON,
+  send only from there, does what it sends hold no NaN or infinity (a float
+  that can be one checked before `send_data`), is the node state complete and
+  serializable as JSON,
   and are effects outside the program idempotent? Does it wait with
   `self.sleep()` rather than `time.sleep()`, look at the outside world only
   in `observe` (bringing it in with `inject`), and set again in

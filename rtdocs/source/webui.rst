@@ -581,8 +581,12 @@ changes accordingly:
 * **Talk to FIFOs**, while the program is live, writes messages into an
   external input and reads, continuously, what a business output that
   no node reads carries. A message is written as JSON, or as text sent
-  as a string, and the transcript shows what was written and what was
-  read in the order in which it happened.
+  as a string; in JSON mode, NaN, Infinity and numbers too large for a
+  float (such as ``1e999``) are refused with "Not JSON, nothing was
+  written", since JSON does not have them. The transcript shows what was
+  written and what was read in the order in which it happened, and marks
+  a line read that is not an envelope (not JSON, or not UTF-8) as "[not
+  an envelope]".
 
 When the output directory holds the state of an earlier run and the
 program changed since that run was launched, "Run program" asks

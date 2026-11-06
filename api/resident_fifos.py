@@ -11,6 +11,7 @@ nothing here ever leaves part of a line in a FIFO, whether written or read.
 
 import errno
 import json
+import math
 import os
 import select
 import stat
@@ -49,19 +50,42 @@ def _check_fifo(path: Path) -> None:
 
 def data_line(payload: Any) -> bytes:
     """A DATA envelope with no sequence number, since what comes from
-    outside the program is not numbered, as one line."""
-    return (json.dumps({"type": "DATA", "payload": payload}, ensure_ascii=False) + "\n").encode("utf-8")
+    outside the program is not numbered, as one line of strict JSON in
+    UTF-8."""
+    line = json.dumps({"type": "DATA", "payload": payload}, ensure_ascii=False, allow_nan=False)
+    return (line + "\n").encode("utf-8")
 
 
 def payload_of(text: str, mode: str) -> Any:
     """The payload the user gave: in JSON mode, any JSON value, over several
-    lines if need be; in text mode, the text as a JSON string."""
+    lines if need be; in text mode, the text as a JSON string. NaN and
+    the infinities, which Python's parser takes (also as a number too large
+    for a float, such as 1e999), are refused: they are not JSON."""
     if mode == "text":
-        return text
+        payload = text
+    else:
+        try:
+            payload = json.loads(text, parse_constant=_refuse_constant, parse_float=_finite_float)
+        except ValueError as exc:
+            raise FifoError(f"Not JSON, nothing was written: {exc}") from None
+    # A lone surrogate, which a JSON escape or the text itself may hold, has
+    # no form in UTF-8, the encoding of the wire.
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise FifoError(f"Not JSON, nothing was written: {exc}") from None
+        data_line(payload)
+    except UnicodeEncodeError:
+        raise FifoError("Not UTF-8, nothing was written: the text holds a lone surrogate") from None
+    return payload
+
+
+def _refuse_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not a JSON value: send null, or the text in text mode")
+
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"{text} is too large for a float: send the text in text mode")
+    return value
 
 
 def write_line(path: Path, line: bytes, timeout_secs: float = WRITE_TIMEOUT_SECS) -> None:
@@ -169,7 +193,12 @@ def read_envelope(path: Path, timeout_secs: float = READ_TIMEOUT_SECS) -> ReadEn
             raw = _read_line(fd, deadline)
             if raw is None:
                 return None
-            text = raw.decode("utf-8", errors="replace")
+            # A line that is not UTF-8 is not an envelope, as the runtime
+            # reads it; it is decoded with replacement only to be shown.
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return ReadEnvelope(unparsable=raw.decode("utf-8", errors="replace"))
             if not text.strip():
                 continue
             try:

@@ -96,6 +96,7 @@ function rulesSection(process: ProgramProcess, kind: NodeKind): string[] {
     `- The signatures of the hooks are fixed: ${signatures}. A hook with an empty body is left out of the class.`,
     "- The class never declares the ports of the node: the engine gives them from the options of its process (see the ports and options below).",
     "- Use the methods of the runtime library rather than writing your own: `self.sleep()`, not `time.sleep()`, to set the pace; `observe` with `self.inject()` to bring in what the node sees outside the program, never `process_data`; and `self.set_notice()` for what whoever watches the program should know (a missing configuration file), set again in `restore_node_state` when it follows from the node state.",
+    "- What `self.send_data()` and `self.inject()` send is strict JSON: a payload holding NaN or an infinity raises ValueError, so turn a float result that can be one into `None` or a string before sending it.",
   ];
   if (kind === "FBPProcess") {
     lines.push("- This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime` (`pass` when it has nothing to open), and to `observe` only if it looks at something outside the program, with `OBSERVE_PORT` set in the class body.");

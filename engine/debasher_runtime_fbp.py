@@ -703,7 +703,8 @@ class FBPProcess(_PortWorker):
         world again. It returns once the message is recorded. It raises
         when called from process_data(), since an input made by processing
         would be made again by every replay, or when the class has no
-        OBSERVE_PORT.
+        OBSERVE_PORT; and ValueError when `payload` holds NaN or an
+        infinity, which JSON does not have.
         """
         # Writes it to the input log and queues it for the brain thread, as
         # a reader thread does with what it reads from a fifo, in the same
@@ -995,11 +996,13 @@ class FBPProcess(_PortWorker):
     def send_data(self, tag, payload):
         """
         Sends `payload`, any value that JSON can serialize, on the output
-        port `tag`. A node acts only in reaction to what it receives, so it
-        may be called only from process_data(), and raises anywhere else.
-        It also raises when what the node has not yet written into its
-        FIFOs would go over OUT_BACKLOG_FAIL_BYTES. When it raises, nothing
-        is sent.
+        port `tag`. It raises ValueError when `payload` holds NaN or an
+        infinity, which JSON does not have (a float result that can be one
+        is sent as None or as a string). A node acts only in reaction to
+        what it receives, so it may be called only from process_data(), and
+        raises anywhere else. It also raises when what
+        the node has not yet written into its FIFOs would go over
+        OUT_BACKLOG_FAIL_BYTES. When it raises, nothing is sent.
         """
         # The message is numbered with this channel's next sequence number
         # (see _out_seq). "Only from process_data()"

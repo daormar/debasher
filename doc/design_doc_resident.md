@@ -599,9 +599,9 @@ exposes a violation.
 - **Effects outside the graph are idempotent**: replay re-executes
   `process_data`, so anything it does outside the FIFOs (writing a file
   elsewhere, calling a service) can happen more than once.
-- **Messages are JSON-serializable, of any size.** A message larger than
-  `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes can
-  leave a truncated fragment in the FIFO. The reader drops it thanks to the
+- **Messages are serializable as strict JSON, of any size.** A message larger
+  than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes
+  can leave a truncated fragment in the FIFO. The reader drops it thanks to the
   resync line (see the Glossary) that every writer incarnation sends first,
   and the sender's replay regenerates the message. Only the framework writes
   to these channels; an external writer must send complete lines.
@@ -847,9 +847,20 @@ sections, cited along the way.
 
 ## Wire format
 
-The format is JSON Lines: one JSON object per line, with `\n` as delimiter.
-Always serializing via `json.dumps` guarantees that a `\n` embedded in the
-`payload` comes out escaped, so the line delimiter is safe with any payload.
+The format is JSON Lines: one JSON object per line, with `\n` as delimiter,
+in UTF-8. Always serializing via `json.dumps` guarantees that a `\n` embedded in
+the `payload` comes out escaped, so the line delimiter is safe with any payload.
+Every writer of the engine (the runtime, the tools for resident programs and
+"Talk to FIFOs" in the web UI) writes strict JSON (RFC 8259): a payload that
+holds a NaN or an infinity, which Python's `json.dumps` would write as `NaN` or
+`Infinity`, is refused when it is sent (`send_data` raises, as for any payload
+that is not JSON, and "Talk to FIFOs" refuses what the user typed). The reader
+thread of a node takes what Python's `json.loads` takes, so such a value written
+from outside the program still reaches the node, which cannot send it on. A line
+that is not valid UTF-8 is treated as one that is not JSON: it is dropped as the
+fragment of a writer killed in the middle of a message when a `HELLO` follows
+it, and otherwise it ends the reader thread; it never reaches the node altered
+(see "The resync line (`HELLO`)").
 
 There are five envelope types, each its own line/message (none nests inside
 another, so the reader thread can dispatch by looking only at `type`, without

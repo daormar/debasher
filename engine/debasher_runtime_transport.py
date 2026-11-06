@@ -599,8 +599,7 @@ class _PortWorker:
                 for raw_line in raw_lines:
                     if self._stopping.is_set():
                         break
-                    line = raw_line.decode("utf-8", errors="replace")
-                    if not line:
+                    if not raw_line:
                         continue
 
                     if closed:
@@ -615,9 +614,16 @@ class _PortWorker:
                             self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
                         continue
 
+                    # A line that is not UTF-8 is as unparsable as one that is
+                    # not JSON: the fragment of a writer killed in the middle of
+                    # a character is still excused by the HELLO that follows,
+                    # and anything else stops the reader instead of reaching
+                    # the node altered.
                     try:
+                        line = raw_line.decode("utf-8")
                         envelope = decode_envelope(line)
-                    except json.JSONDecodeError:
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        line = raw_line.decode("utf-8", errors="replace")
                         if fragment is not None:
                             raise ValueError(
                                 f"{type(self).__name__}: two unparsable lines in a row on "
