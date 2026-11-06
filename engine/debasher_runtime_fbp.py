@@ -164,7 +164,7 @@ class FBPProcess(_PortWorker):
     INPUT_LOG_SEGMENT_BYTES = 4 * 1024 * 1024
 
     # Total size, across every output port, of the DATA that send_data has
-    # numbered but the writer thread has not yet finished writing (G5's
+    # numbered but the writer thread has not yet finished writing (the
     # outbound backlog, see _unwritten). The first limit only decides how
     # big a single checkpoint is allowed to grow: over it, _save_checkpoint
     # skips writing that checkpoint rather than raising, since the previous
@@ -290,20 +290,20 @@ class FBPProcess(_PortWorker):
         # The receiver's own view of the last DATA number it has processed on
         # each input port, updated by the brain thread as it dispatches each
         # one (mirrors _current_pos, but per channel): what a round's capture
-        # takes for the checkpoint (G5), which is why it lags behind
+        # takes for the checkpoint, which is why it lags behind
         # _accepted_seq below. Restored from the checkpoint before
         # initialize_runtime(), like _out_seq.
         self._last_seq = {}
         # The reader threads' own view of the same thing, ahead of _last_seq:
         # updated at arrival, under _arrival_lock, before a DATA is logged or
         # queued, so that a duplicate produced by a replay is dropped before
-        # either happens (G5). Restored at startup from the checkpoint's
+        # either happens. Restored at startup from the checkpoint's
         # last_seq plus whatever the input log holds after capture_pos (see
         # _replay_input_log), since that is what the reader threads had
         # already accepted, whether the brain had processed it or not.
         self._accepted_seq = {}
         # DATA that send_data has numbered and queued but the writer thread
-        # has not yet finished writing (G5's outbound backlog): {tag: [(seq,
+        # has not yet finished writing (the outbound backlog): {tag: [(seq,
         # line), ...]}, in the order send_data queued them, so the entry at
         # index 0 is always the next one _on_written can confirm. A single
         # kill -9 destroys the outbound queue itself, so a round's capture
@@ -352,9 +352,9 @@ class FBPProcess(_PortWorker):
         # Set only by the SIGTERM handler run() installs (see
         # _on_stop_signal): the actual "stop now" signal that run() waits
         # on, decided entirely outside this node, typically by an external
-        # tool once every node's halted marker exists (see the Contract's
-        # Conformance status, "G2 is violated during an ordered shutdown",
-        # third candidate).
+        # tool once every node's halted marker exists (see "Ordered
+        # shutdown" and "`debasher_stop_resident`" in
+        # doc/design_doc_resident.md).
         self._stop_requested = threading.Event()
         # Whether the node is replaying its input log (see
         # _replay_input_log). Internal: a module never sees it, so that
@@ -750,20 +750,20 @@ class FBPProcess(_PortWorker):
                 raise RuntimeError(
                     f"{type(self).__name__}: an item arrived before the input log was opened"
                 )
-            # G5: a DATA that carries a number not above the last one this
-            # channel's reader has already accepted is a duplicate, produced
-            # by a replay on the sender's side, and is dropped here, before it
-            # is ever logged or queued, so that it is never processed twice.
-            # One that skips over a number is a message this channel will
-            # never see: a real loss, not a duplicate, so it is never silent
-            # (G8). The items before it are logged and queued, as they would
-            # be one by one, and then it raises, before it is itself logged
-            # or queued. A DATA with no number (from a source, or a plain
-            # _PortWorker) is not part of the numbering and is always
-            # accepted; only DATA is sequenced (BARRIER/INTERACT carry no seq
-            # of their own; CLOSE carries the sender's last one instead,
-            # checked below, once CLOSE itself is durably recorded, since
-            # nothing sends it twice).
+            # No duplicates across a crash: a DATA that carries a number not
+            # above the last one this channel's reader has already accepted is a
+            # duplicate, produced by a replay on the sender's side, and is
+            # dropped here, before it is ever logged or queued, so that it is
+            # never processed twice. One that skips over a number is a message
+            # this channel will never see: a real loss, not a duplicate, so it
+            # is never silent. The items before it are logged and queued, as
+            # they would be one by one, and then it raises, before it is itself
+            # logged or queued. A DATA with no number (from a source, or a plain
+            # _PortWorker) is not part of the numbering and is always accepted;
+            # only DATA is sequenced (BARRIER/INTERACT carry no seq of their
+            # own; CLOSE carries the sender's last one instead, checked below,
+            # once CLOSE itself is durably recorded, since nothing sends it
+            # twice).
             accepted_items = []
             close_checks = []
             gap = None
@@ -821,7 +821,7 @@ class FBPProcess(_PortWorker):
             for pos, (envelope, _) in zip(positions, accepted_items):
                 self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
 
-            # G5/G8: a CLOSE that carries the sender's last number is checked
+            # A CLOSE that carries the sender's last number is checked
             # only now, after it is itself durably logged and queued, unlike
             # a DATA gap: nothing ever sends CLOSE a second time, so losing
             # it here to an early raise would leave this port's writer
@@ -1002,7 +1002,7 @@ class FBPProcess(_PortWorker):
         is sent.
         """
         # The message is numbered with this channel's next sequence number
-        # (see _out_seq and G5 in the Contract). "Only from process_data()"
+        # (see _out_seq). "Only from process_data()"
         # means on the thread that is running it: the brain thread, or the
         # thread that called run() while it replays the input log. That
         # keeps the messages a node sends, and the state it captures, in the
@@ -1060,7 +1060,7 @@ class FBPProcess(_PortWorker):
         `_out_seq[tag]`, 0 if this port never sent anything: by the time a
         writer thread is about to send CLOSE, the brain thread has already
         stopped (a finished writer means run() is on its way out), so
-        nothing can bump this again and reading it here needs no lock (G5).
+        nothing can bump this again and reading it here needs no lock.
         """
         return self._out_seq.get(tag, 0)
 
@@ -1531,7 +1531,7 @@ class FBPProcess(_PortWorker):
         Nothing is logged after a CLOSE, so a DATA record on a port that is
         already closed means that the log or the checkpoint is corrupt, and
         it is an error. The other kinds of item are not replayed. A numbered
-        DATA record also advances _last_seq and _accepted_seq (G5) for its
+        DATA record also advances _last_seq and _accepted_seq for its
         port, to what they already were before the crash: records only ever
         reach the log in accepted order (see _on_arrival), so this is a
         plain overwrite, the same as _current_pos, never a max(). This reads

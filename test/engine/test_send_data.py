@@ -180,7 +180,7 @@ def test_a_node_can_send_while_it_replays_its_input_log():
     assert _queued(proc) == [5, 6]
 
 
-# --- G5: the sender numbers its DATA (5.2) --------------------------------
+# --- The sender numbers its DATA ---------------------------------------------
 
 
 def test_send_data_numbers_each_message_starting_at_1(execdir):
@@ -247,7 +247,7 @@ def test_the_checkpoint_reflects_the_counters_at_capture_not_what_is_sent_while_
     proc._on_interact({"command": "start_snapshot", "args": {}})
     assert proc._barrier_out_seq == {"outf": 2}
 
-    # More arrives while the round is still open: G2 says it is processed
+    # More arrives while the round is still open: it is processed
     # and sent at once, seq 3, but that belongs to the next epoch, not to
     # the one already captured.
     _run_brain(proc, [("inf", 3)])
@@ -281,9 +281,10 @@ def test_a_restored_checkpoint_makes_the_numbering_go_on_after_it(execdir):
 
 
 def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(execdir):
-    # The guarantee (G5): a relaunched node's replay renumbers what it sends
-    # again exactly as the crashed incarnation had, so a neighbor that
-    # received those messages the first time recognizes them as duplicates.
+    # No duplicates across a crash: a relaunched node's replay renumbers
+    # what it sends again exactly as the crashed incarnation had, so a
+    # neighbor that received those messages the first time recognizes them
+    # as duplicates.
     live = _Relay(opts=_OPTS)
     _run_brain(live, [("inf", 1), ("inf", 2), ("inf", 3)])
     live._save_checkpoint(

@@ -179,9 +179,9 @@ def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdi
     assert restarted.restored_with == {"marker": "restored"}
     assert restarted._last_epoch == 4
     # Restored before initialize_runtime() is even called, so that a replay
-    # numbers what it sends exactly as the crashed incarnation had (G5).
+    # numbers what it sends exactly as the crashed incarnation had.
     assert restarted._out_seq == {"outf": 3}
-    # Both the brain's own view (G5) and the reader threads' live dedup
+    # Both the brain's own view and the reader threads' live dedup
     # counter start from the same restored value; with nothing left to
     # replay here, they stay equal.
     assert restarted._last_seq == {"inf": 2}

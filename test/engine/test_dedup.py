@@ -64,7 +64,7 @@ _OPTS = {"inf": "/dev/null"}
 def _arrive(proc, port, payload, seq=None):
     """Delivers one DATA the way a reader thread does: through the real
     encode/decode round trip and the real _on_arrival, so the dedup check
-    (G5) runs for real, exactly as it would from a live FIFO."""
+    runs for real, exactly as it would from a live FIFO."""
     if proc._input_log is None:
         proc._open_input_log(0)
     line = lib.encode_data(payload, seq=seq)
@@ -114,7 +114,7 @@ def test_a_higher_number_is_accepted_and_moves_the_counters():
     assert proc._last_seq == {"inf": 2}
 
 
-def test_a_gap_is_a_g8_error_naming_the_channel_and_the_missing_numbers():
+def test_a_gap_is_a_loss_error_naming_the_channel_and_the_missing_numbers():
     proc = _Recorder(opts=_OPTS)
     _arrive(proc, "inf", "a", seq=1)
 
@@ -166,7 +166,7 @@ def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_p
 
 
 def test_a_data_with_no_number_is_always_accepted_and_never_moves_the_counters():
-    # decision 6: unnumbered DATA, from a source or a plain _PortWorker, is
+    # Unnumbered DATA, from a source or a plain _PortWorker, is
     # not part of the numbering, so it never counts towards a duplicate.
     proc = _Recorder(opts=_OPTS)
     _arrive(proc, "inf", "a", seq=1)
@@ -191,7 +191,7 @@ def test_each_input_port_is_deduplicated_on_its_own():
 
 
 def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has_accepted():
-    # Mirrors the same isolation the sender's out_seq needs (G5): a reader
+    # Mirrors the same isolation the sender's out_seq needs: a reader
     # thread can accept, log and queue a DATA on a port still pending in an
     # open round before the brain gets to it, so the checkpoint's last_seq
     # must come from the brain's own view, not the reader's live counter.
@@ -203,9 +203,9 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
     proc._on_interact({"command": "start_snapshot", "args": {}})  # "a" and "b" pending
     assert proc._barrier_last_seq == {"a": 1}
 
-    # "b" arrives and is processed while the round stays open (G2): the
-    # reader's own counter moves at once, but the brain's own mirror, and
-    # the round's already-taken copy, must not.
+    # "b" arrives and is processed while the round stays open (no silent
+    # loss): the reader's own counter moves at once, but the brain's own
+    # mirror, and the round's already-taken copy, must not.
     _arrive(proc, "b", "b1", seq=1)
     assert proc._accepted_seq == {"a": 1, "b": 1}
     _run_brain(proc)
@@ -227,9 +227,9 @@ def test_load_latest_checkpoint_returns_last_seq():
 
 
 def test_a_restored_node_drops_what_its_own_log_already_covers():
-    # The guarantee (G5): a relaunched node does not accept, a second time,
-    # what its own input log already holds; new arrivals after the numbers
-    # already logged are still accepted normally.
+    # No duplicates across a crash: a relaunched node does not accept, a
+    # second time, what its own input log already holds; new arrivals after
+    # the numbers already logged are still accepted normally.
     live = _Recorder(opts=_OPTS)
     _arrive(live, "inf", "a", seq=1)
     _arrive(live, "inf", "b", seq=2)

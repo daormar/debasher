@@ -44,7 +44,7 @@ def test_a_halt_keeps_every_node_running_until_an_external_signal_stops_it(outdi
     involved in finding it), every node marks itself halted once its own
     round closes, every node is still alive at that point (a node that
     stopped as soon as its own round closed would lose what its peers
-    were still sending it, against G2), and a real SIGTERM then stops
+    were still sending it, a silent loss), and a real SIGTERM then stops
     each one cleanly.
     """
     launch_chaos(outdir)

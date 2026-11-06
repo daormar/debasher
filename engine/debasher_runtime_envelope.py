@@ -93,8 +93,8 @@ def encode_close(last_seq=None):
     and will be relaunched (after a crash, or after a halt), and nothing
     in the fifo tells the two apart. That is why a halt sends none.
     `last_seq` is the sender's own count of the last numbered `DATA` it
-    ever sent on this channel (G5): the receiver can then tell a message
-    lost between there and here (G8) from a channel that simply never
+    ever sent on this channel: the receiver can then tell a message
+    lost between there and here from a channel that simply never
     carried that many, which a later gap in the numbers could otherwise
     never reveal, since none is coming after a CLOSE. Left out (an empty
     payload) when the sender is not one that numbers what it sends.

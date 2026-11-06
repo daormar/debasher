@@ -24,7 +24,7 @@ def test_encode_data_with_a_seq_adds_it_as_a_sibling_of_type_and_payload():
 def test_encode_data_with_no_seq_leaves_the_key_out():
     # Not the same as seq=0: a message that is not numbered at all (from a
     # plain _PortWorker, or from outside the program) carries no "seq" key,
-    # so the receiver can tell it apart from one that is (decision 6, G5).
+    # so the receiver can tell it apart from one that is.
     line = lib.encode_data(1)
     assert "seq" not in json.loads(line)
 

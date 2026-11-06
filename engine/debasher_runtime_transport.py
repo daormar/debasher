@@ -684,14 +684,14 @@ class _PortWorker:
         it (never for the leading HELLO or a closing CLOSE, neither of which
         a subclass ever needs to track). The base class has no use for it;
         FBPProcess overrides it to know which of what send_data numbered is
-        still only in memory (see _unwritten, G5's outbound backlog).
+        still only in memory (see _unwritten, the outbound backlog).
         """
 
     def _close_payload(self, tag):
         """
         The `last_seq` that this port's own CLOSE carries (see encode_close),
         or None for an empty payload. The base class has no counter of its
-        own to report; FBPProcess overrides it with `_out_seq[tag]` (G5).
+        own to report; FBPProcess overrides it with `_out_seq[tag]`.
         """
         return None
 

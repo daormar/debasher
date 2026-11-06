@@ -16,16 +16,16 @@
 
 # *- bash -*
 #
-# The graceful counterpart to debasher_stop, for a resident program (design
-# doc doc/design_doc_resident.md, Conformance status, G2's third fix
-# candidate). Where debasher_stop ends a program at once (SIGKILL, no
-# coordination), this one asks every node to close a round first (a halt),
-# waits until each one has (its own halted marker, see the design doc's
-# Glossary), and only then stops it (SIGTERM to its whole process group,
-# same as debasher_stop reaches with SIGKILL); if a node never gets there
-# within --timeout, it falls back to debasher_stop on the whole program. If
-# the program has a Supervisor, that is stopped first, the same graceful
-# way, so it cannot relaunch a node out from under the rest of this.
+# The graceful counterpart to debasher_stop, for a resident program (see
+# "`debasher_stop_resident`" in doc/design_doc_resident.md). Where
+# debasher_stop ends a program at once (SIGKILL, no coordination), this one
+# asks every node to close a round first (a halt), waits until each one has
+# (its own halted marker, see the design doc's Glossary), and only then stops
+# it (SIGTERM to its whole process group, same as debasher_stop reaches with
+# SIGKILL); if a node never gets there within --timeout, it falls back to
+# debasher_stop on the whole program. If the program has a Supervisor, that is
+# stopped first, the same graceful way, so it cannot relaunch a node out from
+# under the rest of this.
 #
 # Exit codes: 0 is a clean, fully graceful stop; 1 is a usage or setup error
 # (bad arguments, a directory that is not a resident program's, and the

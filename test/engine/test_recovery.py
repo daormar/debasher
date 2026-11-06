@@ -750,7 +750,7 @@ def test_what_a_relaunched_writer_had_in_its_fifo_survives_its_reader_crashing_w
     # _process() drives the brain loop directly, with no writer thread of its
     # own running: send_data("outf", 1) numbers and queues "1" (seq 1) but
     # nothing ever writes it, so the checkpoint that the BARRIER closes right
-    # after finds it still in the outbound backlog (G5). "3" arrives after
+    # after finds it still in the outbound backlog. "3" arrives after
     # that capture and is only in the input log.
     _process(live, [_data("inf", 1), ("inf", lib.TYPE_BARRIER, _ROUND), _data("inf", 3)])
     _crash(live)

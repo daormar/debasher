@@ -149,7 +149,7 @@ def test_a_close_that_matches_what_was_accepted_is_not_an_error():
     assert [r.envelope.type for r in _log_records(proc)] == ["DATA", "DATA", "CLOSE"]
 
 
-def test_a_close_claiming_more_than_was_accepted_is_a_g8_error():
+def test_a_close_claiming_more_than_was_accepted_is_a_loss_error():
     proc = _Recorder(opts=_OPTS)
     _arrive_data(proc, "inf", "a", seq=1)
 

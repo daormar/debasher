@@ -17,14 +17,14 @@ import pytest
 
 from chaos_ref import (
     ExtFeeder,
-    G8_GAP_RE,
-    G8_TORN_RE,
+    LOSS_GAP_RE,
+    LOSS_TORN_RE,
     KILLABLE_NODES,
     SinkTailer,
     SnapshotPacer,
     assert_engineered_gap_trace,
     assert_trace_matches,
-    find_g8_error,
+    find_loss_error,
     halt_and_check_trace,
     halt_and_wait_for_finished,
     launch_chaos,
@@ -53,8 +53,8 @@ def test_a_clean_run_produces_the_exact_trace_at_sink(outdir):
     """
     "Run once with no failures" (Acceptance): every value fanin forwards
     from ext, and every one it echoes back through the loop, reaches sink
-    exactly once, in the order fanin actually processed it (G1 channel
-    order, G2 no silent loss, G4 faithful replay across ports).
+    exactly once, in the order fanin actually processed it (channel
+    order, no silent loss, faithful replay across ports).
     """
     k = 20
     launch_chaos(outdir)
@@ -90,7 +90,7 @@ def test_a_single_random_node_kill_is_recovered_with_no_loss_or_duplicate(outdir
     endpoint stays alive the whole time, holding it open. The kill can
     still land in the window in which the node has taken a message from a
     fifo but not yet logged it, the Contract's other limit: such a run
-    passes with the G8 error that reports the loss (see
+    passes with the loss error that reports the loss (see
     halt_and_check_trace), and every other run's trace must match the
     criterion exactly.
     """
@@ -149,7 +149,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
     of every channel that touches either one, so this still cannot touch
     the Contract's "both endpoints of a channel crashed" limit, the same
     reasoning as the single-node-kill driver above. As there, a kill that
-    lands between a read and its logging ends the run with a G8 error
+    lands between a read and its logging ends the run with a loss error
     instead (see halt_and_check_trace); every other run's trace must
     match the criterion exactly.
     """
@@ -204,7 +204,7 @@ def test_loop_and_sink_killed_together_are_recovered_with_no_loss_or_duplicate(o
 
 
 @pytest.mark.parametrize("run_index", range(5))
-def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_error(
+def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_loss_error(
     outdir, run_index
 ):
     """
@@ -231,8 +231,8 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     as "already sent" as far as its own recovery is concerned, then
     SIGKILL both before either relaunches.
 
-    The run must still end in one of the two shapes a G8 violation is
-    seen to take on this channel (see find_g8_error) naming 'from_fanin',
+    The run must still end in one of the two shapes a loss is
+    seen to take on this channel (see find_loss_error) naming 'from_fanin',
     and the surviving trace, once the reachable part of the graph (fanin,
     loop) settles, must satisfy assert_engineered_gap_trace: no
     duplicate, nothing out of order, the missing sends forming a single
@@ -249,7 +249,7 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     """
     # A long tail is deliberate, not padding: detecting the engineered gap
     # depends on a live message actually arriving on the channel after it
-    # opens (G8's own mechanism, see _on_arrival), and sink may take
+    # opens (how a gap is detected, see _on_arrival), and sink may take
     # several relaunches, roughly HEARTBEAT_TIMEOUT_SECS apart, before it
     # gives up; k/interval keep the feed running well past that whole
     # window so every relaunch still has something live to read. Once
@@ -333,8 +333,8 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     if fanin_out.error is not None:
         raise fanin_out.error
     if fanin_outcome == "node 'fanin' exceeded":
-        assert G8_GAP_RE.search(fanin_out.text) or G8_TORN_RE.search(fanin_out.text), (
-            f"fanin also gave up, but without a recognizable G8 error: {fanin_out.text!r}"
+        assert LOSS_GAP_RE.search(fanin_out.text) or LOSS_TORN_RE.search(fanin_out.text), (
+            f"fanin also gave up, but without a recognizable loss error: {fanin_out.text!r}"
         )
 
     assert wait_for_text(
@@ -353,9 +353,9 @@ def test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_
     if sink_out.error is not None:
         raise sink_out.error
 
-    reported = find_g8_error(sink_out.text, "from_fanin")
+    reported = find_loss_error(sink_out.text, "from_fanin")
     assert reported is not None, (
-        f"no G8 error naming 'from_fanin' found across sink's incarnations: {sink_out.text!r}"
+        f"no loss error naming 'from_fanin' found across sink's incarnations: {sink_out.text!r}"
     )
     context = f" (run {run_index}, reported range {reported})"
     assert_engineered_gap_trace(tailer.records, k, reported, context)
@@ -388,7 +388,7 @@ def test_fanin_and_sink_killed_together_over_an_engineered_backlog_lose_nothing(
     backlog counts as already sent as far as its own recovery is concerned,
     then SIGKILL both before either is relaunched. Without a holder the
     backlog dies with them, and sink reports the hole from the first number
-    of the backlog up to the last one that the checkpoint covers (G8, see
+    of the backlog up to the last one that the checkpoint covers (see
     the previous piece). With the Supervisor holding the fifo, the relaunched sink reads the backlog,
     and drops as duplicates what the relaunched fanin sends again.
 
@@ -488,7 +488,7 @@ def test_fanin_and_loop_killed_together_are_recovered_with_no_loss_or_duplicate(
     as the loop+sink piece: no run can end in the "both endpoints"
     exception, because the topology itself rules that limit out here, not
     because timing happened to avoid it. A kill between a read and its
-    logging still ends a run with a G8 error, as in the pieces above (see
+    logging still ends a run with a loss error, as in the pieces above (see
     halt_and_check_trace).
     """
     k = 60
@@ -581,7 +581,7 @@ def test_fanin_killed_during_an_open_snapshot_round_is_recovered_with_no_loss_or
     "A crash while a round is open" in the Contract's limits). A crash
     during a halt round is a different case, which this piece does not
     exercise. As in the pieces above, a kill that lands between a read and
-    its logging ends the run with a G8 error instead (see
+    its logging ends the run with a loss error instead (see
     halt_and_check_trace).
     """
     k = 60

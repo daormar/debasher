@@ -825,7 +825,7 @@ class Supervisor(_PortWorker):
                 stderr=subprocess.DEVNULL,
             )
             if result.returncode == self._DEBASHER_STOP_RESIDENT_FORCED_EXIT:
-                # G8, detected, never silent: the reachable part of the
+                # Detected, never silent: the reachable part of the
                 # graph was not stopped gracefully within
                 # FORCE_STOP_TIMEOUT_SECS, so debasher_stop_resident itself
                 # already fell back to a hard kill (the program did end,

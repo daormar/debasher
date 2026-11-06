@@ -32,7 +32,7 @@ def launch_chaos(outdir, *program_opts):
     launch(PFILE, outdir, *program_opts)
 
 
-# Two shapes a G8 violation on a killed node's channel is seen to take in
+# Two shapes a loss on a killed node's channel is seen to take in
 # practice (see "Acceptance" in the design doc): a clean one naming
 # the exact missing sequence numbers, raised when the reader notices the
 # jump itself; and a "torn line" one with no numbers, raised when a freshly
@@ -40,27 +40,27 @@ def launch_chaos(outdir, *program_opts):
 # itself died (so no fresh HELLO is coming to excuse the fragment). Both
 # stop the affected part and are detected, never silent, so both count as
 # the accepted exception; only the first names a range to cross-check.
-G8_GAP_RE = re.compile(
+LOSS_GAP_RE = re.compile(
     r"gap in the sequence numbers on '(?P<channel>[^']+)': "
     r"expected \d+, got \d+, missing (?P<lo>\d+)(?: to (?P<hi>\d+))?"
 )
 
 
-G8_TORN_RE = re.compile(r"unparsable line on '(?P<channel>[^']+)' not followed by HELLO")
+LOSS_TORN_RE = re.compile(r"unparsable line on '(?P<channel>[^']+)' not followed by HELLO")
 
 
-def find_g8_error(text, channel):
+def find_loss_error(text, channel):
     """
     Returns (lo, hi) of the reported missing range if the clean, numbered
     shape naming `channel` is found; (None, None) if only the numberless
     "torn line" shape naming `channel` is found; None if neither is.
     """
-    m = G8_GAP_RE.search(text)
+    m = LOSS_GAP_RE.search(text)
     if m and m.group("channel") == channel:
         lo = int(m.group("lo"))
         hi = int(m.group("hi")) if m.group("hi") else lo
         return (lo, hi)
-    m = G8_TORN_RE.search(text)
+    m = LOSS_TORN_RE.search(text)
     if m and m.group("channel") == channel:
         return (None, None)
     return None
@@ -173,7 +173,7 @@ class ExtFeeder(threading.Thread):
     Every value carries its own sequence number, as a source that knows
     the protocol may send it: a value that fanin takes from ext and loses
     before writing it to its input log (see the Contract's limits) is
-    then a gap that fanin reports (G8), not a silent loss at the
+    then a gap that fanin reports, not a silent loss at the
     boundary of the program.
     """
 
@@ -264,16 +264,18 @@ def halt_and_wait_for_finished(outdir, timeout=30.0):
 
 def assert_node_state_restored(records, context=""):
     """
-    G3 (and G6 across a resume): fanin's node state travels in every copy
-    it sends to sink. On each port the counts that sink sees must be 1, 2,
-    3... with no jump and no restart: a relaunch or a resume that did not
-    restore the state as it was would start counting again, or skip.
+    Node recovery (and orderly halt across a resume): fanin's node state
+    travels in every copy it sends to sink. On each port the counts that
+    sink sees must be 1, 2, 3... with no jump and no restart: a relaunch or
+    a resume that did not restore the state as it was would start counting
+    again, or skip.
 
-    G4: the digest in each copy folds every message fanin processed, on
-    any port, in the order it processed them, and sink sees the copies in
-    that same order. Folding sink's own trace must give the digest of
-    every copy: a replay that reproduced another interleaving of the ports
-    would leave fanin with a digest that no longer follows from the trace.
+    Faithful replay: the digest in each copy folds every message fanin
+    processed, on any port, in the order it processed them, and sink sees
+    the copies in that same order. Folding sink's own trace must give the
+    digest of every copy: a replay that reproduced another interleaving of
+    the ports would leave fanin with a digest that no longer follows from
+    the trace.
 
     Both hold whether or not a message was lost before fanin processed
     it, since the state only follows what fanin processed, and sink sees
@@ -323,7 +325,7 @@ def assert_engineered_gap_trace(records, k, reported_range, context=""):
     """
     The Acceptance criterion's exception clause, for a run that engineers
     a real loss on the fanin->sink channel on purpose (see
-    test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_g8_error).
+    test_fanin_and_sink_killed_together_without_a_holder_end_in_a_recognized_loss_error).
 
     Once the gap opens, sink's reader thread for this channel dies on it
     identically on every relaunch (the same durable hole is still there
@@ -331,7 +333,7 @@ def assert_engineered_gap_trace(records, k, reported_range, context=""):
     for good: what survives is not "everything except a hole in the
     middle", it is an exact, gapless prefix of the channel's own sequence
     numbers (each DATA record's own `seq`, not the derived per-port
-    value), ending exactly where the gap the G8 error named begins.
+    value), ending exactly where the gap the loss error named begins.
     """
     data = [r for r in records if r.get("type") == "DATA" and r.get("seq") is not None]
     seqs = [r["seq"] for r in data]
@@ -370,17 +372,17 @@ def start_sched_out_tailers(outdir):
 
 def find_reported_losses(texts):
     """
-    Every G8 error that the nodes' outputs hold, as (node, channel, lo, hi):
+    Every loss error that the nodes' outputs hold, as (node, channel, lo, hi):
     lo..hi is the missing range, or (None, None) for the "torn line" shape,
-    which names no numbers (see find_g8_error).
+    which names no numbers (see find_loss_error).
     """
     reported = []
     for name, text in texts.items():
-        for m in G8_GAP_RE.finditer(text):
+        for m in LOSS_GAP_RE.finditer(text):
             lo = int(m.group("lo"))
             hi = int(m.group("hi")) if m.group("hi") else lo
             reported.append((name, m.group("channel"), lo, hi))
-        for m in G8_TORN_RE.finditer(text):
+        for m in LOSS_TORN_RE.finditer(text):
             reported.append((name, m.group("channel"), None, None))
     return reported
 
@@ -426,11 +428,11 @@ def halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
     A kill can land in the window in which a node has taken a message
     from a fifo but not yet written it to its input log (see the
     Contract's limits): the message is lost for good, the node reports
-    it with a G8 error when the next one arrives, and the halt may never
+    it with a loss error when the next one arrives, and the halt may never
     complete, since that node's reader has stopped. Such a run passes if
-    every G8 error came from a killed node and the trace satisfies
-    assert_trace_with_reported_losses. A run with no G8 error has to
-    halt cleanly and give the exact trace. Returns the G8 errors found
+    every loss error came from a killed node and the trace satisfies
+    assert_trace_with_reported_losses. A run with no loss error has to
+    halt cleanly and give the exact trace. Returns the loss errors found
     (see find_reported_losses), empty for a clean run.
     """
     result = subprocess.run(
@@ -458,7 +460,7 @@ def halt_and_check_trace(outdir, tailer, node_outs, killed, k, context=""):
         return reported
 
     not_killed = [loss for loss in reported if loss[0] not in killed]
-    assert not not_killed, f"G8 error at a node that was never killed{context}: {not_killed}"
+    assert not not_killed, f"loss error at a node that was never killed{context}: {not_killed}"
     assert_trace_with_reported_losses(tailer.records, k, reported, f"{context}, reported {reported}")
     return reported
 

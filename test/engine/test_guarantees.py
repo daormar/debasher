@@ -1,11 +1,12 @@
 """
 Focused real tests of the guarantees of the Contract (see "Acceptance" in the
 design doc), each stated in the guarantee's words, in the one situation that
-exercises it, on real debasher_exec runs of debasher_chaos_ref.sh: G1, G2,
-G4, G5, G6 and G7. G3 is checked by every trace criterion of chaos_ref.py,
-through fanin's node state, so by every run that relaunches fanin, and G8 by
-the engineered gap of test_chaos.py and the escalation of
-test_stop_resident.py.
+exercises it, on real debasher_exec runs of debasher_chaos_ref.sh: channel
+order, no silent loss without failures, faithful replay, no duplicates across
+a crash, orderly halt and bounded detection. Node recovery is checked by every
+trace criterion of chaos_ref.py, through fanin's node state, so by every run
+that relaunches fanin, and "detected, never silent" by the engineered gap of
+test_chaos.py and the escalation of test_stop_resident.py.
 """
 
 import json
@@ -60,7 +61,7 @@ pytestmark = real_run
 
 def test_on_every_channel_messages_are_delivered_in_the_order_they_were_sent(outdir):
     """
-    G1, channel order: on every channel, messages are delivered in the
+    Channel order: on every channel, messages are delivered in the
     order they were sent. A burst with no pause between messages goes
     through the three channels inside the program, fanin to loop, loop
     back to fanin and fanin to sink, and each receiver must have logged
@@ -91,7 +92,7 @@ def test_on_every_channel_messages_are_delivered_in_the_order_they_were_sent(out
 
 def test_a_message_sent_while_a_round_is_open_reaches_process_data(outdir):
     """
-    G2, no silent loss without failures, also while a round is open: send
+    No silent loss without failures, also while a round is open: send
     5 and then 7 through a fan-in node while a round is open, and
     process_data receives both. loop is frozen, well under
     HEARTBEAT_TIMEOUT_SECS, so that the round fanin opens, which waits for
@@ -151,7 +152,7 @@ def test_a_message_sent_while_a_round_is_open_reaches_process_data(outdir):
 @pytest.mark.parametrize("run_index", range(5))
 def test_a_relaunched_node_replays_its_ports_in_the_order_it_processed_them(outdir, run_index):
     """
-    G4, faithful replay: the input log is one log per node, in the order
+    Faithful replay: the input log is one log per node, in the order
     in which the node processes what arrives on all its input ports, so
     that replay reproduces that order exactly, and a node with several
     input ports does not have to be insensitive to how their messages
@@ -194,13 +195,13 @@ def test_a_relaunched_node_replays_its_ports_in_the_order_it_processed_them(outd
 
 def test_a_running_neighbor_sees_each_message_of_a_relaunched_node_once(outdir):
     """
-    G5, no duplicates across a crash: a neighbor that keeps running
-    observes each message of a relaunched node once, not twice, and in
-    order. fanin is killed after sink has received messages that fanin
-    processed after its last checkpoint: its replay sends them again,
-    with the same numbers, and sink must drop every one of them. (The
-    other half of G5, that a message lost anyway is noticed, is the
-    engineered-gap piece of test_chaos.py.)
+    No duplicates across a crash: a neighbor that keeps running observes
+    each message of a relaunched node once, not twice, and in order. fanin
+    is killed after sink has received messages that fanin processed after
+    its last checkpoint: its replay sends them again, with the same numbers,
+    and sink must drop every one of them. (The other half of the guarantee,
+    that a message lost anyway is noticed, is the engineered-gap piece of
+    test_chaos.py.)
     """
     launch_chaos(outdir)
     tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
@@ -247,7 +248,7 @@ def test_a_running_neighbor_sees_each_message_of_a_relaunched_node_once(outdir):
 
 def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
     """
-    G6, orderly halt: after a halt every node resumes in the state it had
+    Orderly halt: after a halt every node resumes in the state it had
     when it stopped, loading its checkpoint and replaying from its input
     log what it processed after capturing it. The halt here closes with
     messages in flight: loop is frozen while the last values go round, so
@@ -316,7 +317,7 @@ def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
 
 def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdir):
     """
-    G7, bounded detection: a crashed node is noticed within
+    Bounded detection: a crashed node is noticed within
     HEARTBEAT_CHECK_INTERVAL_SECS when its PID is verifiably gone, and
     then relaunched.
     """
@@ -336,7 +337,7 @@ def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdi
 
 def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdir):
     """
-    G7, bounded detection: a node that is alive but unhealthy, because one
+    Bounded detection: a node that is alive but unhealthy, because one
     of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS, and
     then relaunched. A line that is not JSON, followed by one that is not
     a HELLO, stops the reader thread of fanin's ext port (see the resync
