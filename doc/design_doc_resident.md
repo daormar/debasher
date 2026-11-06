@@ -16,10 +16,10 @@ section says so.
 The goal is to extend the FBP engine with state (processes with their own
 lifecycle, communicating over FIFOs, with support for cycles and interactivity)
 so that, in addition to what it already does today, the system is able to do the
-following, **within the limits stated in the Contract section right below**
-(failure model, guarantees, obligations of module authors, non-goals). Where a
-goal and the Contract disagree, the Contract wins: it says precisely what is
-promised.
+following, **within the limits stated in the Contract**, which comes right after
+the Glossary (failure model, guarantees, obligations of module authors,
+non-goals). Where a goal and the Contract disagree, the Contract wins: it says
+precisely what is promised.
 
 - **Tolerate the crash of one or more processes without losing work or
   corrupting the rest of the graph**: a node that goes down is relaunched (by
@@ -43,19 +43,29 @@ promised.
   order it processed it, so that a relaunched node re-processes what it had
   already received, in the same order, and then continues with whatever arrived
   while it was down.
-- **Do all of this without imposing a single language on the graph's
-  processes**, and without requiring additional external infrastructure
-  (databases, coordination services) beyond what the engine and the filesystem
-  already offer.
+- **Do all of this with a wire format that ties no process to a language**
+  (one JSON object per line on a FIFO), although today every node and the
+  `Supervisor` are Python classes of the runtime library (see "Nodes in a
+  compiled language" in Future work), and without requiring additional external
+  infrastructure (databases, coordination services) beyond what the engine and
+  the filesystem already offer.
 - **Fail loudly, never silently**: whenever a guarantee cannot be kept (for
   example, a message lost because two connected nodes crashed at the same time),
   the violation is detected and reported, instead of the program carrying on
   with silently wrong state.
 
-The Contract below says precisely what these goals do and do not promise. After
-it comes the design of the mechanism that provides them, in the sections that
-follow, cited in the text by name ("Input log", "Recovery from a node
-failure", and so on).
+The Glossary comes first, with the meaning of the words that the rest uses.
+The Contract follows: it says precisely what these goals do and do not
+promise. Then comes the design of the mechanism that provides
+them, from the wire up: the "Control envelope" that every line of a FIFO
+carries; the node ("`FBPProcess` class") and its "Input log"; the "`Supervisor`
+class", which watches the nodes; the "Tools for resident programs", which act
+on a live program from outside; the "Channel kinds declared with the fifo",
+which tell the engine what each FIFO is for; "Recovery from a node failure",
+which joins the pieces above when a node comes back; and "`ProgramLauncher`",
+a node that launches batch runs. The document ends with what is still open:
+"Loose ends to check before considering the design closed", "Extensions" and
+"Future work". Sections are cited in the text by name, as here.
 
 # Glossary
 
@@ -660,6 +670,11 @@ guarantee in words and never cite these numbers, which may change.
 
 ## Limits and non-goals
 
+Besides the limits below, the Contract holds only within its "Failure model"
+(the built-in scheduler, no failure of the machine) and only for nodes that keep
+the "Obligations of module authors" (a deterministic `process_data`, idempotent
+effects outside the graph).
+
 - **Both endpoints of a channel crashed while no other process held the
   FIFO.** When one endpoint of a channel crashes, nothing is lost: the other
   holds the FIFO open, and what the writer had sent and the reader had not yet
@@ -722,8 +737,11 @@ guarantee in words and never cite these numbers, which may change.
   loop, deadlock) is not detected today: the heartbeat proves that its threads
   are alive, not that they make progress. Not a goal for now (see "Progress in
   the heartbeat" in Future work).
-- **Not covered**: non-deterministic `process_data`, effects on external systems
-  beyond "idempotent if repeated", Slurm, machine failure.
+- **Python nodes only.** The engine refuses a process of a resident program
+  whose code is not a Python heredoc of a class of the runtime library
+  (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
+  on the wire depends on Python (see "Nodes in a compiled language" in Future
+  work).
 - **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch
   FIFO") is not available in resident programs: declaring it aborts the load of
   the program, before anything is launched. Resident processes keep their own
@@ -2736,20 +2754,20 @@ what it needs to show and edit the channels of a resident program.
 
 An output option is named `-out...` or `--out...`, in every program, and
 `define_opt_from_proc_out` and `define_opt_from_proc_task_out` only connect an
-input option to an output option of another process. Every FIFO of a program
-is created once, by the `define_fifo_opt` (or `define_fifo_opt_generator`) of
-one process, its fifo owner, through an output option: the owner writes it.
-The process at the other end reads it, through an input option connected to
-that output, or no process of the program does, and the other end is outside
-(`__EXTERNAL__` in the engine's fifo registry). The one exception is a fifo
-whose writer is outside the program: the process that reads it has to create
-it, through an input option, and the fifo carries a fifo tag. The engine's
-registries (`DEBASHER_PROGRAM_FIFOS` and `DEBASHER_FIFO_READERS`, written to
-`program.fifos`) give the owner and the other end of every fifo, task by task,
-and the other end may be another task of the owner's own array; the option
-through which the owner defines each fifo is recorded too
-(`DEBASHER_FIFO_OWNER_OPTS`). The direction of every channel follows from them
-and from the tags, with nothing read from Python.
+input option to an output option of another process, or of the same one (a
+self-loop). In a resident program, every FIFO is created once, by the
+`define_fifo_opt` (or `define_fifo_opt_generator`) of one process, its fifo
+owner, through an output option: the owner writes it. The process at the other
+end reads it, through an input option connected to that output, or no process of
+the program does, and the other end is outside (`__EXTERNAL__` in the engine's
+fifo registry). The one exception is a fifo whose writer is outside the program:
+the process that reads it has to create it, through an input option, and the
+fifo carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
+`DEBASHER_FIFO_READERS`, written to `program.fifos`) give the owner and the
+other end of every fifo, task by task, and the other end may be another task of
+the owner's own array; the option through which the owner defines each fifo is
+recorded too (`DEBASHER_FIFO_OWNER_OPTS`). The direction of every channel
+follows from them and from the tags, with nothing read from Python.
 
 ## Tags: `--control` and `--external`
 
@@ -2811,8 +2829,9 @@ A violation stops the load with an error that names the node or the fifo, and
 the rule. The check walks the fifos once; the registries it reads are already
 built by then, for every task of every array and generator. In the fan-in of
 two nodes fed from outside (see "Initiators numbered their rounds independently"
-in "Loose ends"), a program in which only `a` has a control channel is refused
-by rule 1, since `b` cannot be reached.
+in "Loose ends"), where nodes `a` and `b`, whose only inputs come from
+outside, both write to a node `c`, a program in which only `a` has a control
+channel is refused by rule 1, since `b` cannot be reached.
 
 ## Ports from the engine
 
@@ -2899,8 +2918,6 @@ is port by port.
   `Supervisor` whose `TRIGGER_PORT` lists them or someone outside the program.
 - A node cut off at run time, by a node that fails for good, is a separate case,
   handled by "Escalation on a permanent node failure".
-- Reading and writing the tags in the frontend is part of "Resident programs in
-  the frontend" in Future work.
 
 # Recovery from a node failure
 
@@ -4023,11 +4040,6 @@ Design ideas from Future work move here once they are actually built.
   program launched from the command line has no such check. The engine could
   record, at every launch, what the state depends on, and warn or refuse when
   a resume differs from it. Not designed.
-- **Resident programs in the frontend.** The web UI (`frontend/` and the API
-  behind it, `api/`) knows nothing about resident programs yet. How it builds,
-  runs, observes and draws them is designed in "Resident programs in the web
-  UI" of `doc/design_doc_webui.md`, and not built; the engine work that design
-  relies on is listed above.
 - **The ports of a node under test from the program.** The node harness taking
   the ports of a node from the options of the program, as the engine computes
   them for a run, instead of from the test.
