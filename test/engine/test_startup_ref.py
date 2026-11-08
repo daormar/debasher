@@ -4,9 +4,12 @@ every message, so its relaunch, which replays its input log, is silent for
 longer than the heartbeat timeout of the Supervisor. The startup deadline
 that its computational specifications give it (startup_timeout_s), which
 the engine passes to the Supervisor, covers the replay, and the Supervisor
-does not declare it down again.
+does not declare it down again. A limit of the node given in those
+specifications reaches the node that the engine launches and the one that the
+Supervisor relaunches.
 """
 
+import json
 import os
 import signal
 import time
@@ -34,6 +37,15 @@ _MESSAGES = 10
 _HEARTBEAT_TIMEOUT_SECS = 2
 
 
+# The limit of the node that the program sets, input_log_max_mb.
+_INPUT_LOG_MAX_BYTES = 50 * 1024 * 1024
+
+
+def _node_info(outdir):
+    path = Path(outdir, "__exec__", "slow", "node_info")
+    return json.loads(path.read_text()) if path.exists() else None
+
+
 def _logged_data(outdir):
     log_dir = Path(outdir, "__exec__", "slow", "log")
     return sum(
@@ -44,6 +56,9 @@ def _logged_data(outdir):
 def test_a_replay_longer_than_the_heartbeat_timeout_fits_in_the_startup_deadline(outdir):
     launch(PFILE, outdir)
     assert wait_until(lambda: os.path.exists(os.path.join(outdir, "__exec__", "slow", "control_ports")))
+    assert wait_until(lambda: _node_info(outdir) is not None)
+    first_incarnation = _node_info(outdir)
+    assert first_incarnation["limits"]["input_log_max_bytes"] == _INPUT_LOG_MAX_BYTES
 
     ext = find_fifo(outdir, "slow_ext")
     for i in range(_MESSAGES):
@@ -67,3 +82,7 @@ def test_a_replay_longer_than_the_heartbeat_timeout_fits_in_the_startup_deadline
     assert "node 'slow' is down (attempt 1/" in sup_log
     assert "attempt 2/" not in sup_log, sup_log
     assert read_pid(id_path) != old_pid
+
+    # The relaunched node writes its node info file once it has replayed.
+    assert wait_until(lambda: _node_info(outdir)["started_at"] != first_incarnation["started_at"])
+    assert _node_info(outdir)["limits"]["input_log_max_bytes"] == _INPUT_LOG_MAX_BYTES

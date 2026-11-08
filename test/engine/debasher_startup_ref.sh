@@ -118,6 +118,6 @@ EOF
 ########
 debasher_startup_ref_program()
 {
-    add_debasher_process "slow" "cpus=1; mem=32; time=00:10:00; startup_timeout_s=30"
+    add_debasher_process "slow" "cpus=1; mem=32; time=00:10:00; startup_timeout_s=30; input_log_max_mb=50"
     add_debasher_process "sup" "cpus=1; mem=32; time=00:10:00; heartbeat_timeout_s=2"
 }
