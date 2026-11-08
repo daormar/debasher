@@ -161,6 +161,8 @@ class FBPProcess(_PortWorker):
     #: sets it for one of its processes with the computational specification
     #: `input_log_max_mb`.
     INPUT_LOG_MAX_BYTES = 100 * 1024 * 1024
+    # The size at which a segment of the input log is closed, at most: a
+    # quarter of INPUT_LOG_MAX_BYTES when that is less (see _open_input_log).
     INPUT_LOG_SEGMENT_BYTES = 4 * 1024 * 1024
 
     # Total size, across every output port, of the DATA that send_data has
@@ -1586,10 +1588,13 @@ class FBPProcess(_PortWorker):
         `capture_pos` is the position that the restored checkpoint reflects
         (0 if there is none), so that numbering goes on after it.
         """
+        # Pruning deletes only segments that are closed, so the cap has to
+        # hold several of them: a segment larger than the cap would never
+        # close, and nothing would ever be pruned however many rounds close.
         log = _InputLog(
             self._execdir_entry("log"),
             self.INPUT_LOG_MAX_BYTES,
-            self.INPUT_LOG_SEGMENT_BYTES,
+            min(self.INPUT_LOG_SEGMENT_BYTES, self.INPUT_LOG_MAX_BYTES // 4),
         )
         log.recover(capture_pos)
         self._input_log = log

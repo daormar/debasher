@@ -280,6 +280,34 @@ def test_recovery_fails_loudly_when_the_log_has_a_hole(tmp_path):
 # --- the size of the log stays bounded --------------------------------------
 
 
+def test_a_cap_below_the_size_of_a_segment_is_kept_by_regular_rounds(tmp_path):
+    class _SmallCap(_Fanin):
+        INPUT_LOG_MAX_BYTES = 4096
+        CHECKPOINT_RETENTION = 2
+
+    live = _SmallCap(opts=_opts(tmp_path))
+    for epoch in range(40):
+        items = [_data("a", epoch * 10 + 1), _data("b", epoch * 10 + 2)]
+        items += [("a", lib.TYPE_BARRIER, _round(epoch)), ("b", lib.TYPE_BARRIER, _round(epoch))]
+        _process(live, items)
+
+    assert live._last_epoch == 39
+    assert 0 < live._input_log.total_bytes <= 4096
+    _crash(live)
+
+
+@pytest.mark.parametrize("cap, segment", [(100 << 20, 4 << 20), (1 << 20, 1 << 18)])
+def test_a_segment_is_a_quarter_of_the_cap_at_most(tmp_path, cap, segment):
+    class _Capped(_Fanin):
+        INPUT_LOG_MAX_BYTES = cap
+
+    node = _Capped(opts=_opts(tmp_path))
+    node._open_input_log(0)
+
+    assert node._input_log._segment_bytes == segment
+    node._input_log.close()
+
+
 def test_the_log_is_pruned_after_checkpoints_and_recovery_still_works(tmp_path):
     class _Pruning(_Fanin):
         INPUT_LOG_SEGMENT_BYTES = 300

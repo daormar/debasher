@@ -1830,10 +1830,11 @@ The log is split into segments, files named `<first pos>.log` after the
 position of their first record, ordered numerically like a checkpoint's
 `<epoch>.json`. A new segment starts with every incarnation of a node, never
 appended to an existing one, and when the active one reaches
-`INPUT_LOG_SEGMENT_BYTES` (4 MiB by default); files are created at the first
-append, so there are no empty segments, and nothing rotates when a round
-captures the node state, which would couple the brain thread to the readers
-to save, at most, one segment of disk.
+`INPUT_LOG_SEGMENT_BYTES` (4 MiB by default), or a quarter of
+`INPUT_LOG_MAX_BYTES` when that is less; files are created at the first append,
+so there are no empty segments, and nothing rotates when a round captures the
+node state, which would couple the brain thread to the readers to save, at
+most, one segment of disk.
 
 A record is one line, `{"pos": N, "port": "<port>", "env": <the envelope
 line exactly as it arrived>}`. The envelope is embedded by string
@@ -1938,11 +1939,14 @@ node's log together, kept in memory so that checking it costs nothing. It is a
 safety net, not the normal way old history goes away, which is pruning:
 exceeding it raises in the reader thread, before anything is written, like any
 other death of a thread. Reaching it means that no epoch has closed in a long
-time, so it does not trip while something triggers rounds regularly; since a
-node does not start rounds on its own, a program in which nothing does
-reaches it. `debasher_snapshot_resident --every` triggers them from outside
-the program (see "`debasher_snapshot_resident`: rounds from outside the
-program").
+time, so it does not trip while rounds are frequent enough for what arrived
+since the oldest retained checkpoint to fit in the cap. A small cap does not
+prevent pruning: only whole segments other than the active one are deleted, and
+a segment closes on reaching a quarter of the cap at most (see "Log structure
+and record format"). Since a node does not start rounds on its own, a program
+in which nothing does reaches it. `debasher_snapshot_resident --every` triggers
+them from outside the program (see "`debasher_snapshot_resident`: rounds from
+outside the program").
 
 ## `CLOSE` and closed ports
 
