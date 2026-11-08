@@ -204,6 +204,10 @@ def test_fbpprocess_does_not_duplicate_handlers_across_instances_of_the_same_cla
 # --- FBPProcess: extension points must be overridden --------------------
 
 
+def test_the_logger_of_a_node_is_named_after_its_class():
+    assert _NoPortsProcess(opts={}).log.name == "_NoPortsProcess"
+
+
 def test_fbpprocess_extension_points_are_not_implemented_by_default():
     proc = _NoPortsProcess(opts={})
     with pytest.raises(NotImplementedError):

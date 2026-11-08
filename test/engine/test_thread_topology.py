@@ -89,6 +89,21 @@ def _unread_bytes(fifo_path):
         os.close(fd)
 
 
+def _drain_until_writer_ends(fifo_path, writer):
+    """Empties the fifo so that a writer thread abandoned on it can finish."""
+    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    try:
+        deadline = time.monotonic() + 5
+        while writer.is_alive() and time.monotonic() < deadline:
+            try:
+                os.read(fd, 65536)
+            except BlockingIOError:
+                time.sleep(0.01)
+    finally:
+        os.close(fd)
+    writer.join(timeout=2)
+
+
 def _read_envelopes(fifo, count):
     """
     Reads and decodes `count` envelopes from a text stream, skipping the
@@ -593,18 +608,48 @@ def test_stop_threads_abandons_a_writer_stuck_on_a_full_pipe(fifo_path):
     assert writer.is_alive()  # abandoned, not joined
     assert writer.daemon  # so it can never keep the process alive
 
-    # Clean up: drain the fifo so the abandoned thread can finish.
-    fd = os.open(fifo_path, os.O_RDONLY | os.O_NONBLOCK)
+    _drain_until_writer_ends(fifo_path, writer)
+    proc._close_finished_fifos()
+
+
+class _TwoOutputs(_WriterOnly):
+    def _output_ports(self):
+        return {"slow": "slow", "fast": "fast"}
+
+
+def test_a_stalled_reader_on_one_output_port_blocks_only_its_writer(tmp_path):
+    paths = {}
+    for name in ("slow", "fast"):
+        paths[name] = str(tmp_path / name)
+        os.mkfifo(paths[name])
+    proc = _TwoOutputs(opts=paths)
+    proc.start_threads()
+    for _ in range(200):
+        proc.send_data("slow", "x" * 1000)  # far more than a pipe holds, with nobody reading
+    for i in range(3):
+        proc.send_data("fast", i)
+
+    fd = os.open(paths["fast"], os.O_RDONLY | os.O_NONBLOCK)
+    received = b""
     try:
         deadline = time.monotonic() + 5
-        while writer.is_alive() and time.monotonic() < deadline:
+        while received.count(b'"DATA"') < 3 and time.monotonic() < deadline:
             try:
-                os.read(fd, 65536)
+                received += os.read(fd, 65536)
             except BlockingIOError:
                 time.sleep(0.01)
     finally:
         os.close(fd)
-    writer.join(timeout=2)
+
+    envelopes = [lib.decode_envelope(line) for line in received.decode().splitlines() if line]
+    assert [e.payload for e in envelopes if e.type == lib.TYPE_DATA] == [0, 1, 2]
+    slow_writer = proc._writer_threads["slow"]
+    assert slow_writer.is_alive() and proc._outbound_queues["slow"].qsize() > 0
+    assert proc._writer_threads["fast"].is_alive()
+    assert proc._brain_thread.is_alive()
+
+    proc.stop_threads(timeout=0.3)
+    _drain_until_writer_ends(paths["slow"], slow_writer)
     proc._close_finished_fifos()
 
 
@@ -708,18 +753,3 @@ def test_two_processes_talk_over_a_real_fifo(fifo_path):
     finally:
         sender.stop_threads(timeout=2)
         receiver.stop_threads(timeout=2)
-
-
-# --- _on_barrier / _on_interact are still stubs in this slice ------------
-
-
-def test_on_barrier_is_not_implemented_yet():
-    proc = lib.FBPProcess(opts={})
-    with pytest.raises(NotImplementedError):
-        proc._on_barrier("some_port", {"epoch": 1, "halt": False})
-
-
-def test_on_interact_is_not_implemented_yet():
-    proc = lib.FBPProcess(opts={})
-    with pytest.raises(NotImplementedError):
-        proc._on_interact({"command": "start_snapshot", "args": {}})

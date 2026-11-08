@@ -330,6 +330,24 @@ EOF
     [ -z "${output}" ]
 }
 
+@test "debasher::_check_resident_class_name leaves a name already in CamelCase as it is" {
+    Counter_heredoc_py() { cat <<'EOF'
+from debasher_runtime_lib import FBPProcess
+
+
+class Counter(FBPProcess):
+    pass
+
+
+Counter().run()
+EOF
+    }
+
+    run debasher::_check_resident_class_name "Counter"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
 @test "debasher::_check_resident_class_name refuses a class not named after its process" {
     counter_heredoc_py() { cat <<'EOF'
 class Count(FBPProcess):

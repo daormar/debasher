@@ -112,8 +112,9 @@ def test_a_level_that_is_not_info_or_warning_is_an_error_and_writes_nothing(exec
 
 def test_a_text_that_is_too_long_is_cut_with_a_warning_in_the_log(execdir, caplog):
     node = _Node(opts={"inf": "/dev/null"})
+    node.log.addHandler(caplog.handler)
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.WARNING, logger=node.log.name):
         node.set_notice("x" * (node.NOTICE_MAX_CHARS + 5))
 
     assert _notice(execdir)["text"] == "x" * node.NOTICE_MAX_CHARS
@@ -143,6 +144,43 @@ def test_the_file_holds_the_notice_set_last_by_any_thread(execdir):
         t.join()
 
     assert _notice(execdir)["text"] == node._notice["text"]
+
+
+def test_a_reader_never_finds_part_of_a_notice(execdir):
+    node = _Node(opts={"inf": "/dev/null"})
+    node.set_notice("first")
+    stop = threading.Event()
+
+    def rewrite():
+        i = 0
+        while not stop.is_set():
+            node.set_notice("x" * (1 + i % 900))
+            i += 1
+
+    writer = threading.Thread(target=rewrite)
+    writer.start()
+    try:
+        for _ in range(3000):
+            assert isinstance(_notice(execdir)["text"], str)
+    finally:
+        stop.set()
+        writer.join()
+
+
+def test_a_notice_is_in_no_checkpoint(execdir):
+    class _NoPorts(_Node):
+        INPUT_PORTS = []
+
+    node = _NoPorts(opts={})
+    node._open_input_log(0)
+    node.set_notice("a notice to look for")
+
+    node._on_interact({"command": "start_snapshot", "args": {}})
+
+    checkpoint = (execdir / "checkpoints" / "0.json").read_text()
+    assert "a notice to look for" not in checkpoint
+    assert "notice" not in json.loads(checkpoint)
+    assert _notice(execdir)["text"] == "a notice to look for"
 
 
 # --- the replay ---------------------------------------------------------------

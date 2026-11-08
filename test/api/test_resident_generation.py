@@ -232,6 +232,10 @@ def test_the_class_of_a_node_is_named_after_its_process():
     assert node_class_name("org.ns.count_words") == "OrgNsCountWords"
 
 
+def test_a_process_name_already_in_camel_case_names_its_class_as_it_is():
+    assert node_class_name("Counter") == "Counter"
+
+
 def test_a_part_is_kept_without_its_shared_indentation_and_its_blank_ends():
     assert normalized_part("\n\n    a = 1\n\n    if a:\n        b = 2\n\n") == "a = 1\n\nif a:\n    b = 2"
 

@@ -192,3 +192,45 @@ def test_the_observation_thread_stops_with_the_node(ports):
     assert _wait_until(lambda: node.observations == 1)
     node.stop_threads(timeout=2)
     assert not node._observe_thread.is_alive()
+
+
+def test_observe_runs_only_after_the_replay_has_ended(ports):
+    class Recording(_Watcher):
+        def __init__(self, *args, **kwargs):
+            self.at_observe = []
+            super().__init__(*args, **kwargs)
+
+        def observe(self):
+            self.at_observe.append((self._replaying, len(self.received)))
+            super().observe()
+
+    first = _Base(opts=ports)
+    first._open_input_log(0)
+    for i in range(3):
+        line = lib.encode_data(i)
+        first._on_arrival("data", lib.decode_envelope(line), line)
+    first._input_log.close()
+
+    relaunched = Recording(opts=ports)
+    thread = threading.Thread(target=relaunched.run)
+    thread.start()
+    try:
+        assert _wait_until(lambda: relaunched.at_observe)
+        assert relaunched.at_observe[0] == (False, 3)
+    finally:
+        relaunched._stop_requested.set()
+        thread.join(timeout=5)
+
+
+def test_a_round_does_not_wait_on_the_observe_port(ports):
+    class External(_Watcher):
+        EXTERNAL_PORTS = ["data"]
+
+    node = External(opts=ports)
+    node.start_threads()
+    try:
+        assert _wait_until(lambda: node.received == [("events", {"seen": 1})])
+        node._inbound_queue.put((0, "data", lib.TYPE_INTERACT, {"command": "start_snapshot", "args": {}}, None))
+        assert _wait_until(lambda: node._last_epoch == 0)
+    finally:
+        node.stop_threads(timeout=2)

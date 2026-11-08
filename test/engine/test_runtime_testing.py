@@ -393,3 +393,48 @@ def test_a_relative_directory_is_the_one_beside_the_program(tmp_path, monkeypatc
 
     assert node.observe() == [{"file": str(tmp_path / "inbox" / "a.txt")}]
     assert "DEBASHER_PROCESS_MODULE_DIR" not in os.environ
+
+
+ORDERED = """from debasher_runtime_lib import FBPProcess
+
+CALLS = []
+
+
+class Ordered(FBPProcess):
+    def process_data(self, port_name, packet):
+        pass
+
+    def capture_node_state(self):
+        return {}
+
+    def restore_node_state(self, node_state):
+        CALLS.append("restore")
+
+    def initialize_runtime(self):
+        CALLS.append("initialize")
+
+
+Ordered().run()
+"""
+
+
+def test_restart_restores_the_state_and_then_calls_initialize_runtime():
+    node = _node(ORDERED, process="Ordered")
+    calls = sys.modules[type(node.node).__module__].CALLS
+    calls.clear()
+
+    node.restart()
+
+    assert calls == ["restore", "initialize"]
+
+
+def test_inject_from_process_data_still_raises_under_the_harness():
+    source = OBSERVER.replace(
+        "self.send_data(\"out\", f\"{port_name}:{packet['item']}:{self.count}\")",
+        "self.inject({\"item\": \"again\"})",
+    )
+    assert "again" in source
+    node = _node(source, process="Observer", inputs=(), outputs=("out",))
+
+    with pytest.raises(RuntimeError, match="inject"):
+        node.feed("seen", {"item": "x"})
