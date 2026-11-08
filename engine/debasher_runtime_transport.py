@@ -448,7 +448,16 @@ class _PortWorker:
             self._reader_threads[tag] = thread
             thread.start()
 
+        self._start_writer_threads()
+
+        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
+        self._brain_thread.start()
+
+    def _start_writer_threads(self):
+        """Starts the writer thread of every output port that has none yet."""
         for tag, option_name in self._output_ports().items():
+            if tag in self._writer_threads:
+                continue
             thread = threading.Thread(
                 target=self._writer_loop,
                 args=(tag, option_name),
@@ -457,9 +466,6 @@ class _PortWorker:
             )
             self._writer_threads[tag] = thread
             thread.start()
-
-        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
-        self._brain_thread.start()
 
     def stop_threads(self, timeout=None, close=True):
         """

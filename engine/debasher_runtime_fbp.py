@@ -175,7 +175,8 @@ class FBPProcess(_PortWorker):
     # backlog that keeps growing means that a reader is not reading (it was
     # stopped, is down or stuck, or is slower than this node for good), and
     # a loud failure is better than a node that eats the memory of the
-    # machine.
+    # machine. A replay of the input log waits for room instead, since it
+    # can run faster than a writer thread can write, whoever the reader is.
     #: The size, in bytes, of what send_data() has taken and the node has not
     #: yet written into its FIFOs, since their readers are slow, over which
     #: the node skips a checkpoint and waits for the next round (8 MiB by
@@ -184,10 +185,14 @@ class FBPProcess(_PortWorker):
     OUT_BACKLOG_MAX_BYTES = 8 * 1024 * 1024
     #: The size, in bytes, of what send_data() has taken and the node has not
     #: yet written into its FIFOs, over which send_data() raises, since a
-    #: reader of the node is not reading (64 MiB by default). A program sets
-    #: it for one of its processes with the computational specification
+    #: reader of the node is not reading, or waits for room while the node
+    #: replays its input log (64 MiB by default). A program sets it for one
+    #: of its processes with the computational specification
     #: `out_backlog_fail_mb`.
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
+    # How often a replay that waits for room in the outbound backlog looks
+    # at it again (see _wait_for_room_in_backlog).
+    _BACKLOG_POLL_SECS = 0.01
     # The notice of a node (see set_notice): its levels, and the length at
     # which its text is cut.
     NOTICE_LEVELS = ("info", "warning")
@@ -321,6 +326,9 @@ class FBPProcess(_PortWorker):
         # (see _write_node_info) with no need to go through the backlog.
         self._unwritten_port_bytes = {}
         self._out_backlog_lock = threading.Lock()
+        # Whether this replay has already said that it waits for room in the
+        # outbound backlog (see _wait_for_room_in_backlog).
+        self._replay_wait_warned = False
         # The epoch of the first round whose checkpoint was skipped because
         # of the size of the outbound backlog, since the last one written;
         # None while checkpoints are being written. Only the brain thread
@@ -414,10 +422,13 @@ class FBPProcess(_PortWorker):
         # Full startup sequence: install the SIGTERM handler -> open every
         # FIFO -> find the most recent checkpoint if any ->
         # restore_node_state()/defaults, and the sender counters with it (see
-        # _out_seq) -> initialize_runtime() -> open the input log and replay
-        # what it holds after the checkpoint (all of it if there is no
+        # _out_seq) -> initialize_runtime() -> open the input log -> start
+        # the writer threads, after the restored backlog is queued, so that it
+        # reaches a neighbor before what the replay sends again, and so that
+        # what the replay sends drains while it replays -> replay what the
+        # log holds after the checkpoint (all of it if there is no
         # checkpoint, since the node state is then the default one) ->
-        # start_threads() (starts every worker thread) -> wait until told to
+        # start_threads() (starts the other threads) -> wait until told to
         # stop (SIGTERM, from outside this process; see _on_stop_signal and
         # _stop_requested) -> stop every thread, from this (the calling)
         # thread rather than the one that actually delivered the signal. A
@@ -479,9 +490,17 @@ class FBPProcess(_PortWorker):
         self.initialize_runtime()
 
         self._open_input_log(capture_pos)
+        self._start_writer_threads()
         self._replay_input_log(capture_pos)
 
-        self.start_threads()
+        # The threads that are not daemons keep the process alive, so a
+        # failure while they start has to stop them, or the process would
+        # stay up doing nothing, and deaf to a SIGTERM.
+        try:
+            self.start_threads()
+        except BaseException:
+            self.stop_threads(close=False)
+            raise
         self._stop_requested.wait()
         # A halt is an orderly stop that the whole program is resumed from
         # later, not the end of this node. CLOSE is what a writer says when
@@ -574,7 +593,7 @@ class FBPProcess(_PortWorker):
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
         self._started_at = time.time()
-        self._write_node_info(self._all_threads_alive())
+        self._report_node_info(self._all_threads_alive())
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
         if self._observes():
@@ -648,6 +667,15 @@ class FBPProcess(_PortWorker):
         with open(tmp_path, "w") as f:
             json.dump(info, f)
         os.replace(tmp_path, path)
+
+    def _report_node_info(self, healthy):
+        """Writes the node info file. One that cannot be written is not a
+        reason to stop the node: it only reports, so the node goes on and
+        its file goes stale."""
+        try:
+            self._write_node_info(healthy)
+        except OSError as exc:
+            self.log.warning("cannot write the node info file: %r", exc)
 
     def stop_threads(self, timeout=None, close=True):
         """
@@ -1025,7 +1053,8 @@ class FBPProcess(_PortWorker):
         what it receives, so it may be called only from process_data(), and
         raises anywhere else. It also raises when what
         the node has not yet written into its FIFOs would go over
-        OUT_BACKLOG_FAIL_BYTES. When it raises, nothing is sent.
+        OUT_BACKLOG_FAIL_BYTES; while the node replays its input log, it
+        waits for room instead. When it raises, nothing is sent.
         """
         # The message is numbered with this channel's next sequence number
         # (see _out_seq). "Only from process_data()"
@@ -1043,6 +1072,8 @@ class FBPProcess(_PortWorker):
             )
         seq = self._out_seq.get(tag, 0) + 1
         line = encode_data(payload, seq=seq)
+        if self._replaying:
+            self._wait_for_room_in_backlog(len(line))
         with self._out_backlog_lock:
             if self._unwritten_bytes + len(line) > self.OUT_BACKLOG_FAIL_BYTES:
                 port_bytes = self._unwritten_port_bytes.get(tag, 0)
@@ -1056,6 +1087,31 @@ class FBPProcess(_PortWorker):
             self._add_to_out_backlog(tag, seq, line)
         self._out_seq[tag] = seq
         self._outbound_queues[tag].put(line)
+
+    def _wait_for_room_in_backlog(self, size):
+        """
+        Returns once a message of `size` bytes fits under
+        OUT_BACKLOG_FAIL_BYTES, or the backlog is empty, so that a message
+        larger than the limit gets its error instead of waiting for ever, or
+        the node is told to stop, which send_data then reports as the error
+        that it is: the backlog is still over the limit.
+        """
+        while not self._stop_requested.is_set():
+            with self._out_backlog_lock:
+                if (
+                    not self._unwritten_bytes
+                    or self._unwritten_bytes + size <= self.OUT_BACKLOG_FAIL_BYTES
+                ):
+                    return
+            if not self._replay_wait_warned:
+                self._replay_wait_warned = True
+                self.log.warning(
+                    "the replay of the input log waits for room in the outbound backlog, "
+                    "over OUT_BACKLOG_FAIL_BYTES (%d bytes): a reader of this node is not "
+                    "keeping up with it",
+                    self.OUT_BACKLOG_FAIL_BYTES,
+                )
+            self._stop_requested.wait(self._BACKLOG_POLL_SECS)
 
     def _on_written(self, tag, item):
         """
@@ -1141,12 +1197,7 @@ class FBPProcess(_PortWorker):
             # actively announcing its own bad health.
             if healthy and self.SUPERVISOR_PORT is not None:
                 self._send_interact(self.SUPERVISOR_PORT, "heartbeat")
-            # A node info file that cannot be written is not a reason to stop
-            # the heartbeats: the node goes on, only its file goes stale.
-            try:
-                self._write_node_info(healthy)
-            except OSError as exc:
-                self.log.warning("cannot write the node info file: %r", exc)
+            self._report_node_info(healthy)
         self.log.debug("heartbeat thread stopped")
 
     def _on_barrier(self, port_name, payload):

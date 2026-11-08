@@ -431,10 +431,11 @@ do the entries below that refer to it.
   (through `debasher_launch_process`) or by hand. It is the same operation as
   the first launch: there is no recovery mode.
 - **recovery**: what a relaunched node does at startup: open its FIFOs, load its
-  latest checkpoint, `restore_node_state`, `initialize_runtime`, replay the
-  input log after `capture_pos`, then start its threads. Localized recovery is
-  the policy: only the downed node is relaunched. A **global rollback** would
-  instead rewind every node to the last consistent cut; it is future work.
+  latest checkpoint, `restore_node_state`, `initialize_runtime`, start its
+  writer threads, replay the input log after `capture_pos`, then start its
+  other threads. Localized recovery is the policy: only the downed node is
+  relaunched. A **global rollback** would instead rewind every node to the last
+  consistent cut; it is future work.
 - **heartbeat**: the `INTERACT` command that a healthy node sends the
   `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS` from the moment its threads
   start. The `Supervisor` declares a node down when they stop for
@@ -1008,7 +1009,9 @@ of a resident program needs to talk over its FIFOs, whatever its role:
   inbound queue, one writer thread per output port with its own outbound queue
   (both of them handling `HELLO` and `CLOSE`, see "Channel topology"), and the
   brain thread, whose loop each subclass supplies;
-- `start_threads()` and `stop_threads()`, which start and stop all of them.
+- `start_threads()` and `stop_threads()`, which start and stop all of them
+  (`run()` of `FBPProcess` starts the writer threads earlier, see "Startup
+  sequence: `run()`").
 
 It knows nothing of rounds, checkpoints or the input log. `FBPProcess` adds all
 of that on top: the heartbeat thread, the barrier logic, the dispatch of
@@ -1101,9 +1104,10 @@ node test builds a node without the engine to check its business logic.
   checkpoint and the replay of the input log cover.
 
   The price of the threads that are not daemons is that the process cannot end
-  while one of them runs: a `process_data` or an `observe` that never returns
-  keeps the node alive after SIGTERM (see "Stuck but alive" in "Limits and
-  non-goals" and the fallback to SIGKILL of `debasher_stop_resident`).
+  while one of them runs. `run()` therefore stops them when starting the
+  threads fails, and a `process_data` or an `observe` that never returns keeps
+  the node alive after SIGTERM (see "Stuck but alive" in "Limits and non-goals"
+  and the fallback to SIGKILL of `debasher_stop_resident`).
 - **Health reporting**: passive, not pushed; on its own timer, the heartbeat
   thread polls `Thread.is_alive()` on every reader and writer thread, on the
   brain thread and on the observation thread, and only reports "alive" to the
@@ -1224,8 +1228,9 @@ join across ports.
 A module cannot tell a replay from the first execution: `process_data` gets
 the same calls, in the same order, and nothing says which of the two is
 running, so that neither the node state nor what it sends can depend on it.
-The one thing that has to differ, the pace of a node that emits on its own,
-is in the framework: `sleep(seconds)` waits `seconds` when called from
+Two things have to differ, both in the framework: what `send_data` does at the
+limit of the outbound backlog (see "Checkpoint persistence"), and the pace of a
+node that emits on its own: `sleep(seconds)` waits `seconds` when called from
 `process_data`, does not wait while the node replays its log, where the pace
 of the first execution has no use and would only delay the recovery, and
 returns early once the node is told to stop, so that a stop is not delayed
@@ -1430,41 +1435,48 @@ sets one.
 
 ## Startup sequence: `run()`
 
-There are no two distinct paths ("clean start" vs. "recovery") inside the
-process; it always looks for the most recent available checkpoint; if there is
-none, it starts with default values. The distinction between "first time" and
-"recovery" is determined externally by whether checkpoint files exist or not,
-not by a decision the process itself makes.
+A node has one way to start, whether it is launched for the first time or
+relaunched after a failure. Which of the two it is shows only in what it finds
+on disk: with a checkpoint it restores it, and without one it starts from
+default values. The `Supervisor` needs no recovery mode: it runs the same
+script in both cases, and the process does the rest (see "Recovery from a node
+failure").
 
-Single sequence, implemented exactly this way in `run()`: open every FIFO by
-known name -> remove the notice of the previous incarnation (see "Notices") ->
-look for the most recent checkpoint -> (if found) `restore_node_state()`,
-otherwise default values -> `initialize_runtime()` (always invoked, same code
-whether or not state was restored) -> open the input log and replay it after the
-checkpoint's `capture_pos`, all of it if there was no checkpoint (see "Input
-log") -> `start_threads()` (starts every worker thread) -> wait until told to
-stop -> stop every thread. The FIFOs come first because a node holds a FIFO only
-from the moment it opens it, and restoring and replaying can take a while: if a
-neighbor that was the only holder of a FIFO crashed during that time, what it
-had sent would be destroyed with it.
+`run()` follows these steps:
 
-**Important consequence**: launching a process for the first time and
-relaunching it after a failure are the same operation, with no distinction. The
-supervisor does not need to know whether it is starting the topology or
-recovering a downed node; in both cases it simply runs the same process script,
-and it is the process itself that decides what to do depending on whether it
-finds a checkpoint in its folder or not. This also simplifies "Recovery from
-a node failure": no special "recovery mode" logic is needed in the
-supervisor, only failure detection and running the script; the rest
-(looking for a checkpoint, restoring it or not, how much of the log to
-replay) is resolved by the process itself, exactly as on any startup.
+1. Installs the handler of SIGTERM, which only records the request.
+2. Sets the GIL switch interval, if the class gives one.
+3. Opens every FIFO. They come first because a node holds a FIFO only from the
+   moment it opens it, and restoring and replaying can take a while: if a
+   neighbor that was the only holder of a FIFO crashed during that time, what
+   it had sent would be destroyed with it.
+4. Removes the notice of the previous incarnation, and sets the one of
+   `_wiring_problem()`, if any (see "Notices").
+5. Looks for the most recent checkpoint. If there is one, it calls
+   `restore_node_state()`, restores the closed ports and the counters of
+   sequence numbers, and queues the outbound backlog of the checkpoint; if
+   not, it starts from default values.
+6. Calls `initialize_runtime()`, always.
+7. Opens the input log.
+8. Starts the writer threads, so that what the replay sends drains while it
+   replays. The backlog of the checkpoint still reaches the neighbors first,
+   since it was queued before the replay and each port has one queue.
+9. Replays the input log after the `capture_pos` of the checkpoint, all of it
+   if there was none (see "Input log"). While replaying, a `send_data` over
+   `OUT_BACKLOG_FAIL_BYTES` waits for room (see "Checkpoint persistence").
+10. Starts the other threads. If this fails, it stops the threads that are
+    running and raises the error, since they would otherwise keep the process
+    alive doing nothing.
+11. Waits until told to stop, and stops every thread.
 
-**A clean start is an external operation**: it is enough to take away what a
-node finds at startup, with no flag or special logic inside either the process
-or the `Supervisor` to tell the case apart. That is more than the checkpoints:
-with no checkpoint, a node replays the whole of its input log, and ends in the
-state it had. `debasher_reset_resident` does it for the whole program (see
-"`debasher_reset_resident`: a clean start").
+A SIGTERM during the startup is honored when the startup ends, since the replay
+does not look at it; only a `send_data` that waits for room stops waiting.
+
+A clean start is an external operation: it is enough to remove what a node
+finds at startup, with no flag or special logic in the process or the
+`Supervisor`. That is more than the checkpoints, since with none a node replays
+its whole input log and ends in the state it had. `debasher_reset_resident`
+does it for a whole program (see "`debasher_reset_resident`: a clean start").
 
 ## Chandy-Lamport barrier propagation
 
@@ -1611,6 +1623,18 @@ state it had. `debasher_reset_resident` does it for the whole program (see
   messages is thus bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which
   also bounds what waits in its inbound queue, since every queued item is
   logged first.
+
+  While the node replays its input log, the same limit makes `send_data` wait
+  for room instead of raising, with one warning in the log: a replay can run
+  faster than a writer thread can write, whoever the reader is, and a node
+  whose replay sent more than the limit could otherwise never start. A reader
+  that never reads leaves the node in its startup, with no heartbeats, until
+  the `Supervisor` relaunches it (see "Failure detection") or, without one,
+  until it is stopped. The readers of a node start only after its replay, so
+  the nodes of a cycle that replay at once, each over the limit, wait on each
+  other in the same way, and a node with a self-loop waits on itself. A message
+  larger than the limit raises once the backlog has drained, and a stop ends
+  the wait, after which `send_data` raises if the message still does not fit.
 
 ## Testing a node without the engine
 
@@ -1873,12 +1897,13 @@ class requires, is refused with an error.
 
 A relaunched node's startup (`run()`, see "Startup sequence: `run()`") opens
 its FIFOs, restores the latest checkpoint if there is one, calls
-`restore_node_state()` and `initialize_runtime()`, opens the input log and
-replays it, then starts its threads. Opening the log recovers what earlier
-incarnations left: `next_pos` is `max(last complete record, capture_pos) + 1`,
-found by reading only the last segment that has a complete record; a segment
-with no complete record (only a torn fragment) is deleted at startup, since
-the next record would reuse its position and collide with its name.
+`restore_node_state()` and `initialize_runtime()`, opens the input log,
+starts its writer threads and replays it, then starts its other threads.
+Opening the log recovers what earlier incarnations left: `next_pos` is
+`max(last complete record, capture_pos) + 1`, found by reading only the last
+segment that has a complete record; a segment with no complete record (only a
+torn fragment) is deleted at startup, since the next record would reuse its
+position and collide with its name.
 
 Replay re-executes `process_data()` on every `DATA` record with a position
 above `capture_pos`, in log order (all of them when there is no checkpoint,
@@ -2225,7 +2250,7 @@ with it the trace is exact.
   silence is measured against its startup deadline instead (Glossary), kept in
   `_starting` and applied by `_silence_limit`: from its launch the node
   restores its checkpoint, runs `initialize_runtime()` and replays its input
-  log before its threads start, and that can take much longer than the
+  log before its heartbeat thread starts, and that can take much longer than the
   interval between two heartbeats. The first heartbeat still comes one
   `HEARTBEAT_INTERVAL_SECONDS` after the threads start, not at once: it resets
   the relaunch budget (see "Relaunching a downed node"), so it has to show
@@ -2732,7 +2757,7 @@ it prints (see "Observing and talking to a live program" in
 
   - `runtime_class` is the class of the runtime library that the class of the
     node derives from (`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`),
-    `started_at` the time at which this incarnation started its threads, and
+    `started_at` the time at which this incarnation ended its startup, and
     `launcher`, only for a launcher node, its runs root and its `PROCESS`,
     which `runs` needs. The node writes these when its threads start, next to
     its control ports file.
@@ -3137,13 +3162,13 @@ error. `HELLO` also tells the reader that its peer (re)connected.
 ## Opening the FIFOs first in recovery
 
 A relaunched node opens its FIFOs before restoring its checkpoint or
-replaying its input log (`run()`'s first step, `_open_fifos()`, which
-`start_threads()` also calls for the ports that are not open yet, so that a
-node driven without `run()` opens them too). Opening them only later, in
-`start_threads()`, would put the time spent recovering inside the window in
-which the crash of a neighbor could destroy what the neighbor had sent it
-(this is about the channel, not the log; "Input log" covers what a node keeps
-of its own history). What remains of the window is the time to notice the
+replaying its input log (`_open_fifos()`, before `run()` does anything that
+takes time, which `start_threads()` also calls for the ports that are not open
+yet, so that a node driven without `run()` opens them too). Opening them only
+later, in `start_threads()`, would put the time spent recovering inside the
+window in which the crash of a neighbor could destroy what the neighbor had
+sent it (this is about the channel, not the log; "Input log" covers what a node
+keeps of its own history). What remains of the window is the time to notice the
 crash (`HEARTBEAT_CHECK_INTERVAL_SECS` when the process is gone) and to start
 the new process.
 

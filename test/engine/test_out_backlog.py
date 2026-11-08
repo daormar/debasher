@@ -295,3 +295,178 @@ def test_a_log_at_its_cap_names_the_backlog_when_checkpoints_are_being_skipped(s
         assert "OUT_BACKLOG_MAX_BYTES" in str(info.value)
     # What fitted was queued either way.
     assert proc._inbound_queue.qsize() == len(info.value.positions) > 0
+
+
+# --- the replay of a relaunched node -------------------------------------
+
+
+@pytest.fixture
+def relay_opts(tmp_path):
+    paths = {name: str(tmp_path / name) for name in ("inf", "outf")}
+    for path in paths.values():
+        os.mkfifo(path)
+    return paths
+
+
+def _log_arrivals(opts, payloads):
+    node = _Relay(opts=opts)
+    node._open_input_log(0)
+    for payload in payloads:
+        line = lib.encode_data(payload)
+        node._on_arrival("inf", lib.decode_envelope(line), line)
+    node._input_log.close()
+
+
+class _Counting(_Relay):
+    replayed = 0
+
+    def process_data(self, port_name, packet):
+        super().process_data(port_name, packet)
+        self.replayed += 1
+
+
+def _start_run(node):
+    outcome = {}
+
+    def target():
+        try:
+            node.run()
+        except Exception as exc:  # what a test looks at, in the main thread
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    return thread, outcome
+
+
+def _read_data_lines(path, count):
+    """The DATA envelopes of a fifo, until there are `count` of them."""
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+    received, pending = [], b""
+    try:
+        deadline = time.monotonic() + 10
+        while len(received) < count and time.monotonic() < deadline:
+            try:
+                pending += os.read(fd, 1 << 16)
+            except BlockingIOError:
+                time.sleep(0.005)
+                continue
+            *lines, pending = pending.split(b"\n")
+            envelopes = (lib.decode_envelope(line.decode()) for line in lines if line)
+            received += [e for e in envelopes if e.type == lib.TYPE_DATA]
+    finally:
+        os.close(fd)
+    return received
+
+
+def test_what_was_restored_arrives_before_what_the_replay_sends_again(relay_opts):
+    checkpointer = _Relay(opts=relay_opts)
+    checkpointer._save_checkpoint(
+        0, {}, {}, 0, [], {"outf": 1}, {}, {"outf": [{"seq": 1, "payload": "restored"}]}
+    )
+    _log_arrivals(relay_opts, ["replayed"])
+
+    node = _Relay(opts=relay_opts)
+    thread, outcome = _start_run(node)
+    try:
+        received = _read_data_lines(relay_opts["outf"], 2)
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert [(e.seq, e.payload) for e in received] == [(1, "restored"), (2, "replayed")]
+    assert not outcome
+
+
+def test_a_replay_over_the_limit_of_the_backlog_ends_with_a_reader_that_drains(relay_opts):
+    class _SmallBacklog(_Counting):
+        OUT_BACKLOG_FAIL_BYTES = 4096
+
+    payloads = [f"{i}:" + "p" * 1000 for i in range(50)]
+    _log_arrivals(relay_opts, payloads)
+
+    node = _SmallBacklog(opts=relay_opts)
+    thread, outcome = _start_run(node)
+    try:
+        received = _read_data_lines(relay_opts["outf"], 50)
+        assert _wait_until(lambda: node._brain_thread is not None)
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert [e.payload for e in received] == payloads
+    assert node.replayed == 50
+    assert not outcome
+
+
+def test_a_replay_with_no_reader_waits_and_a_stop_ends_it_with_the_error(relay_opts, caplog):
+    class _SmallBacklog(_Counting):
+        OUT_BACKLOG_FAIL_BYTES = 4096
+
+    # More than the pipe and the backlog hold together, and nobody reads.
+    _log_arrivals(relay_opts, ["p" * 1000] * 200)
+
+    node = _SmallBacklog(opts=relay_opts)
+    node.log.addHandler(caplog.handler)
+    thread, outcome = _start_run(node)
+    try:
+        assert _wait_until(lambda: node.replayed >= 1)
+        time.sleep(0.3)
+        assert thread.is_alive() and node.replayed < 200
+        assert "error" not in outcome
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert "is not reading" in str(outcome["error"])
+    assert caplog.text.count("waits for room in the outbound backlog") == 1
+
+
+def test_a_message_larger_than_the_limit_raises_in_a_replay_too(relay_opts):
+    class _SmallBacklog(_Relay):
+        OUT_BACKLOG_FAIL_BYTES = 64
+
+    _log_arrivals(relay_opts, ["p" * 1000])
+
+    node = _SmallBacklog(opts=relay_opts)
+    thread, outcome = _start_run(node)
+    thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert "OUT_BACKLOG_FAIL_BYTES" in str(outcome["error"])
+
+
+def test_a_failure_while_the_threads_start_ends_run_with_no_thread_left(relay_opts):
+    class _FailsLate(_Relay):
+        def start_threads(self):
+            super().start_threads()
+            raise RuntimeError("failed while starting")
+
+    node = _FailsLate(opts=relay_opts)
+    thread, outcome = _start_run(node)
+    thread.join(timeout=10)
+
+    assert not thread.is_alive()
+    assert "failed while starting" in str(outcome["error"])
+    assert not node._brain_thread.is_alive()
+    assert not any(t.is_alive() for t in node._reader_threads.values())
+    assert not node._heartbeat_thread.is_alive()
+
+
+def test_a_first_node_info_file_that_cannot_be_written_leaves_the_node_running(relay_opts, caplog):
+    class _NoInfoFile(_Relay):
+        def _write_node_info(self, healthy):
+            raise OSError(28, "No space left on device")
+
+    node = _NoInfoFile(opts=relay_opts)
+    node.log.addHandler(caplog.handler)
+    thread, outcome = _start_run(node)
+    try:
+        assert _wait_until(lambda: node._brain_thread is not None and node._all_threads_alive())
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert not outcome
+    assert "cannot write the node info file" in caplog.text

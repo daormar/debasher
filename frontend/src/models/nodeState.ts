@@ -159,7 +159,10 @@ function outboundBacklogRows(info: NodeInfo): SummaryRow[] {
 // still replaying its input log, or whose heartbeat thread has died.
 function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
   if (info === null) {
-    return [{ label: "Node info", value: "never written: the node has not started its threads yet" }];
+    return [{
+      label: "Node info",
+      value: "never written: the node has not started its threads yet, or it could not write the file (see the warning in its scheduler output)",
+    }];
   }
   const rows: SummaryRow[] = [
     { label: "Incarnation started", value: formatTime(info.started_at) },

@@ -330,7 +330,9 @@ delivery at that boundary is at most once: inside the program, the
 guarantees start from the moment a node records a message in its input
 log. A reader attached to an output port read outside the program has
 to go on reading, or the node that writes it stops with an error once
-``OUT_BACKLOG_FAIL_BYTES`` of messages are waiting.
+``OUT_BACKLOG_FAIL_BYTES`` of messages are waiting; while the node
+replays its input log, it waits for that reader instead (see "The
+Supervisor" below).
 
 The Supervisor
 --------------
@@ -358,6 +360,16 @@ seconds:
 .. code-block:: bash
 
     add_debasher_process "Counter" "cpus=1 mem=256 time=01:00:00 startup_timeout_s=120"
+
+A replay goes at the pace of the readers of the node: once
+``OUT_BACKLOG_FAIL_BYTES`` of what it sends again is waiting, it waits
+for room, with no heartbeats meanwhile, so a slow reader is one more
+reason to raise ``startup_timeout_s``. A reader that never reads keeps
+the node in its startup until the ``Supervisor`` declares it down and
+relaunches it or, in a program without a ``Supervisor``, until the node
+is stopped. The nodes of a cycle that replay at once, each over the
+limit, wait on each other in the same way, and a node with a self-loop
+waits on itself.
 
 The ``Supervisor`` itself is not supervised, and keeps no state: if it
 dies, the nodes go on running, and it is relaunched by stopping and
@@ -562,7 +574,8 @@ next to ``cpus``, ``mem`` and ``time``:
   node skips a checkpoint (8 MiB by default).
 * ``out_backlog_fail_mb`` sets ``OUT_BACKLOG_FAIL_BYTES``, the size of
   those messages over which ``send_data`` raises an error (64 MiB by
-  default).
+  default). While the node replays its input log, ``send_data`` waits
+  for room instead, unless one message alone is over the limit.
 * ``gil_switch_interval_ms`` sets ``GIL_SWITCH_INTERVAL_SECS`` (0.5 ms
   by default).
 

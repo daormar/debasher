@@ -465,7 +465,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Rounds and snapshots.** A snapshot is a round started by an initiator
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its
-  checkpoint and replays its input log. The Supervisor wiring (heartbeats,
+  checkpoint and replays its input log. While it replays, a `send_data` over
+  `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) waits for room, with one
+  warning in the scheduler output: a node that stays in its startup with that
+  warning has a reader that does not read, so look at that reader, at the
+  nodes of a cycle that replay at once, or at a self-loop, whose reader starts
+  after its replay. The Supervisor wiring (heartbeats,
   triggers) is generated, not edited. Start a round with `snapshot`, never by
   writing a control port or the manual trigger port from a script: they take
   only `INTERACT` commands, and the reader drops anything else written there,
