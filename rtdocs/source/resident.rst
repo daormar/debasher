@@ -485,7 +485,10 @@ directory: it watches ``WATCH_DIR`` (or the directory that the option
 ``-watchdir`` of the process gives), and sends a request on its output
 port ``outrequests`` for every file whose name matches ``PATTERN``
 once the file is complete, that is, once its size and modification
-time stop changing. A module that only needs to set those attributes
+time stop changing. A file is known by its path until a clean start of
+the program, so one that arrives again under the same name gets no
+request: the directory has to receive names that do not repeat. A
+module that only needs to set those attributes
 derives from it with no methods of its own, and runs it as any other
 node. The :doc:`webui_watch_tally`
 shows a complete program with a ``DirectoryWatcher``, and its tests.

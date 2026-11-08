@@ -5,6 +5,7 @@ and brings it in, and the request process_data sends, once per file.
 """
 
 import os
+import threading
 
 import pytest
 
@@ -128,6 +129,26 @@ def test_a_file_brought_in_is_requested_once(watch_dir):
 
     assert _sent(node) == [{"opts": {"-infile": path}, "run": "s17"}]
     assert node.capture_node_state() == {"requested": [path]}
+
+
+def test_a_file_that_comes_back_under_the_same_name_gets_no_second_request(watch_dir):
+    node = _node(watch_dir)
+    node.inject = lambda payload: node.process_data(node.OBSERVE_PORT, payload)
+    path = watch_dir / "a.bam"
+    path.write_text("first contents")
+    node._handler_thread = threading.get_ident()
+    node.observe()
+    node.observe()
+    assert len(_sent(node)) == 1
+
+    path.unlink()
+    node.observe()
+    path.write_text("other contents, and longer")
+    node.observe()
+    node.observe()
+    node.observe()
+
+    assert len(_sent(node)) == 1
 
 
 def test_the_requested_files_survive_a_restore(watch_dir):

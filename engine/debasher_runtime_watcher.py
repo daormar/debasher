@@ -60,6 +60,13 @@ class DirectoryWatcher(FBPProcess):
     request_for() makes of its path: by default a request for a launcher node
     (see ProgramLauncher), with the path as the value of FILE_OPTION and the
     name of the file without its extension as the name of the run.
+
+    A file is known by its path until a clean start of the program: one that
+    arrives again under the same name, with other contents, gets no request,
+    so the directory has to receive names that do not repeat and, with the
+    default request, that differ in more than their extension. The node state
+    keeps one path per file brought in, also of those that are gone, so a
+    checkpoint grows with them; debasher_reset_resident forgets them.
     """
 
     #: The directory to watch, an absolute path or one relative to the
@@ -87,8 +94,8 @@ class DirectoryWatcher(FBPProcess):
         self._watch_dir = self._find_watch_dir()
         # The node state: the files for which a request has been sent, so
         # that a file brought in again is requested once. This is what
-        # decides whether a file was attended, by its path and for the life
-        # of the program.
+        # decides whether a file was attended, by its path and until a clean
+        # start of the program.
         self._requested = set()
         # What observe() remembers between two observations, in this
         # incarnation only; a relaunched node starts it empty, brings the

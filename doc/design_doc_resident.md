@@ -1347,6 +1347,19 @@ the end of a copy) redefines `is_complete()`; `request_for()` makes the
 request from the path. A watcher without the output port `REQUESTS_PORT` sends
 nothing, and says so in a notice (see "Notices").
 
+A file is known by its path alone, until a clean start of the program: one
+removed that arrives again under the same name, with other contents, gets no
+request, in the same incarnation or after a relaunch, so the directory has to
+receive names that do not repeat and, with the default request, which names the
+run after the file without its extension, names that differ in more than their
+extension. Knowing a file by its size and modification time too would not be
+enough, since a launcher node drops a request for a run directory that another
+request owns (see "Ownership of a run directory"). The node state keeps one
+path per file brought in, also of those that are gone, so a checkpoint grows
+with them; `debasher_reset_resident` forgets them with the rest of the node
+state (a run directory under an absolute runs root stays, see "Stopping and
+resetting a launcher node").
+
 ## Notices
 
 A node sometimes has something to tell the person who watches the program that

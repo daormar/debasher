@@ -400,25 +400,26 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 
 ## Resident programs
 
-- **Node kinds** (`nodeKind`, needed by `add_process` unless the node comes
-  from the library): `FBPProcess` (a business node), `ProgramLauncher` (runs a
+- **Node kinds** (`nodeKind`, needed by `add_process` unless the node comes from
+  the library): `FBPProcess` (a business node), `ProgramLauncher` (runs a
   general program for each request), `DirectoryWatcher` (sends the files that
-  appear in a directory), `Supervisor` (at most one, with no code, relaunching
-  nodes that are down). A new `DirectoryWatcher` comes with `-watchdir` (the
-  directory to watch, from the command line) and the output port
-  `-outrequests`, and a new `ProgramLauncher` with the input `-requests`
-  (any input takes requests) and the output port `-outdone`. The classes look
-  for `-watchdir`, `-outrequests` and `-outdone` by name (`WATCH_DIR_OPTION`,
-  `REQUESTS_PORT`, `DONE_PORT`), so do not rename them; give their fields as
-  options with the same labels. A watcher without `-outrequests` or a launcher
-  without an input runs but does nothing, and says so in a warning notice. A
-  launcher puts its run directories in its output directory, unless its class
-  sets `RUNS_ROOT` or it has the option `-runsdir` (`RUNS_ROOT_OPTION`, which
-  wins); both are absolute paths. The program it launches can come from the
-  options `-pfile` and `-process` (data type `string`, not `file`) instead of
-  `PFILE` and `PROCESS` in the class body. Each message on `-outdone` is
-  `{"run", "run_dir", "status", "exit_code"}`, so a node that reads the
-  results of a run takes its directory from `run_dir`.
+  appear in a directory, once per path, so its names must not repeat, also in
+  more than the extension with the default request), `Supervisor` (at most one,
+  with no code, relaunching nodes that are down). A new `DirectoryWatcher` comes
+  with `-watchdir` (the directory to watch, from the command line) and the
+  output port `-outrequests`, and a new `ProgramLauncher` with the input
+  `-requests` (any input takes requests) and the output port `-outdone`. The
+  classes look for `-watchdir`, `-outrequests` and `-outdone` by name
+  (`WATCH_DIR_OPTION`, `REQUESTS_PORT`, `DONE_PORT`), so do not rename them;
+  give their fields as options with the same labels. A watcher without
+  `-outrequests` or a launcher without an input runs but does nothing, and says
+  so in a warning notice. A launcher puts its run directories in its output
+  directory, unless its class sets `RUNS_ROOT` or it has the option `-runsdir`
+  (`RUNS_ROOT_OPTION`, which wins); both are absolute paths. The program it
+  launches can come from the options `-pfile` and `-process` (data type
+  `string`, not `file`) instead of `PFILE` and `PROCESS` in the class body. Each
+  message on `-outdone` is `{"run", "run_dir", "status", "exit_code"}`, so a
+  node that reads the results of a run takes its directory from `run_dir`.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,
