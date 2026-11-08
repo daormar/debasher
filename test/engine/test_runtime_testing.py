@@ -130,7 +130,7 @@ def test_feeding_a_port_that_is_not_an_input_is_refused():
 
 def test_sending_on_a_port_that_is_not_an_output_fails():
     node = _node(ACCUMULATE, outputs=())
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match="'outsum', which is not one of its output ports"):
         node.feed("numbers", 1)
 
 

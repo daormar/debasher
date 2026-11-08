@@ -142,6 +142,15 @@ def test_a_class_that_declares_ports_is_refused_when_the_engine_gives_them(
         cls(opts=_FANIN_OPTS)
 
 
+def test_a_supervisor_port_that_is_not_an_output_port_is_refused():
+    class _Miswired(lib.FBPProcess):
+        OUTPUT_PORTS = ["outf"]
+        SUPERVISOR_PORT = "outhb"
+
+    with pytest.raises(ValueError, match="SUPERVISOR_PORT names 'outhb'"):
+        _Miswired(opts={"outf": "/dev/null"})
+
+
 def test_without_ports_from_the_engine_the_class_declares_them(monkeypatch):
     monkeypatch.delenv("DEBASHER_PROCESS_PORTS", raising=False)
     node = _Worker(opts={"inf": "/tmp/a", "outf": "/tmp/b"})

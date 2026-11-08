@@ -1073,7 +1073,8 @@ node test builds a node without the engine to check its business logic.
   it is given. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
   commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
   fed only from outside the program (see external port in the Glossary); a name
-  in either list that is not an input port is refused when the node is built.
+  in either list that is not an input port, or a `SUPERVISOR_PORT` that is not
+  an output port, is refused when the node is built.
 - **Threads**: one reader thread per `INPUT_PORTS` entry, each reading its
   FIFO in blocks of up to `_READ_BLOCK_BYTES`, cutting them into lines and
   handing all the envelopes of a block to `_on_arrivals`, which records them in

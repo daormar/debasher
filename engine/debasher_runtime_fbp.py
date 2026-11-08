@@ -407,6 +407,11 @@ class FBPProcess(_PortWorker):
                 f"{type(self).__name__}: EXTERNAL_PORTS names {unknown}, which are not in INPUT_PORTS "
                 f"(got: {list(self.INPUT_PORTS)})"
             )
+        if self.SUPERVISOR_PORT is not None and self.SUPERVISOR_PORT not in self.OUTPUT_PORTS:
+            raise ValueError(
+                f"{type(self).__name__}: SUPERVISOR_PORT names {self.SUPERVISOR_PORT!r}, which is "
+                f"not in OUTPUT_PORTS (got: {list(self.OUTPUT_PORTS)})"
+            )
 
     def _output_ports(self):
         return {port: port for port in self.OUTPUT_PORTS}
@@ -1063,7 +1068,8 @@ class FBPProcess(_PortWorker):
         Sends `payload`, any value that JSON can serialize, on the output
         port `tag`. It raises ValueError when `payload` holds NaN or an
         infinity, which JSON does not have (a float result that can be one
-        is sent as None or as a string). A node acts only in reaction to
+        is sent as None or as a string), and when `tag` is not one of its
+        output ports. A node acts only in reaction to
         what it receives, so it may be called only from process_data(), and
         raises anywhere else. It also raises when what
         the node has not yet written into its FIFOs would go over
@@ -1083,6 +1089,11 @@ class FBPProcess(_PortWorker):
                 f"{type(self).__name__}: send_data() called outside process_data(), "
                 "or from a thread other than the one running it: a node sends only "
                 "in reaction to a message that it receives"
+            )
+        if tag not in self._outbound_queues:
+            raise ValueError(
+                f"{type(self).__name__}: send_data() on {tag!r}, which is not one of "
+                f"its output ports: {sorted(self._outbound_queues)}"
             )
         seq = self._out_seq.get(tag, 0) + 1
         line = encode_data(payload, seq=seq)

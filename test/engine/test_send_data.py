@@ -311,3 +311,24 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
     relaunched._replay_input_log(capture_pos)
 
     assert [e.seq for e in _queued_envelopes(relaunched)] == [4, 5]
+
+
+def test_a_module_that_catches_the_refusal_of_a_wrong_port_leaves_no_trace():
+    class _Catches(_Relay):
+        def __init__(self, *args, **kwargs):
+            self.refusal = None
+            super().__init__(*args, **kwargs)
+
+        def process_data(self, port_name, packet):
+            try:
+                self.send_data("outt", packet)
+            except ValueError as exc:
+                self.refusal = exc
+
+    node = _Catches(opts={"inf": "/dev/null", "outf": "/dev/null"})
+    node._run_process_data("inf", 1)
+
+    assert "'outt'" in str(node.refusal)
+    assert node._out_seq == {}
+    assert node._unwritten == {}
+    assert node._unwritten_bytes == 0
