@@ -963,7 +963,8 @@ class FBPProcess(_PortWorker):
         warning in the log. It may be called from any hook and any thread.
         The notice is not part of the node state, and each incarnation of
         the node starts without one, so a notice that follows from the node
-        state is set again in restore_node_state().
+        state is set again in restore_node_state(). A notice that cannot be
+        written leaves a warning in the log and does not stop the node.
         debasher_inspect_resident shows it, and the web interface marks the
         node that has one.
         """
@@ -1011,23 +1012,34 @@ class FBPProcess(_PortWorker):
         """
         Makes the notice file hold `notice`, or removes it for None, unless
         it already does. Atomic (temp file + rename), like the node info
-        file. Called with _notice_lock held.
+        file. Called with _notice_lock held. A file that cannot be written
+        is not a reason to stop the node: a notice only reports. The copy in
+        memory then stays as it was, so asking for this notice again tries
+        the write again.
         """
         if notice == self._notice:
             return
         path = self._notice_path()
-        if notice is None:
-            try:
-                os.remove(path)
-            except FileNotFoundError:
-                pass
-        else:
-            os.makedirs(self._execdir(), exist_ok=True)
-            tmp_path = f"{path}.tmp"
-            with open(tmp_path, "w") as f:
-                json.dump({**notice, "set_at": time.time()}, f)
-            os.replace(tmp_path, path)
+        try:
+            if notice is None:
+                self._remove_if_present(path)
+            else:
+                os.makedirs(self._execdir(), exist_ok=True)
+                tmp_path = f"{path}.tmp"
+                with open(tmp_path, "w") as f:
+                    json.dump({**notice, "set_at": time.time()}, f)
+                os.replace(tmp_path, path)
+        except OSError as exc:
+            self.log.warning("cannot write the notice file: %r", exc)
+            return
         self._notice = notice
+
+    @staticmethod
+    def _remove_if_present(path):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
 
     def _wiring_problem(self):
         """
@@ -1041,9 +1053,9 @@ class FBPProcess(_PortWorker):
     def _remove_notice_file(self):
         with self._notice_lock:
             try:
-                os.remove(self._notice_path())
-            except FileNotFoundError:
-                pass
+                self._remove_if_present(self._notice_path())
+            except OSError as exc:
+                self.log.warning("cannot remove the notice file: %r", exc)
             self._notice = None
 
     def send_data(self, tag, payload):

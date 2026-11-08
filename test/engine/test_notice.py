@@ -146,6 +146,50 @@ def test_the_file_holds_the_notice_set_last_by_any_thread(execdir):
     assert _notice(execdir)["text"] == node._notice["text"]
 
 
+def _fail_on_notice_file(monkeypatch, function):
+    """Makes os.<function> fail for the notice file, until the test ends."""
+    real = getattr(os, function)
+
+    def failing(path, *args, **kwargs):
+        target = args[0] if function == "replace" else path
+        if os.path.basename(target).startswith("notice"):
+            raise PermissionError(13, "Permission denied", target)
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(fbp.os, function, failing)
+
+
+def test_a_notice_that_cannot_be_written_leaves_a_warning_and_process_data_goes_on(
+    execdir, monkeypatch, caplog
+):
+    node = _Node(opts={"inf": "/dev/null"})
+    node.log.addHandler(caplog.handler)
+    with monkeypatch.context() as patch:
+        _fail_on_notice_file(patch, "replace")
+        with caplog.at_level(logging.WARNING, logger=node.log.name):
+            node._run_process_data("inf", 7)
+
+    assert "cannot write the notice file" in caplog.text
+    assert _notice(execdir) is None
+    # The copy in memory did not change, so the same notice is tried again.
+    assert node._notice is None
+    node._run_process_data("inf", 7)
+    assert _notice(execdir)["text"] == "received 7"
+
+
+def test_a_notice_file_that_cannot_be_removed_does_not_stop_the_start(execdir, monkeypatch, caplog):
+    node = _Node(opts={"inf": str(execdir / "inf")})
+    os.mkfifo(execdir / "inf")
+    node.log.addHandler(caplog.handler)
+    monkeypatch.setattr(fbp.FBPProcess, "_notice_path", lambda self: str(execdir / "notice"))
+    _fail_on_notice_file(monkeypatch, "remove")
+
+    thread = _run_until_started(node)
+    _stop(node, thread)
+
+    assert "cannot remove the notice file" in caplog.text
+
+
 def test_a_reader_never_finds_part_of_a_notice(execdir):
     node = _Node(opts={"inf": "/dev/null"})
     node.set_notice("first")

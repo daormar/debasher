@@ -1365,16 +1365,24 @@ it away with `clear_notice()`.
   included. The node keeps a copy of its notice in memory and writes the file
   into a temporary file renamed into place, the comparison, the write and the
   rename under one lock: a reader finds the previous notice or the new one,
-  never a part of either, the file always holds the notice that was set last,
-  and setting the notice that the node already has writes nothing.
+  never a part of either, the file holds the notice that was set last, unless
+  it could not be written (see the next item), and setting the notice that the
+  node already has writes nothing.
 - **Not state.** The notice is in no checkpoint, rounds ignore it, it travels on
-  no channel, and nothing in the node reads it back: it only reports.
-  `debasher_reset_resident` takes it away with the rest, since it speaks of a
-  node whose state is gone (see "`debasher_reset_resident`: a clean start").
+  no channel, and nothing in the node reads it back: it only reports. So a
+  notice file that cannot be written or removed leaves a warning in the log and
+  does not stop the node. While it cannot be written, whoever watches finds the
+  previous notice or none, and only the log of the node tells; asking for the
+  same notice again tries the write again. A notice file that cannot be removed
+  when the node starts stays until the node sets another notice, since the node
+  takes itself to have none. `debasher_reset_resident` takes the notice away
+  with the rest, since it speaks of a node whose state is gone (see
+  "`debasher_reset_resident`: a clean start").
 - **Each incarnation starts with none.** `run()` removes the notice file before
   `restore_node_state()`, so that a notice of an earlier incarnation, about a
-  fault fixed since or a file that has appeared since, never outlives it. What
-  the code of the node sets during the startup, in `restore_node_state()`,
+  fault fixed since or a file that has appeared since, does not outlive it,
+  unless the file cannot be removed (see the previous item). What the code of
+  the node sets during the startup, in `restore_node_state()`,
   `initialize_runtime()` or the replay of its input log, is set again. A notice
   that follows from the node state and that `process_data` set before the latest
   checkpoint is not, since the replay starts after that checkpoint: the node
