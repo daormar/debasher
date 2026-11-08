@@ -330,7 +330,8 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
                     _start_line(statement),
                     f"there is code after the class other than the line {cls.name}().run(), "
                     "which is all that the web UI writes there",
-                    "move it into the node preamble, before the class, or into a method of the class",
+                    "move it into the node preamble, before the class, or into a method of the class; "
+                    f"a node is started only by the line {cls.name}().run()",
                 )
             )
 

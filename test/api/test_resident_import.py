@@ -137,6 +137,15 @@ def test_what_the_parts_of_a_node_cannot_hold_is_a_misfit_with_its_line(source, 
     assert misfits[0].fix
 
 
+def test_code_after_the_class_is_told_how_a_node_is_started():
+    source = (
+        "from debasher_runtime_lib import FBPProcess\n\n\nclass Counter(FBPProcess):\n    pass\n\n\n"
+        "node = Counter()\nnode.run()\n"
+    )
+
+    assert "Counter().run()" in decompose_heredoc(source).misfits[0].fix
+
+
 # --- what import reads back ---------------------------------------------------
 
 
