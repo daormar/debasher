@@ -220,8 +220,8 @@ def _starts_a_node(stmt):
 
 
 def _json_round_trip(value):
-    """`value` as a JSON reader gets it: a tuple becomes a list, a key a
-    string."""
+    """`value` as a JSON reader gets it: a tuple becomes a list, a number
+    used as a key a string."""
     return json.loads(json.dumps(value))
 
 

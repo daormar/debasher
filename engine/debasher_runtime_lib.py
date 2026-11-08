@@ -29,13 +29,19 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 #   debasher_runtime_inputlog    _InputLog, the durable input history of a node
 #   debasher_runtime_fbp         FBPProcess
 #   debasher_runtime_supervisor  Supervisor
+#   debasher_runtime_launcher    ProgramLauncher
+#   debasher_runtime_watcher     DirectoryWatcher
 #
-# Every name that this module offered before the split is still available
-# here, so nothing that imports it has to know about the layers. The names
-# with a leading underscore are not part of what module authors use: they
-# are here because the tests reach them through this module. _write_all is
-# left out on purpose: whoever patches it has to patch the module that looks
-# it up, and a patch on this one would silently do nothing.
+# This module re-exports the names that a module and the tests use, so nothing
+# that imports it has to know about the layers. The names with a leading
+# underscore are not part of what module authors use: they are here because
+# the tests reach them through this module.
+#
+# _write_all is left out on purpose. A test that replaces it has to replace
+# the name in the module whose code calls it: `from debasher_runtime_transport
+# import _write_all` gives debasher_runtime_inputlog a name of its own, and
+# that is the one its code looks up. Replaced in debasher_runtime_transport,
+# the input log would go on calling the real one.
 
 # import modules
 from debasher_runtime_envelope import (
@@ -80,4 +86,6 @@ __all__ = [
     "LogRecord",
     "FBPProcess",
     "Supervisor",
+    "ProgramLauncher",
+    "DirectoryWatcher",
 ]

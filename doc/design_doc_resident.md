@@ -194,8 +194,8 @@ do the entries below that refer to it.
 - **limits of a node**: `INPUT_LOG_MAX_BYTES`, `OUT_BACKLOG_MAX_BYTES`,
   `OUT_BACKLOG_FAIL_BYTES` and `GIL_SWITCH_INTERVAL_SECS`, class attributes of
   `FBPProcess` that a module can redefine and that the computational
-  specifications of a process can set for that process of a program (see "Limits
-  of a node").
+  specifications of a process can set for that process of a program (see
+  "Computational specifications of a resident process").
 
 ## Messages
 
@@ -482,6 +482,13 @@ Node tests, business tests and the test runner are defined in the glossary of
 - **node harness**: `debasher_runtime_testing`, the module of the runtime
   library with which a node test builds a node without the engine and calls its
   hooks (see "Testing a node without the engine").
+- **round trip through JSON**: serializing a value to JSON and reading it back,
+  which gives what the other end of a FIFO or a checkpoint on disk would give:
+  a tuple arrives as a list, a number used as a key arrives as a string, and a
+  value that JSON cannot serialize, such as a set, fails. The node
+  harness does it with every packet and node state, so that a node test sees
+  what a run would, and not a node that passes its test with objects that no
+  run could bring it, or whose state does not survive a checkpoint.
 - **node under test**: what `load_node` of the node harness returns: a node
   built with the options and ports that the test gives, fed with `feed`, whose
   output `sent` gives.
@@ -995,7 +1002,8 @@ of a resident program needs to talk over its FIFOs, whatever its role:
 - parsing `argv` into `self.opts`, taking the ports from the engine and
   checking them;
 - the logger, `self.log`, and the computational specifications that set class
-  attributes of the process (see "Limits of a node");
+  attributes of the process (see "Computational specifications of a resident
+  process");
 - opening the FIFOs, one reader thread per input port feeding the shared
   inbound queue, one writer thread per output port with its own outbound queue
   (both of them handling `HELLO` and `CLOSE`, see "Channel topology"), and the
@@ -1026,24 +1034,24 @@ node test builds a node without the engine to check its business logic.
   `debasher_runtime_envelope.py` (the wire format of "Control envelope"),
   `debasher_runtime_transport.py` (argv parsing, the fifo endpoints and
   `_PortWorker`), `debasher_runtime_inputlog.py` (`_InputLog`, "Input log"),
-  `debasher_runtime_fbp.py` (`FBPProcess`) and `debasher_runtime_supervisor.py`
-  (`Supervisor`, see "`Supervisor` class"). `debasher_runtime_lib.py` keeps
+  `debasher_runtime_fbp.py` (`FBPProcess`), `debasher_runtime_supervisor.py`
+  (`Supervisor`, see "`Supervisor` class"), `debasher_runtime_launcher.py`
+  (`ProgramLauncher`) and `debasher_runtime_watcher.py` (`DirectoryWatcher`).
+  `debasher_runtime_testing.py`, the node harness, comes on top of them, and
+  only tests import it. `debasher_runtime_lib.py` keeps
   `DEBASHER_SHUTDOWN_TOKEN`, a Python mirror of the Bash constant, and
-  re-exports every name that it offered before, so nothing that imports it
-  depends on the layout. All of them are `python_PYTHON`-installed per
+  re-exports the names that a module and the tests use, so nothing that imports
+  it depends on the layout. All of them are `python_PYTHON`-installed per
   `engine/Makefile.am`, in the same directory, which is the one that the
-  heredoc's `sys.path` line (see below) already adds. A test that patches a name
-  has to patch the module that looks it up (for example `_write_all` in
-  `debasher_runtime_inputlog`), since a patch on the re-exporting module changes
-  nothing for the code that was moved.
-  - A heredoc runs as `python3 -c "<text>"`
-    (`debasher::_create_heredoc_func_body` in
-    `engine/debasher_lib_programs.sh`), which does not go through
-    `engine/Makefile.am`'s `.py:` suffix rule, the one that would otherwise
-    prepend `sys.path.append("$(pythondir)")`/
-    `sys.path.append("$(pkgpythondir)")`. So a Python heredoc's own text is
-    itself prefixed with that same `sys.path.append(...)` call, ahead of the
-    module author's code.
+  heredoc's `sys.path` line (see below) already adds.
+- **How a heredoc finds the library**: a heredoc runs as `python3 -c "<text>"`
+  (`debasher::_create_heredoc_func_body` in
+  `engine/debasher_lib_programs.sh`), which does not go through
+  `engine/Makefile.am`'s `.py:` suffix rule, the one that would otherwise
+  prepend `sys.path.append("$(pythondir)")`. So the text of a Python heredoc is
+  itself prefixed with that same call
+  (`debasher::_python_heredoc_sys_path_prelude`), ahead of the code of the
+  module author.
 - **Port declaration**: the ports of a node are lists of option names,
   `INPUT_PORTS`/`OUTPUT_PORTS` (e.g. `["inf"]`), with `CONTROL_PORTS`,
   `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node
@@ -1063,20 +1071,45 @@ node test builds a node without the engine to check its business logic.
   commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
   fed only from outside the program (see external port in the Glossary); a name
   in either list that is not an input port is refused when the node is built.
-- **Threads**: one reader thread per `INPUT_PORTS` entry, each running a
-  blocking `readline()` loop over its FIFO and pushing every deserialized
-  envelope onto a **shared inbound queue** as `(port_name, type, payload)`; one
-  writer thread per `OUTPUT_PORTS` entry, each with **its own outbound queue**
-  (the brain thread enqueues `(type, payload)` there instead of writing to the
-  FIFO directly, so a slow/stalled neighbor on one output port only blocks that
-  port's writer thread, never the rest of the process); a single brain thread
-  consuming the shared inbound queue; an independent heartbeat thread with its
-  own timer.
+- **Threads**: one reader thread per `INPUT_PORTS` entry, each reading its
+  FIFO in blocks of up to `_READ_BLOCK_BYTES`, cutting them into lines and
+  handing all the envelopes of a block to `_on_arrivals`, which records them in
+  the input log and pushes each one onto a **shared inbound queue** as
+  `(pos, port_name, type, payload, seq)`; one writer thread per `OUTPUT_PORTS`
+  entry, each with **its own outbound queue** (the brain thread enqueues the
+  encoded line there instead of writing to the FIFO directly, so a slow/stalled
+  neighbor on one output port only blocks that port's writer thread, never the
+  rest of the process); a single brain thread consuming the shared inbound
+  queue; an independent heartbeat thread with its own timer; and, in a node
+  whose class defines `observe()`, the observation thread.
+- **Which threads keep the process alive**: a thread is a daemon exactly when
+  nothing can wake it. A daemon thread dies with the process, unwarned and
+  unjoined; a thread that is not a daemon keeps the process from ending until
+  it has returned. The reader, brain, heartbeat and observation threads can
+  always be woken, each from where it blocks: a reader by a blank line written
+  through its own ghost write end, the brain by the `_STOP` item on its queue,
+  the other two by an event. So they are not daemons: `stop_threads` wakes them
+  and waits for them with no limit, and each one finishes what it was doing, the
+  brain thread the message in hand, instead of being cut in the middle of it.
+
+  A writer thread cannot be woken. When its reader is down and the pipe is full
+  it stays blocked in `write()`, and the write does not even fail, since the
+  node holds both ends of the FIFO so that the channel outlives a crash. If it
+  were not a daemon, a node with a stalled neighbor would never end. So it is
+  one: `stop_threads` waits for it for `WRITER_STOP_TIMEOUT_SECS`, then abandons
+  it, and the process ends anyway. All it loses is its outbound queue, which the
+  checkpoint and the replay of the input log cover.
+
+  The price of the threads that are not daemons is that the process cannot end
+  while one of them runs: a `process_data` or an `observe` that never returns
+  keeps the node alive after SIGTERM (see "Stuck but alive" in "Limits and
+  non-goals" and the fallback to SIGKILL of `debasher_stop_resident`).
 - **Health reporting**: passive, not pushed; on its own timer, the heartbeat
-  thread polls `Thread.is_alive()` on every reader/writer thread it is tracking,
-  and only reports "alive" to the supervisor if all of them still are (a Python
-  thread that dies from an uncaught exception does so silently, without crashing
-  the process, which is exactly what `is_alive()` catches).
+  thread polls `Thread.is_alive()` on every reader and writer thread, on the
+  brain thread and on the observation thread, and only reports "alive" to the
+  supervisor if all of them still are (a Python thread that dies from an
+  uncaught exception does so silently, without crashing the process, which is
+  exactly what `is_alive()` catches).
 - **Subclass extension points**: `process_data(port_name, packet)`: `packet` is
   the `DATA` envelope's `payload`, already deserialized, never the full envelope
   (this method is only ever called for `DATA`; `BARRIER`/`INTERACT` dispatch is
@@ -1110,13 +1143,11 @@ node test builds a node without the engine to check its business logic.
   output, format including thread name, useful here since the process is
   inherently multi-threaded). The framework itself logs its own lifecycle
   events (thread start/stop, barrier epoch open/close, checkpoint saved,
-  heartbeat) with it, the natural successor to the `echo` statements
-  `data/programs/debasher_cycle*.sh` use today for visibility. Level is
-  configurable via a plain `-log-level` option, declared by the module author
-  in `_explain_opts`/`_define_opts` exactly like any other option (same
-  convention `debasher_dynamic_fanout_fifos.sh` already uses): no new engine
-  mechanism, it is just another entry in `self.opts`; a sensible default
-  applies if the module does not declare it.
+  heartbeat) with it. Level is configurable via a plain `-log-level` option,
+  declared by the module author in `_explain_opts`/`_define_opts` exactly like
+  any other option (the convention of `debasher_dynamic_fanout_fifos.sh`): the
+  engine has no mechanism for it, it is just another entry in `self.opts`; a
+  sensible default applies if the module does not declare it.
 - **Periodic snapshots come from outside the node**: a node never starts a
   round on its own; every round starts with a trigger, relayed by the
   `Supervisor` or written from outside the program. A program in which nothing
@@ -1204,49 +1235,56 @@ How a node finishes for good is not defined yet: `run()` returns only on a stop
 signal, and a stop sends no `CLOSE` (see "A node that finishes for good" in
 Future work).
 
-## Limits of a node
+## Computational specifications of a resident process
 
-Four limits of a node (see the Glossary) are class attributes of `FBPProcess`,
-with a default each, that a module can redefine in its class. A program can
-also set them for one of its processes, over what the class says, in the
-computational specifications that it gives to `add_debasher_process`, next to
-`cpus`, `mem` and `time`:
+The computational specifications that a program gives to
+`add_debasher_process`, next to `cpus`, `mem` and `time`, also configure a
+process of a resident program. This list gives them by who they are for, and
+ends with the one limit that no specification sets:
 
-- `input_log_max_mb` sets `INPUT_LOG_MAX_BYTES`, 100 MiB by default (see
-  "Pruning and the size cap").
-- `out_backlog_max_mb` sets `OUT_BACKLOG_MAX_BYTES`, 8 MiB by default (see
-  "Checkpoint persistence").
-- `out_backlog_fail_mb` sets `OUT_BACKLOG_FAIL_BYTES`, 64 MiB by default (see
-  "Checkpoint persistence").
-- `gil_switch_interval_ms` sets `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms by default
-  (see "Messages read from a FIFO but not yet written to the input log" in the
-  Contract's limits).
+- For a node, the limits of a node (see the Glossary), class attributes of
+  `FBPProcess` with a default each, that a module can redefine in its class and
+  that the specification sets over what the class says:
+  - `input_log_max_mb` sets `INPUT_LOG_MAX_BYTES`, 100 MiB by default (see
+    "Pruning and the size cap").
+  - `out_backlog_max_mb` sets `OUT_BACKLOG_MAX_BYTES`, 8 MiB by default (see
+    "Checkpoint persistence").
+  - `out_backlog_fail_mb` sets `OUT_BACKLOG_FAIL_BYTES`, 64 MiB by default (see
+    "Checkpoint persistence").
+  - `gil_switch_interval_ms` sets `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms by default
+    (see "Messages read from a FIFO but not yet written to the input log" in
+    "Limits and non-goals").
+- For a node: `startup_timeout_s`, its startup deadline in seconds, which the
+  engine passes to the `Supervisor` (see "Failure detection").
+- For the `Supervisor`: `heartbeat_timeout_s` and `startup_timeout_s` (see
+  "Failure detection").
+- For a launcher node: `max_concurrent_runs` and `batch_sched` (see "Launching
+  from the queue on disk").
+- Not a specification: the open descriptors of the process (`RLIMIT_NOFILE`). A
+  process needs two for each of its ports, since it holds both ends of every
+  FIFO (see "Ghost connections"), a `Supervisor` one more for each held FIFO
+  (see "Holding the business channels"), and a margin, `FD_MARGIN`, for the
+  rest. That number follows from the program, and grows with it when a fan-in
+  node or a `Supervisor` has as many ports as the command line says, so nobody
+  has to give it: before it opens anything, the process raises its soft limit
+  to what it needs (`_raise_fd_limit`), which it may do up to its hard limit.
+  When the hard limit is lower, it stops with an error that gives both numbers,
+  and the hard limit has to be raised for the session that launches the
+  program.
 
 For example, `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00;
 out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds,
-and each value, when given, must be a positive number: the engine checks it
-when it loads the program (`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before
-anything is launched. The built-in scheduler exports the computational
-specifications of the process to it as `DEBASHER_PROCESS_COMP_SPECS`, from
-the specification that the generated script carries, so a relaunch gets them
-too, and `FBPProcess` sets them on its instance when it is created
-(`_apply_comp_specs`); it ignores the other fields. The `Supervisor` reads
-its own, `heartbeat_timeout_s` and `startup_timeout_s`, the same way. A node
-can give its startup deadline too, `startup_timeout_s`, in seconds, which it
-does not read itself: the engine passes it to the `Supervisor` (see "Failure
-detection").
-
-One more limit is not a specification: the open descriptors of the process
-(`RLIMIT_NOFILE`). A process needs two for each of its ports, since it holds
-both ends of every fifo (see "Ghost connections"), a `Supervisor` one more
-for each held FIFO (see "Holding the business channels"), and a margin,
-`FD_MARGIN`, for the rest. That number follows from the program, and grows
-with it when a fan-in node or a `Supervisor` has as many ports as the command
-line says, so nobody has to give it: before it opens anything, the process
-raises its soft limit to what it needs (`_raise_fd_limit`), which it may do
-up to its hard limit. When the hard limit is lower, it stops with an error
-that gives both numbers, and the hard limit has to be raised for the session
-that launches the program.
+and each value but `batch_sched`, when given, must be a positive number: the
+engine checks it when it loads the program
+(`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is launched. An
+`input_log_max_mb` or an `out_backlog_fail_mb` smaller than one message stops
+the node at its first message, which the engine cannot foresee, since it does
+not know the size of the messages. The built-in
+scheduler exports the computational specifications of the process to it as
+`DEBASHER_PROCESS_COMP_SPECS`, from the specification that the generated
+script carries, so a relaunch gets them too, and each class sets those that it
+reads on its instance when it is created (`_apply_comp_specs`), and ignores
+the other fields.
 
 ## Observing the outside world
 
@@ -2149,7 +2187,8 @@ as when the reader alone crashes.
   uses it to reach the limit it would otherwise never reach. A module that
   does not offer it holds the FIFOs in every run.
 - **Descriptors.** One for each held FIFO, which the `Supervisor` counts in
-  the limit it raises before it opens anything (see "Limits of a node").
+  the limit it raises before it opens anything (see "Computational
+  specifications of a resident process").
 
 `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
 node opens them, with a single `SIGKILL`, at random moments and with lines
@@ -2181,7 +2220,7 @@ with it the trace is exact.
   `now - _last_heartbeat[node]` against `HEARTBEAT_TIMEOUT_SECS`. A program
   sets the timeout of its `Supervisor` in the computational specifications of
   that process, `heartbeat_timeout_s`, in seconds, the same way as the limits
-  of a node (see "Limits of a node").
+  of a node (see "Computational specifications of a resident process").
 - **Startup deadline**: from each launch until its first heartbeat, a node's
   silence is measured against its startup deadline instead (Glossary), kept in
   `_starting` and applied by `_silence_limit`: from its launch the node
@@ -2671,11 +2710,12 @@ it prints (see "Observing and talking to a live program" in
   consistent state of the node.
 - **The node info file.** Part of what the tool shows lives only in the memory
   of the node: the limits in force, which the class of the node and the
-  computational specifications of its process decide (see "Limits of a
-  node"), and which only the code of the node could tell from outside; and the
-  size of the outbound backlog, whose copy in a checkpoint is missing
-  precisely when it grows too large (see "Checkpoint persistence"). The node
-  writes them into its node info file (see the Glossary), a JSON object:
+  computational specifications of its process decide (see "Computational
+  specifications of a resident process"), and which only the code of the node
+  could tell from outside; and the size of the outbound backlog, whose copy in
+  a checkpoint is missing precisely when it grows too large (see "Checkpoint
+  persistence"). The node writes them into its node info file (see the
+  Glossary), a JSON object:
 
   ```
   {"runtime_class": "ProgramLauncher", "started_at": 1790000000.5,
@@ -3258,9 +3298,10 @@ scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
 itself, so that the batch runs do not depend on the scheduler that a machine
 would pick on its own; `SLURM` sends them to a cluster. A program sets both in
 the computational specifications of the process, `max_concurrent_runs` and
-`batch_sched`, like the limits of a node (see "Limits of a node"); the engine
-checks, when it loads the program, that the first is a positive number and
-the second one of the schedulers that `debasher_exec` knows.
+`batch_sched`, like the limits of a node (see "Computational specifications of
+a resident process"); the engine checks, when it loads the program, that the
+first is a positive number and the second one of the schedulers that
+`debasher_exec` knows.
 
 How a batch run is going is read from its run directory alone, whatever the
 scheduler, so that a relaunched node, which has lost what its previous
@@ -3738,11 +3779,11 @@ Design ideas from Future work move here once they are actually built.
   (see "Holding the business channels"). The loss is then left to the
   `Supervisor` being down at the same time, which nothing watches (see
   "Supervising the `Supervisor`" in Future work). Every process also raises
-  its limit of open descriptors to what its ports need (see "Limits of a
-  node"). `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO
-  together at random moments, with and without the `Supervisor` holding it,
-  and the chaos test runs the same case on a real run of both kinds, one of
-  them with `-no-hold-fifos`.
+  its limit of open descriptors to what its ports need (see "Computational
+  specifications of a resident process"). `test/engine/test_hold_fifos.py`
+  kills both endpoints of a FIFO together at random moments, with and without
+  the `Supervisor` holding it, and the chaos test runs the same case on a real
+  run of both kinds, one of them with `-no-hold-fifos`.
 
 # Future work
 

@@ -98,8 +98,8 @@ class ComputationalSpecs(BaseModel):
     time: Optional[str] = None
     # Only for the node kinds of a resident program that read them, each
     # named as the engine's computational specification it becomes (see
-    # "Limits of a node" in doc/design_doc_resident.md); None leaves the
-    # default of the class. The engine checks their values when it loads
+    # "Computational specifications of a resident process" in
+    # doc/design_doc_resident.md); None leaves the default of the class. The engine checks their values when it loads
     # the program.
     input_log_max_mb: Optional[float] = None
     out_backlog_max_mb: Optional[float] = None

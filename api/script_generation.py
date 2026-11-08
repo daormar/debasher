@@ -64,8 +64,8 @@ def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) 
     if specs.time is not None:
         parts.append(f"time={specs.time}")
     # The specifications that the nodes of a resident program read, under
-    # the names of the engine (see "Limits of a node" in
-    # doc/design_doc_resident.md), none of them set for a general program
+    # the names of the engine (see "Computational specifications of a
+    # resident process" in doc/design_doc_resident.md), none of them set for a general program
     # and none held by the specifications of a sequential process.
     for name in RESIDENT_COMP_SPEC_NAMES:
         value = getattr(specs, name, None)

@@ -933,12 +933,13 @@ nodes of a resident program take settings of their own as computational
 specifications: the limits of a node, the timeouts that the `Supervisor` reads
 and, for a launcher node, `max_concurrent_runs` and the scheduler of its batch
 runs (`batch_sched`). The engine checks them along with the others, and
-`doc/design_doc_resident.md` describes them (see "Limits of a node" and
-"Launching from the queue on disk" there). A process can also pass one of its
-specifications to its tasks as an option (see "Defining the options of a task").
-The additional specifications change how the engine treats the process:
-`processdeps` gives its explicit dependencies, `force=yes` marks it to rerun on
-every run, and `alias`, `ext_alias` and `alias_opt_map` are described above.
+`doc/design_doc_resident.md` describes them (see "Computational specifications
+of a resident process" and "Launching from the queue on disk" there). A process
+can also pass one of its specifications to its tasks as an option (see "Defining
+the options of a task"). The additional specifications change how the engine
+treats the process: `processdeps` gives its explicit dependencies, `force=yes`
+marks it to rerun on every run, and `alias`, `ext_alias` and `alias_opt_map` are
+described above.
 `sched`, which only a sequential process has, is described in "Sequential
 processes", and a process that gives it is refused when it is added.
 
