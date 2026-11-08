@@ -55,6 +55,50 @@ debasher::_check_spec_attr_names()
 }
 
 ########
+# The basic computational specifications, without which a process cannot
+# be scheduled.
+debasher::_check_basic_comp_specs()
+{
+    local processname=$1
+    local comp_specs=$2
+
+    local specname
+    for specname in cpus mem time; do
+        if [ "$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            echo "Error: ${specname} computational specification not given for process ${processname}" >&2
+            return 1
+        fi
+    done
+}
+
+########
+# The limits that a resident process reads, when given, must be positive
+# numbers: checked here, when the program is loaded, rather than by the
+# node when it starts, after it has been launched. The same goes for the
+# scheduler of the batch runs of a launcher node.
+debasher::_check_resident_comp_spec_values()
+{
+    local processname=$1
+    local comp_specs=$2
+
+    local specname
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
+        local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && ! debasher::_str_is_positive_number "${value}"; then
+            echo "Error: ${specname} computational specification of process ${processname} must be a positive number, got \"${value}\"" >&2
+            return 1
+        fi
+    done
+    local batch_sched=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}")
+    if [ "${batch_sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ] \
+           && [ "${batch_sched}" != "${DEBASHER_SLURM_SCHEDULER}" ]; then
+        echo "Error: ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} computational specification of process ${processname} must be ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}, got \"${batch_sched}\"" >&2
+        return 1
+    fi
+}
+
+########
 debasher::_program_process_spec_is_ok()
 {
     # NOTE: Process specification is a set of entries, each one
@@ -78,43 +122,8 @@ debasher::_program_process_spec_is_ok()
     debasher::_check_spec_attr_names "${processname}" "computational" "${comp_specs}" "${comp_sep}" "${DEBASHER_COMP_SPEC_NAMES}" "${DEBASHER_ADDITIONAL_SPEC_NAMES}" || return 1
     debasher::_check_spec_attr_names "${processname}" "additional" "$(debasher::extract_process_additional_specs "${process_spec}")" "${DEBASHER_PROCSPECS_SEP}" "${DEBASHER_ADDITIONAL_SPEC_NAMES}" "${DEBASHER_COMP_SPEC_NAMES}" || return 1
 
-    # Check if basic computational specifications were provided
-    local cpus=$(debasher::_extract_cpus_from_process_spec "$process_spec")
-    if [ "$cpus" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-        echo "Error: cpus computational specification not given for process ${processname}" >&2
-        return 1
-    fi
-
-    local mem=$(debasher::_extract_mem_from_process_spec "$process_spec")
-    if [ "$mem" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-        echo "Error: mem computational specification not given for process ${processname}" >&2
-        return 1
-    fi
-
-    local time=$(debasher::_extract_time_from_process_spec "$process_spec")
-    if [ "$time" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
-        echo "Error: time computational specification not given for process ${processname}" >&2
-        return 1
-    fi
-
-    # The limits that a resident process reads, when given, must be positive
-    # numbers: checked here, when the program is loaded, rather than by the
-    # node when it starts, after it has been launched
-    local specname
-    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
-        local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
-        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && ! debasher::_str_is_positive_number "${value}"; then
-            echo "Error: ${specname} computational specification of process ${processname} must be a positive number, got \"${value}\"" >&2
-            return 1
-        fi
-    done
-    local batch_sched=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}")
-    if [ "${batch_sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] \
-           && [ "${batch_sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ] \
-           && [ "${batch_sched}" != "${DEBASHER_SLURM_SCHEDULER}" ]; then
-        echo "Error: ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} computational specification of process ${processname} must be ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}, got \"${batch_sched}\"" >&2
-        return 1
-    fi
+    debasher::_check_basic_comp_specs "${processname}" "${comp_specs}" || return 1
+    debasher::_check_resident_comp_spec_values "${processname}" "${comp_specs}" || return 1
 
     return 0
 }
