@@ -86,14 +86,21 @@ class DirectoryWatcher(FBPProcess):
         super().__init__(argv, opts)
         self._watch_dir = self._find_watch_dir()
         # The node state: the files for which a request has been sent, so
-        # that a file brought in again is requested once.
+        # that a file brought in again is requested once. This is what
+        # decides whether a file was attended, by its path and for the life
+        # of the program.
         self._requested = set()
         # What observe() remembers between two observations, in this
-        # incarnation only: the size and modification time of each file,
-        # with how many observations in a row they have not changed, and the
-        # files it has brought in. A relaunched node brings the complete
-        # files in again, which process_data drops.
-        self._stability = {}
+        # incarnation only; a relaunched node starts it empty, brings the
+        # complete files in again, and process_data drops them.
+        #
+        # Whether a file is complete, never whether it is new: for each file
+        # now in the directory, what was observed of it (its size and
+        # modification time) and how many observations in a row have seen
+        # that same thing.
+        self._file_observations = {}
+        # The files for which inject() has returned: it only spares injecting
+        # the same file at every observation.
         self._brought_in = set()
 
     def _find_watch_dir(self):
@@ -183,12 +190,18 @@ class DirectoryWatcher(FBPProcess):
                 continue
             present.add(path)
             signature = (st.st_size, st.st_mtime_ns)
-            previous = self._stability.get(path)
+            previous = self._file_observations.get(path)
+            # Observations in a row that found it unchanged: a file still
+            # being written starts again from one.
             stable = previous[1] + 1 if previous is not None and previous[0] == signature else 1
-            self._stability[path] = (signature, stable)
+            self._file_observations[path] = (signature, stable)
+            # A file already brought in is still looked at, so that one that
+            # disappears is forgotten below.
             if path not in self._brought_in and self.is_complete(path, stable):
                 self.inject({"file": path})
                 self._brought_in.add(path)
-        for path in list(self._stability):
+        # What is gone is forgotten, so that this memory holds only what the
+        # directory holds now; the two others keep its path.
+        for path in list(self._file_observations):
             if path not in present:
-                del self._stability[path]
+                del self._file_observations[path]

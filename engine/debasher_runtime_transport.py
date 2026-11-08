@@ -246,21 +246,25 @@ class _PortWorker:
         computational specifications of the process give (see
         _COMP_SPEC_ATTRS): the engine exports them to the process as
         DEBASHER_PROCESS_COMP_SPECS, fields `name=value` separated by ";" or,
-        in the legacy form, by blanks. The other fields (cpus, mem, time...)
-        are for the scheduler, and are ignored here. A specification whose
-        factor is None takes its value as text, which the engine checked when
-        it loaded the program.
+        in the legacy form, by blanks.
         """
         separator = ";" if ";" in comp_specs else None
         for field in comp_specs.split(separator):
             name, _, value = field.strip().partition("=")
+            # A field that this class does not read: for the scheduler, or
+            # for another class of the runtime library.
             target = self._COMP_SPEC_ATTRS.get(name)
             if target is None:
                 continue
             attribute, factor = target
+            # A value taken as text, which the engine checked when it loaded
+            # the program.
             if factor is None:
                 setattr(self, attribute, value)
                 continue
+            # A node built without the engine gets here unchecked, so a
+            # number is checked again; what is not a number is refused like
+            # one that is not positive.
             try:
                 number = float(value)
             except ValueError:
@@ -270,6 +274,7 @@ class _PortWorker:
                     f"{type(self).__name__}: the computational specification "
                     f"{name}={value!r} is not a positive number"
                 )
+            # To the unit of the attribute: a size in bytes is a whole number.
             scaled = number * factor
             setattr(self, attribute, int(scaled) if attribute.endswith("_BYTES") else scaled)
 
