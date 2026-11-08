@@ -759,95 +759,110 @@ class FBPProcess(_PortWorker):
                 raise RuntimeError(
                     f"{type(self).__name__}: an item arrived before the input log was opened"
                 )
-            # No duplicates across a crash: a DATA that carries a number not
-            # above the last one this channel's reader has already accepted is a
-            # duplicate, produced by a replay on the sender's side, and is
-            # dropped here, before it is ever logged or queued, so that it is
-            # never processed twice. One that skips over a number is a message
-            # this channel will never see: a real loss, not a duplicate, so it
-            # is never silent. The items before it are logged and queued, as
-            # they would be one by one, and then it raises, before it is itself
-            # logged or queued. A DATA with no number (from a source, or a plain
-            # _PortWorker) is not part of the numbering and is always accepted;
-            # only DATA is sequenced (BARRIER/INTERACT carry no seq of their
-            # own; CLOSE carries the sender's last one instead, checked below,
-            # once CLOSE itself is durably recorded, since nothing sends it
-            # twice).
-            accepted_items = []
-            close_checks = []
-            gap = None
-            for envelope, line in items:
-                if envelope.type == TYPE_DATA and envelope.seq is not None:
-                    accepted = self._accepted_seq.get(tag, 0)
-                    if envelope.seq <= accepted:
-                        self.log.debug(
-                            "reader for %r dropped a duplicate: seq %s is not above %s "
-                            "already accepted",
-                            tag,
-                            envelope.seq,
-                            accepted,
-                        )
-                        continue
-                    if envelope.seq > accepted + 1:
-                        missing = (
-                            f"{accepted + 1}"
-                            if envelope.seq == accepted + 2
-                            else f"{accepted + 1} to {envelope.seq - 1}"
-                        )
-                        gap = ValueError(
-                            f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
-                            f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
-                        )
-                        break
-                    self._accepted_seq[tag] = envelope.seq
-                if envelope.type == TYPE_CLOSE:
-                    close_checks.append((envelope, self._accepted_seq.get(tag, 0)))
-                accepted_items.append((envelope, line))
-
-            # The records are in the file, in one write, before the brain
-            # thread can see the items. If this raises, the exception ends
-            # the reader thread, which is how the heartbeat notices: after a
-            # failed write none of these items is queued, and at the size cap
-            # only the ones logged before it are.
-            try:
-                positions = self._input_log.append_many([(tag, line) for _, line in accepted_items])
-            except LogCapReached as exc:
-                for pos, (envelope, _) in zip(exc.positions, accepted_items):
-                    self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
-                skipped_since = self._checkpoints_skipped_since
-                if skipped_since is None:
-                    raise
-                # Rounds do close here, but none has written a checkpoint
-                # for a while, so nothing has been pruned: the real cause is
-                # a reader of this node that is not keeping up.
-                raise LogCapReached(
-                    f"{exc}; here the cause is not the rounds: no checkpoint has been "
-                    f"written since epoch {skipped_since}, because the outbound backlog "
-                    f"is over OUT_BACKLOG_MAX_BYTES ({self.OUT_BACKLOG_MAX_BYTES}): a "
-                    "reader of this node is not keeping up with it",
-                    exc.positions,
-                ) from None
-            for pos, (envelope, _) in zip(positions, accepted_items):
-                self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
-
-            # A CLOSE that carries the sender's last number is checked
-            # only now, after it is itself durably logged and queued, unlike
-            # a DATA gap: nothing ever sends CLOSE a second time, so losing
-            # it here to an early raise would leave this port's writer
-            # looking unfinished forever, rather than reporting one lost
-            # message and moving on.
-            for envelope, accepted in close_checks:
-                claimed = envelope.payload.get("last_seq")
-                if claimed is not None and claimed > accepted:
-                    missing = f"{accepted + 1}" if claimed == accepted + 1 else f"{accepted + 1} to {claimed}"
-                    raise ValueError(
-                        f"{type(self).__name__}: {tag!r} closed for good after sending up "
-                        f"to {claimed}, but only {accepted} was ever accepted here, "
-                        f"missing {missing}"
-                    )
-
+            accepted, close_checks, gap = self._filter_by_seq(tag, items)
+            positions = self._log_arrivals(tag, accepted)
+            self._queue_arrivals(tag, accepted, positions)
+            # A CLOSE is checked only now, after it is itself durably logged
+            # and queued, unlike a DATA gap: nothing ever sends CLOSE a second
+            # time, so losing it here to an early raise would leave this
+            # port's writer looking unfinished forever, rather than reporting
+            # one lost message and moving on.
+            self._check_close_claims(tag, close_checks)
             if gap is not None:
                 raise gap
+
+    def _filter_by_seq(self, tag, items):
+        """
+        Returns the (envelope, line) pairs of `items` to log, what each CLOSE
+        among them has to be checked against, and the error of a gap, if any.
+
+        No duplicates across a crash: a DATA that carries a number not above
+        the last one this channel's reader has already accepted is a
+        duplicate, produced by a replay on the sender's side, and is dropped
+        here, before it is ever logged or queued, so that it is never
+        processed twice. One that skips over a number is a message this
+        channel will never see: a real loss, not a duplicate, so it is never
+        silent. The items before it are logged and queued, as they would be
+        one by one, and then it raises, before it is itself logged or queued.
+        A DATA with no number (from a source, or a plain _PortWorker) is not
+        part of the numbering and is always accepted; only DATA is sequenced
+        (BARRIER/INTERACT carry no seq of their own; CLOSE carries the
+        sender's last one instead, see _check_close_claims).
+        """
+        accepted_items = []
+        close_checks = []
+        for envelope, line in items:
+            if envelope.type == TYPE_DATA and envelope.seq is not None:
+                accepted = self._accepted_seq.get(tag, 0)
+                if envelope.seq <= accepted:
+                    self.log.debug(
+                        "reader for %r dropped a duplicate: seq %s is not above %s "
+                        "already accepted",
+                        tag,
+                        envelope.seq,
+                        accepted,
+                    )
+                    continue
+                if envelope.seq > accepted + 1:
+                    missing = (
+                        f"{accepted + 1}"
+                        if envelope.seq == accepted + 2
+                        else f"{accepted + 1} to {envelope.seq - 1}"
+                    )
+                    gap = ValueError(
+                        f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
+                        f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
+                    )
+                    return accepted_items, close_checks, gap
+                self._accepted_seq[tag] = envelope.seq
+            if envelope.type == TYPE_CLOSE:
+                close_checks.append((envelope, self._accepted_seq.get(tag, 0)))
+            accepted_items.append((envelope, line))
+        return accepted_items, close_checks, None
+
+    def _log_arrivals(self, tag, accepted):
+        """
+        Writes the items `accepted` in the input log, in one write, and
+        returns their positions: the records are in the file before the
+        brain thread can see the items. If this raises, the exception ends
+        the reader thread, which is how the heartbeat notices: after a failed
+        write none of these items is queued, and at the size cap only the
+        ones logged before it are.
+        """
+        try:
+            return self._input_log.append_many([(tag, line) for _, line in accepted])
+        except LogCapReached as exc:
+            self._queue_arrivals(tag, accepted, exc.positions)
+            skipped_since = self._checkpoints_skipped_since
+            if skipped_since is None:
+                raise
+            # Rounds do close here, but none has written a checkpoint
+            # for a while, so nothing has been pruned: the real cause is
+            # a reader of this node that is not keeping up.
+            raise LogCapReached(
+                f"{exc}; here the cause is not the rounds: no checkpoint has been "
+                f"written since epoch {skipped_since}, because the outbound backlog "
+                f"is over OUT_BACKLOG_MAX_BYTES ({self.OUT_BACKLOG_MAX_BYTES}): a "
+                "reader of this node is not keeping up with it",
+                exc.positions,
+            ) from None
+
+    def _queue_arrivals(self, tag, accepted, positions):
+        """Queues for the brain thread the items that were given `positions`."""
+        for pos, (envelope, _) in zip(positions, accepted):
+            self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+
+    def _check_close_claims(self, tag, close_checks):
+        """Raises if a CLOSE claims to have sent more than was accepted."""
+        for envelope, accepted in close_checks:
+            claimed = envelope.payload.get("last_seq")
+            if claimed is not None and claimed > accepted:
+                missing = f"{accepted + 1}" if claimed == accepted + 1 else f"{accepted + 1} to {claimed}"
+                raise ValueError(
+                    f"{type(self).__name__}: {tag!r} closed for good after sending up "
+                    f"to {claimed}, but only {accepted} was ever accepted here, "
+                    f"missing {missing}"
+                )
 
     def _brain_loop(self):
         while True:
