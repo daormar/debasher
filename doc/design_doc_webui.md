@@ -2886,12 +2886,13 @@ additional methods, which a resident program does not offer (see "The program
 model of a resident program"), is refused too, as is one whose code is not a
 Python heredoc. Import then refuses the whole program and lists every node that
 does not fit, each with its line, the shape that the web UI expects and how to
-change the code to fit it. Such a module is a valid resident program, which the
-engine runs; only the web UI cannot hold it. This is where import departs from
-"What import does not understand, it keeps": the code of a node has no
-counterpart of the `manual` mode of the options handler, since the parts of a
-node already cover what a node can do, and a mode of its own would need an
-editor of its own.
+change the code to fit it. Unless it lacks the line that starts its node (see
+"Defining a node" in `doc/design_doc_resident.md`), such a module is a valid
+resident program, which the engine runs; only the web UI cannot hold it. This
+is where import departs from "What import does not understand, it keeps": the
+code of a node has no counterpart of the `manual` mode of the options handler,
+since the parts of a node already cover what a node can do, and a mode of its
+own would need an editor of its own.
 
 **The round trip of the code of a node.** A node built with the web UI comes
 back from script generation and import with the same parts. A node written by

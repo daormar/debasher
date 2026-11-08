@@ -175,8 +175,10 @@ debasher::_classify_resident_process_role()
 # hides nothing that the code of the node could need: a class of the
 # runtime library, a Python builtin, or a name that the heredoc binds at
 # its top level, such as an import of its preamble. Prints nothing and
-# exits 0 if the class passes, or prints the first violation to stderr
-# and exits 1. Like the classifier, it only parses the source.
+# The code also has the line that starts the node, <Name>().run(), at the
+# top level or under if __name__ == "__main__":. It exits 0 if the class
+# passes, or prints the first violation to stderr and exits 1. Like the
+# classifier, it only parses the source.
 debasher::_resident_class_name_checker_src()
 {
     cat <<'EOF'
@@ -245,6 +247,52 @@ def bindings(node):
         yield from bindings(child)
 
 
+def runs_the_node(statement, name):
+    """Whether `statement` is the line <name>().run()."""
+    if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
+        return False
+    call = statement.value
+    return (
+        not call.args
+        and not call.keywords
+        and isinstance(call.func, ast.Attribute)
+        and call.func.attr == "run"
+        and isinstance(call.func.value, ast.Call)
+        and isinstance(call.func.value.func, ast.Name)
+        and call.func.value.func.id == name
+        and not call.func.value.args
+        and not call.func.value.keywords
+    )
+
+
+def is_main_guard(statement):
+    """Whether `statement` is if __name__ == "__main__":, which holds when the
+    engine runs the heredoc, as python3 -c runs it as the main module."""
+    if not isinstance(statement, ast.If) or not isinstance(statement.test, ast.Compare):
+        return False
+    test = statement.test
+    return (
+        isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Eq)
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value == "__main__"
+    )
+
+
+def starts_the_node(tree, name):
+    """Whether the heredoc has the line <name>().run(), at the top level or
+    under if __name__ == "__main__":."""
+    for statement in tree.body:
+        if runs_the_node(statement, name):
+            return True
+        if is_main_guard(statement) and any(runs_the_node(inner, name) for inner in statement.body):
+            return True
+    return False
+
+
 def check(processname, source):
     tree = ast.parse(source)
     expected = camel_case(processname)
@@ -273,6 +321,10 @@ def check(processname, source):
             if name == expected:
                 return (f"the class of process {processname}, {expected}, has the name of what "
                         f"its code also defines on line {line}, which it would hide")
+
+    if not starts_the_node(tree, expected):
+        return (f"process {processname} has no line {expected}().run(), at the top level or "
+                'under if __name__ == "__main__":, which is how a node is started')
     return None
 
 
@@ -293,7 +345,8 @@ EOF
 }
 
 ########
-# Checks the name of the class of a resident program's process by running
+# Checks the name of the class of a resident program's process, and the
+# line that starts it, by running
 # debasher::_resident_class_name_checker_src against its Python heredoc
 # source (see debasher::_get_resident_process_source). Returns 1, with an
 # error on stderr, if the name breaks one of its rules, or if the process
@@ -315,7 +368,7 @@ debasher::_check_resident_class_name()
 # Validates every process of a "resident" program (see
 # doc/design_doc_resident.md): each one must classify (via
 # debasher::_classify_resident_process_role) as either "supervisor" or
-# "fbpprocess", with its class named as
+# "fbpprocess", with its class named and its node started as
 # debasher::_check_resident_class_name requires, and at most one process
 # may be a "supervisor" (a supervisor is optional, like ext2/3/4
 # journaling, but never more than one). A no-op, returning 0

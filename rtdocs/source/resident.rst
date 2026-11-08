@@ -127,8 +127,9 @@ sum and sends it on ``outsum``. ``capture_node_state`` and
 ``restore_node_state`` turn that state into a value that JSON can
 serialize and back, so that it can be saved in a checkpoint.
 
-The ``Supervisor`` needs no code: an empty subclass of
-``Supervisor`` is enough. Its options connect it to the heartbeat
+The ``Supervisor`` needs no code of its own: an empty subclass of
+``Supervisor``, followed by the line that runs it, is enough. Its
+options connect it to the heartbeat
 channel of every node, to the control port of every initiator
 (``-outAccumulate_trig``, tagged ``--control``, since it carries
 orders), and to a *manual trigger port*, ``-manual``, where the tools
@@ -213,7 +214,13 @@ place (``Counter``) gives the process and its class the same name.
 When the program is loaded, DeBasher checks that the Python code
 defines exactly one such class and that its name hides no Python
 builtin nor name of the runtime library, so a process called
-``supervisor`` or ``type_error`` has to be renamed.
+``supervisor`` or ``type_error`` has to be renamed. It also checks
+that the code has the line ``Counter().run()``, with the name of the
+class and no arguments, at the top level or under
+``if __name__ == "__main__":``, in a node and in the ``Supervisor``
+alike. Without that line the process would end at once having started
+nothing, so a program that lacks it is refused, as is one that creates
+and runs the node in another way.
 
 The Hooks of a Node
 ^^^^^^^^^^^^^^^^^^^
@@ -479,7 +486,8 @@ directory: it watches ``WATCH_DIR`` (or the directory that the option
 port ``outrequests`` for every file whose name matches ``PATTERN``
 once the file is complete, that is, once its size and modification
 time stop changing. A module that only needs to set those attributes
-derives from it with no code of its own. The :doc:`webui_watch_tally`
+derives from it with no methods of its own, and runs it as any other
+node. The :doc:`webui_watch_tally`
 shows a complete program with a ``DirectoryWatcher``, and its tests.
 
 Notices

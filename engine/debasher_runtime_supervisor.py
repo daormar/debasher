@@ -73,8 +73,9 @@ class Supervisor(_PortWorker):
     of them, unless the process is given the flag `-no-hold-fifos`.
 
     A module declares it with an empty subclass,
-    `class Sup(Supervisor): pass`, whose ports the engine gives, like
-    those of a node. It keeps no state: a Supervisor relaunched by hand
+    `class Sup(Supervisor): pass`, and runs it with the line
+    `Sup().run()`. The engine gives it its ports, like those of a node.
+    It keeps no state: a Supervisor relaunched by hand
     starts afresh.
     """
 

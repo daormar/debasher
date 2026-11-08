@@ -1167,15 +1167,18 @@ node test builds a node without the engine to check its business logic.
 ## Defining a node
 
 A node is written as a class that derives from `FBPProcess`, in the Python
-heredoc of a process of a resident program. The engine only checks, without
+heredoc of a process of a resident program. The engine checks, without
 importing anything, that the heredoc has a top-level class deriving from
 `FBPProcess` or `Supervisor` (`debasher::_classify_resident_process_role`). It
 never instantiates it: the heredoc itself creates the object, which parses the
 options of the process from `argv`, and calls `run()`, in the line
-`<Name>().run()` that ends it. That line may also go under
-`if __name__ == "__main__":`, which holds when the engine runs the heredoc,
-since `python3 -c` runs it as the main module. The node harness recognizes
-both forms, and runs the heredoc without starting the node (see "Testing a
+`<Name>().run()`. That line may also go under `if __name__ == "__main__":`,
+which holds when the engine runs the heredoc, since `python3 -c` runs it as the
+main module. When it loads the program, the engine refuses a heredoc that has
+neither form (`debasher::_check_resident_class_name`), even one that starts
+the node in another way: it only parses the heredoc, and without that line a
+process would end at once having started nothing. The node harness recognizes
+both forms too, and runs the heredoc without starting the node (see "Testing a
 node without the engine").
 
 A resident program has nodes only, and no sequential processes (see "Sequential
@@ -1732,6 +1735,10 @@ A test names only the ports whose traffic it checks: a control port, the port
 to the `Supervisor` and any port that the test leaves out are not ports of the
 node under test, and `send_data` on one of them fails, as it does for a port
 that a node does not have.
+
+The harness does not require the line that starts the node: a heredoc that
+lacks it passes a node test and is refused when the program is loaded (see
+"Defining a node").
 
 A node under test offers:
 

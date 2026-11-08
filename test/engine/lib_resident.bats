@@ -238,16 +238,25 @@ EOF
     watchdog_heredoc_py() { cat <<'EOF'
 class Watchdog(Supervisor):
     pass
+
+
+Watchdog().run()
 EOF
     }
     worker_a_heredoc_py() { cat <<'EOF'
 class WorkerA(FBPProcess):
     pass
+
+
+WorkerA().run()
 EOF
     }
     worker_b_heredoc_py() { cat <<'EOF'
 class WorkerB(FBPProcess):
     pass
+
+
+WorkerB().run()
 EOF
     }
 
@@ -262,6 +271,9 @@ EOF
     worker_a_heredoc_py() { cat <<'EOF'
 class WorkerA(FBPProcess):
     pass
+
+
+WorkerA().run()
 EOF
     }
 
@@ -276,11 +288,17 @@ EOF
     watchdog_a_heredoc_py() { cat <<'EOF'
 class WatchdogA(Supervisor):
     pass
+
+
+WatchdogA().run()
 EOF
     }
     watchdog_b_heredoc_py() { cat <<'EOF'
 class WatchdogB(Supervisor):
     pass
+
+
+WatchdogB().run()
 EOF
     }
 
@@ -346,6 +364,78 @@ EOF
     run debasher::_check_resident_class_name "Counter"
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
+}
+
+@test "debasher::_check_resident_class_name refuses a heredoc without the line that starts the node" {
+    counter_heredoc_py() { cat <<'EOF'
+from debasher_runtime_lib import FBPProcess
+
+
+class Counter(FBPProcess):
+    pass
+EOF
+    }
+
+    run debasher::_check_resident_class_name "counter"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has no line Counter().run()"* ]]
+}
+
+@test "debasher::_check_resident_class_name accepts the line that starts the node under the main guard" {
+    counter_heredoc_py() { cat <<'EOF'
+from debasher_runtime_lib import FBPProcess
+
+
+class Counter(FBPProcess):
+    pass
+
+
+if __name__ == "__main__":
+    Counter().run()
+EOF
+    }
+
+    run debasher::_check_resident_class_name "counter"
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "debasher::_check_resident_class_name refuses the line under a guard that is not the main one" {
+    counter_heredoc_py() { cat <<'EOF'
+from debasher_runtime_lib import FBPProcess
+
+
+class Counter(FBPProcess):
+    pass
+
+
+if __name__ != "__main__":
+    Counter().run()
+EOF
+    }
+
+    run debasher::_check_resident_class_name "counter"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has no line Counter().run()"* ]]
+}
+
+@test "debasher::_check_resident_class_name refuses a node started in another form" {
+    counter_heredoc_py() { cat <<'EOF'
+from debasher_runtime_lib import FBPProcess
+
+
+class Counter(FBPProcess):
+    pass
+
+
+node = Counter()
+node.run()
+EOF
+    }
+
+    run debasher::_check_resident_class_name "counter"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"has no line Counter().run()"* ]]
 }
 
 @test "debasher::_check_resident_class_name refuses a class not named after its process" {

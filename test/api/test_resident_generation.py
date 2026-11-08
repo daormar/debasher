@@ -9,7 +9,10 @@ with debasher_exec --validate, which loads a resident program and validates it
 without launching anything.
 """
 
+import importlib
+import re
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -39,7 +42,7 @@ from api.models import (
     ProgramOption,
     ProgramProcess,
 )
-from api.resident_node_code import node_class_name, node_heredoc, normalized_part
+from api.resident_node_code import RUNTIME_CLASSES, node_class_name, node_heredoc, normalized_part
 from api.script_generation import generate_script
 
 _ARRAY_CODE = (
@@ -230,6 +233,37 @@ def _function(script, name):
 def test_the_class_of_a_node_is_named_after_its_process():
     assert node_class_name("counter") == "Counter"
     assert node_class_name("org.ns.count_words") == "OrgNsCountWords"
+
+
+def _embedded_python(function):
+    """Loads the Python program that a function of the Bash library embeds."""
+    source = (Path(__file__).resolve().parents[2] / "engine" / "debasher_lib_resident.sh").read_text()
+    match = re.search(rf"^debasher::{function}\(\)\n\{{\n    cat <<'EOF'\n(.*?)^EOF$", source, re.S | re.M)
+    namespace = {"__name__": "embedded"}
+    exec(match.group(1), namespace)
+    return namespace
+
+
+@pytest.mark.parametrize("name", ["counter", "Counter", "org.ns.count_words", "a__b", "_x", "x_", "a.b_c.d"])
+def test_the_engine_and_the_api_name_the_class_of_a_node_alike(name):
+    checker = _embedded_python("_resident_class_name_checker_src")
+    assert checker["camel_case"](name) == node_class_name(name)
+
+
+def test_the_engine_and_the_api_know_the_same_classes_of_the_runtime_library():
+    checker = _embedded_python("_resident_class_name_checker_src")
+    classifier = _embedded_python("_resident_role_classifier_src")
+    assert set(checker["RUNTIME_CLASSES"]) == set(RUNTIME_CLASSES) == set(classifier["BASE_ROLES"])
+
+
+@pytest.mark.parametrize("kind", ["FBPProcess", "DirectoryWatcher"])
+def test_the_heredoc_that_the_api_writes_passes_the_engine_and_the_harness(kind, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "engine"))
+    testing = importlib.import_module("debasher_runtime_testing")
+    heredoc = node_heredoc(_process("org.ns.count_words", kind))
+
+    assert _embedded_python("_resident_class_name_checker_src")["check"]("org.ns.count_words", heredoc) is None
+    assert testing._node_class("org.ns.count_words", heredoc).__name__ == "OrgNsCountWords"
 
 
 def test_a_process_name_already_in_camel_case_names_its_class_as_it_is():
