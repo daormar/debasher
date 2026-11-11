@@ -284,11 +284,12 @@ do the entries below that refer to it.
   see execdir) that a node writes in its own `execdir` (atomically, like a
   checkpoint, but never schema-versioned or pruned) when a halt round closes,
   holding that round's epoch as plain text. Read by nothing inside the node
-  itself (in memory, `_halted` already keeps the same incarnation from opening
-  another round, see "State variables, at a glance"); it exists only for an
-  external actor with no other view of the node's state, such as the tool a stop
-  signal comes from, to notice that this incarnation has nothing further to send
-  and it is safe to stop it.
+  itself (in memory, `_halted` already keeps the same incarnation from starting
+  another round when a trigger reaches it, see "Ordered shutdown"); it exists
+  only for an external actor with no other view of the node's state, such as
+  the tool a stop signal comes from, to notice that this incarnation has closed
+  the round of the halt, so that stopping it now loses nothing that a resume
+  does not bring back.
 - **stop signal**: `SIGTERM`, sent to a node's whole process group (the same
   group `debasher_stop` already reaches with `SIGKILL`, see
   `debasher::_stop_pid`), which is what actually ends a node's `run()`
@@ -1543,12 +1544,31 @@ does it for a whole program (see "`debasher_reset_resident`: a clean start").
 
 - Same `BARRIER`, with the `halt=True` flag: see the generic barrier logic
   above and `_on_epoch_closed`'s `halt` handling.
-- Closing a halt's epoch has no effect of its own (see the Glossary's "halt"):
-  the node keeps running, exactly like after any other round.
-  `_on_epoch_closed` only sets
-  `self._halted` (blocks `_start_barrier_round` from opening a further one,
-  keeping the checkpoint sequence frozen at this epoch for the rest of this
-  incarnation) and writes the halted marker (`_write_halted_marker`).
+- Closing a halt's epoch has no effect on what the node processes (see the
+  Glossary's "halt"): the node keeps running, exactly like after any other
+  round, and goes on processing every `DATA` that reaches it until a stop
+  signal arrives.
+  `_on_epoch_closed` only sets `self._halted` and writes the halted marker
+  (`_write_halted_marker`).
+- `_halted` keeps the node from starting a round when a trigger reaches it
+  (`_start_barrier_round`): a later trigger, from the `Supervisor`,
+  `debasher_snapshot_resident` or `debasher_stop_resident`, opens no round
+  for the rest of this incarnation. It does not keep the node out of a round
+  that reaches it as the marker of a peer. A round has to close at every node
+  it reaches, or it never closes at the nodes downstream of this one, so a
+  node that has halted opens it, captures its state and writes its checkpoint
+  like any other node, and, when that round is a halt too, writes its epoch
+  into the halted marker. That checkpoint need not equal the one of the halt:
+  the node may have processed messages since, and its `capture_pos` is later
+  in any case, since the marker that opens the round has a position of its
+  own in the input log. A resume restores it like any other checkpoint (see
+  the item on resumption below). The cost of ignoring the triggers is that a
+  halt cannot always be retried: an initiator that has halted, and that no
+  marker of the new halt reaches, never opens it, so when another initiator
+  does (one relaunched after a crash, for instance), the nodes downstream of
+  the first wait for its marker for ever (see "A crash while a round is open"
+  in the Contract's limits). When every initiator has halted, no new round
+  starts at all.
 - What actually ends `run()` is a stop signal, not a round closing: `run()`
   installs a `SIGTERM` handler (`_on_stop_signal`) on the main thread only
   (a background-thread caller, every test that drives `run()` this way, has
@@ -2675,9 +2695,11 @@ closes no epoch, prunes nothing and ends at the size cap of its input logs
   has one. Otherwise it names the nodes that have none and returns 2
   (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`), not 1, which is kept for
   usage and setup errors. A round does not close at a node that is down or
-  stopped, nor at one that has halted or has a halt open, which ignores a
-  snapshot. It does not start when a trigger cannot be written within 5
-  seconds (a control port fed from outside whose node is down has no reader).
+  stopped, nor at one that has a halt open, which ignores a snapshot, nor at
+  an initiator that has halted, which ignores the trigger, or at the nodes
+  that the round reaches only through one. It does not start when a trigger
+  cannot be written within 5 seconds (a control port fed from outside whose
+  node is down has no reader).
   And a node closes it without a checkpoint when its outbound backlog is over
   its cap (see "Checkpoint persistence").
 - **Periodically.** With `--every <secs>`, it starts a round every that many

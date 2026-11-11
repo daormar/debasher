@@ -3254,8 +3254,9 @@ until their size cap stops the nodes. The web UI starts rounds in two ways.
 `debasher_snapshot_resident -d <output directory>` within the request, with
 the default timeout of the tool, and shows what its exit code means. With 0,
 the round closed at every node, and the frontend shows its epoch. With 2, the
-round did not close at some node, because the node is down, has halted or has
-a halt open, and the frontend names the nodes. With 1, an error of usage or
+round did not close at some node, because the node is down or has a halt
+open, or is an initiator that has halted or is reached only through one, and
+the frontend names the nodes. With 1, an error of usage or
 setup. The action is offered only while there is a run in progress, and works
 as well on a program launched from the command line.
 
