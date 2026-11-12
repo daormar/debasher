@@ -63,7 +63,8 @@ debasher::_init_slurm_scheduler()
 # before the time limit (--signal): the _slurm_sigterm_handler method of the
 # process when it has one, or a handler that says so and ends the task with
 # an error. It goes first in the script, before the context, as the trap of
-# the built-in scheduler does (see debasher_builtin_sched::_print_script_trap):
+# a resident program does under the built-in scheduler (see
+# debasher_builtin_sched::_print_script_trap):
 # the trap names the handler, which the context defines when it is a method
 # of the process.
 debasher::_print_script_trap_slurm_sched()

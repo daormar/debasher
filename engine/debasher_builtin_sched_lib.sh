@@ -1748,21 +1748,22 @@ debasher_builtin_sched::_select_processes_to_be_exec()
 }
 
 ########
+# Prints the handling of SIGTERM that heads a process script: `trap '' TERM`
+# for a resident program, nothing for a general one.
 debasher_builtin_sched::_print_script_trap()
 {
-    # Ignored, not left at bash's default (terminate): a graceful stop
-    # (see FBPProcess's own SIGTERM handler, engine/debasher_runtime_fbp.py)
-    # signals this whole process group, not a lone PID, so that it reaches
-    # a resident process's own Python interpreter wherever it actually
-    # sits in the fork tree (the process function that
-    # debasher::_execute_task runs starts it as a child process). This
-    # script, the process group's leader
-    # and the one named in .id, has to survive that same broadcast, or it
-    # would die right here instead of going on to run
-    # _signal_process_completion once its own child actually exits, and
-    # .finished would never appear. A hard kill (SIGKILL, used by
-    # debasher_stop) cannot be trapped and is unaffected by this.
-    echo "trap '' TERM"
+    # A graceful stop (debasher::_stop_pid_gracefully, which only
+    # debasher_stop_resident uses) signals the whole process group, to reach
+    # the interpreter of the node; the script, leader of the group and named
+    # in .id, has to survive it to run _signal_process_completion once its
+    # child exits. An ignored signal, unlike a handler, is inherited through
+    # fork and exec, so the subshells of the script survive it too, and so
+    # does the node until it installs its own handler (FBPProcess.run). A
+    # general program traps nothing: nothing of the engine sends it SIGTERM,
+    # and what its processes start has to stop on a plain kill.
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "trap '' TERM"
+    fi
 }
 
 ########
@@ -1801,8 +1802,8 @@ debasher_builtin_sched::_create_script()
     local BASH_SHEBANG=$(debasher::_init_bash_shebang_var)
     echo ${BASH_SHEBANG} > "${fname}" || return 1
 
-    # Ignore a graceful-stop SIGTERM at this (the process group leader's)
-    # level, before anything else runs (see _print_script_trap).
+    # Write the handling of SIGTERM first, before anything else runs (only
+    # the script of a resident program has one, see _print_script_trap).
     debasher_builtin_sched::_print_script_trap >> "${fname}" || return 1
 
     # Write environment variables

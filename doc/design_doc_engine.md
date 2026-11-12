@@ -378,7 +378,7 @@ relative to the output directory of the run.
   tasks.
 - **execution context**: `.exec_context.sh`, the variables and functions of the
   shell of `debasher_exec` once the program is defined, which every process
-  script carries, right after its handling of `SIGTERM`.
+  script carries, right after its handling of `SIGTERM`, if it has one.
 - **command line file**: `command_line.sh`, the command line of the run, with
   the program file resolved and the scheduler recorded, from which the tools
   reload the program.
@@ -2459,11 +2459,20 @@ used. Before its first round the scheduler refuses the run when a process asks
 for more CPUs or memory than the budget, which the validation checks too, in
 the same way.
 
-A task is launched as a background process of its own process group, whose
-id (see below) goes to the `.id` file of the task, so that stopping it reaches
-everything it started. The script of the task ignores `SIGTERM` itself, so
-that a graceful stop sent to its whole group ends what it runs but lets it
-finish its own bookkeeping; `debasher_stop` sends `SIGKILL` to the group.
+A task is launched as a background process of its own process group, whose id
+(see below) goes to the `.id` file of the task, so that stopping it reaches
+everything it started; `debasher_stop` sends `SIGKILL` to the group. The script
+of a task of a resident program ignores `SIGTERM`: the stop signal of a node
+(see "Ordered shutdown" in `doc/design_doc_resident.md`) is sent to the whole
+group, so that it reaches the interpreter of the node, and the script has to
+survive it to finish its own bookkeeping once the node ends. An ignored signal
+is inherited through `fork` and `exec`, so what the script starts begins with
+`SIGTERM` ignored, and its subshells survive the signal too; the node installs a
+handler of its own, which, unlike an ignored signal, goes back to the default in
+what the node starts. The script of a task of a general program leaves `SIGTERM`
+at its default: nothing of the engine sends it one, and what its process starts
+has to stop on a plain `kill`, such as a helper that a process function starts
+and stops.
 
 Once a task has ended, the system may give its process id to another process.
 The id of a task is therefore its process id together with the time at which
@@ -2620,11 +2629,12 @@ cluster, which has not loaded any module and may not be able to. What it needs
 of the program travels in its process script, which the engine writes into the
 exec directory of the process when the process is launched, or, under the
 built-in scheduler, when its first task is cancelled. The script first sets how
-it handles `SIGTERM`, before anything else runs: under the built-in scheduler it
-ignores it (see "The built-in scheduler"); under the Slurm scheduler, which
-sends it before the time limit, it installs the `_slurm_sigterm_handler` method
-of the process or a default handler that prints a message and exits with an
-error. Then come three parts:
+it handles `SIGTERM`, before anything else runs: under the built-in scheduler
+the script of a resident program ignores it, and that of a general program
+leaves it at its default (see "The built-in scheduler"); under the Slurm
+scheduler, which sends it before the time limit, it installs the
+`_slurm_sigterm_handler` method of the process or a default handler that prints
+a message and exits with an error. Then come three parts:
 
 - **The execution context**, a copy of `.exec_context.sh`, which `debasher_exec`
   writes once the program is defined (see "Architecture"). It holds every

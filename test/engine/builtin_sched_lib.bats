@@ -66,12 +66,25 @@ start_sleeper() {
 # The launched script keeps running after _launch returns, so wait for
 # its own report instead of reading it right away.
 wait_for_report() {
+    wait_for_file "${EXECDIR}/seen.txt"
+}
+
+# Waits for the file $1 to appear, for up to five seconds
+wait_for_file() {
     local i
     for i in $(seq 1 100); do
-        [ -f "${EXECDIR}/seen.txt" ] && return 0
+        [ -f "$1" ] && return 0
         sleep 0.05
     done
     return 1
+}
+
+# A launched script that a failed test leaves running, with what it started,
+# would hold the output of bats open
+teardown() {
+    if [ -f "${EXECDIR}/proc.id" ]; then
+        kill -KILL -- "-$(pid_in_id_file "${EXECDIR}/proc.id")" 2>/dev/null || true
+    fi
 }
 
 @test "_launch writes the launched process's own PID into its .id file" {
@@ -261,24 +274,29 @@ EOF
     [ -z "${BUILTIN_ARRAY_TASK_ID+x}" ]
 }
 
-@test "_print_script_trap emits a trap that ignores TERM" {
+@test "_print_script_trap ignores TERM in a resident program and traps nothing in a general one" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
     [ "$(debasher_builtin_sched::_print_script_trap)" = "trap '' TERM" ]
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    [ -z "$(debasher_builtin_sched::_print_script_trap)" ]
 }
 
-@test "a launched script survives SIGTERM to its own process group, unlike one without the trap" {
-    # _create_script puts _print_script_trap's line first, before anything
-    # else runs (see debasher_builtin_sched::_create_script): a graceful
-    # stop signals the whole group (the same group debasher_stop already
-    # reaches with SIGKILL, see debasher::_stop_pid), not a lone PID, so it
-    # reaches a resident process's own Python interpreter wherever it sits
-    # in the fork tree; without this, that broadcast would kill the
-    # process-group leader itself before it ever gets to write .finished.
+@test "the script of a resident program survives SIGTERM to its process group, and a child with a handler of its own ends" {
+    # A graceful stop signals the whole group, so that it reaches the Python
+    # interpreter of a node, a child of the script: the script has to
+    # survive it to go on to _signal_process_completion once the child
+    # ends, as the child does through its own handler. Without one, the
+    # child would sleep for 30 seconds.
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_RESIDENT}"
     cat > "${SCRIPT}" <<EOF
 #!/bin/bash
 $(debasher_builtin_sched::_print_script_trap)
-sleep 5 &
-child=\$!
-wait "\${child}"
+"${PYTHON}" -c '
+import signal, sys, time
+signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+open(sys.argv[1], "w").close()
+time.sleep(30)
+' "$(dirname "${SCRIPT}")/ready"
 echo "pid=\$\$" > "$(dirname "${SCRIPT}")/seen.tmp"
 mv "$(dirname "${SCRIPT}")/seen.tmp" "$(dirname "${SCRIPT}")/seen.txt"
 EOF
@@ -288,18 +306,63 @@ EOF
     local pid
     pid=$(pid_in_id_file "${EXECDIR}/proc.id")
     [ -n "${pid}" ]
+    wait_for_file "${EXECDIR}/ready"
 
     kill -TERM -- "-${pid}"
 
-    # If the trap had not protected it, this signal would have killed the
-    # wrapper itself at once, and it would never reach the line that
-    # writes seen.txt: its own child dying from the same broadcast (no
-    # trap of its own) is what lets "wait" return and the script go on,
-    # the same way a resident process's Python interpreter exiting
-    # cleanly (see FBPProcess's own SIGTERM handler) lets the real script
-    # go on to _signal_process_completion and write .finished.
     wait_for_report
     [ "$(grep '^pid=' "${EXECDIR}/seen.txt" | cut -d= -f2)" = "${pid}" ]
+}
+
+@test "the script of a general program dies with SIGTERM to its process group, and so does its child" {
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    cat > "${SCRIPT}" <<EOF
+#!/bin/bash
+$(debasher_builtin_sched::_print_script_trap)
+touch "$(dirname "${SCRIPT}")/ready"
+sleep 30
+echo "pid=\$\$" > "$(dirname "${SCRIPT}")/seen.txt"
+EOF
+    chmod +x "${SCRIPT}"
+
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+    local pid
+    pid=$(pid_in_id_file "${EXECDIR}/proc.id")
+    [ -n "${pid}" ]
+    wait_for_file "${EXECDIR}/ready"
+
+    kill -TERM -- "-${pid}"
+
+    local i
+    for i in $(seq 1 100); do
+        kill -0 -- "-${pid}" 2>/dev/null || break
+        sleep 0.05
+    done
+    run kill -0 -- "-${pid}"
+    [ "${status}" -ne 0 ]
+    [ ! -f "${EXECDIR}/seen.txt" ]
+}
+
+@test "a helper that a process of a general program starts stops on a plain kill" {
+    # What a task starts does not inherit an ignored SIGTERM, so a process
+    # function can stop a helper of its own with kill.
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    cat > "${SCRIPT}" <<EOF
+#!/bin/bash
+$(debasher_builtin_sched::_print_script_trap)
+sleep 30 &
+helper=\$!
+kill "\${helper}"
+wait "\${helper}"
+echo "status=\$?" > "$(dirname "${SCRIPT}")/seen.tmp"
+mv "$(dirname "${SCRIPT}")/seen.tmp" "$(dirname "${SCRIPT}")/seen.txt"
+EOF
+    chmod +x "${SCRIPT}"
+
+    debasher_builtin_sched::_launch "${OUTDIR}" proc "${DEBASHER_BUILTIN_SCHED_NO_ARRAY_TASK}"
+
+    wait_for_report
+    [ "$(grep '^status=' "${EXECDIR}/seen.txt" | cut -d= -f2)" = "143" ]
 }
 
 @test "_get_process_comp_specs returns the computational specs of the process" {

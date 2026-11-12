@@ -1698,9 +1698,16 @@ process group instead (`kill -TERM` to the group, in
 `debasher::_stop_pid_gracefully`, the same group that `debasher_stop` already
 reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper script
 itself survives that same broadcast to still write `.finished` once its own
-child exits, which is what `debasher_builtin_sched::_print_script_trap` (`trap
-'' TERM`, the first thing `_create_script` writes into the generated file) is
-for. A hard kill (`SIGKILL`) cannot be trapped and is unaffected.
+child exits, which is what `debasher_builtin_sched::_print_script_trap`
+(`trap '' TERM`, the first thing `_create_script` writes into the generated file
+of a resident program) is for. A hard kill (`SIGKILL`) cannot be trapped and is
+unaffected. An ignored signal is inherited through `fork` and `exec`, so the
+interpreter of the node starts with `SIGTERM` ignored; the node does not depend
+on it, since `run()` installs a handler of its own at its start, and that
+handler, unlike an ignored signal, goes back to the default in what the node
+starts, such as the `debasher_exec` of a `ProgramLauncher`. The script of a
+general program traps nothing (see "The built-in scheduler" in
+`doc/design_doc_engine.md`).
 
 A program is resumed by relaunching every process, through the ordinary
 startup (see "Startup sequence: `run()`"), with no special case for a halt:
