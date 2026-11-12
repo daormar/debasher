@@ -250,8 +250,10 @@ def test_a_root_node_that_starts_a_round_before_processing_anything_records_zero
 
 def test_load_latest_checkpoint_returns_the_position(execdir):
     proc = _Node(opts=_OPTS)
-    proc._save_checkpoint(2, {"seen": ["s"]}, {}, 12, [], {}, {}, {})
-    assert proc._load_latest_checkpoint() == (2, {"seen": ["s"]}, 12, [], {}, {}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=2, node_state={"seen": ["s"]}, capture_pos=12))
+    assert proc._load_latest_checkpoint() == lib._Checkpoint(
+        epoch=2, node_state={"seen": ["s"]}, capture_pos=12
+    )
 
 
 def test_a_checkpoint_written_before_positions_existed_is_refused_by_its_version(execdir):
@@ -268,7 +270,13 @@ class _NoPorts(_Node):
 
 
 def test_a_restored_checkpoint_makes_the_positions_go_on_after_its_own(execdir):
-    _NoPorts(opts={})._save_checkpoint(4, {"seen": []}, {}, 40, [], {}, {}, {})
+    _NoPorts(opts={})._save_checkpoint(
+        lib._Checkpoint(
+            epoch=4,
+            node_state={"seen": []},
+            capture_pos=40,
+        )
+    )
 
     proc = _NoPorts(opts={})
     proc._stop_requested.set()

@@ -227,9 +227,9 @@ def test_a_capture_takes_the_sender_counters_at_that_instant_and_the_checkpoint_
     # input port, "inf", is left pending): capture_node_state() and the
     # sender counters are taken right there, at the same instant.
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    assert proc._barrier_out_seq == {"outf": 3}
+    assert proc._round.capture.out_seq == {"outf": 3}
 
-    proc._close_barrier_round()
+    proc._close_round()
     with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["out_seq"] == {"outf": 3}
@@ -245,16 +245,16 @@ def test_the_checkpoint_reflects_the_counters_at_capture_not_what_is_sent_while_
     # The round opens at once but its own input port, "inf", is left
     # pending, so it does not close here.
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    assert proc._barrier_out_seq == {"outf": 2}
+    assert proc._round.capture.out_seq == {"outf": 2}
 
     # More arrives while the round is still open: it is processed
     # and sent at once, seq 3, but that belongs to the next epoch, not to
     # the one already captured.
     _run_brain(proc, [("inf", 3)])
     assert proc._out_seq == {"outf": 3}
-    assert proc._barrier_out_seq == {"outf": 2}
+    assert proc._round.capture.out_seq == {"outf": 2}
 
-    proc._close_barrier_round()
+    proc._close_round()
     with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["out_seq"] == {"outf": 2}
@@ -262,15 +262,15 @@ def test_the_checkpoint_reflects_the_counters_at_capture_not_what_is_sent_while_
 
 def test_a_restored_checkpoint_makes_the_numbering_go_on_after_it(execdir):
     live = _Relay(opts=_OPTS)
-    live._save_checkpoint(0, {}, {}, 0, set(), {"outf": 3}, {}, {})
+    live._save_checkpoint(lib._Checkpoint(epoch=0, node_state={}, out_seq={"outf": 3}))
 
     relaunched = _Relay(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq, last_seq, _ = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(node_state)
-    relaunched._closed_ports = set(closed_ports)
-    relaunched._out_seq = dict(out_seq)
-    relaunched._last_seq = dict(last_seq)
-    relaunched._accepted_seq = dict(last_seq)
+    checkpoint = relaunched._load_latest_checkpoint()
+    relaunched.restore_node_state(checkpoint.node_state)
+    relaunched._closed_ports = set(checkpoint.closed_ports)
+    relaunched._out_seq = dict(checkpoint.out_seq)
+    relaunched._last_seq = dict(checkpoint.last_seq)
+    relaunched._accepted_seq = dict(checkpoint.last_seq)
 
     _run_brain(relaunched, [("inf", "d"), ("inf", "e")])
 
@@ -288,7 +288,12 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
     live = _Relay(opts=_OPTS)
     _run_brain(live, [("inf", 1), ("inf", 2), ("inf", 3)])
     live._save_checkpoint(
-        0, live.capture_node_state(), {}, live._current_pos, set(), dict(live._out_seq), {}, {}
+        lib._Checkpoint(
+            epoch=0,
+            node_state=live.capture_node_state(),
+            capture_pos=live._current_pos,
+            out_seq=dict(live._out_seq),
+        )
     )
     while not live._outbound_queues["outf"].empty():  # drain what the checkpoint already covers
         live._outbound_queues["outf"].get_nowait()
@@ -301,14 +306,14 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
     assert [e.seq for e in _queued_envelopes(live)] == [4, 5]
 
     relaunched = _Relay(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq, last_seq, _ = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(node_state)
-    relaunched._closed_ports = set(closed_ports)
-    relaunched._out_seq = dict(out_seq)
-    relaunched._last_seq = dict(last_seq)
-    relaunched._accepted_seq = dict(last_seq)
-    relaunched._open_input_log(capture_pos)
-    relaunched._replay_input_log(capture_pos)
+    checkpoint = relaunched._load_latest_checkpoint()
+    relaunched.restore_node_state(checkpoint.node_state)
+    relaunched._closed_ports = set(checkpoint.closed_ports)
+    relaunched._out_seq = dict(checkpoint.out_seq)
+    relaunched._last_seq = dict(checkpoint.last_seq)
+    relaunched._accepted_seq = dict(checkpoint.last_seq)
+    relaunched._open_input_log(checkpoint.capture_pos)
+    relaunched._replay_input_log(checkpoint.capture_pos)
 
     assert [e.seq for e in _queued_envelopes(relaunched)] == [4, 5]
 

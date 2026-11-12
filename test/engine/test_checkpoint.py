@@ -57,7 +57,7 @@ def test_a_task_of_an_array_adds_its_index_to_every_file_it_keeps(execdir, monke
     proc = _Node(opts={"x": "/dev/null"})
     proc._open_input_log(0)
     proc._input_log.append("a", '{"type": "DATA", "payload": 1}')
-    proc._save_checkpoint(0, {}, {}, 0, frozenset(), {}, {}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={}))
     proc._write_halted_marker(0)
     proc._write_control_ports_file()
 
@@ -71,7 +71,15 @@ def test_a_task_of_an_array_adds_its_index_to_every_file_it_keeps(execdir, monke
 def test_save_checkpoint_writes_the_expected_json_structure(execdir):
     proc = _Node(opts={"x": "/dev/null"})
     path = proc._save_checkpoint(
-        3, {"marker": "s"}, {"a": [1, 2]}, 17, [], {"outf": 4}, {"inf": 2}, {"outf": [{"seq": 5, "payload": 9}]}
+        lib._Checkpoint(
+            epoch=3,
+            node_state={"marker": "s"},
+            channel_state={"a": [1, 2]},
+            capture_pos=17,
+            out_seq={"outf": 4},
+            last_seq={"inf": 2},
+            out_backlog={"outf": [{"seq": 5, "payload": 9}]},
+        )
     )
 
     with open(path) as f:
@@ -92,7 +100,7 @@ def test_save_checkpoint_writes_the_expected_json_structure(execdir):
 
 def test_save_checkpoint_leaves_no_temp_file_behind(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={}))
 
     names = os.listdir(proc._checkpoints_dir())
     assert names == ["0.json"]
@@ -100,7 +108,7 @@ def test_save_checkpoint_leaves_no_temp_file_behind(execdir):
 
 def test_save_checkpoint_is_named_after_the_epoch(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    path = proc._save_checkpoint(7, {}, {}, 0, [], {}, {}, {})
+    path = proc._save_checkpoint(lib._Checkpoint(epoch=7, node_state={}))
     assert os.path.basename(path) == "7.json"
 
 
@@ -109,7 +117,7 @@ def test_save_checkpoint_prunes_older_epochs_beyond_retention(execdir):
     proc.CHECKPOINT_RETENTION = 2
 
     for epoch in range(5):
-        proc._save_checkpoint(epoch, {}, {}, 0, [], {}, {}, {})
+        proc._save_checkpoint(lib._Checkpoint(epoch=epoch, node_state={}))
 
     names = sorted(os.listdir(proc._checkpoints_dir()))
     assert names == ["3.json", "4.json"]
@@ -185,7 +193,13 @@ def test_the_halted_marker_names_the_epoch_of_the_round_that_wrote_it(execdir):
 
 def test_save_checkpoint_lists_the_closed_ports_in_order(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    path = proc._save_checkpoint(0, {}, {}, 0, {"c", "a", "b"}, {}, {}, {})
+    path = proc._save_checkpoint(
+        lib._Checkpoint(
+            epoch=0,
+            node_state={},
+            closed_ports={"c", "a", "b"},
+        )
+    )
 
     with open(path) as f:
         assert json.load(f)["closed_ports"] == ["a", "b", "c"]

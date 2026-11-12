@@ -70,14 +70,12 @@ def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
 
 def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {}, {})
-    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={"marker": "old"}))
+    proc._save_checkpoint(lib._Checkpoint(epoch=1, node_state={"marker": "new"}))
 
-    epoch, node_state, capture_pos, closed_ports, out_seq, last_seq, out_backlog = (
-        proc._load_latest_checkpoint()
-    )
-    assert epoch == 1
-    assert node_state == {"marker": "new"}
+    checkpoint = proc._load_latest_checkpoint()
+    assert checkpoint.epoch == 1
+    assert checkpoint.node_state == {"marker": "new"}
 
 
 def _save_valid_then_edit_newer(proc, edit):
@@ -86,8 +84,8 @@ def _save_valid_then_edit_newer(proc, edit):
     `edit` to the dictionary of epoch 1, so that a load that fell back to an
     older checkpoint would return epoch 0 instead of failing.
     """
-    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {}, {})
-    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={"marker": "old"}))
+    proc._save_checkpoint(lib._Checkpoint(epoch=1, node_state={"marker": "new"}))
     checkpoint_path = os.path.join(proc._checkpoints_dir(), "1.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -104,7 +102,7 @@ def test_load_latest_checkpoint_rejects_a_schema_version_mismatch_without_fallin
 
     _save_valid_then_edit_newer(proc, other_version)
 
-    with pytest.raises(ValueError, match="schema version"):
+    with pytest.raises(ValueError, match=r"^_Node: checkpoint .* has schema version"):
         proc._load_latest_checkpoint()
 
 
@@ -139,7 +137,14 @@ def test_run_skips_restore_state_and_starts_with_defaults_when_no_checkpoint(exe
 
 def test_run_restores_state_and_seeds_last_epoch_when_a_checkpoint_exists(execdir):
     proc = _Node(opts={})
-    proc._save_checkpoint(4, {"marker": "restored"}, {}, 0, [], {"outf": 3}, {"inf": 2}, {})
+    proc._save_checkpoint(
+        lib._Checkpoint(
+            epoch=4,
+            node_state={"marker": "restored"},
+            out_seq={"outf": 3},
+            last_seq={"inf": 2},
+        )
+    )
 
     # A second instance is what actually "restarts": the first one
     # above only exists here to seed the checkpoint file on disk.
@@ -308,7 +313,12 @@ def test_run_restores_the_outbound_backlog_and_it_reaches_a_neighbor(execdir):
     try:
         proc = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})
         proc._save_checkpoint(
-            0, {}, {}, 0, [], {"outf": 5}, {}, {"outf": [{"seq": 4, "payload": "d"}, {"seq": 5, "payload": "e"}]}
+            lib._Checkpoint(
+                epoch=0,
+                node_state={},
+                out_seq={"outf": 5},
+                out_backlog={"outf": [{"seq": 4, "payload": "d"}, {"seq": 5, "payload": "e"}]},
+            )
         )
 
         restarted = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})

@@ -201,7 +201,7 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
     assert proc._last_seq == {"a": 1}
 
     proc._on_interact({"command": "start_snapshot", "args": {}})  # "a" and "b" pending
-    assert proc._barrier_last_seq == {"a": 1}
+    assert proc._round.capture.last_seq == {"a": 1}
 
     # "b" arrives and is processed while the round stays open (no silent
     # loss): the reader's own counter moves at once, but the brain's own
@@ -210,9 +210,9 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
     assert proc._accepted_seq == {"a": 1, "b": 1}
     _run_brain(proc)
     assert proc._last_seq == {"a": 1, "b": 1}
-    assert proc._barrier_last_seq == {"a": 1}
+    assert proc._round.capture.last_seq == {"a": 1}
 
-    proc._close_barrier_round()
+    proc._close_round()
     with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["last_seq"] == {"a": 1}
@@ -220,9 +220,9 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
 
 def test_load_latest_checkpoint_returns_last_seq():
     proc = _Recorder(opts=_OPTS)
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {"inf": 4}, {})
+    proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={}, last_seq={"inf": 4}))
 
-    _, _, _, _, _, last_seq, _ = proc._load_latest_checkpoint()
+    last_seq = proc._load_latest_checkpoint().last_seq
     assert last_seq == {"inf": 4}
 
 
@@ -234,17 +234,17 @@ def test_a_restored_node_drops_what_its_own_log_already_covers():
     _arrive(live, "inf", "a", seq=1)
     _arrive(live, "inf", "b", seq=2)
     # last_seq: {} (nothing processed yet)
-    live._save_checkpoint(0, live.capture_node_state(), {}, 0, [], {}, {}, {})
+    live._save_checkpoint(lib._Checkpoint(epoch=0, node_state=live.capture_node_state()))
 
     relaunched = _Recorder(opts=_OPTS)
-    _, node_state, capture_pos, closed_ports, out_seq, last_seq, _ = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(node_state)
-    relaunched._closed_ports = set(closed_ports)
-    relaunched._out_seq = dict(out_seq)
-    relaunched._last_seq = dict(last_seq)
-    relaunched._accepted_seq = dict(last_seq)
-    relaunched._open_input_log(capture_pos)
-    relaunched._replay_input_log(capture_pos)  # reprocesses a (seq 1) and b (seq 2)
+    checkpoint = relaunched._load_latest_checkpoint()
+    relaunched.restore_node_state(checkpoint.node_state)
+    relaunched._closed_ports = set(checkpoint.closed_ports)
+    relaunched._out_seq = dict(checkpoint.out_seq)
+    relaunched._last_seq = dict(checkpoint.last_seq)
+    relaunched._accepted_seq = dict(checkpoint.last_seq)
+    relaunched._open_input_log(checkpoint.capture_pos)
+    relaunched._replay_input_log(checkpoint.capture_pos)  # reprocesses a (seq 1) and b (seq 2)
 
     assert relaunched._accepted_seq == {"inf": 2}
     assert relaunched.received == ["a", "b"]

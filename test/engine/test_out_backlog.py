@@ -116,13 +116,13 @@ def test_the_checkpoint_carries_only_what_is_still_unwritten_at_the_capture(fifo
             time.sleep(0.01)
 
         proc._current_pos = i + 1  # the position a following INTERACT would take
-        proc._open_barrier_round(0, False, arrived_port=None)
-        captured = proc._barrier_out_backlog
+        proc._open_round(0, False, arrived_port=None)
+        captured = proc._round.capture.out_backlog
         assert captured["outf"]
         assert len(captured["outf"]) < proc._out_seq["outf"]
 
-        proc._barrier_pending = set()  # "inf" is /dev/null, no marker will ever arrive
-        proc._close_barrier_round()
+        proc._round.pending = set()  # "inf" is /dev/null, no marker will ever arrive
+        proc._close_round()
 
         checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
         with open(checkpoint_path) as f:
@@ -151,13 +151,13 @@ def test_a_capture_is_a_copy_not_a_live_view_of_the_backlog():
     assert proc._unwritten["outf"] == [(1, lib.encode_data("a", seq=1))]
 
     proc._on_interact({"command": "start_snapshot", "args": {}})  # "inf" left pending
-    assert proc._barrier_out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
+    assert proc._round.capture.out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
 
     # The line is confirmed written while the round stays open: the live
     # backlog empties, but the round's own copy, taken earlier, must not.
     proc._on_written("outf", lib.encode_data("a", seq=1))
     assert proc._unwritten["outf"] == []
-    assert proc._barrier_out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
+    assert proc._round.capture.out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
 
 
 def test_over_the_cap_the_checkpoint_is_not_written(caplog):
@@ -171,7 +171,7 @@ def test_over_the_cap_the_checkpoint_is_not_written(caplog):
     try:
         with caplog.at_level("WARNING", logger=proc.log.name):
             proc._on_interact({"command": "start_snapshot", "args": {}})
-            proc._close_barrier_round()
+            proc._close_round()
     finally:
         proc.log.removeHandler(caplog.handler)
 
@@ -190,7 +190,7 @@ def test_a_halt_over_the_cap_still_marks_the_node_halted():
     _run_brain(proc, [("inf", "a longer payload than the cap allows")])
 
     proc._on_interact({"command": "shutdown", "args": {}})
-    proc._close_barrier_round()
+    proc._close_round()
 
     assert not os.path.exists(os.path.join(proc._checkpoints_dir(), "0.json"))
     assert proc._halted.is_set()
@@ -200,9 +200,15 @@ def test_a_halt_over_the_cap_still_marks_the_node_halted():
 
 def test_load_latest_checkpoint_returns_out_backlog():
     proc = _Relay(opts=_OPTS)
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {"outf": [{"seq": 1, "payload": "a"}]})
+    proc._save_checkpoint(
+        lib._Checkpoint(
+            epoch=0,
+            node_state={},
+            out_backlog={"outf": [{"seq": 1, "payload": "a"}]},
+        )
+    )
 
-    *_, out_backlog = proc._load_latest_checkpoint()
+    out_backlog = proc._load_latest_checkpoint().out_backlog
     assert out_backlog == {"outf": [{"seq": 1, "payload": "a"}]}
 
 
@@ -258,18 +264,18 @@ def test_a_skipped_checkpoint_is_remembered_until_one_is_written():
     proc = _SmallCap(opts=_OPTS)
     _run_brain(proc, [("inf", "a longer payload than the cap allows")])
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    proc._close_barrier_round()
+    proc._close_round()
     assert proc._checkpoints_skipped_since == 0
 
     # A second skipped round keeps the first epoch that was skipped.
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    proc._close_barrier_round()
+    proc._close_round()
     assert proc._checkpoints_skipped_since == 0
 
     # Once the line is written, the next round writes its checkpoint.
     proc._on_written("outf", lib.encode_data("a longer payload than the cap allows", seq=1))
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    proc._close_barrier_round()
+    proc._close_round()
     assert os.path.exists(os.path.join(proc._checkpoints_dir(), "2.json"))
     assert proc._checkpoints_skipped_since is None
 
@@ -362,7 +368,12 @@ def _read_data_lines(path, count):
 def test_what_was_restored_arrives_before_what_the_replay_sends_again(relay_opts):
     checkpointer = _Relay(opts=relay_opts)
     checkpointer._save_checkpoint(
-        0, {}, {}, 0, [], {"outf": 1}, {}, {"outf": [{"seq": 1, "payload": "restored"}]}
+        lib._Checkpoint(
+            epoch=0,
+            node_state={},
+            out_seq={"outf": 1},
+            out_backlog={"outf": [{"seq": 1, "payload": "restored"}]},
+        )
     )
     _log_arrivals(relay_opts, ["replayed"])
 

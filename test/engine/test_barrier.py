@@ -43,11 +43,10 @@ class _BarrierWorker(lib.FBPProcess):
     def process_data(self, port_name, packet):
         self.received.append((port_name, packet))
 
-    def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
-        out_backlog
-    ):
-        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
+    def _on_epoch_closed(self, checkpoint, halt):
+        self.closed_epochs.append(
+            (checkpoint.epoch, halt, checkpoint.node_state, checkpoint.channel_state)
+        )
 
 
 _FAKE_OPTS = {"a": "/dev/null", "b": "/dev/null", "x": "/dev/null", "y": "/dev/null"}
@@ -68,11 +67,10 @@ class _OnePort(lib.FBPProcess):
     def capture_node_state(self):
         return {"marker": "initial"}
 
-    def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
-        out_backlog
-    ):
-        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
+    def _on_epoch_closed(self, checkpoint, halt):
+        self.closed_epochs.append(
+            (checkpoint.epoch, halt, checkpoint.node_state, checkpoint.channel_state)
+        )
 
 
 class _Root(lib.FBPProcess):
@@ -85,11 +83,10 @@ class _Root(lib.FBPProcess):
     def capture_node_state(self):
         return {}
 
-    def _on_epoch_closed(
-        self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
-        out_backlog
-    ):
-        self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
+    def _on_epoch_closed(self, checkpoint, halt):
+        self.closed_epochs.append(
+            (checkpoint.epoch, halt, checkpoint.node_state, checkpoint.channel_state)
+        )
 
 
 # --- peer-triggered rounds (a BARRIER arriving on an input port) --------
@@ -109,7 +106,7 @@ def test_two_pending_ports_waits_for_the_second_marker():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     proc._on_barrier("a", {"epoch": 0, "halt": False})
 
-    assert proc._barrier_pending == {"b"}
+    assert proc._round.pending == {"b"}
     assert proc.closed_epochs == []
 
     proc._on_barrier("b", {"epoch": 0, "halt": False})
@@ -132,7 +129,7 @@ def test_start_snapshot_leaves_every_input_port_pending():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     proc._on_interact({"command": "start_snapshot", "args": {}})
 
-    assert proc._barrier_pending == {"a", "b"}
+    assert proc._round.pending == {"a", "b"}
     assert proc.closed_epochs == []
     assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 0, "halt": False}
 
@@ -182,7 +179,7 @@ def test_unrecognized_interact_command_is_logged_and_ignored(caplog):
         proc._on_interact({"command": "not_a_real_command", "args": {}})
 
     assert proc.closed_epochs == []
-    assert proc._barrier_epoch is None
+    assert proc._round is None
     assert "not_a_real_command" in caplog.text
 
 
@@ -329,13 +326,13 @@ def test_data_on_a_still_pending_port_is_delivered_and_recorded_through_real_fif
         with open(path_a, "w") as wa, open(path_b, "w") as wb:
             wa.write(lib.encode_barrier(0) + "\n")
             wa.flush()
-            assert _wait_until(lambda: proc._barrier_pending == {"b"})
+            assert _wait_until(lambda: proc._round is not None and proc._round.pending == {"b"})
 
             wb.write(lib.encode_data("in transit") + "\n")
             wb.flush()
             # delivered right away, while "b"'s own marker has still not arrived
             assert _wait_until(lambda: proc.received == [("b", "in transit")])
-            assert proc._barrier_pending == {"b"}
+            assert proc._round.pending == {"b"}
 
             wb.write(lib.encode_barrier(0) + "\n")
             wb.flush()
@@ -366,11 +363,10 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
             # and so a log, which real nodes never do.
             return self.opts["execdir"]
 
-        def _on_epoch_closed(
-            self, epoch, halt, node_state, channel_buffers, capture_pos, closed_ports, out_seq, last_seq,
-            out_backlog
-        ):
-            self.closed_epochs.append((epoch, halt, node_state, channel_buffers))
+        def _on_epoch_closed(self, checkpoint, halt):
+            self.closed_epochs.append(
+                (checkpoint.epoch, halt, checkpoint.node_state, checkpoint.channel_state)
+            )
 
     # A cycle of two nodes: node_a -> node_b -> node_a.
     node_a = _Node(opts={"inf": b_to_a, "outf": a_to_b, "name": "a", "execdir": str(tmp_path / "a")})
@@ -383,7 +379,7 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
         # node_a is the initiator: its own input port is pending until
         # the marker it just sent has gone all the way around through
         # node_b and back to it.
-        assert node_a._barrier_pending == {"inf"}
+        assert node_a._round.pending == {"inf"}
         assert node_a.closed_epochs == []
 
         assert _wait_until(lambda: node_a.closed_epochs != [])
@@ -436,7 +432,7 @@ def test_a_close_after_the_marker_of_its_port_changes_nothing():
     _run_brain(proc, [("a", lib.TYPE_BARRIER, _ROUND), _close("a")])
 
     assert proc.closed_epochs == []
-    assert proc._barrier_pending == {"b", "c"}
+    assert proc._round.pending == {"b", "c"}
 
 
 def test_a_round_that_opens_after_a_port_closed_does_not_wait_for_it():
@@ -535,7 +531,7 @@ def test_a_control_port_takes_no_part_in_a_round_that_a_peer_starts():
 def test_an_initiator_with_a_data_port_and_a_control_port_waits_only_for_the_data_port():
     proc = _WithCommands(opts=_COMMANDS_OPTS)
     _run_brain(proc, [("commands", lib.TYPE_INTERACT, _START)])
-    assert proc._barrier_pending == {"inf"}
+    assert proc._round.pending == {"inf"}
     assert proc.closed_epochs == []
 
     _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
@@ -594,7 +590,7 @@ def test_a_round_does_not_wait_for_an_external_port_when_a_peer_starts_it():
 def test_an_initiator_with_a_data_port_and_an_external_port_waits_only_for_the_data_port():
     proc = _WithExternal(opts=_EXTERNAL_OPTS)
     _run_brain(proc, [("trigger", lib.TYPE_INTERACT, _START)])
-    assert proc._barrier_pending == {"inf"}
+    assert proc._round.pending == {"inf"}
     assert proc.closed_epochs == []
 
     _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
@@ -618,7 +614,7 @@ def test_a_marker_from_a_cooperative_external_source_opens_a_round_like_any_othe
     proc = _WithExternal(opts=_EXTERNAL_OPTS)
     _run_brain(proc, [("ext", lib.TYPE_BARRIER, _ROUND)])
 
-    assert proc._barrier_pending == {"inf"}
+    assert proc._round.pending == {"inf"}
     assert proc.closed_epochs == []
 
     _run_brain(proc, [("inf", lib.TYPE_BARRIER, _ROUND)])
@@ -675,7 +671,7 @@ def test_a_marker_of_a_newer_round_replaces_the_open_one_and_captures_when_it_ar
 def test_a_marker_of_a_newer_snapshot_does_not_replace_an_open_halt():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 0, halt=True), _marker("a", 1)])
-    assert (proc._barrier_epoch, proc._barrier_halt) == (0, True)
+    assert (proc._round.epoch, proc._round.halt) == (0, True)
 
     _run_brain(proc, [_marker("b", 0, halt=True)])
     assert proc.closed_epochs == [(0, True, {"marker": "initial"}, {"b": []})]
@@ -692,13 +688,13 @@ def test_a_marker_of_a_round_that_was_replaced_or_is_over_is_ignored():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     # b is slow: its marker for round 0 arrives after round 1 has replaced it, and settles nothing.
     _run_brain(proc, [_marker("a", 0), _marker("a", 1), _marker("b", 0)])
-    assert proc._barrier_epoch == 1
-    assert proc._barrier_pending == {"b"}
+    assert proc._round.epoch == 1
+    assert proc._round.pending == {"b"}
 
     # Round 1 closes with the marker of b. Later markers of rounds 1 and 0 open nothing.
     _run_brain(proc, [_marker("b", 1), _marker("a", 1), _marker("b", 0)])
     assert [epoch for epoch, *_ in proc.closed_epochs] == [1]
-    assert proc._barrier_epoch is None
+    assert proc._round is None
 
 
 def test_a_snapshot_trigger_that_finds_a_snapshot_open_replaces_it_with_the_next_epoch():
@@ -710,8 +706,8 @@ def test_a_snapshot_trigger_that_finds_a_snapshot_open_replaces_it_with_the_next
         [_marker("a", 0), ("b", lib.TYPE_DATA, 5), _trigger("start_snapshot"), ("b", lib.TYPE_DATA, 6)],
     )
 
-    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (1, False, {"a", "b"})
-    assert proc._barrier_node_state == {"n": 1}
+    assert (proc._round.epoch, proc._round.halt, proc._round.pending) == (1, False, {"a", "b"})
+    assert proc._round.capture.node_state == {"n": 1}
     assert proc.received == [("b", 5), ("b", 6)]  # the node went on processing
     assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
         {"epoch": 0, "halt": False},
@@ -723,7 +719,7 @@ def test_a_snapshot_trigger_that_finds_a_halt_open_changes_nothing():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 0, halt=True), _trigger("start_snapshot")])
 
-    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (0, True, {"b"})
+    assert (proc._round.epoch, proc._round.halt, proc._round.pending) == (0, True, {"b"})
     assert proc._outbound_queues["x"].qsize() == 1
 
 
@@ -731,7 +727,7 @@ def test_a_shutdown_trigger_that_finds_a_snapshot_open_replaces_it_with_the_halt
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 0), _trigger("shutdown")])
 
-    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (1, True, {"a", "b"})
+    assert (proc._round.epoch, proc._round.halt, proc._round.pending) == (1, True, {"a", "b"})
     assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
         {"epoch": 0, "halt": False},
         {"epoch": 1, "halt": True},
@@ -744,8 +740,41 @@ def test_a_shutdown_trigger_that_finds_a_halt_open_changes_nothing():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 0, halt=True), _trigger("shutdown")])
 
-    assert (proc._barrier_epoch, proc._barrier_pending) == (0, {"b"})
+    assert (proc._round.epoch, proc._round.pending) == (0, {"b"})
     assert proc._outbound_queues["x"].qsize() == 1
+
+
+def test_a_node_that_has_halted_ignores_a_trigger_but_still_closes_the_round_of_a_peer(
+    execdir,
+):
+    class _Halting(lib.FBPProcess):
+        INPUT_PORTS = ["a", "b", "trigger"]
+        CONTROL_PORTS = ["trigger"]
+        OUTPUT_PORTS = ["x"]
+
+        def capture_node_state(self):
+            return {}
+
+    proc = _Halting(
+        opts={"a": "/dev/null", "b": "/dev/null", "trigger": "/dev/null", "x": "/dev/null"}
+    )
+    proc._on_barrier("a", {"epoch": 0, "halt": True})
+    proc._on_barrier("b", {"epoch": 0, "halt": True})
+    assert proc._halted.is_set()
+
+    proc._on_interact({"command": "start_snapshot", "args": {}})
+    assert proc._round is None
+
+    # Downstream of this node, the round of a peer closes only if it closes here.
+    for epoch, halt in ((1, False), (2, True)):
+        proc._on_barrier("a", {"epoch": epoch, "halt": halt})
+        assert proc._round.epoch == epoch
+        proc._on_barrier("b", {"epoch": epoch, "halt": halt})
+        assert proc._round is None
+
+    assert sorted(os.listdir(proc._checkpoints_dir())) == ["0.json", "1.json", "2.json"]
+    with open(proc._halted_marker_path()) as f:
+        assert f.read() == "2"
 
 
 # --- triggers that carry their epoch: numbered outside the initiators --------------------------
@@ -769,7 +798,7 @@ def test_two_initiators_whose_counters_differ_open_the_same_round_when_the_trigg
     _run_brain(fanin, [("b", lib.TYPE_BARRIER, markers[1]), ("a", lib.TYPE_BARRIER, markers[0])])
 
     assert [epoch for epoch, *_ in fanin.closed_epochs] == [1000]
-    assert fanin._barrier_epoch is None
+    assert fanin._round is None
 
 
 def test_a_numbered_trigger_of_a_round_that_is_over_is_ignored():
@@ -786,7 +815,7 @@ def test_a_numbered_trigger_of_the_round_already_open_changes_nothing():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 9), _numbered("start_snapshot", 9)])
 
-    assert (proc._barrier_epoch, proc._barrier_pending) == (9, {"b"})
+    assert (proc._round.epoch, proc._round.pending) == (9, {"b"})
     assert proc._outbound_queues["x"].qsize() == 1
 
 
@@ -801,8 +830,8 @@ def test_a_numbered_trigger_of_a_newer_round_replaces_the_open_one(caplog):
 
     assert "abandoning round 4: round 9 reached this node" in caplog.text
 
-    assert (proc._barrier_epoch, proc._barrier_pending) == (9, {"a", "b"})
-    assert proc._barrier_node_state == {"n": 1}
+    assert (proc._round.epoch, proc._round.pending) == (9, {"a", "b"})
+    assert proc._round.capture.node_state == {"n": 1}
     assert [lib.decode_envelope(_out(proc, "x")).payload["epoch"] for _ in range(2)] == [4, 9]
 
 
@@ -810,14 +839,14 @@ def test_a_numbered_snapshot_trigger_does_not_replace_an_open_halt():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 4, halt=True), _numbered("start_snapshot", 9)])
 
-    assert (proc._barrier_epoch, proc._barrier_halt) == (4, True)
+    assert (proc._round.epoch, proc._round.halt) == (4, True)
 
 
 def test_a_numbered_shutdown_trigger_replaces_an_open_snapshot_with_its_own_epoch():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     _run_brain(proc, [_marker("a", 4), _numbered("shutdown", 9)])
 
-    assert (proc._barrier_epoch, proc._barrier_halt, proc._barrier_pending) == (9, True, {"a", "b"})
+    assert (proc._round.epoch, proc._round.halt, proc._round.pending) == (9, True, {"a", "b"})
 
 
 def test_a_trigger_whose_epoch_is_not_an_integer_is_ignored(caplog):

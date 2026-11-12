@@ -21,6 +21,7 @@ along with this program; If not, see <http://www.gnu.org/licenses/>.
 # import modules
 import os
 import copy
+import dataclasses
 import json
 import signal
 import sys
@@ -42,6 +43,96 @@ from debasher_runtime_inputlog import LogCapReached, _InputLog
 # (see FBPProcess._replayed_notice), which None, a request to clear it,
 # cannot stand for.
 _NO_NOTICE_REQUEST = object()
+
+
+#####################
+# Rounds            #
+#####################
+
+
+@dataclasses.dataclass
+class _Checkpoint:
+    """
+    What a round captures at a node, and the fields of its checkpoint file,
+    with the same names. channel_state fills while the round is open; the
+    rest is taken when the round opens.
+    """
+
+    epoch: int
+    node_state: object
+    capture_pos: int = 0
+    closed_ports: frozenset = frozenset()
+    out_seq: dict = dataclasses.field(default_factory=dict)
+    last_seq: dict = dataclasses.field(default_factory=dict)
+    out_backlog: dict = dataclasses.field(default_factory=dict)
+    channel_state: dict = dataclasses.field(default_factory=dict)
+
+    def to_dict(self, schema_version):
+        """The checkpoint as the JSON object of its file."""
+        return {
+            "schema_version": schema_version,
+            "epoch": self.epoch,
+            "capture_pos": self.capture_pos,
+            "closed_ports": sorted(self.closed_ports),
+            "out_seq": dict(self.out_seq),
+            "last_seq": dict(self.last_seq),
+            "out_backlog": self.out_backlog,
+            "node_state": self.node_state,
+            "channel_state": self.channel_state,
+        }
+
+    @classmethod
+    def from_dict(cls, data, schema_version, where):
+        """
+        The checkpoint that the JSON object `data` of the file `where` holds.
+        Raises ValueError if it was written with another schema version, and
+        KeyError, naming the field, if a field that it reads is missing.
+        """
+        if data["schema_version"] != schema_version:
+            raise ValueError(
+                f"checkpoint {where} has schema version {data['schema_version']!r}, "
+                f"expected {schema_version!r}"
+            )
+        # The channel state is not read: a restore never uses it (the input
+        # log holds those messages above capture_pos).
+        return cls(
+            epoch=data["epoch"],
+            node_state=data["node_state"],
+            capture_pos=data["capture_pos"],
+            closed_ports=frozenset(data["closed_ports"]),
+            out_seq=data["out_seq"],
+            last_seq=data["last_seq"],
+            out_backlog=data["out_backlog"],
+        )
+
+
+@dataclasses.dataclass
+class _Round:
+    """
+    The round open at a node: whether it is a halt, the input ports whose
+    marker it still waits for, and what it captured when it opened.
+    """
+
+    halt: bool
+    pending: set
+    capture: _Checkpoint
+
+    @property
+    def epoch(self):
+        return self.capture.epoch
+
+
+def _checkpoint_epochs(checkpoints_dir):
+    """The epochs of the checkpoint files `<epoch>.json` in `checkpoints_dir`."""
+    epochs = []
+    for name in os.listdir(checkpoints_dir):
+        if not name.endswith(".json"):
+            continue
+        try:
+            epochs.append(int(name[: -len(".json")]))
+        except ValueError:
+            continue
+    return epochs
 
 
 #####################
@@ -247,29 +338,8 @@ class FBPProcess(_PortWorker):
                 "process_data has to tell it apart from what arrives on its ports"
             )
 
-        # Chandy-Lamport barrier round in progress, if any (None = none).
-        self._barrier_epoch = None
-        self._barrier_halt = False
-        self._barrier_pending = set()
-        self._barrier_node_state = None
-        self._barrier_channel_buffers = {}
-        # The input ports that had received CLOSE when the round in progress
-        # captured the node state (see _closed_ports).
-        self._barrier_closed_ports = frozenset()
-        # Position of the envelope whose processing captured the node state of the
-        # round in progress (see _current_pos).
-        self._barrier_capture_pos = 0
-        # The sender counters (see _out_seq) as they stood when the round in
-        # progress captured the node state.
-        self._barrier_out_seq = {}
-        # The receiver counters (see _last_seq) as they stood when the round
-        # in progress captured the node state.
-        self._barrier_last_seq = {}
-        # The outbound backlog (see _unwritten) as it stood when the round in
-        # progress captured the node state: {tag: [{"seq":, "payload":}, ...]},
-        # decoded fresh from each line, so it shares nothing with a payload
-        # the module may still hold and go on mutating.
-        self._barrier_out_backlog = {}
+        # The Chandy-Lamport round open at this node, None when there is none.
+        self._round = None
         # Highest epoch this node has closed or abandoned; -1 means none
         # yet, so the first round it self-initiates is epoch 0. run() seeds
         # it from the restored checkpoint, or a relaunched node would start
@@ -314,7 +384,7 @@ class FBPProcess(_PortWorker):
         # line), ...]}, in the order send_data queued them, so the entry at
         # index 0 is always the next one _on_written can confirm. A single
         # kill -9 destroys the outbound queue itself, so a round's capture
-        # copies this (decoded, see _barrier_out_backlog) into the
+        # copies this (decoded, see _snapshot_out_backlog) into the
         # checkpoint, and recovery re-enqueues it with the same numbers
         # before anything else is sent (see _restore_out_backlog). Touched by
         # both the thread inside process_data() (send_data appends) and the
@@ -354,10 +424,9 @@ class FBPProcess(_PortWorker):
         # between calls (see send_data).
         self._handler_thread = None
 
-        # Set once an epoch closes with halt=True: blocks _start_barrier_round
-        # from opening any further round (see _on_epoch_closed), which keeps
-        # this incarnation's halted marker file (see _write_halted_marker)
-        # pointing at its final epoch. Never itself stops a thread.
+        # Set once an epoch closes with halt=True: keeps a trigger from
+        # opening another round in this incarnation (see _on_trigger); the
+        # marker of a peer still opens one. Never itself stops a thread.
         self._halted = threading.Event()
         # Set only by the SIGTERM handler run() installs (see
         # _on_stop_signal): the actual "stop now" signal that run() waits
@@ -439,7 +508,7 @@ class FBPProcess(_PortWorker):
         # stop (SIGTERM, from outside this process; see _on_stop_signal and
         # _stop_requested) -> stop every thread, from this (the calling)
         # thread rather than the one that actually delivered the signal. A
-        # halt closing its epoch is not part of this wait any more (see
+        # halt closing its epoch is not part of this wait (see
         # _on_epoch_closed): it behaves like an ordinary snapshot, and this
         # node keeps running until told to stop by signal, whether or not it
         # ever halted.
@@ -476,21 +545,21 @@ class FBPProcess(_PortWorker):
         checkpoint = self._load_latest_checkpoint()
         capture_pos = 0
         if checkpoint is not None:
-            epoch, node_state, capture_pos, closed_ports, out_seq, last_seq, out_backlog = checkpoint
-            self.restore_node_state(node_state)
-            self._last_epoch = epoch
-            self._closed_ports = set(closed_ports)
-            self._out_seq = dict(out_seq)
-            self._last_seq = dict(last_seq)
+            capture_pos = checkpoint.capture_pos
+            self.restore_node_state(checkpoint.node_state)
+            self._last_epoch = checkpoint.epoch
+            self._closed_ports = set(checkpoint.closed_ports)
+            self._out_seq = dict(checkpoint.out_seq)
+            self._last_seq = dict(checkpoint.last_seq)
             # The reader threads' own counters start at the same point; if the
             # log holds DATA after capture_pos, _replay_input_log advances them
             # past it, to what the reader threads had already accepted before
             # the crash, whether the brain had processed it or not.
-            self._accepted_seq = dict(last_seq)
+            self._accepted_seq = dict(checkpoint.last_seq)
             # What was numbered but not yet written reaches a neighbor before
             # anything process_data() sends again while replaying the log.
-            self._restore_out_backlog(out_backlog)
-            self.log.info("restored checkpoint for epoch %s", epoch)
+            self._restore_out_backlog(checkpoint.out_backlog)
+            self.log.info("restored checkpoint for epoch %s", checkpoint.epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
 
@@ -532,52 +601,27 @@ class FBPProcess(_PortWorker):
 
     def _load_latest_checkpoint(self):
         """
-        Returns (epoch, node_state, capture_pos, closed_ports, out_seq,
-        last_seq, out_backlog) for the highest-epoch checkpoint in this
-        process's checkpoints directory,
-        or None if there isn't one yet (a brand new process, or one that has
-        never closed an epoch). Raises ValueError if the checkpoint's schema
-        version doesn't match this class's, or KeyError if a field this
-        class now requires is missing (an older checkpoint, from before that
-        field existed): a real incompatibility, not something to silently
-        paper over by falling back to an older checkpoint or a default value.
+        Returns the _Checkpoint of the highest epoch in this process's
+        checkpoints directory, or None if there is none yet (a brand new
+        process, or one that has never closed an epoch). Raises ValueError
+        if its schema version is not this class's, and KeyError if a field
+        that it reads is missing: a real incompatibility, never papered over by falling
+        back to an older checkpoint or a default value.
         """
         checkpoints_dir = self._checkpoints_dir()
         if not os.path.isdir(checkpoints_dir):
             return None
-
-        epochs = []
-        for name in os.listdir(checkpoints_dir):
-            if not name.endswith(".json"):
-                continue
-            try:
-                epochs.append(int(name[: -len(".json")]))
-            except ValueError:
-                continue
-
+        epochs = _checkpoint_epochs(checkpoints_dir)
         if not epochs:
             return None
 
         path = os.path.join(checkpoints_dir, f"{max(epochs)}.json")
         with open(path) as f:
-            checkpoint = json.load(f)
-
-        if checkpoint["schema_version"] != self.CHECKPOINT_SCHEMA_VERSION:
-            raise ValueError(
-                f"{type(self).__name__}: checkpoint {path} has schema version "
-                f"{checkpoint['schema_version']!r}, expected "
-                f"{self.CHECKPOINT_SCHEMA_VERSION!r}"
-            )
-
-        return (
-            checkpoint["epoch"],
-            checkpoint["node_state"],
-            checkpoint["capture_pos"],
-            checkpoint["closed_ports"],
-            checkpoint["out_seq"],
-            checkpoint["last_seq"],
-            checkpoint["out_backlog"],
-        )
+            data = json.load(f)
+        try:
+            return _Checkpoint.from_dict(data, self.CHECKPOINT_SCHEMA_VERSION, path)
+        except ValueError as exc:
+            raise ValueError(f"{type(self).__name__}: {exc}") from None
 
     # -- thread topology --
 
@@ -909,7 +953,7 @@ class FBPProcess(_PortWorker):
             if envelope_type == TYPE_DATA:
                 if seq is not None:
                     self._last_seq[port_name] = seq
-                if port_name in self._barrier_pending:
+                if self._round is not None and port_name in self._round.pending:
                     # A barrier round is open and this port's marker for
                     # it hasn't arrived yet: this DATA was sent before
                     # its sender's own snapshot and arrives after this
@@ -919,7 +963,7 @@ class FBPProcess(_PortWorker):
                     # alter it through the packet it is handed): the
                     # message itself is still processed right below,
                     # like any other and in arrival order.
-                    self._barrier_channel_buffers[port_name].append(
+                    self._round.capture.channel_state[port_name].append(
                         copy.deepcopy(payload)
                     )
                 self._run_process_data(port_name, payload)
@@ -1174,7 +1218,7 @@ class FBPProcess(_PortWorker):
     def _restore_out_backlog(self, out_backlog):
         """
         Re-enqueues, with their original numbers, the DATA that a round's
-        capture found still unwritten (see _barrier_out_backlog): what
+        capture found still unwritten (see _snapshot_out_backlog): what
         send_data had already numbered before the crash but the writer
         thread had not yet gotten to. Called by run(), before anything else
         is sent, so these reach a neighbor ahead of whatever process_data()
@@ -1193,7 +1237,7 @@ class FBPProcess(_PortWorker):
     def _snapshot_out_backlog(self):
         """
         A round's own copy of _unwritten, taken at the capture (see
-        _open_barrier_round): {tag: [{"seq":, "payload":}, ...]}, decoded
+        _open_round): {tag: [{"seq":, "payload":}, ...]}, decoded
         fresh from each line rather than kept as the line itself, so the
         checkpoint holds plain values, not escaped JSON text, and a port
         with nothing unwritten is left out entirely.
@@ -1234,43 +1278,44 @@ class FBPProcess(_PortWorker):
         epoch = payload["epoch"]
         halt = payload["halt"]
 
-        if epoch == self._barrier_epoch:
-            self._barrier_pending.discard(port_name)
+        if self._round is not None and epoch == self._round.epoch:
+            self._round.pending.discard(port_name)
         elif self._round_may_open(epoch, halt, f"the marker of round {epoch} on port {port_name!r}"):
-            self._enter_barrier_round(epoch, halt, arrived_port=port_name)
+            self._switch_to_round(epoch, halt, arrived_port=port_name)
         else:
             return
 
-        if not self._barrier_pending:
-            self._close_barrier_round()
+        if not self._round.pending:
+            self._close_round()
 
     def _round_may_open(self, epoch, halt, what):
         """
         Whether a round that reaches this node, other than the open one, may
         open, replacing the open round if there is one. Rounds do not overlap
         on a node: a newer round replaces an older one (see
-        _abandon_barrier_round), unless the older one is a halt and the newer
+        _abandon_round), unless the older one is a halt and the newer
         one is not, since a halt is never given up for a snapshot. A round
         older than the open one, or one that this node has closed or
         abandoned, is stale. When the answer is no, the reason is logged,
         `what` naming what brought the round.
         """
-        if self._barrier_epoch is None:
+        if self._round is None:
             if epoch <= self._last_epoch:
                 self.log.warning("ignoring %s: that round is over", what)
                 return False
-        elif epoch < self._barrier_epoch:
-            self.log.warning("ignoring %s: round %s replaced it", what, self._barrier_epoch)
+        elif epoch < self._round.epoch:
+            self.log.warning("ignoring %s: round %s replaced it", what, self._round.epoch)
             return False
-        elif self._barrier_halt and not halt:
-            self.log.warning("ignoring %s: the halt of round %s is open", what, self._barrier_epoch)
+        elif self._round.halt and not halt:
+            self.log.warning("ignoring %s: the halt of round %s is open", what, self._round.epoch)
             return False
         return True
 
-    def _enter_barrier_round(self, epoch, halt, arrived_port):
-        if self._barrier_epoch is not None:
-            self._abandon_barrier_round(replaced_by=epoch)
-        self._open_barrier_round(epoch, halt, arrived_port)
+    def _switch_to_round(self, epoch, halt, arrived_port):
+        """Abandons the open round, if any, and opens the round of `epoch`."""
+        if self._round is not None:
+            self._abandon_round(replaced_by=epoch)
+        self._open_round(epoch, halt, arrived_port)
 
     def _on_close(self, port_name):
         """
@@ -1279,17 +1324,17 @@ class FBPProcess(_PortWorker):
         pending, it stops being so, and the round closes if it was the last
         one; what was already recorded for the port stays in the round's
         channel state. Ports that are closed when a round opens are left
-        out of it altogether (see _open_barrier_round).
+        out of it altogether (see _open_round).
         """
         if port_name in self.CONTROL_PORTS:
             self.log.debug("the writer of control port %r said CLOSE, which changes nothing", port_name)
             return
         self._closed_ports.add(port_name)
         self.log.debug("port %r was closed by its writer", port_name)
-        if port_name in self._barrier_pending:
-            self._barrier_pending.discard(port_name)
-            if not self._barrier_pending:
-                self._close_barrier_round()
+        if self._round is not None and port_name in self._round.pending:
+            self._round.pending.discard(port_name)
+            if not self._round.pending:
+                self._close_round()
 
     def _on_interact(self, payload):
         command = payload["command"]
@@ -1299,32 +1344,20 @@ class FBPProcess(_PortWorker):
             if epoch is not None and (not isinstance(epoch, int) or isinstance(epoch, bool)):
                 self.log.warning("ignoring a trigger: its epoch %r is not an integer", epoch)
                 return
-            self._start_barrier_round(halt=command == "shutdown", epoch=epoch)
+            self._on_trigger(halt=command == "shutdown", epoch=epoch)
         else:
             # The command catalog is deliberately open-ended: an
             # unrecognized command is a forward-compatibility concern,
             # not a reason to abort an otherwise-healthy process.
             self.log.warning("ignoring unrecognized INTERACT command: %r", command)
 
-    def _start_barrier_round(self, halt, epoch=None):
+    def _on_trigger(self, halt, epoch=None):
         """
-        Opens a barrier round as its initiator (triggered by INTERACT,
-        not by a peer's own BARRIER arriving on some input port): no
-        input port has closed yet at this point, unlike the peer-
-        triggered case in _on_barrier, so every declared input port
-        (including this node's own, if a cycle loops back to it) starts
-        out pending, and the initiator only closes its part once the
-        marker it just sent comes back around, the same as any other
-        node would. A node that has halted starts no more rounds.
-
-        A trigger that carries its epoch was numbered outside the node,
-        the same for every initiator it reaches, and follows the rule of
-        a marker (see _round_may_open): ignoring a newer one would leave
-        this initiator alone on an older round while the others open the
-        new one. It is ignored if its round is already open, which in a
-        cycle happens when the marker of another initiator gets here
-        first. A trigger without an epoch is numbered by the node itself
-        (see _own_round_epoch).
+        What an initiator does with a trigger, a shutdown when `halt`: opens
+        the round of `epoch`, or of a number of its own when the trigger
+        carries none (see _own_round_epoch), replacing the open round when
+        the rules of rounds allow it, and closes it at once when no port is
+        pending. Ignores the trigger once the node has halted.
         """
         if self._halted.is_set():
             self.log.warning("ignoring a trigger: this node has already halted")
@@ -1334,15 +1367,21 @@ class FBPProcess(_PortWorker):
             epoch = self._own_round_epoch(halt)
             if epoch is None:
                 return
-        elif epoch == self._barrier_epoch:
+        elif self._round is not None and epoch == self._round.epoch:
+            # In a cycle, the marker of another initiator can get here before
+            # the trigger of the same round.
             self.log.warning("ignoring the trigger of round %s: that round is already open", epoch)
             return
+        # A numbered trigger was numbered outside the node, the same for every
+        # initiator it reaches, so it follows the rule of a marker: ignoring a
+        # newer one would leave this initiator alone on an older round while
+        # the others open the new one.
         elif not self._round_may_open(epoch, halt, f"the trigger of round {epoch}"):
             return
 
-        self._enter_barrier_round(epoch, halt, arrived_port=None)
-        if not self._barrier_pending:
-            self._close_barrier_round()
+        self._switch_to_round(epoch, halt, arrived_port=None)
+        if not self._round.pending:
+            self._close_round()
 
     def _own_round_epoch(self, halt):
         """
@@ -1355,22 +1394,29 @@ class FBPProcess(_PortWorker):
         that round open to replace it too. It is ignored if a halt is open:
         a halt is never given up, and a second one adds nothing.
         """
-        if self._barrier_epoch is None:
+        if self._round is None:
             return self._last_epoch + 1
-        if self._barrier_halt:
-            self.log.warning("ignoring a trigger: the halt of round %s is open", self._barrier_epoch)
+        if self._round.halt:
+            self.log.warning("ignoring a trigger: the halt of round %s is open", self._round.epoch)
             return None
-        return self._barrier_epoch + 1
+        return self._round.epoch + 1
 
-    def _open_barrier_round(self, epoch, halt, arrived_port):
-        self._barrier_epoch = epoch
-        self._barrier_halt = halt
-        self._barrier_node_state = self.capture_node_state()
-        self._barrier_capture_pos = self._current_pos
-        self._barrier_closed_ports = frozenset(self._closed_ports)
-        self._barrier_out_seq = dict(self._out_seq)
-        self._barrier_last_seq = dict(self._last_seq)
-        self._barrier_out_backlog = self._snapshot_out_backlog()
+    def _open_round(self, epoch, halt, arrived_port):
+        """
+        Opens the round of `epoch` at this node: captures the node state and
+        the bookkeeping, forwards the marker, and waits for the pending ports
+        (see below; never `arrived_port`, the port of the marker that opened
+        it, if a marker did).
+        """
+        capture = _Checkpoint(
+            epoch=epoch,
+            node_state=self.capture_node_state(),
+            capture_pos=self._current_pos,
+            closed_ports=frozenset(self._closed_ports),
+            out_seq=dict(self._out_seq),
+            last_seq=dict(self._last_seq),
+            out_backlog=self._snapshot_out_backlog(),
+        )
         for out_port in self.OUTPUT_PORTS:
             # The supervisor channel never sees a BARRIER: it doesn't
             # take part in the barrier protocol, only in INTERACT.
@@ -1388,10 +1434,10 @@ class FBPProcess(_PortWorker):
         pending = set(self.INPUT_PORTS) - set(self.CONTROL_PORTS) - set(self.EXTERNAL_PORTS)
         pending.discard(arrived_port)
         pending -= self._closed_ports
-        self._barrier_pending = pending
-        self._barrier_channel_buffers = {port: [] for port in pending}
+        capture.channel_state = {port: [] for port in pending}
+        self._round = _Round(halt=halt, pending=pending, capture=capture)
 
-    def _abandon_barrier_round(self, replaced_by):
+    def _abandon_round(self, replaced_by):
         """
         Drops the round in progress because a newer one reached this node:
         what it had captured is discarded and no checkpoint is written for
@@ -1401,72 +1447,26 @@ class FBPProcess(_PortWorker):
         """
         self.log.warning(
             "abandoning round %s: round %s reached this node while it was open",
-            self._barrier_epoch,
+            self._round.epoch,
             replaced_by,
         )
-        self._last_epoch = max(self._last_epoch, self._barrier_epoch)
-        self._reset_barrier_round()
+        self._last_epoch = max(self._last_epoch, self._round.epoch)
+        self._round = None
 
-    def _reset_barrier_round(self):
-        self._barrier_epoch = None
-        self._barrier_halt = False
-        self._barrier_node_state = None
-        self._barrier_pending = set()
-        self._barrier_channel_buffers = {}
-        self._barrier_capture_pos = 0
-        self._barrier_closed_ports = frozenset()
-        self._barrier_out_seq = {}
-        self._barrier_last_seq = {}
-        self._barrier_out_backlog = {}
+    def _close_round(self):
+        """Closes the open round and hands what it captured to _on_epoch_closed."""
+        closed = self._round
+        self._last_epoch = max(self._last_epoch, closed.epoch)
+        self._round = None
+        self._on_epoch_closed(closed.capture, closed.halt)
 
-    def _close_barrier_round(self):
-        epoch = self._barrier_epoch
-        halt = self._barrier_halt
-        node_state = self._barrier_node_state
-        channel_buffers = self._barrier_channel_buffers
-        capture_pos = self._barrier_capture_pos
-        closed_ports = self._barrier_closed_ports
-        out_seq = self._barrier_out_seq
-        last_seq = self._barrier_last_seq
-        out_backlog = self._barrier_out_backlog
-
-        self._last_epoch = max(self._last_epoch, epoch)
-        self._reset_barrier_round()
-
-        self._on_epoch_closed(
-            epoch,
-            halt,
-            node_state,
-            channel_buffers,
-            capture_pos,
-            closed_ports,
-            out_seq,
-            last_seq,
-            out_backlog,
-        )
-
-    def _on_epoch_closed(
-        self,
-        epoch,
-        halt,
-        node_state,
-        channel_buffers,
-        capture_pos,
-        closed_ports,
-        out_seq,
-        last_seq,
-        out_backlog,
-    ):
-        path = self._save_checkpoint(
-            epoch,
-            node_state,
-            channel_buffers,
-            capture_pos,
-            closed_ports,
-            out_seq,
-            last_seq,
-            out_backlog,
-        )
+    def _on_epoch_closed(self, checkpoint, halt):
+        """
+        Writes the checkpoint of a closed round and tells the Supervisor; on
+        a halt, also sets _halted and writes the halted marker.
+        """
+        epoch = checkpoint.epoch
+        path = self._save_checkpoint(checkpoint)
         if path is None:
             # Over OUT_BACKLOG_MAX_BYTES: _save_checkpoint already warned and
             # wrote nothing. The round still closed as far as the rest of the
@@ -1484,16 +1484,16 @@ class FBPProcess(_PortWorker):
                 )
 
         if halt:
-            # A halt round closing has no effect of its own any more: this
-            # node keeps running, exactly like after any other round (see
-            # run()). _halted only blocks _start_barrier_round from opening
-            # a further one, which is what keeps the marker this writes
-            # pointing at this incarnation's final epoch; actually stopping
-            # is entirely up to whoever sends this process a SIGTERM later.
+            # A halt round closing has no effect of its own: this node keeps
+            # running, exactly like after any other round (see run()).
+            # _halted keeps a trigger from opening another round (see
+            # _on_trigger); the marker of a peer still opens one, which
+            # rewrites the halted marker if it is a halt too. Actually
+            # stopping is up to whoever sends this process a SIGTERM later.
             self._halted.set()
             self._write_halted_marker(epoch)
             self.log.info(
-                "epoch %s closed with halt=True, no more rounds will open; "
+                "epoch %s closed with halt=True, no trigger will open another round; "
                 "waiting for an external stop signal",
                 epoch,
             )
@@ -1523,27 +1523,20 @@ class FBPProcess(_PortWorker):
             f.write(str(epoch))
         os.replace(tmp_path, path)
 
-    def _save_checkpoint(
-        self,
-        epoch,
-        node_state,
-        channel_buffers,
-        capture_pos,
-        closed_ports,
-        out_seq,
-        last_seq,
-        out_backlog,
-    ):
+    def _save_checkpoint(self, checkpoint):
         """
-        Writes the checkpoint, unless the outbound backlog it would carry is
+        Writes `checkpoint`, unless the outbound backlog it would carry is
         over OUT_BACKLOG_MAX_BYTES: then it writes nothing and returns None,
         with a warning, rather than a checkpoint whose own file could grow
         without bound. Whatever checkpoint this node had before stays the
         latest one on disk; its own replay of the input log, next time it
-        starts, only grows longer, never wrong.
+        starts, only grows longer, never wrong. Returns the path written.
         """
+        epoch = checkpoint.epoch
         backlog_bytes = sum(
-            len(json.dumps(entry)) for entries in out_backlog.values() for entry in entries
+            len(json.dumps(entry))
+            for entries in checkpoint.out_backlog.values()
+            for entry in entries
         )
         if backlog_bytes > self.OUT_BACKLOG_MAX_BYTES:
             self.log.warning(
@@ -1559,22 +1552,10 @@ class FBPProcess(_PortWorker):
         checkpoints_dir = self._checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
-        checkpoint = {
-            "schema_version": self.CHECKPOINT_SCHEMA_VERSION,
-            "epoch": epoch,
-            "capture_pos": capture_pos,
-            "closed_ports": sorted(closed_ports),
-            "out_seq": dict(out_seq),
-            "last_seq": dict(last_seq),
-            "out_backlog": out_backlog,
-            "node_state": node_state,
-            "channel_state": channel_buffers,
-        }
-
         final_path = os.path.join(checkpoints_dir, f"{epoch}.json")
         tmp_path = f"{final_path}.tmp"
         with open(tmp_path, "w") as f:
-            json.dump(checkpoint, f)
+            json.dump(checkpoint.to_dict(self.CHECKPOINT_SCHEMA_VERSION), f)
         os.replace(tmp_path, final_path)
 
         self._prune_old_checkpoints(checkpoints_dir)
@@ -1582,16 +1563,7 @@ class FBPProcess(_PortWorker):
         return final_path
 
     def _prune_old_checkpoints(self, checkpoints_dir):
-        epochs = []
-        for name in os.listdir(checkpoints_dir):
-            if not name.endswith(".json"):
-                continue
-            try:
-                epochs.append(int(name[: -len(".json")]))
-            except ValueError:
-                continue
-
-        epochs.sort(reverse=True)
+        epochs = sorted(_checkpoint_epochs(checkpoints_dir), reverse=True)
         for old_epoch in epochs[self.CHECKPOINT_RETENTION :]:
             os.remove(os.path.join(checkpoints_dir, f"{old_epoch}.json"))
 

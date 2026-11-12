@@ -511,20 +511,23 @@ Several pieces of a node's bookkeeping go through the same three stages: a live
 value that the brain thread keeps up to date as it processes each envelope, a
 copy taken at the capture and held only while a round is open (see "capture"
 above), and the checkpoint field the copy is written to when the round closes.
-The table names the three for each concept, which this glossary already defines:
-it is not redefined here. `Supervisor`'s own bookkeeping (which nodes are down,
-how many times each has been relaunched) is a separate concern, covered in the
-"`Supervisor` class" section.
+The open round is `_round` (`None` when there is none), and its copy is
+`_round.capture`, a `_Checkpoint` whose fields have the names of the fields of
+the checkpoint. The table therefore names, for each concept, the live value and
+the field; the concepts are defined in this glossary and not redefined here.
+`Supervisor`'s own bookkeeping (which nodes are down, how many times each has
+been relaunched) is a separate concern, covered in the "`Supervisor` class"
+section.
 
-| Concept                | Live            | Held during an open round  | Checkpoint field |
-| ---------------------- | --------------- | -------------------------- | ---------------- |
-| capture position       | `_current_pos`  | `_barrier_capture_pos`     | `capture_pos`    |
-| closed input ports     | `_closed_ports` | `_barrier_closed_ports`    | `closed_ports`   |
-| sender counters (G5)   | `_out_seq`      | `_barrier_out_seq`         | `out_seq`        |
-| receiver counters (G5) | `_last_seq`     | `_barrier_last_seq`        | `last_seq`       |
-| outbound backlog (G5)  | `_unwritten`    | `_barrier_out_backlog`     | `out_backlog`    |
-| node state             | module's own    | `_barrier_node_state`      | `node_state`     |
-| channel state          | round open only | `_barrier_channel_buffers` | `channel_state`  |
+| Concept                | Live            | Field of `_round.capture` and of the checkpoint |
+| ---------------------- | --------------- | ----------------------------------------------- |
+| capture position       | `_current_pos`  | `capture_pos`                                   |
+| closed input ports     | `_closed_ports` | `closed_ports`                                  |
+| sender counters (G5)   | `_out_seq`      | `out_seq`                                       |
+| receiver counters (G5) | `_last_seq`     | `last_seq`                                      |
+| outbound backlog (G5)  | `_unwritten`    | `out_backlog`                                   |
+| node state             | module's own    | `node_state`                                    |
+| channel state          | (none)          | `channel_state`                                 |
 
 `_unwritten` is the one exception to "the brain thread keeps it up to date":
 `send_data` appends to it (the brain thread, or the one replaying the input
@@ -535,7 +538,7 @@ Bookkeeping that never enters a checkpoint, because it only means something
 while its own thread or round is live, or is computed again from what a
 checkpoint holds: `_handler_thread` (the identity of the thread currently
 inside `process_data`, checked by `send_data`),
-`_barrier_pending` (the input ports an open round still waits on),
+`_round.pending` (the input ports an open round still waits on),
 `_closed_at_start_ports` (what a relaunched node's readers of closed ports
 start out knowing, taken from `_closed_ports` once, when the threads start),
 `_accepted_seq` (the reader threads' own live view of `_last_seq`, ahead
@@ -1635,7 +1638,7 @@ exactly like after any other round, and goes on processing every `DATA` that
 reaches it until a stop signal arrives.
 
 `_halted` keeps the node from starting a round when a trigger reaches it
-(`_start_barrier_round`): a later trigger, from the `Supervisor`,
+(`_on_trigger`): a later trigger, from the `Supervisor`,
 `debasher_snapshot_resident` or `debasher_stop_resident`, opens no round for the
 rest of this incarnation. It does not keep the node out of a round that reaches
 it as the marker of a peer. A round has to close at every node it reaches, or it
