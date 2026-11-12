@@ -598,9 +598,15 @@ next to ``cpus``, ``mem`` and ``time``:
   the messages sent and not yet written into the FIFOs over which a
   node skips a checkpoint (8 MiB by default).
 * ``out_backlog_fail_mb`` sets ``OUT_BACKLOG_FAIL_BYTES``, the size of
-  those messages over which ``send_data`` raises an error (64 MiB by
-  default). While the node replays its input log, ``send_data`` waits
-  for room instead, unless one message alone is over the limit.
+  those messages over which ``send_data`` raises an error, since a
+  reader is not reading (64 MiB by default). While the node replays its
+  input log, ``send_data`` waits for room instead. A single message
+  larger than the limit never fits: ``send_data`` raises at once, live
+  or in a replay, with an error that names the size of the message, its
+  port and the limit. The replay sends that message again, so the node
+  fails the same way at every relaunch, until the program is stopped
+  and launched again with a larger ``out_backlog_fail_mb`` for that
+  process, or the node sends smaller messages.
 * ``gil_switch_interval_ms`` sets ``GIL_SWITCH_INTERVAL_SECS`` (0.5 ms
   by default).
 

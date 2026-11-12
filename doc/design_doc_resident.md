@@ -632,7 +632,9 @@ exposes a violation.
 - **Effects outside the graph are idempotent**: replay re-executes
   `process_data`, so anything it does outside the FIFOs (writing a file
   elsewhere, calling a service) can happen more than once.
-- **Messages are serializable as strict JSON, of any size.** A message larger
+- **Messages are serializable as strict JSON, of any size up to
+  `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`), measured on the encoded
+  line.** A message larger
   than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes
   can leave a truncated fragment in the FIFO. The reader drops it thanks to the
   resync line (see the Glossary) that every writer incarnation sends first,
@@ -1547,8 +1549,9 @@ failure").
    replays. The backlog of the checkpoint still reaches the neighbors first,
    since it was queued before the replay and each port has one queue.
 9. Replays the input log after the `capture_pos` of the checkpoint, all of it
-   if there was none (see "Input log"). While replaying, a `send_data` over
-   `OUT_BACKLOG_FAIL_BYTES` waits for room (see "Checkpoint persistence").
+   if there was none (see "Input log"). While replaying, a `send_data` that
+   would take the backlog over `OUT_BACKLOG_FAIL_BYTES` waits for room, unless
+   the message alone is larger than the limit (see "Checkpoint persistence").
 10. Starts the other threads. If this fails, it stops the threads that are
     running and raises the error, since they would otherwise keep the process
     alive doing nothing.
@@ -1780,37 +1783,39 @@ a checkpoint. Nothing is pruned meanwhile either, and if the input log reaches
 which no checkpoint has been written (`_checkpoints_skipped_since`), since the
 rounds themselves do close.
 
-When a message would take what the node has not yet written into its FIFOs,
-on all its output ports together, over `OUT_BACKLOG_FAIL_BYTES` (64 MiB by
-default), `send_data` raises a `RuntimeError` instead of sending it: the
-message is neither numbered nor queued, and the error names the port it was
-for and how much that port holds unwritten. A backlog that keeps growing means
-a reader that is not reading: stopped, down or stuck, or slower than this node
-for good. The exception ends the brain thread, which the heartbeat reports,
-and the `Supervisor` relaunches the node. The relaunch restores the backlog of
-its checkpoint, which counts against the same limit, and replays its input
-log, which sends again what the node had sent since; while it replays, it
-waits for room instead of raising (see the next paragraph). So if the reader
-still does not read, the relaunch waits in its replay, with no heartbeats,
-until the `Supervisor` relaunches it again (see "Failure detection"), and the
-node ends in "Escalation on a permanent node failure" when the attempts run
-out; only a replay that gets through can raise the error again, live. The
-memory a node takes for its messages is thus bounded by this limit and by
-`INPUT_LOG_MAX_BYTES`, which also bounds what waits in its inbound queue,
-since every queued envelope is logged first.
+When a message would take what the node has not yet written into its FIFOs, on
+all its output ports together, over `OUT_BACKLOG_FAIL_BYTES` (64 MiB by
+default), `send_data` raises a `RuntimeError` instead of sending it: the message
+is neither numbered nor queued, and the error names the port it was for and how
+much that port holds unwritten. A backlog that keeps growing means a reader that
+is not reading: stopped, down or stuck, or slower than this node for good. The
+exception ends the brain thread, which the heartbeat reports, and the
+`Supervisor` relaunches the node. The relaunch restores the backlog of its
+checkpoint, which counts against the same limit, and replays its input log,
+which sends again what the node had sent since; while it replays, it waits for
+room instead of raising (see the next paragraph). So if the reader still does
+not read, the relaunch waits in its replay, with no heartbeats, until the
+`Supervisor` relaunches it again (see "Failure detection"), and the node ends in
+"Escalation on a permanent node failure" when the attempts run out; only a
+replay that gets through can raise the error again, live. A message larger than
+the limit never fits: `send_data` raises a `RuntimeError` of its own at once,
+live and in a replay, which gives its size and the limit. The replay sends it
+again, so the node fails at every relaunch and ends in "Escalation on a
+permanent node failure". The memory a node takes for its messages is thus
+bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which also bounds what waits
+in its inbound queue, since every queued envelope is logged first.
 
-While the node replays its input log, the same limit makes `send_data` wait
-for room instead of raising, with one warning in the log: a replay can run
-faster than a writer thread can write, whoever the reader is, and a node whose
-replay sent more than the limit could otherwise never start. A reader that
-never reads leaves the node in its startup, with no heartbeats, until the
-`Supervisor` relaunches it (see "Failure detection") or, without one, until it
-is stopped. The readers of a node start only after its replay, so the nodes of
-a cycle that replay at once, each over the limit, wait on each other in the
-same way, and a node with a self-loop waits on itself. A message larger than
-the limit raises its `RuntimeError` once the backlog has drained, and a stop
-ends the wait, after which `send_data` raises the same error if the message
-still does not fit.
+While the node replays its input log, the same limit makes `send_data` wait for
+room instead of raising, with one warning in the log: a replay can run faster
+than a writer thread can write, whoever the reader is, and a node whose replay
+sent more than the limit could otherwise never start. A reader that never reads
+leaves the node in its startup, with no heartbeats, until the `Supervisor`
+relaunches it (see "Failure detection") or, without one, until it is stopped.
+The readers of a node start only after its replay, so the nodes of a cycle that
+replay at once, each over the limit, wait on each other in the same way, and a
+node with a self-loop waits on itself. A stop ends the wait, after which
+`send_data` raises the error of the previous paragraph if the message still
+does not fit.
 
 ## Testing a node without the engine
 

@@ -331,6 +331,13 @@ class _Counting(_Relay):
         self.replayed += 1
 
 
+def _stays_still(value, interval=0.3):
+    """Whether `value()` gives the same result before and after `interval`."""
+    before = value()
+    time.sleep(interval)
+    return value() == before
+
+
 def _start_run(node):
     outcome = {}
 
@@ -389,24 +396,35 @@ def test_what_was_restored_arrives_before_what_the_replay_sends_again(relay_opts
     assert not outcome
 
 
-def test_a_replay_over_the_limit_of_the_backlog_ends_with_a_reader_that_drains(relay_opts):
+def test_a_replay_over_the_limit_of_the_backlog_ends_with_a_reader_that_drains(
+    relay_opts, caplog
+):
     class _SmallBacklog(_Counting):
         OUT_BACKLOG_FAIL_BYTES = 4096
 
-    payloads = [f"{i}:" + "p" * 1000 for i in range(50)]
+    # More than the pipe and the backlog hold together, on any platform.
+    payloads = [f"{i}:" + "p" * 1000 for i in range(200)]
     _log_arrivals(relay_opts, payloads)
 
     node = _SmallBacklog(opts=relay_opts)
+    node.log.addHandler(caplog.handler)
     thread, outcome = _start_run(node)
     try:
-        received = _read_data_lines(relay_opts["outf"], 50)
+        # The replay stops, waiting for room, before anything reads: the
+        # warning comes at the first wait, and the count stays still.
+        assert _wait_until(lambda: "waits for room in the outbound backlog" in caplog.text)
+        assert _wait_until(lambda: _stays_still(lambda: node.replayed), timeout=5)
+        assert node.replayed < 200
+
+        received = _read_data_lines(relay_opts["outf"], 200)
         assert _wait_until(lambda: node._brain_thread is not None)
     finally:
         node._stop_requested.set()
         thread.join(timeout=5)
+        node.log.removeHandler(caplog.handler)
 
     assert [e.payload for e in received] == payloads
-    assert node.replayed == 50
+    assert node.replayed == 200
     assert not outcome
 
 
@@ -428,24 +446,57 @@ def test_a_replay_with_no_reader_waits_and_a_stop_ends_it_with_the_error(relay_o
     finally:
         node._stop_requested.set()
         thread.join(timeout=5)
+        node.log.removeHandler(caplog.handler)
 
     assert not thread.is_alive()
     assert "is not reading" in str(outcome["error"])
     assert caplog.text.count("waits for room in the outbound backlog") == 1
 
 
-def test_a_message_larger_than_the_limit_raises_in_a_replay_too(relay_opts):
-    class _SmallBacklog(_Relay):
+def test_a_message_larger_than_the_limit_raises_at_once_with_its_own_error():
+    class _TinyFailCap(_Relay):
         OUT_BACKLOG_FAIL_BYTES = 64
 
-    _log_arrivals(relay_opts, ["p" * 1000])
+    proc = _TinyFailCap(opts=_OPTS)
+    proc._handler_thread = threading.get_ident()
 
-    node = _SmallBacklog(opts=relay_opts)
-    thread, outcome = _start_run(node)
-    thread.join(timeout=5)
+    with pytest.raises(RuntimeError, match="larger than OUT_BACKLOG_FAIL_BYTES.*never fits"):
+        proc.send_data("outf", "p" * 1000)
 
-    assert not thread.is_alive()
-    assert "OUT_BACKLOG_FAIL_BYTES" in str(outcome["error"])
+    assert proc._out_seq == {}
+    assert proc._unwritten == {}
+
+
+def test_a_message_larger_than_the_limit_raises_at_once_in_a_replay_too():
+    class _TinyFailCap(_Relay):
+        OUT_BACKLOG_FAIL_BYTES = 64
+
+    proc = _TinyFailCap(opts=_OPTS)
+    # A replay with a backlog that nothing drains: no writer thread runs.
+    proc._replaying = True
+    with proc._out_backlog_lock:
+        proc._add_to_out_backlog("outf", 1, lib.encode_data("p", seq=1))
+    proc._out_seq["outf"] = 1
+    outcome = {}
+
+    def send():
+        proc._handler_thread = threading.get_ident()
+        try:
+            proc.send_data("outf", "p" * 1000)
+        except RuntimeError as exc:
+            outcome["error"] = exc
+
+    sender = threading.Thread(target=send, daemon=True)
+    sender.start()
+    try:
+        sender.join(timeout=2)
+        assert not sender.is_alive(), "send_data waited instead of raising at once"
+    finally:
+        proc._stop_requested.set()  # ends a wait, if send_data waited
+        sender.join(timeout=2)
+
+    assert "larger than OUT_BACKLOG_FAIL_BYTES" in str(outcome.get("error"))
+    assert proc._out_seq == {"outf": 1}
 
 
 def test_a_failure_while_the_threads_start_ends_run_with_no_thread_left(relay_opts):

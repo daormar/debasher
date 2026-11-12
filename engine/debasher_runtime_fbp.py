@@ -269,7 +269,8 @@ class FBPProcess(_PortWorker):
     # stopped, is down or stuck, or is slower than this node for good), and
     # a loud failure is better than a node that eats the memory of the
     # machine. A replay of the input log waits for room instead, since it
-    # can run faster than a writer thread can write, whoever the reader is.
+    # can run faster than a writer thread can write, whoever the reader is;
+    # a single message larger than the limit raises in either case.
     #: The size, in bytes, of what send_data() has taken and the node has not
     #: yet written into its FIFOs, since their readers are slow, over which
     #: the node skips a checkpoint and waits for the next round (8 MiB by
@@ -279,9 +280,9 @@ class FBPProcess(_PortWorker):
     #: The size, in bytes, of what send_data() has taken and the node has not
     #: yet written into its FIFOs, over which send_data() raises, since a
     #: reader of the node is not reading, or waits for room while the node
-    #: replays its input log (64 MiB by default). A program sets it for one
-    #: of its processes with the computational specification
-    #: `out_backlog_fail_mb`.
+    #: replays its input log; a single message larger than it raises in
+    #: either case (64 MiB by default). A program sets it for one of its
+    #: processes with the computational specification `out_backlog_fail_mb`.
     OUT_BACKLOG_FAIL_BYTES = 64 * 1024 * 1024
     # How often a replay that waits for room in the outbound backlog looks
     # at it again (see _wait_for_room_in_backlog).
@@ -1118,12 +1119,13 @@ class FBPProcess(_PortWorker):
         port `tag`. It raises ValueError when `payload` holds NaN or an
         infinity, which JSON does not have (a float result that can be one
         is sent as None or as a string), and when `tag` is not one of its
-        output ports. A node acts only in reaction to
-        what it receives, so it may be called only from process_data(), and
-        raises anywhere else. It also raises when what
-        the node has not yet written into its FIFOs would go over
-        OUT_BACKLOG_FAIL_BYTES; while the node replays its input log, it
-        waits for room instead. When it raises, nothing is sent.
+        output ports. A node acts only in reaction to what it receives, so it
+        may be called only from process_data(), and raises RuntimeError
+        anywhere else. It also raises RuntimeError when the message alone is
+        larger than OUT_BACKLOG_FAIL_BYTES, and when what the node has not yet
+        written into its FIFOs would go over that limit; while the node
+        replays its input log, it waits for room instead in that second
+        case. When it raises, nothing is sent.
         """
         # The message is numbered with this channel's next sequence number
         # (see _out_seq). "Only from process_data()"
@@ -1146,6 +1148,16 @@ class FBPProcess(_PortWorker):
             )
         seq = self._out_seq.get(tag, 0) + 1
         line = encode_data(payload, seq=seq)
+        # A message that would never fit raises at once, live and in a
+        # replay, rather than wait for the backlog to drain: the node fails
+        # either way, and no relaunch gets past this message.
+        if len(line) > self.OUT_BACKLOG_FAIL_BYTES:
+            raise RuntimeError(
+                f"{type(self).__name__}: a message of {len(line)} bytes on {tag!r} is larger "
+                f"than OUT_BACKLOG_FAIL_BYTES ({self.OUT_BACKLOG_FAIL_BYTES} bytes), so it "
+                "never fits in the outbound backlog: raise the limit (out_backlog_fail_mb) "
+                "or send smaller messages"
+            )
         if self._replaying:
             self._wait_for_room_in_backlog(len(line))
         with self._out_backlog_lock:
@@ -1164,18 +1176,13 @@ class FBPProcess(_PortWorker):
 
     def _wait_for_room_in_backlog(self, size):
         """
-        Returns once a message of `size` bytes fits under
-        OUT_BACKLOG_FAIL_BYTES, or the backlog is empty, so that a message
-        larger than the limit gets its error instead of waiting for ever, or
-        the node is told to stop, which send_data then reports as the error
-        that it is: the backlog is still over the limit.
+        Returns once a message of `size` bytes, no larger than
+        OUT_BACKLOG_FAIL_BYTES, fits under it, or once the node is told to
+        stop.
         """
         while not self._stop_requested.is_set():
             with self._out_backlog_lock:
-                if (
-                    not self._unwritten_bytes
-                    or self._unwritten_bytes + size <= self.OUT_BACKLOG_FAIL_BYTES
-                ):
+                if self._unwritten_bytes + size <= self.OUT_BACKLOG_FAIL_BYTES:
                     return
             if not self._replay_wait_warned:
                 self._replay_wait_warned = True
