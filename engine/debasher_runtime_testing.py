@@ -253,8 +253,8 @@ class NodeUnderTest:
         # then to the brain thread (see observe below); inject() keeps its
         # own checks
         self._injected = []
-        self.node._on_arrivals = lambda port, items: self._injected.extend(
-            envelope.payload for envelope, _ in items
+        self.node._on_arrivals = lambda port, envelopes: self._injected.extend(
+            envelope.payload for envelope, _ in envelopes
         )
 
     @contextlib.contextmanager

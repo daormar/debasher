@@ -568,23 +568,23 @@ class _PortWorker:
         """
         Called with every envelope that the transport does not consume itself
         (everything but HELLO), in the order in which it was read, and the
-        only way an item gets onto the inbound queue. `line` is the text
+        only way an envelope gets onto the inbound queue. `line` is the text
         exactly as it arrived. The base class puts (tag, type, payload) on
         the queue and has no use for the text; a subclass overrides this, or
-        _on_arrivals, to do something with each item at the moment it
+        _on_arrivals, to do something with each envelope at the moment it
         arrives, before the thread that processes it can see it.
         """
         self._inbound_queue.put((tag, envelope.type, envelope.payload))
 
-    def _on_arrivals(self, tag, items):
+    def _on_arrivals(self, tag, envelopes):
         """
         Called by a reader thread with the (envelope, line) pairs of one block
-        it has read from its fifo, in order: every item of the block that
+        it has read from its fifo, in order: every envelope of the block that
         reaches the node, at once, so that a subclass can record them all
         together (see FBPProcess._on_arrivals). The base class hands each one
         to _on_arrival.
         """
-        for envelope, line in items:
+        for envelope, line in envelopes:
             self._on_arrival(tag, envelope, line)
 
     def _reader_loop(self, tag, option_name):
@@ -592,27 +592,27 @@ class _PortWorker:
         self.log.debug("reader for %r reading %r", tag, self.opts[option_name])
 
         # The reader takes from the fifo a block at a time, and hands every
-        # item of a block to _on_arrivals at once: what it has taken from the
+        # envelope of a block to _on_arrivals at once: what it has taken from the
         # fifo exists only in this process until it is logged, and is lost if
-        # the process dies before, so every item of a block is logged
+        # the process dies before, so every envelope of a block is logged
         # together, without waiting for the others one by one (see the
         # Contract's limits). The descriptor belongs to
         # start_threads()/stop_threads().
         state = _ReaderState(self._closed_at_start(tag) and self._drops_after_close(tag))
         for raw_lines in self._blocks_of_lines(rfd):
-            items = []
+            envelopes = []
             try:
                 for raw_line in raw_lines:
                     if self._stopping.is_set():
                         break
-                    item = self._item_of_line(tag, raw_line, state)
-                    if item is not None:
-                        items.append(item)
+                    arrived = self._envelope_of_line(tag, raw_line, state)
+                    if arrived is not None:
+                        envelopes.append(arrived)
             finally:
                 # Whatever came before a corrupt line reaches the node before
                 # the error ends this thread, as it would line by line.
-                if items:
-                    self._on_arrivals(tag, items)
+                if envelopes:
+                    self._on_arrivals(tag, envelopes)
 
         self.log.debug("reader for %r stopped", tag)
 
@@ -647,7 +647,7 @@ class _PortWorker:
             if not block:
                 return
 
-    def _item_of_line(self, tag, raw_line, state):
+    def _envelope_of_line(self, tag, raw_line, state):
         """
         What the reader of `tag` does with one line, without its newline:
         returns the (envelope, line) pair to hand to the node, or None when
@@ -749,18 +749,18 @@ class _PortWorker:
         # artifact of a crash and can be dropped (see encode_hello).
         _write_all(wfd, "\n" + encode_hello() + "\n")
         while True:
-            item = out_queue.get()
-            if item is _STOP:
+            line = out_queue.get()
+            if line is _STOP:
                 if self._close_on_stop:
                     _write_all(wfd, encode_close(self._close_payload(tag)) + "\n")
                 break
-            _write_all(wfd, item + "\n")
-            self._on_written(tag, item)
+            _write_all(wfd, line + "\n")
+            self._on_written(tag, line)
         self.log.debug("writer for %r stopped", tag)
 
-    def _on_written(self, tag, item):
+    def _on_written(self, tag, line):
         """
-        Called with every item once the writer thread has finished writing
+        Called with every line once the writer thread has finished writing
         it (never for the leading HELLO or a closing CLOSE, neither of which
         a subclass ever needs to track). The base class has no use for it;
         FBPProcess overrides it to know which of what send_data numbered is

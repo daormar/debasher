@@ -34,8 +34,8 @@ from debasher_runtime_transport import _write_all
 # The input log of one FBPProcess: a durable, ordered history of everything
 # that arrives at it, kept on disk in the node's own directory so that a
 # relaunched node can be brought back to where it was. It is meant to be
-# written when an item arrives, before the item is handed to the thread that
-# processes it, so a crash never leaves an item that was processed (or was
+# written when an envelope arrives, before it is handed to the thread that
+# processes it, so a crash never leaves an envelope that was processed (or was
 # waiting to be) missing from the log. This class knows nothing about threads,
 # ports or barriers: it appends records, hands them back in order and forgets
 # old ones.
@@ -111,7 +111,8 @@ class _InputLog:
         """
         `max_bytes` caps the total size of all the segments; `segment_bytes`
         is the size at which the segment being written is closed and a new
-        one started (a segment can exceed it by one record).
+        one started (a segment can exceed it by the records of one call of
+        append_many).
         """
         self._dir = directory
         self._max_bytes = max_bytes

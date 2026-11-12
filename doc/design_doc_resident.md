@@ -70,15 +70,14 @@ a node that launches batch runs. The document ends with what is still open:
 # Glossary
 
 The precise meaning of the words this document uses, in the order in which they
-build on each other. Identifiers in backticks are names that exist in the
-code or that have been decided. Earlier text called the input
-log the "message log" and its replay "drain"; both names are gone from the code.
-The vocabulary of the guarantees (deterministic, idempotent, chaos test,
-mutation check, durability level) is defined in the Contract, where it is used.
-Terms of the engine that this glossary does not list, such as task, option
-list, output directory, process script or completion marker, have the meaning
-that the design of the engine (`doc/design_doc_engine.md`) gives them, and so
-do the entries below that refer to it.
+build on each other. Identifiers in backticks are names that exist in the code
+or that have been decided. The vocabulary of the guarantees (deterministic,
+idempotent, chaos test, mutation check, durability level) is defined in the
+Contract, where it is used. Terms of the engine that this glossary does not
+list, such as task, option list, output directory, process script or completion
+marker, have the meaning that the design of the engine
+(`doc/design_doc_engine.md`) gives them, and so do the entries below that refer
+to it.
 
 ## Program and topology
 
@@ -350,31 +349,35 @@ do the entries below that refer to it.
 - **input log**: one log per node, in `<execdir>/log/` (`log_<idx>/` for a task
   of an array, see execdir), of everything that arrives at it, in the order in
   which the brain thread processes it, written by the reader threads when each
-  item arrives. It holds every queued item (`DATA`, `BARRIER`, `INTERACT`,
-  `CLOSE`), and only `DATA` is replayed.
+  envelope arrives. It holds every queued envelope (`DATA`, `BARRIER`,
+  `INTERACT`, `CLOSE`), and only `DATA` is replayed.
 - **record**: one line of the input log, holding the position, the port and the
   envelope exactly as it arrived. Not to be confused with the verb: what a round
   does to the `DATA` of a pending port is "keep a copy".
 - **position, `pos`**: the number of a record in the input log. It is a counter
   of the receiver, global to the node (across all its input ports), that starts
-  at 1 and is assigned in the same critical section that puts the item on the
-  inbound queue, so that position order is processing order. A checkpoint refers
-  to the log by position, never by epoch.
+  at 1 and is assigned in the same critical section that puts the envelope on
+  the inbound queue, so that position order is processing order. A checkpoint
+  refers to the log by position, never by epoch.
 - **segment**: a file of the input log with consecutive records, named by the
   position of its first record (`<first pos>.log`). A new one starts with every
-  incarnation and when the active one reaches a size limit; only whole segments
-  that are not the active one are deleted.
-- **capture position, `capture_pos`**: the position of the item during whose
+  incarnation and when the active one has reached a size limit, which a write
+  can pass by the records of one block that a reader thread took from its
+  FIFO; only whole segments that are not the active one are deleted.
+- **capture position, `capture_pos`**: the position of the envelope during whose
   handling the node captured its state: a marker, or a command that opens a
   round, never a `DATA`. Every `DATA` before it is reflected in the checkpoint's
   node state; recovery replays what comes after it.
-- **torn tail**: an unterminated last line that a process killed in the middle
-  of a write leaves in a file. It can happen at any record size. A record counts
-  only if its line ends in a newline and parses as JSON, so a torn tail is
-  ignored on replay, and no incarnation ever appends to an existing segment.
+- **torn tail**: part of a record, with no newline, at the end of a segment,
+  which a process that dies in the middle of a write (a `kill -9`, a crash), or
+  a write that fails halfway (a full disk), leaves. It can happen at any record
+  size. Nothing is written after it, since no incarnation appends to an
+  existing segment and a log refuses every append after a failed write, and
+  replay ignores it. A line that ends in a newline is a complete record and has
+  to parse, or the log is corrupt (see "Log structure and record format").
 - **replay**: re-executing `process_data` on the `DATA` records after
   `capture_pos`, in log order, when a node starts. It reads from disk and writes
-  nothing to the log. Earlier text calls it "drain".
+  nothing to the log.
 - **prune**: deleting what no retained checkpoint needs: the checkpoints beyond
   `CHECKPOINT_RETENTION` and, in the input log, the whole segments that end at
   or before the `capture_pos` of the oldest retained checkpoint.
@@ -504,14 +507,14 @@ Node tests, business tests and the test runner are defined in the glossary of
 
 ## State variables, at a glance
 
-Several pieces of a node's bookkeeping go through the same three stages: a
-live value that the brain thread keeps up to date as it processes each item, a
+Several pieces of a node's bookkeeping go through the same three stages: a live
+value that the brain thread keeps up to date as it processes each envelope, a
 copy taken at the capture and held only while a round is open (see "capture"
 above), and the checkpoint field the copy is written to when the round closes.
-The table names the three for each concept, which this glossary already
-defines: it is not redefined here. `Supervisor`'s own bookkeeping (which
-nodes are down, how many times each has been relaunched) is a separate
-concern, covered in the "`Supervisor` class" section.
+The table names the three for each concept, which this glossary already defines:
+it is not redefined here. `Supervisor`'s own bookkeeping (which nodes are down,
+how many times each has been relaunched) is a separate concern, covered in the
+"`Supervisor` class" section.
 
 | Concept                | Live            | Held during an open round  | Checkpoint field |
 | ---------------------- | --------------- | -------------------------- | ---------------- |
@@ -1104,10 +1107,11 @@ node test builds a node without the engine to check its business logic.
   unjoined; a thread that is not a daemon keeps the process from ending until
   it has returned. The reader, brain, heartbeat and observation threads can
   always be woken, each from where it blocks: a reader by a blank line written
-  through its own ghost write end, the brain by the `_STOP` item on its queue,
-  the other two by an event. So they are not daemons: `stop_threads` wakes them
-  and waits for them with no limit, and each one finishes what it was doing, the
-  brain thread the message in hand, instead of being cut in the middle of it.
+  through its own ghost write end, the brain by the `_STOP` sentinel on its
+  queue, the other two by an event. So they are not daemons: `stop_threads`
+  wakes them and waits for them with no limit, and each one finishes what it was
+  doing, the brain thread the message in hand, instead of being cut in the
+  middle of it.
 
   A writer thread cannot be woken. When its reader is down and the pipe is full
   it stays blocked in `write()`, and the write does not even fail, since the
@@ -1323,7 +1327,7 @@ What `observe()` sees enters the node as an input:
   `OBSERVE_PORT`, and queues it for the brain thread, as a reader thread does
   with what it reads from a fifo and through the same code (`_on_arrivals`,
   under the lock that orders the arrivals of every port), so that the order of
-  the log is the order in which the brain thread gets the items, whatever
+  the log is the order in which the brain thread gets the envelopes, whatever
   thread logs them. The brain thread hands it to `process_data`, which decides
   what the node does about it; a replay finds it in the log, and does not look
   at the world again.
@@ -1963,13 +1967,13 @@ That use sets what the log has to guarantee:
 - A message is logged when a reader thread takes it from its FIFO, not when
   the brain thread reaches it, so that what waits in the inbound queue, which
   has no limit, survives a crash of the node.
-- A node has one log, not one per port, in the order in which the brain
-  thread processes its items, so that a replay processes the messages of every
-  port in the same order as the first execution.
+- A node has one log, not one per port, in the order in which the brain thread
+  processes its envelopes, so that a replay processes the messages of every port
+  in the same order as the first execution.
 - Every `DATA` reaches `process_data`, also on a port whose marker is still
   pending in an open round, where a copy of it goes into the channel state
   besides.
-- A replay starts right after the item whose processing captured the node
+- A replay starts right after the envelope whose processing captured the node
   state, not where the round closed, so that a message processed between the
   capture and the close is not skipped; a node with no checkpoint yet replays
   its whole log.
@@ -1987,50 +1991,55 @@ taps ("Why not built on `--mirror`, and locality"). It comes right after
 
 ## Log structure and record format
 
-One input log per node, in `<execdir>/log/`, not one per port: everything
-that arrives at a node (`DATA`, `BARRIER`, `INTERACT`, `CLOSE`) is written to
-it, in the order the brain thread processes it. That order is guaranteed by
-one lock, shared with pruning (see "Pruning and the size cap"), that makes
-appending the record and queuing the item for the brain thread a single step.
-Only `DATA` is replayed.
+One input log per node, in `<execdir>/log/`, not one per port: everything that
+arrives at a node (`DATA`, `BARRIER`, `INTERACT`, `CLOSE`) is written to it, in
+the order the brain thread processes it. That order is guaranteed by one lock,
+shared with pruning (see "Pruning and the size cap"), that makes appending the
+record and queuing the envelope for the brain thread a single step. Only `DATA`
+is replayed.
 
 The log is split into segments, files named `<first pos>.log` after the
 position of their first record, ordered numerically like a checkpoint's
 `<epoch>.json`. A new segment starts with every incarnation of a node, never
-appended to an existing one, and when the active one reaches
+appended to an existing one, and when the active one has reached
 `INPUT_LOG_SEGMENT_BYTES` (4 MiB by default), or a quarter of
-`INPUT_LOG_MAX_BYTES` when that is less; files are created at the first append,
-so there are no empty segments, and nothing rotates when a round captures the
-node state, which would couple the brain thread to the readers to save, at
-most, one segment of disk.
+`INPUT_LOG_MAX_BYTES` when that is less. The size is checked before a write,
+and the records of one write go to the same segment, so a segment can pass its
+size by one write, that is, by the records of one block that a reader thread
+took from its FIFO (see "Arrival and positions"). Files are created at the
+first append, so there are no empty segments, and nothing rotates when a round
+captures the node state, which would couple the brain thread to the readers to
+save, at most, one segment of disk.
 
 A record is one line, `{"pos": N, "port": "<port>", "env": <the envelope
 line exactly as it arrived>}`. The envelope is embedded by string
-concatenation, not re-encoded: building a record this way is about thirty
-times faster than with `json.dumps`, for records of 100 bytes as for records
-of 1 KB, at a cost of 28 more bytes per record. So the critical section that
-writes it stays short, every line is still valid JSON, and a `DATA`'s `seq`
-(G5) travels inside `env` with no change to the record format. Each record is
-written with one `os.write` to an `O_APPEND` descriptor (looped over partial
-writes), never through a buffered file object: a buffered `f.write` without
-`flush` can lose acknowledged records across a `kill -9`, while `f.write` plus
-`flush`, and `os.write`, do not.
+concatenation, not encoded again: it is already JSON, so the critical section
+that writes the record does not decode and encode it, every line is still
+valid JSON, and a `DATA`'s `seq` (G5) travels inside `env` with no change to
+the record format. The records go to an `O_APPEND` descriptor with
+`os.write`, never through a buffered file object: a buffered `f.write`
+without `flush` can lose acknowledged records across a `kill -9`, while
+`f.write` plus `flush`, and `os.write`, do not.
 
-A record counts only if its line ends in a newline and parses as JSON, so an
-unterminated last line, a torn tail left by a process killed in the middle of
-a write, is ignored on replay. A torn tail is possible at any record size,
-which is why a new incarnation never appends to an existing segment, only
-starts a new one: a reader thread appending behind an existing fragment
-would bury it in the middle of the file, where replay rejects it, instead of
-leaving it as the torn tail of its own segment. After any failed append the
-log refuses more appends until the process restarts: every reader thread
-dies with the same error, the heartbeat stops and the `Supervisor`
-relaunches the node.
+The records of one call of `append_many` go to the segment in one write, which
+`_write_all` repeats while the operating system takes only part of the bytes.
+When the process dies before the last part is written (a `kill -9`, a crash), or
+a write fails halfway (a full disk), the segment ends with part of a record and
+no newline: a torn tail. Nothing is written after it: a new incarnation starts a
+segment of its own, and after a failed write the log refuses every append until
+the process restarts (the reader thread whose write failed dies with its error,
+any other that appends dies with a `RuntimeError`, the heartbeat stops and the
+`Supervisor` relaunches the node). Otherwise another append would bury the
+fragment in the middle of the file. Replay ignores the torn tail: it can only be
+part of the records that were being written, which `append_many` had not
+returned, so none of them had been queued. A line that ends in a newline is a
+complete record and has to parse; one that does not means that the log is
+corrupt, and the replay stops with a `ValueError`.
 
 ## Arrival and positions
 
-A reader thread reads its FIFO a block at a time and hands the items it
-decodes from one block, together, to `_on_arrivals(tag, items)` instead of
+A reader thread reads its FIFO a block at a time and hands the envelopes it
+decodes from one block, together, to `_on_arrivals(tag, envelopes)` instead of
 putting them on the inbound queue itself; a line cut at the end of a block
 waits for the next one. `FBPProcess` overrides it: under one lock it appends
 the records of the whole block to the log in one write
@@ -2042,9 +2051,9 @@ the log, for the same short time, instead of a time that grows with its place
 in the block (see "Messages read from a FIFO but not yet written to the input
 log" in the Contract's limits). The version of `_PortWorker`, which the
 `Supervisor` keeps, is unaffected: it puts `(tag, type, payload)` for each
-item, with no position.
+envelope, with no position.
 
-Every queued item gets a position, starting at 1; `HELLO` never reaches the
+Every queued envelope gets a position, starting at 1; `HELLO` never reaches the
 queue. Whatever starts a round from inside the node, such as a snapshot timer
 (see "Periodic snapshots from a node's own timer" in Future work), has to go
 through the same hook, so that `capture_pos` (see the Glossary) is always
@@ -2052,63 +2061,107 @@ defined; 0 means that nothing had been processed yet.
 
 ## Recovery: startup and replay
 
-A relaunched node's startup (`run()`, see "Startup sequence: `run()`") opens
-its FIFOs, restores the latest checkpoint if there is one, calls
-`restore_node_state()` and `initialize_runtime()`, opens the input log,
-starts its writer threads and replays it, then starts its other threads.
-Opening the log recovers what earlier incarnations left: `next_pos` is
-`max(last complete record, capture_pos) + 1`, found by reading only the last
-segment that has a complete record; a segment with no complete record (only a
-torn fragment) is deleted at startup, since the next record would reuse its
-position and collide with its name.
+Three of the steps of "Startup sequence: `run()`" recover a node from its
+checkpoint and its input log, whether it is relaunched after a crash or
+resumed after a halt:
 
-Replay re-executes `process_data()` on every `DATA` record with a position
-above `capture_pos`, in log order (all of them when there is no checkpoint,
-since the node state is then the default one): what had been processed
-before the crash and what had arrived but not yet been processed, with no
-distinction between the two. A `CLOSE` record only adds its port to
-`closed_ports`; the other kinds of item are not replayed. It reads from disk
-and writes nothing to the log.
+1. Step 5 restores the latest checkpoint (see "Checkpoint persistence"),
+   which gives `capture_pos`; with no checkpoint, `capture_pos` is 0 and the
+   node state is the default one.
+2. Step 7 opens the input log (`_InputLog.recover`). It reads only the last
+   segment that has a complete record, and deletes a segment with no complete
+   record (an empty file, or only a torn tail), since the next record would
+   take its position and collide with its name. The next position is one more
+   than the position of the last complete record or `capture_pos`, whichever
+   is higher.
+3. Step 9 replays the log (`FBPProcess._replay_input_log`): every `DATA`
+   record above `capture_pos` goes through `process_data()`, in log order,
+   what had been processed before the crash and what had arrived but not yet
+   been processed, with no distinction between the two. A `CLOSE` record adds
+   its port to `closed_ports`, unless it is a control port, and the other
+   kinds of envelope are not replayed. A `DATA` record on a port that is
+   already closed is an error, since nothing is logged after a `CLOSE`. The
+   replay reads from disk and writes nothing to the log.
 
-Replay starts at the last segment whose name is at most `capture_pos + 1`
-and fails loudly if the log starts above that, if the positions from there
-on are not consecutive, if a segment does not start where the previous one
-ended, or if a line that ends in a newline does not parse. A log with no
-records is not an error, since it cannot be told from a log that was lost
-(the sequence numbers of G5 detect that later, see the Contract). A log
-whose last record is below `capture_pos` is not an error either, because
-everything in it is already reflected in the checkpoint: numbering then
-continues after `capture_pos`.
+The replay starts at the last segment whose name is at most `capture_pos + 1`,
+and stops the startup with a `ValueError` if the log starts above that, if the
+positions from there on are not consecutive, if a segment does not start where
+its name says, or if a line that ends in a newline does not parse. A log with
+no records is not an error, since it cannot be told from a log that was lost
+(the sequence numbers of G5 detect that later, see the Contract). A log whose
+last record is below `capture_pos` is not an error either, because everything
+in it is already reflected in the checkpoint: numbering then continues after
+`capture_pos`.
 
 ## Pruning and the size cap
 
-After each checkpoint is saved, whole segments other than the active one are
-deleted once the next segment starts at or below the `capture_pos` of the
-oldest retained checkpoint plus one; that value is read from the oldest
-retained checkpoint's own file on every round, which costs about a quarter of
-writing that checkpoint, so no state is kept in memory for it. A checkpoint
-that cannot be read aborts the prune with an error. Pruning runs on the brain
-thread, under the same lock as an append.
+Pruning keeps the input log from growing for ever. The log is a directory of
+segment files (see "Log structure and record format"), and pruning it deletes
+whole files, never part of one. The checkpoints are pruned too, but they are
+not segmented: there is one file per epoch, and only the
+`CHECKPOINT_RETENTION` with the highest epochs are kept (see "Checkpoint
+persistence"). This section describes the pruning of the log, and then its
+size cap.
 
-`INPUT_LOG_MAX_BYTES` (100 MiB by default) is the cap on every segment of a
-node's log together, kept in memory so that checking it costs nothing. It is a
-safety net, not the normal way old history goes away, which is pruning:
-exceeding it raises in the reader thread, before anything is written, like any
-other death of a thread. Reaching it means that no epoch has closed in a long
-time, so it does not trip while rounds are frequent enough for what arrived
-since the oldest retained checkpoint to fit in the cap. A small cap does not
-prevent pruning: only whole segments other than the active one are deleted, and
-a segment closes on reaching a quarter of the cap at most (see "Log structure
-and record format"). Since a node does not start rounds on its own, a program
-in which nothing does reaches it. `debasher_snapshot_resident --every` triggers
-them from outside the program (see "`debasher_snapshot_resident`: rounds from
-outside the program").
+A recovery replays the log from the `capture_pos` of the checkpoint it
+restores, so a record is needed while a retained checkpoint has its
+`capture_pos` below the position of the record. The one that needs the most of
+the log is the oldest retained checkpoint: every record at or below its
+`capture_pos` is reflected in all of them, and can go.
+
+The log is pruned right after each checkpoint is written, since that is when
+the oldest retained checkpoint changes. A segment can go once all its records
+are at or below that `capture_pos`, which is known without reading it: a
+segment holds only positions below the first position of the next one, so the
+test is that the next segment starts at `capture_pos + 1` or before. The last
+segment is never deleted: it is the one being written, or the newest one that
+an earlier incarnation left.
+
+The `capture_pos` of the oldest retained checkpoint is read from that
+checkpoint's file at each prune, not kept in memory: the node would otherwise
+have to keep the positions of its retained checkpoints in step with the files
+that hold them, and the file is read once per checkpoint written, outside the
+lock. A checkpoint that cannot be read stops the prune with a `RuntimeError` in
+the brain thread, before anything is deleted. The deletion runs on the brain
+thread under `_arrival_lock`, the lock with which the reader threads append: the
+list of segments and the size of the log, against which the cap is checked,
+change in one place at a time.
+
+`INPUT_LOG_MAX_BYTES` (100 MiB by default) is the cap on every segment of the
+log together. It is a safety net, not the normal way old history goes away,
+which is pruning. The cap is checked record by record before a block is written:
+the records of the block that fit under it are written and queued, and then
+`LogCapReached` ends the reader thread, like any other death of a thread.
+Reaching it means that pruning has not kept up, or that the cap is too small for
+what arrives between the rounds (see below). Pruning does not keep up when no
+round has closed in a long time, or when rounds do close but write no
+checkpoint, since the outbound backlog is over `OUT_BACKLOG_MAX_BYTES`, which
+the error then says (see "Checkpoint persistence"). Since a node does not start
+rounds on its own, a program in which nothing does reaches it.
+`debasher_snapshot_resident --every` triggers them from outside the program (see
+"`debasher_snapshot_resident`: rounds from outside the program").
+
+The size of the log is a counter of `_InputLog`, `_total_bytes`, set by
+`recover` from the files and kept up to date by every write and every prune,
+not a question to the disk: the cap is checked on every block, under the lock,
+and asking the disk (listing the directory and the size of each file) would
+put a call to the file system per segment in the critical section.
+
+The cap is not reached while rounds close often enough for what arrived since
+the oldest retained checkpoint to fit in it, together with the active segment
+and the block being written. A small cap does not prevent pruning, since a
+segment is at most a quarter of the cap plus one block, but that condition is
+the one that decides, and it is easy to miss with a small cap: a segment can
+pass its size by one block, and a block of small messages weighs in the log much
+more than what was read from the FIFO, since each record adds its position and
+its port to its envelope. A rule of thumb for setting it: the cap has to hold
+what arrives in `CHECKPOINT_RETENTION` rounds, plus a segment and a block.
 
 ## `CLOSE` and closed ports
 
 `CLOSE` means that a writer has finished for good, and only that; a halt
 sends none (see "Control envelope"). A reader hands it to the brain thread
-like any other item, so it is logged, and then keeps reading but drops
+like any other envelope, so it is logged, and then keeps reading but drops
 everything that follows: nothing after it is decoded, logged or queued, and
 the first such line warns, once per port. The reader does not end on a
 `CLOSE`, for two reasons: a reader that ended would leave the heartbeat
@@ -2120,27 +2173,26 @@ reader goes on delivering what follows a `CLOSE`, and the `CLOSE` is neither
 recorded nor restored, since its writer, such as the `Supervisor`, may come
 back.
 
-`closed_ports`, sorted, is the checkpoint field that lists the input ports
-whose `CLOSE` the brain thread had processed at the capture, that is, those
-with a `CLOSE` record at a position at or below `capture_pos`: taken at the
-same moment and on the same thread as the node state and `capture_pos`, by
-the order in which the brain thread processes the items, not by what the
-reader threads have already read, since they run ahead of it. Two other
-definitions would not work, as a node of three ports shows: a closes before a
-round opens and c closes while it is open, with a message of c in between.
-Neither "what the reader threads have logged by then" nor "what is closed when
-the round closes" agrees with what the checkpoint's own `capture_pos`
-reflects, and both would leave the checkpoint saying that c is closed while a
-message of c still lies after `capture_pos` and is due to be replayed. The
-definition that is used is what lets replay demand that no `DATA` record ever
-follows the `CLOSE` of its port, an error that means the log or the
-checkpoint is corrupt. Recovery restores the set and adds the port of each
-`CLOSE` record after `capture_pos`; the readers of the ports that are then
-closed start already dropping what follows, so a relaunched node behaves like
-the incarnation that read the `CLOSE`. A `CLOSE` between the capture and the
-close of a round is not stored in the checkpoint file, the same as any other
-item that arrives then: it is history after the cut, and recovery finds it in
-the log.
+`closed_ports`, sorted, is the checkpoint field that lists the input ports whose
+`CLOSE` the brain thread had processed at the capture, that is, those with a
+`CLOSE` record at a position at or below `capture_pos`: taken at the same moment
+and on the same thread as the node state and `capture_pos`, by the order in
+which the brain thread processes the envelopes, not by what the reader threads
+have already read, since they run ahead of it. Two other definitions would not
+work, as a node of three ports shows: a closes before a round opens and c closes
+while it is open, with a message of c in between. Neither "what the reader
+threads have logged by then" nor "what is closed when the round closes" agrees
+with what the checkpoint's own `capture_pos` reflects, and both would leave the
+checkpoint saying that c is closed while a message of c still lies after
+`capture_pos` and is due to be replayed. The definition that is used is what
+lets replay demand that no `DATA` record ever follows the `CLOSE` of its port,
+an error that means the log or the checkpoint is corrupt. Recovery restores the
+set and adds the port of each `CLOSE` record after `capture_pos`; the readers of
+the ports that are then closed start already dropping what follows, so a
+relaunched node behaves like the incarnation that read the `CLOSE`. A `CLOSE`
+between the capture and the close of a round is not stored in the checkpoint
+file, the same as any other envelope that arrives then: it is history after the
+cut, and recovery finds it in the log.
 
 A round does not wait for a port whose writer has finished, since no marker
 will ever come from it. A `CLOSE` the brain thread processes while a round is
@@ -3253,7 +3305,7 @@ good; a halt sends none (see "Ordered shutdown"). The idea mirrors FIN versus
 RST in TCP: a `CLOSE` means "finished, do not wait"; its absence means "may
 still return".
 
-The reader hands `CLOSE` to the brain thread in order, like any other item,
+The reader hands `CLOSE` to the brain thread in order, like any other envelope,
 so it is logged and its port can leave the barrier's pending set. Why the
 reader then keeps reading and drops what follows instead of ending, and what
 `closed_ports` records, is in "`CLOSE` and closed ports".
@@ -4238,17 +4290,18 @@ Design ideas from Future work move here once they are actually built.
   The module author would enable it only on a node that is a valid initiator
   (see "Chandy-Lamport barrier propagation"), and it would work the same with or
   without a `Supervisor`, which could still trigger rounds on demand. Points to
-  settle: the timer has to start its round through the same hook as an item that
-  arrives, so that the round has a `capture_pos` (see "Arrival and positions");
-  its period has to be longer than a round, or rounds keep replacing each other
-  (see "A round that a newer one replaces" in the Contract's limits); and the
-  timers of several initiators would open rounds of different epochs, which a
-  node that both reach waits for separately, so they need a common numbering,
-  like that of a numbered trigger (see the Glossary). Not built.
+  settle: the timer has to start its round through the same hook as an envelope
+  that arrives, so that the round has a `capture_pos` (see "Arrival and
+  positions"); its period has to be longer than a round, or rounds keep
+  replacing each other (see "A round that a newer one replaces" in the
+  Contract's limits); and the timers of several initiators would open rounds of
+  different epochs, which a node that both reach waits for separately, so they
+  need a common numbering, like that of a numbered trigger (see the Glossary).
+  Not built.
 - **Progress in the heartbeat.** A node whose brain thread is alive but
   blocked is not detected (see "Stuck but alive" in the Contract's limits):
   the heartbeat says that its threads are alive, not that they make progress.
-  A counter of the items the brain thread has processed, sent with each
+  A counter of the envelopes the brain thread has processed, sent with each
   heartbeat, would let the `Supervisor` notice a node whose counter does not
   move. Telling that apart from a healthy node needs care: a node with
   nothing to process makes no progress either, and a long `process_data` call
@@ -4394,5 +4447,5 @@ Design ideas from Future work move here once they are actually built.
   authors and AI assistants write best, and a compiled language serves the few
   nodes of a program where its time goes. Above some rate of messages the limit
   moves to the protocol itself, one envelope and one record for each message,
-  which only larger packets (many items in one `DATA`) push back, in any
+  which only larger packets (many values in one `DATA`) push back, in any
   language.

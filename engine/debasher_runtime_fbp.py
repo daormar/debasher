@@ -256,7 +256,7 @@ class FBPProcess(_PortWorker):
         # The input ports that had received CLOSE when the round in progress
         # captured the node state (see _closed_ports).
         self._barrier_closed_ports = frozenset()
-        # Position of the item whose processing captured the node state of the
+        # Position of the envelope whose processing captured the node state of the
         # round in progress (see _current_pos).
         self._barrier_capture_pos = 0
         # The sender counters (see _out_seq) as they stood when the round in
@@ -338,16 +338,16 @@ class FBPProcess(_PortWorker):
         # reached its cap (see _on_arrivals).
         self._checkpoints_skipped_since = None
 
-        # Every item that a reader thread queues gets a position and a record
+        # Every envelope that a reader thread queues gets a position and a record
         # in the input log before the brain thread can see it. The lock makes
-        # taking the position, writing the record and queuing the item a
+        # taking the position, writing the record and queuing the envelope a
         # single step, so that the order of the positions, of the log and of
         # the queue is one and the same. It also keeps pruning from running
         # while a record is being appended. The log is opened by run(), or by
         # start_threads() when the node is driven without run().
         self._arrival_lock = threading.Lock()
         self._input_log = None
-        # Position of the item that the brain thread is processing, 0 before
+        # Position of the envelope that the brain thread is processing, 0 before
         # the first one. Only the brain thread reads or writes it.
         self._current_pos = 0
         # Identity of the thread that is inside process_data() right now, None
@@ -780,21 +780,21 @@ class FBPProcess(_PortWorker):
     def _on_arrival(self, tag, envelope, line):
         self._on_arrivals(tag, [(envelope, line)])
 
-    def _on_arrivals(self, tag, items):
+    def _on_arrivals(self, tag, envelopes):
         """
         Records in the input log, and then queues for the brain thread, the
-        items of one block that a reader thread has taken from its fifo, all
+        envelopes of one block that a reader thread has taken from its fifo, all
         of them in one write (see _InputLog.append_many): until then they
         exist only in this process, and are lost if it dies. The lock keeps
         the positions in the log in the order in which the brain thread gets
-        the items, across the reader threads of every port.
+        the envelopes, across the reader threads of every port.
         """
         with self._arrival_lock:
             if self._input_log is None:
                 raise RuntimeError(
-                    f"{type(self).__name__}: an item arrived before the input log was opened"
+                    f"{type(self).__name__}: an envelope arrived before the input log was opened"
                 )
-            accepted, close_checks, gap = self._filter_by_seq(tag, items)
+            accepted, close_checks, gap = self._filter_by_seq(tag, envelopes)
             positions = self._log_arrivals(tag, accepted)
             self._queue_arrivals(tag, accepted, positions)
             # A CLOSE is checked only now, after it is itself durably logged
@@ -806,9 +806,9 @@ class FBPProcess(_PortWorker):
             if gap is not None:
                 raise gap
 
-    def _filter_by_seq(self, tag, items):
+    def _filter_by_seq(self, tag, envelopes):
         """
-        Returns the (envelope, line) pairs of `items` to log, what each CLOSE
+        Returns the (envelope, line) pairs of `envelopes` to log, what each CLOSE
         among them has to be checked against, and the error of a gap, if any.
 
         No duplicates across a crash: a DATA that carries a number not above
@@ -817,16 +817,16 @@ class FBPProcess(_PortWorker):
         here, before it is ever logged or queued, so that it is never
         processed twice. One that skips over a number is a message this
         channel will never see: a real loss, not a duplicate, so it is never
-        silent. The items before it are logged and queued, as they would be
+        silent. The envelopes before it are logged and queued, as they would be
         one by one, and then it raises, before it is itself logged or queued.
         A DATA with no number (from a source, or a plain _PortWorker) is not
         part of the numbering and is always accepted; only DATA is sequenced
         (BARRIER/INTERACT carry no seq of their own; CLOSE carries the
         sender's last one instead, see _check_close_claims).
         """
-        accepted_items = []
+        accepted_envelopes = []
         close_checks = []
-        for envelope, line in items:
+        for envelope, line in envelopes:
             if envelope.type == TYPE_DATA and envelope.seq is not None:
                 accepted = self._accepted_seq.get(tag, 0)
                 if envelope.seq <= accepted:
@@ -848,20 +848,20 @@ class FBPProcess(_PortWorker):
                         f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
                         f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
                     )
-                    return accepted_items, close_checks, gap
+                    return accepted_envelopes, close_checks, gap
                 self._accepted_seq[tag] = envelope.seq
             if envelope.type == TYPE_CLOSE:
                 close_checks.append((envelope, self._accepted_seq.get(tag, 0)))
-            accepted_items.append((envelope, line))
-        return accepted_items, close_checks, None
+            accepted_envelopes.append((envelope, line))
+        return accepted_envelopes, close_checks, None
 
     def _log_arrivals(self, tag, accepted):
         """
-        Writes the items `accepted` in the input log, in one write, and
+        Writes the envelopes `accepted` in the input log, in one write, and
         returns their positions: the records are in the file before the
-        brain thread can see the items. If this raises, the exception ends
+        brain thread can see them. If this raises, the exception ends
         the reader thread, which is how the heartbeat notices: after a failed
-        write none of these items is queued, and at the size cap only the
+        write none of them is queued, and at the size cap only the
         ones logged before it are.
         """
         try:
@@ -883,7 +883,7 @@ class FBPProcess(_PortWorker):
             ) from None
 
     def _queue_arrivals(self, tag, accepted, positions):
-        """Queues for the brain thread the items that were given `positions`."""
+        """Queues for the brain thread the envelopes that were given `positions`."""
         for pos, (envelope, _) in zip(positions, accepted):
             self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
 
@@ -901,10 +901,10 @@ class FBPProcess(_PortWorker):
 
     def _brain_loop(self):
         while True:
-            item = self._inbound_queue.get()
-            if item is _STOP:
+            queued = self._inbound_queue.get()
+            if queued is _STOP:
                 break
-            pos, port_name, envelope_type, payload, seq = item
+            pos, port_name, envelope_type, payload, seq = queued
             self._current_pos = pos
             if envelope_type == TYPE_DATA:
                 if seq is not None:
@@ -1138,9 +1138,9 @@ class FBPProcess(_PortWorker):
                 )
             self._stop_requested.wait(self._BACKLOG_POLL_SECS)
 
-    def _on_written(self, tag, item):
+    def _on_written(self, tag, line):
         """
-        The writer thread has finished writing `item`. If it is the numbered
+        The writer thread has finished writing `line`. If it is the numbered
         DATA line send_data is still waiting to see written (always the
         oldest one queued for `tag`, since a queue is FIFO and _unwritten is
         only ever appended to in that same order), it leaves the backlog: a
@@ -1150,10 +1150,10 @@ class FBPProcess(_PortWorker):
         """
         with self._out_backlog_lock:
             backlog = self._unwritten.get(tag)
-            if backlog and backlog[0][1] == item:
+            if backlog and backlog[0][1] == line:
                 backlog.pop(0)
-                self._unwritten_bytes -= len(item)
-                self._unwritten_port_bytes[tag] -= len(item)
+                self._unwritten_bytes -= len(line)
+                self._unwritten_port_bytes[tag] -= len(line)
 
     def _add_to_out_backlog(self, tag, seq, line):
         """Appends a numbered DATA line to the outbound backlog of `tag`,
@@ -1384,7 +1384,7 @@ class FBPProcess(_PortWorker):
         # whose writer has finished sends no more, so the round does not
         # wait for any of the three. The brain thread's own set decides, in
         # the order of the input log: a CLOSE that the reader threads have
-        # already logged but that comes after this item does not count yet.
+        # already logged but that comes after this envelope does not count yet.
         pending = set(self.INPUT_PORTS) - set(self.CONTROL_PORTS) - set(self.EXTERNAL_PORTS)
         pending.discard(arrived_port)
         pending -= self._closed_ports
@@ -1600,7 +1600,7 @@ class FBPProcess(_PortWorker):
     # -- input log --
     #
     # The log lives in this process's own directory and is written by its own
-    # reader threads as items arrive, never by the neighbor that sent them:
+    # reader threads as envelopes arrive, never by the neighbor that sent them:
     # the process that ever needs to replay it is the one relaunched after a
     # crash, itself, so there is no reason for it to live anywhere else. See
     # _InputLog for the format.
@@ -1635,7 +1635,7 @@ class FBPProcess(_PortWorker):
         (a control port is never added, since it is never closed).
         Nothing is logged after a CLOSE, so a DATA record on a port that is
         already closed means that the log or the checkpoint is corrupt, and
-        it is an error. The other kinds of item are not replayed. A numbered
+        it is an error. The other kinds of envelope are not replayed. A numbered
         DATA record also advances _last_seq and _accepted_seq for its
         port, to what they already were before the crash: records only ever
         reach the log in accepted order (see _on_arrival), so this is a
@@ -1678,13 +1678,15 @@ class FBPProcess(_PortWorker):
         """
         Deletes the segments of the input log that no kept checkpoint needs:
         those whose records all lie at or below the capture_pos of the
-        oldest kept checkpoint. That value is read from the checkpoint's file
-        on every call, which costs about a quarter of what writing it did. A
-        checkpoint that cannot be read aborts the prune with an error.
-        Without an open log there is nothing to prune.
+        oldest kept checkpoint. Raises RuntimeError, before deleting
+        anything, if that checkpoint cannot be read. Without an open log
+        there is nothing to prune.
         """
         if self._input_log is None or not kept_epochs:
             return
+        # Read from the file, not kept in memory: the node would otherwise
+        # have to keep the positions of its kept checkpoints in step with the
+        # files that hold them, for a value needed once per round.
         path = os.path.join(checkpoints_dir, f"{min(kept_epochs)}.json")
         try:
             with open(path) as f:

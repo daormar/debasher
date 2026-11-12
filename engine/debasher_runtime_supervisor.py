@@ -390,10 +390,10 @@ class Supervisor(_PortWorker):
 
     def _dispatch_loop(self):
         while True:
-            item = self._inbound_queue.get()
-            if item is _STOP:
+            queued = self._inbound_queue.get()
+            if queued is _STOP:
                 break
-            tag, envelope_type, payload = item
+            tag, envelope_type, payload = queued
             if envelope_type == TYPE_CLOSE:
                 self.log.debug("%r closed its channel", tag)
                 continue
