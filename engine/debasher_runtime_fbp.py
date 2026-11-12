@@ -146,6 +146,12 @@ def _checkpoint_epochs(checkpoints_dir):
 # checkpoint/recovery startup sequence (run()).
 
 
+def _missing_numbers(first, last):
+    """The sequence numbers from `first` to `last`, as an error names them:
+    "4", or "4 to 7"."""
+    return f"{first}" if first == last else f"{first} to {last}"
+
+
 class FBPProcess(_PortWorker):
     """
     The base class of every node of a resident program. A module defines a
@@ -852,45 +858,39 @@ class FBPProcess(_PortWorker):
 
     def _filter_by_seq(self, tag, envelopes):
         """
-        Returns the (envelope, line) pairs of `envelopes` to log, what each CLOSE
-        among them has to be checked against, and the error of a gap, if any.
-
-        No duplicates across a crash: a DATA that carries a number not above
-        the last one this channel's reader has already accepted is a
-        duplicate, produced by a replay on the sender's side, and is dropped
-        here, before it is ever logged or queued, so that it is never
-        processed twice. One that skips over a number is a message this
-        channel will never see: a real loss, not a duplicate, so it is never
-        silent. The envelopes before it are logged and queued, as they would be
-        one by one, and then it raises, before it is itself logged or queued.
-        A DATA with no number (from a source, or a plain _PortWorker) is not
-        part of the numbering and is always accepted; only DATA is sequenced
-        (BARRIER/INTERACT carry no seq of their own; CLOSE carries the
-        sender's last one instead, see _check_close_claims).
+        Returns the (envelope, line) pairs of `envelopes` to log, the
+        (CLOSE, number accepted by then) pairs to check (see
+        _check_close_claims), and the ValueError of a gap in the sequence
+        numbers, or None. After a gap it returns only what came before it.
         """
         accepted_envelopes = []
         close_checks = []
         for envelope, line in envelopes:
+            # A DATA with no number (from a source outside the program, or a
+            # writer that is a plain _PortWorker) is outside the numbering, and
+            # BARRIER and INTERACT carry none.
             if envelope.type == TYPE_DATA and envelope.seq is not None:
-                accepted = self._accepted_seq.get(tag, 0)
-                if envelope.seq <= accepted:
+                last = self._accepted_seq.get(tag, 0)
+                # Not above the last one accepted: a duplicate that a replay
+                # of the writer sent again, dropped before it is logged, so
+                # that it is never processed twice.
+                if envelope.seq <= last:
                     self.log.debug(
                         "reader for %r dropped a duplicate: seq %s is not above %s "
                         "already accepted",
                         tag,
                         envelope.seq,
-                        accepted,
+                        last,
                     )
                     continue
-                if envelope.seq > accepted + 1:
-                    missing = (
-                        f"{accepted + 1}"
-                        if envelope.seq == accepted + 2
-                        else f"{accepted + 1} to {envelope.seq - 1}"
-                    )
+                # Over the next one: a message this channel will never see,
+                # never silent. What came before it is logged, as it would be
+                # one by one, and the caller raises.
+                if envelope.seq > last + 1:
                     gap = ValueError(
                         f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
-                        f"expected {accepted + 1}, got {envelope.seq}, missing {missing}"
+                        f"expected {last + 1}, got {envelope.seq}, "
+                        f"missing {_missing_numbers(last + 1, envelope.seq - 1)}"
                     )
                     return accepted_envelopes, close_checks, gap
                 self._accepted_seq[tag] = envelope.seq
@@ -942,11 +942,10 @@ class FBPProcess(_PortWorker):
         for envelope, accepted in close_checks:
             claimed = envelope.payload.get("last_seq")
             if claimed is not None and claimed > accepted:
-                missing = f"{accepted + 1}" if claimed == accepted + 1 else f"{accepted + 1} to {claimed}"
                 raise ValueError(
                     f"{type(self).__name__}: {tag!r} closed for good after sending up "
                     f"to {claimed}, but only {accepted} was ever accepted here, "
-                    f"missing {missing}"
+                    f"missing {_missing_numbers(accepted + 1, claimed)}"
                 )
 
     def _brain_loop(self):
