@@ -170,13 +170,12 @@ class _InputLog:
             raise ValueError(f"input log record at {where} lacks pos, port or env: {raw[:80]!r}")
         return pos, obj["port"], _envelope_from_obj(obj["env"], where)
 
-    def recover(self, capture_pos=0):
+    def recover(self, must_reach=0):
         """
         Reads what earlier incarnations left in the directory and prepares
-        this one to append after it. `capture_pos` is the position that the
-        node's latest checkpoint already reflects (0 if there is none): the
-        next position is never at or below it, even if the log holds less, so
-        the numbering stays consistent with the checkpoint.
+        this one to append after it. Raises ValueError if the log ends below
+        `must_reach`, the position that the node's latest checkpoint
+        reflects (0 if there is none): the log was lost or cut.
 
         A segment with no complete record (an empty file, or only a torn
         fragment) is deleted. The next record takes the position that
@@ -202,9 +201,17 @@ class _InputLog:
                 raise ValueError(f"{path} is named for position {first_pos} but ends at {last_pos}")
             break
 
+        if last_pos < must_reach:
+            raise ValueError(
+                f"the input log in {self._dir} ends at position {last_pos}, below position "
+                f"{must_reach} of the latest checkpoint: it was lost or cut, so what the node "
+                "processed after that checkpoint is gone (debasher_reset_resident starts the "
+                "program afresh)"
+            )
+
         self._segments = [[first_pos, os.path.getsize(path)] for first_pos, path in segments]
         self._total_bytes = sum(size for _, size in self._segments)
-        self._next_pos = max(last_pos, capture_pos) + 1
+        self._next_pos = last_pos + 1
 
     def append(self, port, line):
         """
@@ -216,35 +223,27 @@ class _InputLog:
         """
         Appends a record for each (port, line) of `records`, in order: `line`
         is an envelope exactly as it arrived on `port` (one JSON value, with no
-        newline in it). Returns the positions they were given, consecutive.
-        The records are handed to the operating system before this returns,
-        all of them in one write and with no buffering in this process, so
-        they survive the death of the process. A reader thread appends in
-        one go every message of a block it has taken from its fifo, so that
-        none of them waits in memory for the others to be logged: what a
-        reader has taken from a fifo and not yet logged is lost if the
-        process dies (see the Contract's limits). A write cut short by the
-        death of the process leaves the records it wrote whole and a torn
-        tail, which recovery ignores.
+        newline in it). The records go to the operating system in one write,
+        with no buffering in this process, before this returns their
+        positions, which are consecutive. They all go to the same segment, so
+        a segment can pass INPUT_LOG_SEGMENT_BYTES by the size of one call.
 
-        Raises LogCapReached if a record would take the log over its size
-        cap, after writing the records before it, whose positions the
-        exception carries: it means that nothing is being pruned, a real
-        problem to fix rather than a reason to drop history that a recovery
-        may need. A failed write is different: it may have
-        left a fragment, so from then on every append raises, until the
-        process restarts. Otherwise another thread could append behind the
-        fragment and bury it in the middle of the file, where replay rejects
-        it, instead of leaving it as the torn tail of its segment.
-
-        The records of one call go to the same segment, so a segment can
-        grow past INPUT_LOG_SEGMENT_BYTES by the size of one call.
+        Raises LogCapReached if a record would take the log over its size cap,
+        after writing the records before it, whose positions it carries; the
+        OSError of a write that fails; and RuntimeError on every call after
+        it.
         """
+        # A failed write may have left a fragment at the end of the segment.
+        # Appending behind it would bury it in the middle of the file, where
+        # replay rejects it, instead of leaving it as the torn tail.
         if self._failure is not None:
             raise RuntimeError(
                 "the input log accepts no more records after a failed write"
             ) from self._failure
 
+        # The record is built by concatenation: the envelope is already JSON,
+        # so nothing is decoded or encoded again while the caller holds its
+        # lock. The port is encoded once and kept.
         first_pos = self._next_pos
         chunks = []
         for offset, (port, line) in enumerate(records):
@@ -255,6 +254,10 @@ class _InputLog:
                 port_json = self._port_json[port] = json.dumps(port)
             chunks.append(f'{{"pos": {first_pos + offset}, "port": {port_json}, "env": {line}}}\n')
         encoded = [chunk.encode("utf-8") for chunk in chunks]
+
+        # The cap is counted record by record before anything is written: the
+        # records that fit are written, and their positions travel in
+        # LogCapReached, since the caller queues them.
         fitting = 0
         total = self._total_bytes
         for record in encoded:
@@ -265,9 +268,9 @@ class _InputLog:
         positions = self._write_records(first_pos, encoded[:fitting])
         if fitting < len(encoded):
             raise LogCapReached(
-                f"the input log in {self._dir} would exceed {self._max_bytes} bytes with no "
-                "pruning having kept up: an epoch is not closing (no periodic or triggered "
-                "snapshot), a real problem to fix, not something to silently discard history over",
+                f"the input log in {self._dir} would exceed {self._max_bytes} bytes: pruning "
+                "has not kept up, a real problem to fix, not something to silently discard "
+                "history over",
                 positions,
             )
         return positions
@@ -309,33 +312,19 @@ class _InputLog:
     def replay(self, after=0):
         """
         Yields, in order, a LogRecord(pos, port, envelope) for every record
-        with a position above `after`: the position that the latest
-        checkpoint reflects, or 0 to replay everything. It starts at the last
-        segment that can hold position after + 1 and reads only from disk.
-
-        Raises ValueError, while yielding, if the log cannot be trusted to
-        hold every record above `after`: it starts above after + 1, positions
-        are missing or out of order, a segment does not start at the position
-        it is named for, or a line that ends in a newline does not parse. A
-        log with no records is not an error, and neither is one that ends
-        below `after` (everything in it is already reflected in the checkpoint).
+        with a position above `after` (0 to replay everything), reading only
+        from disk. Raises ValueError, while yielding, if the log cannot be
+        trusted to hold every record above `after`: it starts above
+        after + 1, positions are missing or out of order, a segment does not
+        start at the position it is named for, or a line that ends in a
+        newline does not parse.
         """
         segments = self._list_segments()
         if not segments:
             return
 
-        start = 0
-        for i, (first_pos, _) in enumerate(segments):
-            if first_pos <= after + 1:
-                start = i
-        if segments[start][0] > after + 1:
-            raise ValueError(
-                f"the input log in {self._dir} starts at position {segments[0][0]}, "
-                f"but replaying after position {after} needs it from {after + 1}"
-            )
-
         last_pos = None
-        for first_pos, path in segments[start:]:
+        for first_pos, path in segments[self._start_segment(segments, after):]:
             with open(path, "rb") as f:
                 for lineno, raw in enumerate(f, 1):
                     if not raw.endswith(b"\n"):
@@ -347,25 +336,45 @@ class _InputLog:
                         raise ValueError(
                             f"{path} is named for position {first_pos} but starts at {pos}"
                         )
-                    if last_pos is None:
-                        if pos > after + 1:
-                            raise ValueError(
-                                f"the input log starts at position {pos}, but replaying after "
-                                f"position {after} needs it from {after + 1}"
-                            )
-                    else:
-                        if pos <= last_pos:
-                            raise ValueError(
-                                f"position {pos} at {where} does not come after {last_pos}"
-                            )
-                        # Positions missing at or below `after` are not needed.
-                        if pos != last_pos + 1 and pos > after + 1:
-                            raise ValueError(
-                                f"positions {last_pos + 1} to {pos - 1} are missing before {where}"
-                            )
+                    self._check_position(pos, last_pos, after, where)
                     last_pos = pos
                     if pos > after:
                         yield LogRecord(pos, port, envelope)
+
+    def _start_segment(self, segments, after):
+        """
+        The index in `segments` of the last segment that can hold position
+        after + 1. Raises ValueError if the first segment starts above it.
+        """
+        start = 0
+        for i, (first_pos, _) in enumerate(segments):
+            if first_pos <= after + 1:
+                start = i
+        if segments[start][0] > after + 1:
+            raise ValueError(
+                f"the input log in {self._dir} starts at position {segments[0][0]}, "
+                f"but replaying after position {after} needs it from {after + 1}"
+            )
+        return start
+
+    def _check_position(self, pos, last_pos, after, where):
+        """
+        Raises ValueError unless `pos`, read at `where`, follows `last_pos`,
+        the position read before it (None for the first one), as a replay
+        after `after` needs.
+        """
+        if last_pos is None:
+            if pos > after + 1:
+                raise ValueError(
+                    f"the input log starts at position {pos}, but replaying after "
+                    f"position {after} needs it from {after + 1}"
+                )
+            return
+        if pos <= last_pos:
+            raise ValueError(f"position {pos} at {where} does not come after {last_pos}")
+        # Positions missing at or below `after` are not needed.
+        if pos != last_pos + 1 and pos > after + 1:
+            raise ValueError(f"positions {last_pos + 1} to {pos - 1} are missing before {where}")
 
     def prune(self, upto):
         """

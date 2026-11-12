@@ -270,6 +270,11 @@ class _NoPorts(_Node):
 
 
 def test_a_restored_checkpoint_makes_the_positions_go_on_after_its_own(execdir):
+    # The log of a node with a checkpoint always reaches its position.
+    log = lib._InputLog(str(execdir / "log"), 10**9, 10**9)
+    log.recover()
+    log.append_many([("a", lib.encode_data(i)) for i in range(40)])
+    log.close()
     _NoPorts(opts={})._save_checkpoint(
         lib._Checkpoint(
             epoch=4,

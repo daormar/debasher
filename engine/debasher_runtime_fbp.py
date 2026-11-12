@@ -828,8 +828,7 @@ class FBPProcess(_PortWorker):
         """
         Records in the input log, and then queues for the brain thread, the
         envelopes of one block that a reader thread has taken from its fifo, all
-        of them in one write (see _InputLog.append_many): until then they
-        exist only in this process, and are lost if it dies. The lock keeps
+        of them in one write (see _log_arrivals). The lock keeps
         the positions in the log in the order in which the brain thread gets
         the envelopes, across the reader threads of every port.
         """
@@ -908,6 +907,12 @@ class FBPProcess(_PortWorker):
         write none of them is queued, and at the size cap only the
         ones logged before it are.
         """
+        # Every envelope of the block goes in one write, so that none of them
+        # waits in memory for the others to be logged: what a reader has taken
+        # from its fifo and not yet logged is lost if the process dies (see the
+        # Contract's limits). A write cut short by the death of the process
+        # leaves the records it wrote whole and a torn tail, which recovery
+        # ignores.
         try:
             return self._input_log.append_many([(tag, line) for _, line in accepted])
         except LogCapReached as exc:
@@ -919,7 +924,7 @@ class FBPProcess(_PortWorker):
             # for a while, so nothing has been pruned: the real cause is
             # a reader of this node that is not keeping up.
             raise LogCapReached(
-                f"{exc}; here the cause is not the rounds: no checkpoint has been "
+                f"{exc}; the cause here: no checkpoint has been "
                 f"written since epoch {skipped_since}, because the outbound backlog "
                 f"is over OUT_BACKLOG_MAX_BYTES ({self.OUT_BACKLOG_MAX_BYTES}): a "
                 "reader of this node is not keeping up with it",
@@ -1581,8 +1586,15 @@ class FBPProcess(_PortWorker):
         """
         Opens the input log and recovers what earlier incarnations left in it.
         `capture_pos` is the position that the restored checkpoint reflects
-        (0 if there is none), so that numbering goes on after it.
+        (0 if there is none). Raises ValueError if the log does not reach it
+        (see _InputLog.recover).
         """
+        # The log of a node with a checkpoint always reaches its capture_pos:
+        # the envelope at that position was logged before the brain thread saw
+        # it, recover deletes only a segment with no complete record, and
+        # pruning never deletes the last segment. One that does not was lost or
+        # cut, and starting from the checkpoint would silently lose what the
+        # node processed after it.
         # Pruning deletes only segments that are closed, so the cap has to
         # hold several of them: a segment larger than the cap would never
         # close, and nothing would ever be pruned however many rounds close.
@@ -1591,39 +1603,35 @@ class FBPProcess(_PortWorker):
             self.INPUT_LOG_MAX_BYTES,
             min(self.INPUT_LOG_SEGMENT_BYTES, self.INPUT_LOG_MAX_BYTES // 4),
         )
-        log.recover(capture_pos)
+        log.recover(must_reach=capture_pos)
         self._input_log = log
 
     def _replay_input_log(self, capture_pos):
         """
-        Re-executes process_data() on every DATA record of the input log with
-        a position above `capture_pos`, in log order: what the node had
-        received and processed, or had received and was still to process,
-        since the node state its checkpoint holds. That order is the one in which
-        the brain thread processed them before, so a node that is sensitive
-        to how messages from different ports interleave ends where it was.
-        A CLOSE record only adds its port to the closed ports, which the
-        checkpoint restored as they were when it captured the node state
-        (a control port is never added, since it is never closed).
-        Nothing is logged after a CLOSE, so a DATA record on a port that is
-        already closed means that the log or the checkpoint is corrupt, and
-        it is an error. The other kinds of envelope are not replayed. A numbered
-        DATA record also advances _last_seq and _accepted_seq for its
-        port, to what they already were before the crash: records only ever
-        reach the log in accepted order (see _on_arrival), so this is a
-        plain overwrite, the same as _current_pos, never a max(). This reads
-        from disk and never writes to the log.
+        Re-executes process_data() on every DATA record of the input log above
+        `capture_pos`, in log order, which is the order in which the brain
+        thread processed them, and restores the closed ports and the counters
+        of sequence numbers to what they were before the crash. Raises
+        ValueError on a DATA on a port already closed, or if the log cannot be
+        trusted (see _InputLog.replay). Reads from disk only.
         """
         replayed = 0
         self._replaying = True
         try:
             for record in self._input_log.replay(capture_pos):
                 if record.envelope.type == TYPE_CLOSE:
+                    # It only closes its port; a control port is never closed.
                     if record.port not in self.CONTROL_PORTS:
                         self._closed_ports.add(record.port)
                     continue
+                # A BARRIER or an INTERACT acted on a round, which is not node
+                # state: a round that closed after the checkpoint is over for
+                # the program, and one open at the crash is lost with it (see
+                # the Contract's limits).
                 if record.envelope.type != TYPE_DATA:
                     continue
+                # Nothing is logged after a CLOSE, so this means that the log
+                # or the checkpoint is corrupt.
                 if record.port in self._closed_ports:
                     raise ValueError(
                         f"{type(self).__name__}: the input log holds a DATA record at position "
@@ -1631,6 +1639,8 @@ class FBPProcess(_PortWorker):
                         "nothing is logged after a CLOSE, so the log or the checkpoint is corrupt"
                     )
                 self._current_pos = record.pos
+                # Records reach the log in accepted order (_on_arrivals,
+                # _filter_by_seq), so a plain overwrite restores the counters.
                 if record.envelope.seq is not None:
                     self._last_seq[record.port] = record.envelope.seq
                     self._accepted_seq[record.port] = record.envelope.seq

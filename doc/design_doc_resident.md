@@ -599,7 +599,9 @@ operating system's memory and is not lost, so logs and checkpoints survive a
 `kill -9`, an uncaught exception or an out-of-memory kill, which is exactly what
 the failure model covers. If the machine crashes or loses power, whatever was
 still only in memory is lost: the last seconds of log and, with bad luck, a
-checkpoint that was renamed into place but is empty. Surviving that has a price,
+checkpoint that was renamed into place but is empty. If that cuts the log of a
+node below its latest checkpoint, the node refuses to start (see "Recovery:
+startup and replay"). Surviving that has a price,
 measured on the development machine (NVMe, ext4): an append to the log takes 0.8
 microseconds without `fsync`, 13 with an `fsync` every 100 appends and about
 1050 with one after every append (roughly 950 messages per second); saving a
@@ -693,7 +695,8 @@ guarantee in words and never cite these numbers, which may change.
   `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a
   channel's sequence numbers, a checkpoint with another schema version, an input
-  log over its size cap, an exhausted relaunch budget), the node or the
+  log over its size cap, an input log that does not reach its latest
+  checkpoint, an exhausted relaunch budget), the node or the
   `Supervisor` raises an error that stops the affected part, instead of
   continuing with silently wrong state. What happens after that stop is manual
   today; the planned fallback is a coordinated global rollback to the last
@@ -2074,9 +2077,10 @@ resumed after a halt:
 2. Step 7 opens the input log (`_InputLog.recover`). It reads only the last
    segment that has a complete record, and deletes a segment with no complete
    record (an empty file, or only a torn tail), since the next record would
-   take its position and collide with its name. The next position is one more
-   than the position of the last complete record or `capture_pos`, whichever
-   is higher.
+   take its position and collide with its name. If there is a checkpoint and
+   the log ends below its `capture_pos`, the startup stops with a `ValueError`
+   (see below). Otherwise the next position is one more than the position of
+   the last complete record.
 3. Step 9 replays the log (`FBPProcess._replay_input_log`): every `DATA`
    record above `capture_pos` goes through `process_data()`, in log order,
    what had been processed before the crash and what had arrived but not yet
@@ -2089,12 +2093,22 @@ resumed after a halt:
 The replay starts at the last segment whose name is at most `capture_pos + 1`,
 and stops the startup with a `ValueError` if the log starts above that, if the
 positions from there on are not consecutive, if a segment does not start where
-its name says, or if a line that ends in a newline does not parse. A log with
-no records is not an error, since it cannot be told from a log that was lost
-(the sequence numbers of G5 detect that later, see the Contract). A log whose
-last record is below `capture_pos` is not an error either, because everything
-in it is already reflected in the checkpoint: numbering then continues after
-`capture_pos`.
+its name says, or if a line that ends in a newline does not parse.
+
+The log of a node with a checkpoint always reaches the checkpoint's
+`capture_pos`: the envelope at that position was logged before the brain thread
+saw it, `recover` deletes only a segment with no complete record, and pruning
+never deletes the last segment. A log that is empty, or that ends below
+`capture_pos`, while a checkpoint exists, was lost or cut, and what the node
+processed after the checkpoint is gone with it. Starting from the checkpoint
+would lose it in silence: a numbered message from a peer would later show a gap,
+but nothing would ever tell of a message from outside the program. So `recover`
+stops the startup with a `ValueError` that names the log, its last position and
+`capture_pos`, and says that `debasher_reset_resident` starts the program
+afresh. With a `Supervisor`, every relaunch fails in the same way, until the
+`Supervisor` gives up on it (see "Escalation on a permanent node failure");
+without one, the task of the node fails. A log with no records and no checkpoint
+is a node that has received nothing yet, and starts from position 1.
 
 ## Pruning and the size cap
 
@@ -4227,13 +4241,15 @@ Design ideas from Future work move here once they are actually built.
     and a checksum, checked only on a joined line; one that fails the check is
     a fragment, dropped if a `HELLO` follows, as today.
 - **Durability against machine failure (`fsync`)**: see the note in the
-  Contract's failure model. First step: `fsync` of the checkpoint file and of
-  its directory when a checkpoint is saved, and of the log at a halt (about 2 ms
-  per round); together with the global rollback above it lets a program go back,
-  after a machine crash, to its last consistent snapshot. Second step: `fsync`
-  of the input log every few messages (group commit), which also protects the
-  work since that snapshot, at a cost in throughput. Neither is designed nor
-  built.
+  Contract's failure model. First step: when a checkpoint is saved, `fsync` of
+  the input log first, so that on disk it reaches the checkpoint's `capture_pos`
+  (a node whose log does not is refused at startup, see "Recovery: startup and
+  replay"), then of the checkpoint file and of its directory; and of the log at
+  a halt (about 2 ms per round); together with the global rollback above it lets
+  a program go back, after a machine crash, to its last consistent snapshot.
+  Second step: `fsync` of the input log every few messages (group commit), which
+  also protects the work since that snapshot, at a cost in throughput. Neither
+  is designed nor built.
 - **A hook for the module to learn that a port closed.** Today only the engine
   records a `CLOSE`: the barrier will use it and it is stored in `closed_ports`,
   but `capture_node_state()` and `restore_node_state()` never see it, so a

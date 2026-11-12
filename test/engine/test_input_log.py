@@ -24,9 +24,9 @@ def _data(payload):
     return lib.encode_data(payload)
 
 
-def _new_log(tmp_path, max_bytes=BIG, segment_bytes=BIG, capture_pos=0):
+def _new_log(tmp_path, max_bytes=BIG, segment_bytes=BIG, must_reach=0):
     log = lib._InputLog(str(tmp_path / "log"), max_bytes, segment_bytes)
-    log.recover(capture_pos)
+    log.recover(must_reach)
     return log
 
 
@@ -180,18 +180,31 @@ def test_recover_continues_after_the_last_complete_record(tmp_path):
     assert _new_log(tmp_path).next_pos == 8
 
 
-def test_recover_never_numbers_at_or_below_the_position_a_checkpoint_reflects(tmp_path):
-    empty = _new_log(tmp_path, capture_pos=50)
-    assert empty.next_pos == 51
-    _fill(empty, 1)
-    assert _segments(tmp_path) == ["51.log"]
-    empty.close()
+def test_recover_accepts_a_log_that_reaches_the_position_of_a_checkpoint(tmp_path):
+    log = _new_log(tmp_path)
+    _fill(log, 5)
+    log.close()
 
-    # A log that holds less than the checkpoint reflects: numbering goes on after the checkpoint.
-    behind = _new_log(tmp_path, capture_pos=80)
-    assert behind.next_pos == 81
-    # A log that holds more: numbering goes on after the log.
-    assert _new_log(tmp_path, capture_pos=10).next_pos == 52
+    assert _new_log(tmp_path, must_reach=5).next_pos == 6
+    assert _new_log(tmp_path, must_reach=3).next_pos == 6
+
+
+def test_recover_accepts_an_empty_log_when_there_is_no_checkpoint(tmp_path):
+    assert _new_log(tmp_path).next_pos == 1
+
+
+def test_recover_refuses_an_empty_log_behind_a_checkpoint(tmp_path):
+    with pytest.raises(ValueError, match="ends at position 0, below position 50.*lost or cut"):
+        _new_log(tmp_path, must_reach=50)
+
+
+def test_recover_refuses_a_log_that_ends_below_the_position_of_a_checkpoint(tmp_path):
+    log = _new_log(tmp_path)
+    _fill(log, 3)
+    log.close()
+
+    with pytest.raises(ValueError, match="ends at position 3, below position 10"):
+        _new_log(tmp_path, must_reach=10)
 
 
 def test_recover_can_only_run_once_and_before_any_append(tmp_path):
@@ -365,24 +378,19 @@ def test_replay_fails_if_a_segment_is_not_named_for_its_first_position(tmp_path)
         _replay(tmp_path, 98)
 
 
-def test_a_log_with_no_records_is_not_an_error(tmp_path):
+def test_the_replay_of_a_log_with_no_records_yields_nothing(tmp_path):
     assert _replay(tmp_path, 0) == []
     assert _replay(tmp_path, 40) == []
     os.makedirs(tmp_path / "log")
     assert _replay(tmp_path, 0) == []
 
 
-def test_a_log_that_ends_below_the_given_position_is_not_an_error(tmp_path):
+def test_the_replay_after_the_end_of_the_log_yields_nothing(tmp_path):
     log = _new_log(tmp_path)
     _fill(log, 3)
     log.close()
 
     assert _positions(tmp_path, 10) == []
-
-    later = _new_log(tmp_path, capture_pos=10)
-    assert later.next_pos == 11
-    _fill(later, 2)
-    assert _positions(tmp_path, 10) == [11, 12]
 
 
 def test_replay_only_reads_and_never_writes(tmp_path):

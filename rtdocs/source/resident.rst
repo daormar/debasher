@@ -359,7 +359,10 @@ The ``Supervisor`` declares a node down when its heartbeats stop for
 its process is gone, and relaunches it. A node that goes down again
 after ``MAX_RELAUNCH_ATTEMPTS`` relaunches (three by default) with no
 heartbeat in between is given up on, and the ``Supervisor`` stops the
-rest of the program in order. A node whose recovery takes long, such as one with a large
+rest of the program in order. A node that cannot recover, such as one
+whose input log was lost, fails the same way at every relaunch, so the
+``Supervisor`` gives up on it (see `Stopping, Resuming and Resetting`_
+below). A node whose recovery takes long, such as one with a large
 input log to replay, is given more time before its first heartbeat
 through the computational specification ``startup_timeout_s``, in
 seconds:
@@ -407,7 +410,15 @@ outside it; they are described in the :ref:`tools` Section.
 * Launching the program again with ``debasher_exec`` and the same
   output directory resumes it: every node restores the checkpoint of
   the stop, and processes again what it received after it, if
-  anything.
+  anything. A node whose input log was lost or cut (removed, emptied,
+  or ending before the position of its latest checkpoint) refuses to
+  start rather than silently lose what it processed after that
+  checkpoint: its error, which ``debasher_get_sched_out`` shows, names
+  the log and both positions. With a ``Supervisor``, every relaunch
+  fails the same way until the ``Supervisor`` gives up on the node and
+  stops the program; without one, the task fails. The way out is
+  ``debasher_reset_resident``, which starts the whole program afresh.
+  The input logs are never cleaned by hand: snapshots prune them.
 * ``debasher_reset_resident -d <outdir>`` takes a stopped program back
   to its first run: it moves the checkpoints, the input logs and the
   outputs of every node under ``__reset__/<timestamp>/`` in the output
@@ -621,7 +632,9 @@ And these are its limits:
 
 * It survives the crash of processes, not of the machine: nothing is
   forced to disk, so a power loss may lose the last seconds of
-  checkpoints and input logs.
+  checkpoints and input logs. If what is lost is the end of an input
+  log that a checkpoint of its node already reflects, the node
+  refuses to start (see `Stopping, Resuming and Resetting`_ above).
 * If both ends of a channel crash while no process holds its FIFO (in
   a program without a ``Supervisor``, or with ``-no-hold-fifos``),
   what the FIFO held may be lost; the reader then reports the gap.

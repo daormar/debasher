@@ -1,6 +1,7 @@
 import errno
 import json
 import os
+import re
 import select
 import shutil
 import threading
@@ -500,14 +501,32 @@ def test_a_relaunched_node_knows_again_which_ports_had_closed(tmp_path):
 
 
 def test_a_port_closed_long_ago_is_still_closed_once_the_log_that_recorded_its_close_is_gone(tmp_path):
-    live = _Three(opts=_opts(tmp_path, _THREE))
-    _process(live, [_data("a", 1), _close("a"), _marker("b"), _marker("c")])
-    _crash(live)
-    # What pruning does to every segment that ends at or below the checkpoint's position.
-    shutil.rmtree(os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log"))
+    class _OneRecordPerSegment(_Three):
+        INPUT_LOG_SEGMENT_BYTES = 1
 
-    relaunched = _relaunch(tmp_path, _Three, _THREE)
+    live = _OneRecordPerSegment(opts=_opts(tmp_path, _THREE))
+    _process(live, [_data("a", 1), _close("a"), _marker("b"), _marker("c"), _data("b", 2)])
+    _crash(live)
+    # The round captured at position 3 and pruned the segments up to it, the
+    # CLOSE of position 2 among them.
+    log_dir = os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log")
+    assert sorted(os.listdir(log_dir)) == ["4.log", "5.log"]
+
+    relaunched = _relaunch(tmp_path, _OneRecordPerSegment, _THREE)
     assert relaunched._closed_ports == {"a"}
+    assert relaunched.seen == [("a", 1), ("b", 2)]
+
+
+def test_a_relaunch_whose_input_log_was_lost_fails_and_names_the_log(tmp_path):
+    live = _Fanin(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _marker("a"), _marker("b"), _data("b", 2)])
+    _crash(live)
+    log_dir = os.path.join(os.environ["DEBASHER_PROCESS_EXECDIR"], "log")
+    shutil.rmtree(log_dir)
+
+    expected = f"input log in {re.escape(log_dir)} ends at position 0, below position 2"
+    with pytest.raises(ValueError, match=expected):
+        _relaunch(tmp_path)
 
 
 def test_a_replay_that_finds_a_message_after_the_close_of_its_port_fails_loudly(tmp_path):
