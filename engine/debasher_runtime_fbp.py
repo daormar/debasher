@@ -1413,9 +1413,12 @@ class FBPProcess(_PortWorker):
         (see below; never `arrived_port`, the port of the marker that opened
         it, if a marker did).
         """
+        # The node state is copied: it is taken now and written when the round
+        # closes, and process_data goes on changing the objects of the node in
+        # between, which the hook may have returned as they are.
         capture = _Checkpoint(
             epoch=epoch,
-            node_state=self.capture_node_state(),
+            node_state=copy.deepcopy(self.capture_node_state()),
             capture_pos=self._current_pos,
             closed_ports=frozenset(self._closed_ports),
             out_seq=dict(self._out_seq),
@@ -1703,8 +1706,9 @@ class FBPProcess(_PortWorker):
         """
         Returns the node state: everything that process_data() keeps from
         one message to the next, as a value that JSON can serialize. It is
-        called when a snapshot is taken, and what it returns is saved in a
-        checkpoint of the node.
+        called when a round opens, and what it returns is saved in a
+        checkpoint of the node. The runtime copies it at once, so it may
+        return the objects of the node themselves.
         """
         raise NotImplementedError
 

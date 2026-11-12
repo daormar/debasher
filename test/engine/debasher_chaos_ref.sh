@@ -93,7 +93,10 @@ class Fanin(FBPProcess):
             self.send_data("outloop", packet)
 
     def capture_node_state(self):
-        return {"counts": dict(self.counts), "digest": self.digest}
+        # No copy: the runtime copies what the hook returns, and a relaunch
+        # from a round that stayed open while this node processed relies on
+        # it.
+        return {"counts": self.counts, "digest": self.digest}
 
     def restore_node_state(self, node_state):
         self.counts = dict(node_state["counts"])

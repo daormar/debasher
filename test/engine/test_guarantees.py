@@ -5,8 +5,9 @@ exercises it, on real debasher_exec runs of debasher_chaos_ref.sh: channel
 order, no silent loss without failures, faithful replay, no duplicates across
 a crash, orderly halt and bounded detection. Node recovery is checked by every
 trace criterion of chaos_ref.py, through fanin's node state, so by every run
-that relaunches fanin, and "detected, never silent" by the engineered gap of
-test_chaos.py and the escalation of test_stop_resident.py.
+that relaunches fanin, and by a focused test of a relaunch from a round that
+stayed open while fanin processed; "detected, never silent" by the engineered
+gap of test_chaos.py and the escalation of test_stop_resident.py.
 """
 
 import json
@@ -53,6 +54,7 @@ from resident_run import (
     sched_out_file,
     wait_for_relaunch,
     wait_for_text,
+    wait_until,
     write_line,
 )
 
@@ -146,6 +148,69 @@ def test_a_message_sent_while_a_round_is_open_reaches_process_data(outdir):
         raise tailer.error
     assert values_at_sink(tailer.records, "ext") == [3, 5, 7]
     assert values_at_sink(tailer.records, "loop_in") == [3, 5, 7]
+    assert_node_state_restored(tailer.records)
+
+
+def test_a_relaunched_node_whose_hook_shares_its_state_processes_each_message_once(
+    outdir,
+):
+    """
+    Node recovery, with a hook that returns the objects of the node: the
+    hook of fanin returns its dictionary of counts with no copy, and fanin
+    processes 5 and 7 while a round that captured it after 3 is open (loop
+    is frozen, so the round waits for its marker). The checkpoint holds the
+    counts of the capture, not those of the close, so that once fanin is
+    killed and relaunched, its replay of 5 and 7 counts each of them once,
+    and the counts that sink sees go on with no jump. loop stays frozen
+    well under HEARTBEAT_TIMEOUT_SECS.
+    """
+    launch_chaos(outdir)
+    tailer = SinkTailer(os.path.join(outdir, "__exec__", "sink", "log"))
+    tailer.start()
+    ext_fifo = find_fifo(outdir, "fanin_ext")
+    checkpoints_dir = Path(outdir, "__exec__", "fanin", "checkpoints")
+
+    loop_pid = int(read_pid(id_file(outdir, "loop")))
+    os.killpg(loop_pid, signal.SIGSTOP)
+    try:
+        write_line(ext_fifo, {"type": "DATA", "seq": 1, "payload": 3})
+        assert wait_for_logged(outdir, "fanin", "ext", data_numbered(1)), "fanin never got 3"
+        write_line(
+            find_fifo(outdir, "sup_trig_fanin"),
+            {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {}}},
+        )
+        trigger = lambda env: (
+            env.get("type") == "INTERACT" and env["payload"]["command"] == "start_snapshot"
+        )
+        assert wait_for_logged(outdir, "fanin", "trigger", trigger), "fanin never got the trigger"
+
+        write_line(ext_fifo, {"type": "DATA", "seq": 2, "payload": 5})
+        write_line(ext_fifo, {"type": "DATA", "seq": 3, "payload": 7})
+        for value in (5, 7):
+            assert wait_for_logged(outdir, "sink", "from_fanin", copy_at_sink("ext", value)), (
+                f"process_data never received {value} while the round was open"
+            )
+        assert not list(checkpoints_dir.glob("*.json")), "the round closed while loop was frozen"
+    finally:
+        os.killpg(loop_pid, signal.SIGCONT)
+
+    assert wait_until(lambda: list(checkpoints_dir.glob("*.json"))), "the round never closed"
+    with open(next(checkpoints_dir.glob("*.json"))) as f:
+        assert json.load(f)["node_state"]["counts"] == {"ext": 1}
+
+    old_pid = kill_node(outdir, "fanin")
+    assert wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
+    write_line(ext_fifo, {"type": "DATA", "seq": 4, "payload": 9})
+    assert wait_for_logged(outdir, "sink", "from_fanin", copy_at_sink("ext", 9)), (
+        "sink never received 9 from the relaunched fanin"
+    )
+
+    time.sleep(0.5)
+    halt_and_wait_for_finished(outdir)
+    tailer.stop_and_join()
+    if tailer.error is not None:
+        raise tailer.error
+    assert values_at_sink(tailer.records, "ext") == [3, 5, 7, 9]
     assert_node_state_restored(tailer.records)
 
 

@@ -1239,7 +1239,8 @@ framework keep the state that a node captures in step with what it has sent:
   `DATA`, in the order of the input log, and on the thread that called `run()`
   while the node replays that log. It is the only place from which a node sends,
   with `send_data(port_name, payload)`, which raises anywhere else.
-- `capture_node_state()` runs on the brain thread, when a round opens.
+- `capture_node_state()` runs on the brain thread, when a round opens, and the
+  runtime keeps a deep copy of what it returns.
 - `restore_node_state(node_state)` and `initialize_runtime()` run on the thread
   that called `run()`, before any other thread starts. They cannot send.
 
@@ -1466,11 +1467,13 @@ processing. A checkpoint is a JSON object with these fields:
 
 - `schema_version`: the `CHECKPOINT_SCHEMA_VERSION` of the class that wrote it.
 - `epoch`: the round.
-- `node_state`: what `capture_node_state()` returned when the round opened. It
-  holds only logical state that JSON can serialize, never runtime resources
-  (connections, sockets, file handles), which `initialize_runtime()` builds
-  again at every start (see "Startup sequence: `run()`"). A restore passes it,
-  and only it, to `restore_node_state()`.
+- `node_state`: what `capture_node_state()` returned when the round opened,
+  which the runtime copies at once (`copy.deepcopy`), since `process_data` goes
+  on changing the node while the round is open: the hook may return the objects
+  of the node themselves. It holds only logical state that JSON can serialize,
+  never runtime resources (connections, sockets, file handles), which
+  `initialize_runtime()` builds again at every start (see "Startup sequence:
+  `run()`"). A restore passes it, and only it, to `restore_node_state()`.
 - `capture_pos`: the position in the input log of the envelope that opened
   the round (see "Arrival and positions").
 - `closed_ports`: the input ports whose `CLOSE` the brain thread had

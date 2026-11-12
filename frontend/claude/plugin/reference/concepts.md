@@ -430,11 +430,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Rules of the hooks.** Send only from `process_data`, with
   `self.send_data(port, payload)`, as strict JSON (a payload with NaN or an
   infinity raises ValueError, so a float result that can be one is sent as
-  `None` or a string); `process_data` is deterministic;
-  the node state is complete and serializable as JSON; effects outside the
-  program are idempotent. Read options from `self.opts` (labels without the
-  dash), log with `self.log` (its lines, and the warnings of the runtime,
-  such as a dropped envelope, are in the scheduler output of the node:
+  `None` or a string); `process_data` is deterministic; the node state is
+  complete and serializable as JSON, and `capture_node_state` may return the
+  node's own objects, which the runtime copies when a round opens; effects
+  outside the program are idempotent. Read options from `self.opts` (labels
+  without the dash), log with `self.log` (its lines, and the warnings of the
+  runtime, such as a dropped envelope, are in the scheduler output of the node:
   `get_process_output` with `kind: scheduler`), wait with `self.sleep()`.
 - **Methods that a node calls**, on top of `send_data` and `sleep`:
   - `self.inject(payload)`, from `observe`: `observe` looks at the world

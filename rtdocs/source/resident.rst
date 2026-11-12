@@ -233,7 +233,10 @@ A node redefines four methods, its *hooks*, which the framework calls:
   payload)``; calling ``send_data`` anywhere else raises an error.
 * ``capture_node_state()``: returns the *node state*, everything that
   ``process_data`` keeps from one message to the next, as a value that
-  JSON can serialize. It is called when a snapshot is taken.
+  JSON can serialize. It is called when a snapshot is taken, and the
+  framework copies what it returns at once, so it may return the
+  objects of the node themselves (a list or a dictionary that
+  ``process_data`` goes on changing) without copying them.
 * ``restore_node_state(node_state)``: sets the node state back from
   what ``capture_node_state`` returned, when the node starts from a
   checkpoint. The constructor sets the initial state, for a node that

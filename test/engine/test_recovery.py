@@ -517,6 +517,61 @@ def test_a_port_closed_long_ago_is_still_closed_once_the_log_that_recorded_its_c
     assert relaunched.seen == [("a", 1), ("b", 2)]
 
 
+class _SharesItsState(lib.FBPProcess):
+    """A node whose hook returns its own objects, with no copy."""
+
+    INPUT_PORTS = ["a", "b"]
+
+    def __init__(self, *args, **kwargs):
+        self.state = {"seen": [], "by_port": {"a": [], "b": []}, "count": {}}
+        super().__init__(*args, **kwargs)
+
+    def process_data(self, port_name, packet):
+        self.state["seen"].append(packet)
+        self.state["by_port"][port_name].append(packet)
+        self.state["count"][port_name] = self.state["count"].get(port_name, 0) + 1
+
+    def capture_node_state(self):
+        return self.state
+
+    def restore_node_state(self, node_state):
+        self.state = node_state
+
+    def initialize_runtime(self):
+        pass
+
+
+def test_a_checkpoint_holds_the_state_of_its_capture_when_the_hook_returns_the_objects_of_the_node(
+    tmp_path,
+):
+    live = _SharesItsState(opts=_opts(tmp_path))
+    # The round opens at the marker on "a" and closes at the one on "b": the
+    # DATA between them is processed while the round is open.
+    _process(live, [_data("a", 1), _marker("a"), _data("b", 5), _marker("b")])
+    _crash(live)
+
+    with open(os.path.join(live._checkpoints_dir(), "0.json")) as f:
+        checkpoint = json.load(f)
+    assert checkpoint["capture_pos"] == 2
+    assert checkpoint["node_state"] == {
+        "seen": [1],
+        "by_port": {"a": [1], "b": []},
+        "count": {"a": 1},
+    }
+
+
+def test_a_relaunch_processes_each_message_once_when_the_hook_returns_the_objects_of_the_node(
+    tmp_path,
+):
+    live = _SharesItsState(opts=_opts(tmp_path))
+    _process(live, [_data("a", 1), _marker("a"), _data("b", 5), _marker("b"), _data("a", 7)])
+    _crash(live)
+
+    relaunched = _relaunch(tmp_path, _SharesItsState)
+    assert relaunched.state == live.state
+    assert relaunched.state["seen"] == [1, 5, 7]
+
+
 def test_a_relaunch_whose_input_log_was_lost_fails_and_names_the_log(tmp_path):
     live = _Fanin(opts=_opts(tmp_path))
     _process(live, [_data("a", 1), _marker("a"), _marker("b"), _data("b", 2)])
