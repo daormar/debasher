@@ -156,15 +156,13 @@ class _ReaderState:
     """What the reader thread of a port remembers from one line to the next."""
 
     def __init__(self, closed):
-        # The unparsable line that a HELLO has yet to excuse, if any.
+        # Of the stream: the unparsable line that a HELLO has yet to excuse,
+        # if any (see _decode_line).
         self.fragment = None
-        # Set once the writer has sent CLOSE and this class drops what
-        # follows it (see _drops_after_close). From then on the reader only
-        # reads: nothing is decoded, logged or queued, so not even a corrupt
-        # line can stop it.
+        # Of the port: set once its writer has said CLOSE, in a class that
+        # drops what follows (see _drops_after_close).
         self.closed = closed
-        # The first line after a CLOSE warns, since a writer that says
-        # something after CLOSE is either a new incarnation of it or at fault.
+        # Of the port: whether the first line after the CLOSE has warned.
         self.warned = False
 
 
@@ -606,9 +604,20 @@ class _PortWorker:
                 for raw_line in raw_lines:
                     if self._stopping.is_set():
                         break
-                    arrived = self._envelope_of_line(tag, raw_line, state)
-                    if arrived is not None:
-                        envelopes.append(arrived)
+                    # Nothing after a CLOSE is decoded, so that not even a
+                    # corrupt line can stop the reader.
+                    if state.closed:
+                        self._warn_dropped_after_close(tag, state)
+                        continue
+                    decoded = self._decode_line(tag, raw_line, state)
+                    if decoded is None:
+                        continue
+                    envelope, line = decoded
+                    if not self._port_carries(tag, envelope.type):
+                        continue
+                    if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
+                        state.closed = True
+                    envelopes.append((envelope, line))
             finally:
                 # Whatever came before a corrupt line reaches the node before
                 # the error ends this thread, as it would line by line.
@@ -648,65 +657,56 @@ class _PortWorker:
             if not block:
                 return
 
-    def _envelope_of_line(self, tag, raw_line, state):
+    def _warn_dropped_after_close(self, tag, state):
+        """Logs a line that the reader of `tag` drops after a CLOSE: a
+        warning for the first one, debug for the rest."""
+        if state.warned:
+            self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
+            return
+        # A writer that says something after CLOSE is either a new
+        # incarnation of it or at fault.
+        self.log.warning(
+            "reader for %r: its writer sent something after CLOSE (a new "
+            "incarnation of it?), dropping everything that follows",
+            tag,
+        )
+        state.warned = True
+
+    def _decode_line(self, tag, raw_line, state):
         """
-        What the reader of `tag` does with one line, without its newline:
-        returns the (envelope, line) pair to hand to the node, or None when
-        the line is consumed here.
-
-        An unparsable line is tolerated once, provided the next line is a
-        HELLO: it is then the fragment left by a writer that died in the
-        middle of a message (see encode_hello). Anything else is a corrupt
-        stream, never skipped silently, and raises.
-
-        A line that is JSON but not a well-formed envelope (a missing key, an
-        unknown type, a field of the wrong type), or whose type this port
-        does not carry (see _types_of_port), is a wrong message, not a broken
-        line: it is dropped with a warning. Only a writer outside the program
-        can send one, and nothing of it can be recovered: what it meant to
-        say is lost, with the warning as its only trace.
+        Decodes one line of the stream of `tag`, without its newline.
+        Returns the (envelope, line) pair, `line` being its text as it
+        arrived, or None when the line is consumed here: a blank line, a
+        HELLO, a fragment kept until the next line, or a JSON line that is
+        not an envelope, dropped with a warning. Raises ValueError on a
+        corrupt stream: an unparsable line not followed by a HELLO.
         """
         if not raw_line:
             return None
 
-        if state.closed:
-            if not state.warned:
-                self.log.warning(
-                    "reader for %r: its writer sent something after CLOSE (a new "
-                    "incarnation of it?), dropping everything that follows",
-                    tag,
-                )
-                state.warned = True
-            else:
-                self.log.debug("reader for %r dropped a line sent after CLOSE", tag)
-            return None
-
         # A line that is not UTF-8 is as unparsable as one that is not JSON:
         # the fragment of a writer killed in the middle of a character is
-        # still excused by the HELLO that follows, and anything else stops
-        # the reader instead of reaching the node altered.
+        # still excused by the HELLO that follows.
         try:
             line = raw_line.decode("utf-8")
             envelope = decode_envelope(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
-            line = raw_line.decode("utf-8", errors="replace")
-            if state.fragment is not None:
-                raise ValueError(
-                    f"{type(self).__name__}: two unparsable lines in a row on "
-                    f"{tag!r}: {state.fragment[:60]!r} and {line[:60]!r}"
-                ) from None
-            state.fragment = line
+            self._raise_if_fragment(tag, state)
+            # Kept until the next line says whether it is what a writer left
+            # when it died in the middle of a message (see encode_hello).
+            state.fragment = raw_line.decode("utf-8", errors="replace")
             return None
         except ValueError as exc:
-            if state.fragment is not None:
-                raise ValueError(
-                    f"{type(self).__name__}: unparsable line on {tag!r} not "
-                    f"followed by HELLO: {state.fragment[:60]!r}"
-                ) from None
+            self._raise_if_fragment(tag, state)
+            # JSON, but not an envelope: a wrong message from a writer outside
+            # the program, not a broken line. Nothing of it can be recovered,
+            # and the warning is its only trace.
             self.log.warning("reader for %r dropped a malformed envelope: %s", tag, exc)
             return None
 
         if envelope.type == TYPE_HELLO:
+            # A new incarnation of the writer: the fragment kept, if any, is
+            # what the previous one left.
             if state.fragment is not None:
                 self.log.warning(
                     "reader for %r dropped %d bytes left by a writer that died "
@@ -717,26 +717,32 @@ class _PortWorker:
                 state.fragment = None
             return None
 
+        self._raise_if_fragment(tag, state)
+        return envelope, line
+
+    def _raise_if_fragment(self, tag, state):
+        """Raises ValueError if the reader of `tag` keeps an unparsable line,
+        which the line that has just arrived does not excuse."""
         if state.fragment is not None:
             raise ValueError(
                 f"{type(self).__name__}: unparsable line on {tag!r} not followed "
                 f"by HELLO: {state.fragment[:60]!r}"
             )
 
+    def _port_carries(self, tag, envelope_type):
+        """Whether the port `tag` carries envelopes of `envelope_type`;
+        warns when it does not. CLOSE is carried by every port."""
         types = self._types_of_port(tag)
-        if envelope.type != TYPE_CLOSE and types is not None and envelope.type not in types:
-            self.log.warning(
-                "reader for %r dropped a %s envelope, which this port does not "
-                "carry (only %s)",
-                tag,
-                envelope.type,
-                ", ".join(types),
-            )
-            return None
-
-        if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
-            state.closed = True
-        return envelope, line
+        if envelope_type == TYPE_CLOSE or types is None or envelope_type in types:
+            return True
+        self.log.warning(
+            "reader for %r dropped a %s envelope, which this port does not "
+            "carry (only %s)",
+            tag,
+            envelope_type,
+            ", ".join(types),
+        )
+        return False
 
     def _writer_loop(self, tag, option_name):
         wfd, _ = self._writer_fds[tag]
