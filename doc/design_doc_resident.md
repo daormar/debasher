@@ -100,10 +100,12 @@ to it.
 - **channel**: the one-way connection from an output port of one node to an
   input port of another, made of a FIFO (a named pipe created by the engine). A
   **self-loop** joins two ports of the same node. A channel delivers envelopes
-  in the order in which they were sent. Besides `HELLO` and `CLOSE`, which
-  every writer of the engine sends, business channels and channels to an
-  external port carry `DATA` and `BARRIER`, and the heartbeat channels and the
-  channels of commands carry only `INTERACT` (see "Channel topology").
+  in the order in which they were sent. Besides `HELLO`, which every writer of
+  the engine sends, and `CLOSE`, which a writer that has finished for good sends
+  (no process of a resident program does, see "Ordered shutdown"), business
+  channels and channels to an external port carry `DATA` and `BARRIER`, and the
+  heartbeat channels and the channels of commands carry only `INTERACT` (see
+  "Channel topology").
 - **fifo owner**: the FIFO owner, as defined in the design of the engine: the
   process whose `define_fifo_opt` (or `define_fifo_opt_generator`) creates a
   FIFO. It is the process that writes it, except for a fifo tagged `--control`
@@ -163,7 +165,9 @@ to it.
   fifo tagged `--control`), that carries only `INTERACT` commands, such as the
   one on which an initiator receives its triggers. It never carries a marker, so
   it takes no part in any round, and a `CLOSE` on it does not close it, because
-  its writer (the `Supervisor`, or whoever writes commands) may come back.
+  several writers feed it in turn (a `Supervisor` and the one of a resumed
+  program, `debasher_snapshot_resident`, a person writing by hand), and none of
+  them ends the channel for the others.
 - **control ports file**: the file `control_ports` (`control_ports_<idx>` for a
   task of an array, see execdir) that a node writes in its own `execdir` when it
   starts (one fifo path per line, from `self.opts`, one per entry of
@@ -972,7 +976,8 @@ takes only `INTERACT`; a business port and an external port take `DATA` and
 is (see "Fields of each type"). Channel by channel:
 
 - Between business processes (`FBPProcess`), the normal FBP graph channels
-  carry `DATA`/`CLOSE`/`HELLO` in normal operation, and `BARRIER` interleaved
+  carry `DATA` and `HELLO` in normal operation (and `CLOSE` from a writer that
+  finishes for good), and `BARRIER` interleaved
   when a snapshot/shutdown is in progress; this is how Chandy-Lamport
   propagates the marker: each node forwards it through its own output ports,
   the same ones it uses for `DATA`, never "upward" to anywhere else.
@@ -987,9 +992,9 @@ is (see "Fields of each type"). Channel by channel:
   that the supervisor owns and defines with the tag `--control`, so that the
   initiator reads it as a control port. It carries only `INTERACT`
   (`start_snapshot`, `shutdown`, see "Trigger port(s)"), never a marker, so
-  the round it opens never waits on it. A `CLOSE` on it, sent when the
-  supervisor stops, does not close it: a supervisor relaunched by hand writes
-  its triggers there again.
+  the round it opens never waits on it. A `CLOSE` on it does not close it, and
+  the supervisor sends none when it stops (see control port in the
+  Glossary).
 - From outside the program, the other channels of commands: the manual trigger
   port of the supervisor, also tagged `--control`, whose `INTERACT` the
   supervisor relays to every trigger port (see "Manual trigger channel"), and
@@ -1676,14 +1681,18 @@ graceful stop tool"), typically once the halted marker of every node exists,
 but nothing in the node requires that, or requires a halt to have happened at
 all.
 
-A halt sends no `CLOSE`, and neither does any other stop signal: `run()`
-always calls `stop_threads(close=False)` once its wait on `_stop_requested`
-returns. `CLOSE` says that a writer has finished for good, and a node that got
-a stop signal, whether or not it ever halted, may be resumed later: had it sent
+A halt sends no `CLOSE`, and neither does any other stop signal: `run()` always
+calls `stop_threads(close=False)` once its wait on `_stop_requested` returns.
+`CLOSE` says that a writer has finished for good, and a node that got a stop
+signal, whether or not it ever halted, may be resumed later: had it sent
 `CLOSE`, the reader at the other end could keep it in its input log after its
-`capture_pos` (see "Input log"), and a resume would take the node for a
-finished one. A node that ends some other way (not through `run()`) still gets
-`stop_threads()`'s own default, which does send `CLOSE`.
+`capture_pos` (see "Input log"), and a resume would take the node for a finished
+one. So no process of a resident program sends `CLOSE`, on a business port or on
+a control port: `run()` is the only way a process of it ends, and both
+`FBPProcess.run` and `Supervisor.run` stop their threads with `close=False`.
+`stop_threads()` still sends it by default, but only the unit tests call it
+outside `run()`, and the `CLOSE` of a business port waits for a node that
+finishes for good (see "A node that finishes for good" in "Future work").
 
 The signal has to reach the node's own process, not just the leader of the
 process group that `debasher_stop` and `.id` already agree on.
@@ -2191,19 +2200,18 @@ what arrives in `CHECKPOINT_RETENTION` rounds, plus a segment and a block.
 
 ## `CLOSE` and closed ports
 
-`CLOSE` means that a writer has finished for good, and only that; a halt
-sends none (see "Control envelope"). A reader hands it to the brain thread
-like any other envelope, so it is logged, and then keeps reading but drops
-everything that follows: nothing after it is decoded, logged or queued, and
-the first such line warns, once per port. The reader does not end on a
-`CLOSE`, for two reasons: a reader that ended would leave the heartbeat
-unhealthy for good once its producer finished, and a node whose peer sent
-`CLOSE`, ended its reader, and was later relaunched would fill that peer's
-pipe with nobody reading, since the old reader is gone. Dropping instead of
-ending solves both. A control port (see the Glossary) is the exception: its
-reader goes on delivering what follows a `CLOSE`, and the `CLOSE` is neither
-recorded nor restored, since its writer, such as the `Supervisor`, may come
-back.
+`CLOSE` means that a writer has finished for good, and only that; a halt sends
+none (see "Control envelope"). A reader hands it to the brain thread like any
+other envelope, so it is logged, and then keeps reading but drops everything
+that follows: nothing after it is decoded, logged or queued, and the first such
+line warns, once per port. The reader does not end on a `CLOSE`, for two
+reasons: a reader that ended would leave the heartbeat unhealthy for good once
+its producer finished, and a node whose peer sent `CLOSE`, ended its reader, and
+was later relaunched would fill that peer's pipe with nobody reading, since the
+old reader is gone. Dropping instead of ending solves both. A control port (see
+the Glossary) is the exception: its reader goes on delivering what follows a
+`CLOSE`, and the `CLOSE` is neither recorded nor restored, since several
+writers feed the port in turn, and none of them ends it for the others.
 
 `closed_ports`, sorted, is the checkpoint field that lists the input ports whose
 `CLOSE` the brain thread had processed at the capture, that is, those with a
@@ -2367,10 +2375,10 @@ one that resets a program, in "Tools for resident programs".
   on which it reads them in `CONTROL_PORTS`, since the `Supervisor` defines
   that fifo with the tag `--control`. Without the tag the channel would be a
   data port: the round would open, the marker would go downstream and the
-  initiator would wait for ever for a marker from the `Supervisor`. The tag is
-  also what keeps the `CLOSE` that a `Supervisor` sends when it stops from
-  closing the channel for good, so that the triggers of one relaunched by hand
-  still arrive.
+  initiator would wait for ever for a marker from the `Supervisor`. A
+  `Supervisor` sends no `CLOSE` when it stops, since another one, of a resumed
+  program, writes into the same ports; a `CLOSE` written there by anyone else
+  changes nothing either (see control port in the Glossary).
 - This is a convenience, not the only way to trigger a round: a direct
   external `INTERACT` write into an initiator's own FIFO (e.g. via
   Talk-to-FIFOs, or `debasher_snapshot_resident`, which writes into the

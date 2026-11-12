@@ -467,22 +467,22 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Rounds and snapshots.** A snapshot is a round started by an initiator
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its
-  checkpoint and replays its input log. A `send_data` of a message larger
-  than `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) raises RuntimeError,
-  live and in a replay, naming its size, its port and the limit: raise
-  `out_backlog_fail_mb` in the `computationalSpecs` of the node or send
-  smaller messages. While the node replays, a `send_data` that would take the
-  outbound backlog over that limit waits for room instead, with one warning in
-  the scheduler output: a node that stays in its startup with that warning has
-  a reader that does not read, so look at that reader, at the nodes of a cycle
-  that replay at once, or at a self-loop, whose reader starts after its
-  replay. The Supervisor wiring (heartbeats,
-  triggers) is generated, not edited. Start a round with `snapshot`, never by
-  writing a control port or the manual trigger port from a script: they take
-  only `INTERACT` commands, and the reader drops anything else written there,
-  with a warning in the scheduler output. A Supervisor that fails (a thread of
-  its own died) leaves its traceback in its scheduler output; the nodes go on
-  running unsupervised: stop the program and launch it again.
+  checkpoint and replays its input log. A `send_data` of a message larger than
+  `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) raises RuntimeError, live and
+  in a replay, naming its size, its port and the limit: raise
+  `out_backlog_fail_mb` in the `computationalSpecs` of the node or send smaller
+  messages. While the node replays, a `send_data` that would take the outbound
+  backlog over that limit waits for room instead, with one warning in the
+  scheduler output: a node that stays in its startup with that warning has a
+  reader that does not read, so look at that reader, at the nodes of a cycle
+  that replay at once, or at a self-loop, whose reader starts after its replay.
+  The Supervisor wiring (heartbeats, triggers) is generated, not edited. Start a
+  round with `snapshot`, never by writing a control port or the manual trigger
+  port from a script: they take only `INTERACT` commands: the reader drops any
+  other type with a warning in the scheduler output, and the node ignores a
+  `CLOSE` written there. A Supervisor that fails (a thread of its own died)
+  leaves its traceback in its scheduler output; the nodes go on running
+  unsupervised: stop the program and launch it again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the
   launch and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on

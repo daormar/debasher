@@ -184,8 +184,8 @@ class FBPProcess(_PortWorker):
     # The INPUT_PORTS entries that carry only INTERACT commands (from the
     # Supervisor, or from whoever writes commands into a fifo of this node).
     # They are read like any other, but take no part in the barrier, in any
-    # round, and a CLOSE on them does not close them: their writer may come
-    # back.
+    # round, and a CLOSE on them does not close them: several writers feed
+    # them in turn, and none ends them for the others.
     CONTROL_PORTS = []
 
     # The INPUT_PORTS entries fed only from outside the program (a source
@@ -810,8 +810,8 @@ class FBPProcess(_PortWorker):
         return tag in self._closed_at_start_ports
 
     def _drops_after_close(self, tag):
-        # The writer of a control port may come back after saying CLOSE, and
-        # what it sends then must be heard.
+        # Several writers feed a control port in turn: what one sends after
+        # another said CLOSE must be heard.
         return tag not in self.CONTROL_PORTS
 
     def _types_of_port(self, tag):
@@ -1222,8 +1222,8 @@ class FBPProcess(_PortWorker):
         """
         `_out_seq[tag]`, 0 if this port never sent anything: by the time a
         writer thread is about to send CLOSE, the brain thread has already
-        stopped (a finished writer means run() is on its way out), so
-        nothing can bump this again and reading it here needs no lock.
+        stopped, so nothing can bump this again and reading it here needs no
+        lock.
         """
         return self._out_seq.get(tag, 0)
 

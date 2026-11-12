@@ -1044,6 +1044,25 @@ def test_run_does_not_touch_the_signal_handler_off_the_main_thread(_sigterm_hand
     assert _wait_until(lambda: not runner.is_alive())
 
 
+def test_a_supervisor_that_stops_sends_no_close_on_its_trigger_ports(tmp_path):
+    fifo_path = tmp_path / "init.fifo"
+    os.mkfifo(fifo_path)
+
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        TRIGGER_PORT = ["init_a"]
+
+    proc = Sup(opts={"init_a": str(fifo_path)})
+    runner = threading.Thread(target=proc.run, daemon=True)
+    runner.start()
+    with open(fifo_path, "r") as r:
+        assert _wait_until(lambda: proc._checker_thread is not None)
+        proc._all_resolved.set()
+        assert _wait_until(lambda: not runner.is_alive())
+        envelopes = [lib.decode_envelope(line) for line in r.read().splitlines() if line]
+    assert [e.type for e in envelopes] == ["HELLO"]
+
+
 def test_a_real_sigterm_stops_run_before_every_node_is_resolved(_sigterm_handler_guard, _real_opts):
     # The actual guarantee this piece is for: a graceful-stop tool that
     # finds a Supervisor can end it by signal even while nodes it watches

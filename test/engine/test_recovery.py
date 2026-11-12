@@ -194,7 +194,7 @@ def test_after_a_halt_the_node_resumes_in_the_state_it_had_when_it_stopped(tmp_p
             _data("a", 1),
             ("a", lib.TYPE_BARRIER, _round(0, halt=True)),  # position 2, the state is captured
             _data("b", 2),  # in transit at the cut, processed before the round closes
-            ("b", lib.TYPE_BARRIER, _round(0, halt=True)),  # the round closes and the node stops
+            ("b", lib.TYPE_BARRIER, _round(0, halt=True)),  # the round closes and the node halts: it goes on running
         ],
     )
     assert live._halted.is_set()

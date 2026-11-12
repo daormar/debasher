@@ -547,9 +547,10 @@ class _PortWorker:
 
     def _types_of_port(self, tag):
         """
-        The envelope types that the input port `tag` carries, besides HELLO
-        and CLOSE, which every writer of the engine sends on any channel; a
-        reader drops any other with a warning. None, the default, takes
+        The envelope types that the input port `tag` carries, besides HELLO,
+        which every writer of the engine sends on any channel, and CLOSE,
+        which a writer sends when it has finished for good; a reader drops
+        any other with a warning. None, the default, takes
         every type: a plain _PortWorker gives its ports no kind.
         """
         return None
