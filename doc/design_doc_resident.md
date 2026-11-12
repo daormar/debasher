@@ -326,17 +326,23 @@ do the entries below that refer to it.
 - **checkpoint**: the file `<epoch>.json` that a node writes atomically in
   `<execdir>/checkpoints/` (`checkpoints_<idx>/` for a task of an array, see
   execdir) when a round closes. It holds a schema version, the epoch, the
-  `node_state` and the `channel_state` and, with the input-log redesign, the
-  engine's own bookkeeping: `capture_pos`, `closed_ports`, `out_seq`, `last_seq`
-  and the outbound backlog, `out_backlog`. Only the last `CHECKPOINT_RETENTION`
-  are kept.
+  `node_state`, the `channel_state` and the engine's own bookkeeping:
+  `capture_pos`, `closed_ports`, `out_seq`, `last_seq` and the outbound
+  backlog, `out_backlog` (see "State capture and checkpoint schema"). Only the
+  last `CHECKPOINT_RETENTION` are kept.
 - **outbound backlog, `out_backlog`**: the `DATA` that `send_data` has numbered
-  and queued but the writer thread has not yet finished writing when a round
-  captures the node state (G5): `{tag: [{"seq":, "payload":}, ...]}`, decoded
-  fresh from each queued line. Without it, a crash right there would destroy
-  those messages for good, with no trace (see "Both endpoints of a channel
-  crashed" in the Contract's limits). Recovery re-enqueues it, with the same
-  numbers, before anything else is sent.
+  and queued and that the writer thread of its port has not yet finished
+  writing into the FIFO, on all the output ports of the node (G5). The node
+  keeps it live in `_unwritten`. When a round captures the node state, it takes
+  a copy, which the checkpoint stores as `out_backlog`:
+  `{tag: [{"seq":, "payload":}, ...]}`, decoded from each queued line. Without
+  it, a crash right after the capture would destroy those messages for good,
+  with no trace (see "Both endpoints of a channel crashed" in the Contract's
+  limits). Recovery queues it again, with the same numbers, before anything else
+  is sent. Two limits apply to it (see "Checkpoint persistence"):
+  `OUT_BACKLOG_FAIL_BYTES` to the live backlog, the bytes of its lines on all
+  ports together, and `OUT_BACKLOG_MAX_BYTES` to the copy, the size of its
+  entries in the checkpoint.
 
 ## Input log
 
@@ -522,15 +528,20 @@ log), but the writer thread pops from it, under the same lock, as it confirms
 each line written.
 
 Bookkeeping that never enters a checkpoint, because it only means something
-while its own thread or round is live: `_handler_thread` (the identity of the
-thread currently inside `process_data`, checked by `send_data`),
+while its own thread or round is live, or is computed again from what a
+checkpoint holds: `_handler_thread` (the identity of the thread currently
+inside `process_data`, checked by `send_data`),
 `_barrier_pending` (the input ports an open round still waits on),
 `_closed_at_start_ports` (what a relaunched node's readers of closed ports
-start out knowing, taken from `_closed_ports` once, when the threads start)
-and `_accepted_seq` (the reader threads' own live view of `_last_seq`, ahead
+start out knowing, taken from `_closed_ports` once, when the threads start),
+`_accepted_seq` (the reader threads' own live view of `_last_seq`, ahead
 of it, which the dedup check of G5 actually consults; restored at startup
 from the checkpoint's `last_seq` plus the log after `capture_pos`, never
-itself written to one).
+itself written to one), and `_unwritten_bytes` and `_unwritten_port_bytes`
+(the size of `_unwritten` on all ports together and on each port: the first is
+what `OUT_BACKLOG_FAIL_BYTES` is checked against, the second what its error
+names and what the node info file reports by port; derived from `_unwritten`,
+they are computed again as a restore queues the backlog of the checkpoint).
 
 # Contract: assumptions, guarantees and non-goals
 
@@ -1430,34 +1441,68 @@ sets one.
 
 ## State capture and checkpoint schema
 
-- `capture_node_state()`: only serializable logical state, never runtime
-  resources (connections, sockets, file handles); those are rebuilt by
-  `initialize_runtime()` instead, see the Startup sequence below.
-- Channel state: a copy of the `DATA` that arrives on a still-pending port
-  during an open barrier round (the generic barrier logic above) is saved as the
-  checkpoint's own `channel_state` field (`_save_checkpoint`). A restore does
-  not read it, and must not: on restore, only `node_state` is passed to
-  `restore_node_state()`. Every message in it arrived after the capture, so the
-  input log holds it above `capture_pos` and the replay processes it again;
-  feeding it from `channel_state` too would process it twice. It exists for the
-  two uses of a consistent cut: inspecting the state of the whole program at a
-  round, where the node states alone miss the messages that were in transit (the
-  introduction's second goal), and a global rollback, which discards the input
-  logs above the target and has to redeliver those messages from it (see Future
-  work).
-- The node state is stored under `node_state`, distinct from `channel_state`;
-  its hooks are `capture_node_state()` and `restore_node_state()`. There is no
-  backward-compatibility code for a mismatch: a checkpoint written under
-  another key fails to load with a `KeyError`, and a module that defines
-  differently named hooks fails at its first round with `NotImplementedError`.
-- Schema version: `CHECKPOINT_SCHEMA_VERSION` class constant, checked in
-  `_load_latest_checkpoint` before `restore_node_state()`; a mismatch raises
-  `ValueError`, a real incompatibility to fail on loudly, not something to
-  silently paper over by trying an older checkpoint.
-- The checkpoint also stores the engine's own bookkeeping: `capture_pos`,
-  `closed_ports`, `out_seq`, `last_seq` and `out_backlog` (see "Input log").
-  `channel_state` is a copy of what arrived on pending ports, which is also
-  processed.
+A checkpoint is what a node keeps on disk to come back to the state it had
+when a round opened at it. This section says what a checkpoint holds and why,
+and which checkpoint a node accepts when it starts. How a round opens and
+closes is in "Chandy-Lamport barrier propagation", and how the file reaches
+the disk in "Checkpoint persistence".
+
+What a round captures is taken at one moment: when the round opens at the
+node, on the brain thread, while it handles the envelope that opens it (a
+marker or a trigger). The file is written only when the round closes, once a
+marker has arrived on every pending port; meanwhile the node goes on
+processing. A checkpoint is a JSON object with these fields:
+
+- `schema_version`: the `CHECKPOINT_SCHEMA_VERSION` of the class that wrote it.
+- `epoch`: the round.
+- `node_state`: what `capture_node_state()` returned when the round opened. It
+  holds only logical state that JSON can serialize, never runtime resources
+  (connections, sockets, file handles), which `initialize_runtime()` builds
+  again at every start (see "Startup sequence: `run()`"). A restore passes it,
+  and only it, to `restore_node_state()`.
+- `capture_pos`: the position in the input log of the envelope that opened
+  the round (see "Arrival and positions").
+- `closed_ports`: the input ports whose `CLOSE` the brain thread had
+  processed by then (see "`CLOSE` and closed ports").
+- `out_seq` and `last_seq`: for each output port, the last sequence number
+  sent, and for each input port, the last one that the brain thread had
+  processed (see "Sequence numbers (G5) in the input log").
+- `out_backlog`: the copy of the outbound backlog (see the Glossary).
+- `channel_state`: for each port that was pending in the round, a copy of the
+  `DATA` that arrived on it while it was still pending (before its marker).
+
+The node state and the engine's own bookkeeping (`capture_pos`,
+`closed_ports`, `out_seq`, `last_seq` and `out_backlog`) are taken at the same
+position, so they agree with each other: a restore puts the node where it was
+right after it handled the envelope at `capture_pos`, with the counters, the
+closed ports and the outbound backlog of that moment, and the replay of what
+the input log holds above that position brings it up to date (see "Recovery:
+startup and replay").
+
+The channel state is the one field that a restore does not read, and must
+not. A `DATA` that arrives on a pending port is processed like any other, and
+a copy of it goes into the channel state besides. Every message in it arrived
+after the capture, so the input log holds it above `capture_pos` and the
+replay processes it again; feeding it from `channel_state` too would process
+it twice. It exists for the two uses of a consistent cut: inspecting the state
+of the whole program at a round, where the node states alone miss the messages
+that were in transit (the introduction's second goal), and a global rollback,
+which discards the input logs above the target and has to redeliver those
+messages from it (see "Future work").
+
+A node accepts only a checkpoint of its own format, with no compatibility
+code. `_load_latest_checkpoint` takes the checkpoint with the highest
+epoch (see "Checkpoint persistence") and loads it only if it has this class's
+`CHECKPOINT_SCHEMA_VERSION` and every field that the class reads; otherwise
+the startup fails, with a `ValueError` for another version (or a file that is
+not JSON) and a `KeyError` naming a missing field. It never falls back to an
+older checkpoint or to a default value, since either would start the node
+from a state other than the one it had, with nothing said. A new field needs
+no new version, since its absence is already refused; the version changes when
+an existing field changes its meaning or its format, which the presence of the
+fields cannot tell. The names of the hooks have no compatibility code
+either: a module that defines differently named hooks fails at its first round
+with a `NotImplementedError`.
 
 ## Startup sequence: `run()`
 
@@ -1632,54 +1677,91 @@ does it for a whole program (see "`debasher_reset_resident`: a clean start").
 
 ## Checkpoint persistence
 
-- Location: `__exec__/<process_name>/checkpoints/`, a dedicated directory (not
-  loose files mixed in with
-  `<process_name>.{finished,id,opts,sched_out,stdout}`, which already exist
-  today under `__exec__/<process_name>/`): `_checkpoints_dir()`. A task of an
-  array keeps its own, `checkpoints_<idx>/`, next to those of the other tasks
-  (see execdir in the Glossary).
-- Atomic write: temporary file + rename, `_save_checkpoint()`'s `os.replace`.
-- Named by epoch; on startup, load the highest valid epoch:
-  `_load_latest_checkpoint()`.
-- Retention: keep the last few, discard the rest, `CHECKPOINT_RETENTION`
-  (default 3), `_prune_old_checkpoints()`.
-- Lightweight notification (epoch + path) to the supervisor (never resend the
-  whole blob over the channel): `_on_epoch_closed()` sends
-  `INTERACT {"command": "checkpoint_saved"}` to `SUPERVISOR_PORT` if set.
-- The process always looks for the most recent checkpoint on startup; it does
-  not distinguish "first time" from "recovery" by itself (see the Startup
-  sequence above).
-- Size of the outbound backlog in a checkpoint: over `OUT_BACKLOG_MAX_BYTES`
-  (8 MiB by default), `_save_checkpoint()` writes nothing and warns. The
-  previous checkpoint plus a longer replay of the input log regenerate every
-  output since, so a neighbor that is slow for a while costs no more than
-  rounds without a checkpoint. Nothing is pruned meanwhile, and if the input
-  log reaches `INPUT_LOG_MAX_BYTES` its error names the outbound backlog and
-  the epoch since which no checkpoint has been written, since the rounds
-  themselves do close (`_checkpoints_skipped_since`).
-- Memory of the outbound backlog: `send_data` raises, with nothing sent or
-  numbered, rather than take the backlog over `OUT_BACKLOG_FAIL_BYTES` (64 MiB
-  by default), and names the port. A backlog that keeps growing means a
-  reader that is not reading: stopped, down or stuck, or slower than this
-  node for good. The exception ends the brain thread, which the heartbeat
-  reports; the `Supervisor` relaunches the node, and if the reader still does
-  not read, the relaunch reaches the limit again and the node ends in
-  "Escalation on a permanent node failure". The memory a node takes for its
-  messages is thus bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which
-  also bounds what waits in its inbound queue, since every queued item is
-  logged first.
+This section says where the checkpoints of a node live, how one reaches the
+disk, how many are kept, and what happens when one cannot be written or
+loaded. It ends with the two limits on the outbound backlog, which the
+checkpoints carry: one on the size of a checkpoint, the other on the memory
+of the node.
 
-  While the node replays its input log, the same limit makes `send_data` wait
-  for room instead of raising, with one warning in the log: a replay can run
-  faster than a writer thread can write, whoever the reader is, and a node
-  whose replay sent more than the limit could otherwise never start. A reader
-  that never reads leaves the node in its startup, with no heartbeats, until
-  the `Supervisor` relaunches it (see "Failure detection") or, without one,
-  until it is stopped. The readers of a node start only after its replay, so
-  the nodes of a cycle that replay at once, each over the limit, wait on each
-  other in the same way, and a node with a self-loop waits on itself. A message
-  larger than the limit raises once the backlog has drained, and a stop ends
-  the wait, after which `send_data` raises if the message still does not fit.
+A node keeps its checkpoints in a directory of its own,
+`__exec__/<process_name>/checkpoints/` (`_checkpoints_dir()`), not among the
+files that the engine already writes there
+(`<process_name>.{finished,id,opts,sched_out,stdout}`); a task of an array
+keeps its own, `checkpoints_<idx>/`, next to those of the other tasks (see
+execdir in the Glossary). Each checkpoint is a file named by its epoch,
+`<epoch>.json`.
+
+When a round closes, `_save_checkpoint()` writes the checkpoint into a
+temporary file and renames it into place (`os.replace`), so that a crash of
+the process leaves the new checkpoint whole or not at all, never a part of it.
+It then keeps the `CHECKPOINT_RETENTION` checkpoints (3 by default) with the
+highest epochs, deletes the others (`_prune_old_checkpoints()`) and prunes the
+input log up to what the oldest of them needs (see "Pruning and the size
+cap"). When the node has a `SUPERVISOR_PORT`, `_on_epoch_closed()` tells the
+`Supervisor` with an `INTERACT {"command": "checkpoint_saved"}` that carries
+the epoch and the path, never the checkpoint itself.
+
+A checkpoint that cannot be written stops the node as an exception of
+`process_data` does: a node state that JSON cannot serialize raises a
+`TypeError`, and a full disk an `OSError`, which ends the brain thread. The
+round is over at the node all the same. The heartbeat reports the dead thread,
+and the `Supervisor` relaunches the node, which restores its previous
+checkpoint and replays a longer part of its input log. A temporary file left
+behind is never loaded, since its name is not an epoch.
+
+On startup, the node loads the checkpoint with the highest epoch among the
+files named `<integer>.json` (`_load_latest_checkpoint()`); if that one does
+not load, the startup fails (see "State capture and checkpoint schema"). A
+node does not tell a first launch from a relaunch: with no checkpoint, it
+starts from default values (see "Startup sequence: `run()`").
+
+The outbound backlog is held in memory and copied into every checkpoint, and a
+reader that does not keep up makes it grow. Two limits bound it, a soft one on
+the size of a checkpoint and a hard one on the memory of the node: a reader
+that is slow for a while meets only the first, and one that has stopped for
+good meets the second.
+
+Over `OUT_BACKLOG_MAX_BYTES` (8 MiB by default), measured on the copy that the
+capture took, `_save_checkpoint()` writes nothing and logs a warning: the
+round closes without a checkpoint. Nothing is lost, since the previous
+checkpoint plus a longer replay of the input log regenerate every output
+since, so a neighbor that is slow for a while costs no more than rounds without
+a checkpoint. Nothing is pruned meanwhile either, and if the input log reaches
+`INPUT_LOG_MAX_BYTES`, its error names the outbound backlog and the epoch since
+which no checkpoint has been written (`_checkpoints_skipped_since`), since the
+rounds themselves do close.
+
+When a message would take what the node has not yet written into its FIFOs,
+on all its output ports together, over `OUT_BACKLOG_FAIL_BYTES` (64 MiB by
+default), `send_data` raises a `RuntimeError` instead of sending it: the
+message is neither numbered nor queued, and the error names the port it was
+for and how much that port holds unwritten. A backlog that keeps growing means
+a reader that is not reading: stopped, down or stuck, or slower than this node
+for good. The exception ends the brain thread, which the heartbeat reports,
+and the `Supervisor` relaunches the node. The relaunch restores the backlog of
+its checkpoint, which counts against the same limit, and replays its input
+log, which sends again what the node had sent since; while it replays, it
+waits for room instead of raising (see the next paragraph). So if the reader
+still does not read, the relaunch waits in its replay, with no heartbeats,
+until the `Supervisor` relaunches it again (see "Failure detection"), and the
+node ends in "Escalation on a permanent node failure" when the attempts run
+out; only a replay that gets through can raise the error again, live. The
+memory a node takes for its messages is thus bounded by this limit and by
+`INPUT_LOG_MAX_BYTES`, which also bounds what waits in its inbound queue,
+since every queued envelope is logged first.
+
+While the node replays its input log, the same limit makes `send_data` wait
+for room instead of raising, with one warning in the log: a replay can run
+faster than a writer thread can write, whoever the reader is, and a node whose
+replay sent more than the limit could otherwise never start. A reader that
+never reads leaves the node in its startup, with no heartbeats, until the
+`Supervisor` relaunches it (see "Failure detection") or, without one, until it
+is stopped. The readers of a node start only after its replay, so the nodes of
+a cycle that replay at once, each over the limit, wait on each other in the
+same way, and a node with a self-loop waits on itself. A message larger than
+the limit raises its `RuntimeError` once the backlog has drained, and a stop
+ends the wait, after which `send_data` raises the same error if the message
+still does not fit.
 
 ## Testing a node without the engine
 
@@ -1857,9 +1939,10 @@ That use sets what the log has to guarantee:
   its whole log.
 
 The section first describes the log itself ("Log structure and record
-format", "Arrival and positions") and what a checkpoint keeps about it ("The
-checkpoint's own bookkeeping"), then how a node recovers from it ("Recovery:
-startup and replay") and how it is kept small ("Pruning and the size cap").
+format", "Arrival and positions"), then how a node recovers from it
+("Recovery: startup and replay") and how it is kept small ("Pruning and the
+size cap"); what a checkpoint keeps about the log is in "State capture and
+checkpoint schema".
 It ends with how the log carries the end of a writer ("`CLOSE` and closed
 ports") and the sequence numbers ("Sequence numbers (G5) in the input log"),
 and with why it is built into `FBPProcess` rather than on the engine's fifo
@@ -1930,18 +2013,6 @@ queue. Whatever starts a round from inside the node, such as a snapshot timer
 (see "Periodic snapshots from a node's own timer" in Future work), has to go
 through the same hook, so that `capture_pos` (see the Glossary) is always
 defined; 0 means that nothing had been processed yet.
-
-## The checkpoint's own bookkeeping
-
-Besides `node_state` and `channel_state`, a checkpoint (schema version 2)
-holds the position, `capture_pos`, of the item whose processing captured the
-node state, taken when the round opens, not when it closes. `closed_ports`
-(the input ports whose `CLOSE` the brain thread had processed by then, see
-"`CLOSE` and closed ports"), `out_seq`, `last_seq` and `out_backlog`
-(the sender's and receiver's own G5 bookkeeping, see the Contract and the
-"State variables, at a glance" table in the Glossary) share the same schema
-version: a checkpoint of another schema version, or one missing a field this
-class requires, is refused with an error.
 
 ## Recovery: startup and replay
 
