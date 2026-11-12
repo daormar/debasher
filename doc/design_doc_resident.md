@@ -254,12 +254,13 @@ do the entries below that refer to it.
   sequence numbers).
 - **round**: one run of the barrier protocol (Chandy-Lamport) over the whole
   program. At a node it opens when the node captures its state, on the first
-  marker of the round or on the `INTERACT` that starts it, and it closes when
-  the marker has arrived on every input port. An input port whose marker has not
-  yet arrived is **pending**. A port whose writer has said `CLOSE` is never
-  pending: a finished writer sends no more markers, so the round does not wait
-  for it. Rounds do not overlap at a node: a newer round that reaches it
-  replaces an older one that is open (see abandoned round).
+  marker of the round or on the `INTERACT` that starts it, and it closes when no
+  input port is pending. An input port on which the round still waits for a
+  marker is **pending**: every input port but the control ports, the external
+  ports, the ports whose writer has said `CLOSE` (a finished writer sends no
+  more markers) and the port whose marker opened the round. Rounds do not
+  overlap at a node: a newer round that reaches it replaces an older one that
+  is open (see abandoned round).
 - **epoch**: the number that identifies a round. Markers carry it, and it names
   the checkpoint file (`<epoch>.json`). An initiator numbers a new round with
   the epoch that its trigger carries (see numbered trigger) or, if it carries
@@ -1551,129 +1552,164 @@ does it for a whole program (see "`debasher_reset_resident`: a clean start").
 
 ## Chandy-Lamport barrier propagation
 
-- A `DATA` arriving on a port whose marker has not arrived is processed at
-  once, as any other, and a deep copy goes to the round's `channel_state`. A
-  port whose writer has said `CLOSE` leaves the round's pending set, or is
-  left out of it if it had already closed when the round opened.
-- The trigger reaches a valid node as initiator via `INTERACT` (the
-  already-existing interactivity/heartbeat channel), not via a new
-  connection: see the `INTERACT` logic above.
-- With cycles: the initiator waits for the marker to come back through its
-  own input port before closing its part of the snapshot.
-- Without cycles: the initiator must be a root; if it has no input ports, it
-  closes its part instantly.
-- Control ports are left out of every round, whoever opens it: a command is
-  not the marker of the port that carries it (a round opened by a command
-  starts with no port counted as arrived), the `Supervisor` takes no part in
-  the barrier and never sends one, and a node with a control port must also
-  close the rounds that a peer starts.
-- Rounds do not overlap at a node. A marker of a newer epoch that reaches a
-  node while an older round is open replaces it: the older round is
-  abandoned, and the node captures again at the newer marker (a later
-  capture would include messages that the sender had sent after its own, and
-  holding back the port would break the order of the input log) and forwards
-  the newer marker. A halt is never replaced by a snapshot, and a marker of
-  an older epoch, or of a round that is over, is ignored. A trigger without
-  an epoch that finds a snapshot open replaces it with a round numbered as the
-  open one plus one, a number above it so that the nodes that have that round
-  open replace it too; without this, an initiator whose marker was lost would
-  keep its round open for ever. A trigger that finds a halt open, and any
-  trigger once the node has halted, are ignored. A numbered trigger follows
-  the rule of a marker instead (see numbered trigger in the Glossary).
-- A round has to be able to reach every node from an initiator, or it never
-  opens at the nodes it cannot reach and never closes at the nodes they write
-  to. The engine checks it when the program is loaded, and refuses a program in
-  which a node cannot be reached (see "Validation when the program is loaded").
+A round runs the Chandy-Lamport barrier over the business channels of the
+program: every node captures its state once, and the marker that it forwards
+on its output ports separates, on each channel, what the sender sent before
+its capture from what it sent after. This section says how a round opens at a
+node, how it propagates and when it closes, and then the cases that the rule
+has to settle: initiators, control ports, rounds that meet at a node, and the
+nodes that a round has to reach.
+
+A round opens at a node in one of two ways. At an initiator, a trigger opens it:
+an `INTERACT` `start_snapshot`, or `shutdown` for a halt, on one of its control
+ports, written by the `Supervisor` through a trigger port or from outside the
+program (see "Trigger port(s): initiator(s) for snapshot/shutdown" and "Manual
+trigger channel"). At any node, the first marker of the round that arrives on an
+input port opens it. Either way, the node captures its state at once (see "State
+capture and checkpoint schema") and forwards the marker on every output port but
+the one to the `Supervisor`, which takes no part in the barrier.
+
+The round then waits for a marker on every input port that is pending: all of
+them but the control ports, the external ports, the ports whose writer has
+already said `CLOSE`, and the port whose marker opened the round, if a marker
+did. Meanwhile the node goes on processing: a `DATA` that arrives on a pending
+port is processed at once, like any other, and a deep copy of it goes to the
+channel state of the round. Each marker that arrives settles its port, and so
+does a `CLOSE` on a pending port, since a finished writer sends no more
+markers. When no port is pending, the round closes at the node and the node
+writes its checkpoint (see "Checkpoint persistence").
+
+An initiator closes its part in the same way as any other node, once a marker
+has come by every pending port. In a cycle, that is the marker it sent itself,
+when it comes back; with business inputs, the markers of the same round from
+upstream (see numbered trigger in the Glossary), so an initiator need not be a
+root; with no port pending at all, the round closes as soon as it opens.
+
+Control ports are left out of every round, whoever opens it: a command is not
+the marker of the port that carries it (a round opened by a command starts
+with no port counted as arrived), the `Supervisor` takes no part in the barrier
+and never sends a marker, and a node with a control port must also close the
+rounds that a peer starts.
+
+Rounds do not overlap at a node. A marker of a newer epoch that reaches a node
+while an older round is open replaces it: the older round is abandoned, and
+the node captures again at the newer marker and forwards it. Capturing later,
+at the close of the older round, would include messages that the sender had
+sent after its own capture, and holding back the port would break the order of
+the input log. A halt is never replaced by a snapshot, and a marker of an
+older epoch, or of a round that is over, is ignored. A trigger without an
+epoch that finds a snapshot open replaces it with a round numbered as the open
+one plus one, a number above it so that the nodes that have that round open
+replace it too; without this, an initiator whose marker was lost would keep
+its round open for ever. A trigger that finds a halt open, and any trigger
+once the node has halted, are ignored (see "Ordered shutdown"). A numbered
+trigger follows the rule of a marker instead (see numbered trigger in the
+Glossary).
+
+A round has to be able to reach every node from an initiator, or it never
+opens at the nodes it cannot reach and never closes at the nodes they write
+to. The engine checks it when the program is loaded, and refuses a program in
+which a node cannot be reached (see "Validation when the program is loaded").
+So, in a program without cycles, every node with no business input has to be
+an initiator, since no marker can reach it otherwise.
 
 ## Ordered shutdown
 
-- Same `BARRIER`, with the `halt=True` flag: see the generic barrier logic
-  above and `_on_epoch_closed`'s `halt` handling.
-- Closing a halt's epoch has no effect on what the node processes (see the
-  Glossary's "halt"): the node keeps running, exactly like after any other
-  round, and goes on processing every `DATA` that reaches it until a stop
-  signal arrives.
-  `_on_epoch_closed` only sets `self._halted` and writes the halted marker
-  (`_write_halted_marker`).
-- `_halted` keeps the node from starting a round when a trigger reaches it
-  (`_start_barrier_round`): a later trigger, from the `Supervisor`,
-  `debasher_snapshot_resident` or `debasher_stop_resident`, opens no round
-  for the rest of this incarnation. It does not keep the node out of a round
-  that reaches it as the marker of a peer. A round has to close at every node
-  it reaches, or it never closes at the nodes downstream of this one, so a
-  node that has halted opens it, captures its state and writes its checkpoint
-  like any other node, and, when that round is a halt too, writes its epoch
-  into the halted marker. That checkpoint need not equal the one of the halt:
-  the node may have processed messages since, and its `capture_pos` is later
-  in any case, since the marker that opens the round has a position of its
-  own in the input log. A resume restores it like any other checkpoint (see
-  the item on resumption below). The cost of ignoring the triggers is that a
-  halt cannot always be retried: an initiator that has halted, and that no
-  marker of the new halt reaches, never opens it, so when another initiator
-  does (one relaunched after a crash, for instance), the nodes downstream of
-  the first wait for its marker for ever (see "A crash while a round is open"
-  in the Contract's limits). When every initiator has halted, no new round
-  starts at all.
-- What actually ends `run()` is a stop signal, not a round closing: `run()`
-  installs a `SIGTERM` handler (`_on_stop_signal`) on the main thread only
-  (a background-thread caller, every test that drives `run()` this way, has
-  no real signal to install one for, and `signal.signal()` raises off the
-  main thread; those tests set `_stop_requested` directly instead, the same
-  way other tests simulate an external `INTERACT` arriving), then waits on
-  `_stop_requested` before calling `stop_threads()`. Deciding when to send
-  that signal is external to `FBPProcess` by design (the
-  `debasher_stop_resident` subsection has the tool that actually does):
-  typically once every node's halted marker exists, but nothing here
-  enforces that, or requires a halt to have happened at all.
-- A halt sends no `CLOSE`, and neither does any other stop signal: `run()`
-  always calls `stop_threads(close=False)`, unconditionally, once its wait
-  on `_stop_requested` returns. `CLOSE` says that a writer has finished for
-  good, and a node that got a stop signal, whether or not it ever halted,
-  may be resumed later: had it sent `CLOSE`, the reader at the other end
-  could keep it in its input log after its `capture_pos` (see "Input log"),
-  and a resume would take the node for a finished one. A node that ends
-  some other way (not through `run()`) still gets `stop_threads()`'s own
-  default, which does send `CLOSE`.
-- The signal has to reach the node's own process, not just the process group
-  leader `debasher_stop` and `.id` already agree on.
-  `debasher_builtin_sched::_launch` backgrounds a generated script as its own
-  process group leader (`pgid == pid`, the pid in `.id`), and the process
-  function that this script runs (`debasher::_execute_task`) starts the Python
-  interpreter as a child process, so a resident process's own Python interpreter
-  sits below the pid in `.id`, not at it. A plain, single-pid `SIGTERM` there
-  would only reach the wrapper script, orphaning the Python interpreter, which
-  would never receive anything and would keep running. So a stop signal targets
-  the whole process group instead (`os.killpg`, the same group `debasher_stop`
-  already reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper
-  script itself survives that same broadcast to still write `.finished` once its
-  own child actually exits, which is what
-  `debasher_builtin_sched::_print_script_trap` (`trap '' TERM`, the first thing
-  `_create_script` writes into the generated file) is for. A hard kill
-  (`SIGKILL`) cannot be trapped and is unaffected.
-- Resumption: relaunch every process. It is the ordinary Startup sequence above,
-  with no special case for a halt: each node loads its latest checkpoint (the
-  one the halt closed, in the ordinary case where nothing else ran in this
-  incarnation after it) and replays its input log after that checkpoint's
-  `capture_pos`. What is replayed is what the node processed between
-  capturing its state and closing the round (the messages that were in
-  transit at the cut, which its checkpoint also holds as `channel_state`) and
-  anything that reached its log after that. The node ends in the state it had
-  when it stopped, and re-executing those messages is deterministic, like any
-  other replay.
-- How a program is resumed: `debasher_exec` again, on the same output
-  directory. Every node stopped by the halt left a `.finished`, which for a
-  general program means a process that is done and is not launched again. In
-  a resident program a process is never done, so `debasher_exec` marks every
-  process that is not running to be launched again
-  (`debasher::_define_rerun_processes_due_to_resident_resume`), every task of
-  an array included, also when only some of them have a `.finished`, as a
-  hard kill of the others leaves them. Nothing in the directory of a node is
-  reset on the way: not its checkpoints, its input log or its halted marker,
-  in its execdir (Glossary), nor its output directory, `<outdir>/<process>`,
-  which a general process has emptied every time it is launched. What a node
-  keeps there is part of what it has done so far, and a launch of the node
-  resumes it, whether it is a new run after a halt or the `Supervisor`'s
-  relaunch after a crash.
+A halt stops a resident program without losing anything that a resume cannot
+bring back. It takes two steps: a round with `halt` true, which leaves every
+node with a checkpoint of the same round (see "Checkpoint persistence") and a
+halted marker, and then a stop signal to every node, which ends its `run()`.
+This section describes the two steps, what the halted flag of a node blocks and
+what it does not, and how a program is resumed.
+
+A halt is a round like a snapshot, whose markers carry `halt=True` (see
+"Chandy-Lamport barrier propagation"). When it closes at a node,
+`_on_epoch_closed` writes the checkpoint as for any round, sets `_halted` and
+writes the halted marker (`_write_halted_marker`), which holds its epoch.
+Nothing else changes at the node (see the Glossary's "halt"): it keeps running,
+exactly like after any other round, and goes on processing every `DATA` that
+reaches it until a stop signal arrives.
+
+`_halted` keeps the node from starting a round when a trigger reaches it
+(`_start_barrier_round`): a later trigger, from the `Supervisor`,
+`debasher_snapshot_resident` or `debasher_stop_resident`, opens no round for the
+rest of this incarnation. It does not keep the node out of a round that reaches
+it as the marker of a peer. A round has to close at every node it reaches, or it
+never closes at the nodes downstream of this one, so a node that has halted
+opens it, captures its state and writes its checkpoint like any other node, and,
+when that round is a halt too, writes its epoch into the halted marker. That
+checkpoint need not equal the one of the halt: the node may have processed
+messages since, and its `capture_pos` is later in any case, since the marker
+that opens the round has a position of its own in the input log. A resume
+restores it like any other checkpoint (see how a program is resumed, below). The
+cost of ignoring the triggers is that a halt cannot always be retried: an
+initiator that has halted, and that no marker of the new halt reaches, never
+opens it, so when another initiator does (one relaunched after a crash, for
+instance), the nodes downstream of the first wait for its marker for ever (see
+"A crash while a round is open" in the Contract's limits). When every initiator
+has halted, no new round starts at all.
+
+What ends `run()` is the stop signal, not a round closing. `run()` installs a
+handler of `SIGTERM` (`_on_stop_signal`) on the main thread only, since
+`signal.signal()` raises a `ValueError` off it (the tests that drive `run()`
+from another thread set `_stop_requested` themselves, as other tests simulate
+an `INTERACT` arriving), and then waits on `_stop_requested` before it stops
+its threads. When to send that signal is decided outside `FBPProcess`, by
+design: `debasher_stop_resident` sends it (see "`debasher_stop_resident`: the
+graceful stop tool"), typically once the halted marker of every node exists,
+but nothing in the node requires that, or requires a halt to have happened at
+all.
+
+A halt sends no `CLOSE`, and neither does any other stop signal: `run()`
+always calls `stop_threads(close=False)` once its wait on `_stop_requested`
+returns. `CLOSE` says that a writer has finished for good, and a node that got
+a stop signal, whether or not it ever halted, may be resumed later: had it sent
+`CLOSE`, the reader at the other end could keep it in its input log after its
+`capture_pos` (see "Input log"), and a resume would take the node for a
+finished one. A node that ends some other way (not through `run()`) still gets
+`stop_threads()`'s own default, which does send `CLOSE`.
+
+The signal has to reach the node's own process, not just the leader of the
+process group that `debasher_stop` and `.id` already agree on.
+`debasher_builtin_sched::_launch` backgrounds a generated script as the leader
+of its own process group (`pgid == pid`, the pid in `.id`), and the process
+function that this script runs (`debasher::_execute_task`) starts the Python
+interpreter as a child process, so the interpreter of a resident process sits
+below the pid in `.id`, not at it. A plain, single-pid `SIGTERM` there would
+only reach the wrapper script, orphaning the interpreter, which would never
+receive anything and would keep running. So a stop signal targets the whole
+process group instead (`kill -TERM` to the group, in
+`debasher::_stop_pid_gracefully`, the same group that `debasher_stop` already
+reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper script
+itself survives that same broadcast to still write `.finished` once its own
+child exits, which is what `debasher_builtin_sched::_print_script_trap` (`trap
+'' TERM`, the first thing `_create_script` writes into the generated file) is
+for. A hard kill (`SIGKILL`) cannot be trapped and is unaffected.
+
+A program is resumed by relaunching every process, through the ordinary
+startup (see "Startup sequence: `run()`"), with no special case for a halt:
+each node loads its latest checkpoint (the one the halt closed, in the
+ordinary case where nothing else ran in this incarnation after it) and replays
+its input log after that checkpoint's `capture_pos`. What is replayed is what
+the node processed between capturing its state and closing the round (the
+messages that were in transit at the cut, which its checkpoint also holds as
+`channel_state`) and anything that reached its log after that. The node ends
+in the state it had when it stopped, and re-executing those messages is
+deterministic, like any other replay.
+
+The relaunch is `debasher_exec` again, on the same output directory. Every
+node stopped by the halt left a `.finished`, which for a general program means
+a process that is done and is not launched again. In a resident program a
+process is never done, so `debasher_exec` marks every process that is not
+running to be launched again
+(`debasher::_define_rerun_processes_due_to_resident_resume`), every task of an
+array included, also when only some of them have a `.finished`, as a hard kill
+of the others leaves them. Nothing in the directory of a node is reset on the
+way: not its checkpoints, its input log or its halted marker, in its execdir
+(Glossary), nor its output directory, `<outdir>/<process>`, which a general
+process has emptied every time it is launched. What a node keeps there is part
+of what it has done so far, and a launch of the node resumes it, whether it is
+a new run after a halt or the `Supervisor`'s relaunch after a crash.
 
 ## Checkpoint persistence
 
