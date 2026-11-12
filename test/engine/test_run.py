@@ -80,73 +80,45 @@ def test_load_latest_checkpoint_returns_the_highest_epoch(execdir):
     assert node_state == {"marker": "new"}
 
 
-def test_load_latest_checkpoint_rejects_a_schema_version_mismatch(execdir):
-    proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+def _save_valid_then_edit_newer(proc, edit):
+    """
+    Saves a valid checkpoint as epoch 0 and another as epoch 1, then applies
+    `edit` to the dictionary of epoch 1, so that a load that fell back to an
+    older checkpoint would return epoch 0 instead of failing.
+    """
+    proc._save_checkpoint(0, {"marker": "old"}, {}, 0, [], {}, {}, {})
+    proc._save_checkpoint(1, {"marker": "new"}, {}, 0, [], {}, {}, {})
+    checkpoint_path = os.path.join(proc._checkpoints_dir(), "1.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
-    data["schema_version"] = 999
+    edit(data)
     with open(checkpoint_path, "w") as f:
         json.dump(data, f)
 
-    with pytest.raises(ValueError):
+
+def test_load_latest_checkpoint_rejects_a_schema_version_mismatch_without_falling_back(execdir):
+    proc = _Node(opts={})
+
+    def other_version(data):
+        data["schema_version"] = 999
+
+    _save_valid_then_edit_newer(proc, other_version)
+
+    with pytest.raises(ValueError, match="schema version"):
         proc._load_latest_checkpoint()
 
 
-def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_closed_ports(execdir):
+@pytest.mark.parametrize(
+    "field",
+    ["epoch", "node_state", "capture_pos", "closed_ports", "out_seq", "last_seq", "out_backlog"],
+)
+def test_load_latest_checkpoint_refuses_a_checkpoint_without_a_field_without_falling_back(
+    execdir, field
+):
     proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
-    with open(checkpoint_path) as f:
-        data = json.load(f)
-    del data["closed_ports"]
-    with open(checkpoint_path, "w") as f:
-        json.dump(data, f)
+    _save_valid_then_edit_newer(proc, lambda data: data.pop(field))
 
-    with pytest.raises(KeyError, match="closed_ports"):
-        proc._load_latest_checkpoint()
-
-
-def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_seq(execdir):
-    proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
-    with open(checkpoint_path) as f:
-        data = json.load(f)
-    del data["out_seq"]
-    with open(checkpoint_path, "w") as f:
-        json.dump(data, f)
-
-    with pytest.raises(KeyError, match="out_seq"):
-        proc._load_latest_checkpoint()
-
-
-def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_last_seq(execdir):
-    proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
-    with open(checkpoint_path) as f:
-        data = json.load(f)
-    del data["last_seq"]
-    with open(checkpoint_path, "w") as f:
-        json.dump(data, f)
-
-    with pytest.raises(KeyError, match="last_seq"):
-        proc._load_latest_checkpoint()
-
-
-def test_load_latest_checkpoint_refuses_a_checkpoint_without_its_out_backlog(execdir):
-    proc = _Node(opts={})
-    proc._save_checkpoint(0, {}, {}, 0, [], {}, {}, {})
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
-    with open(checkpoint_path) as f:
-        data = json.load(f)
-    del data["out_backlog"]
-    with open(checkpoint_path, "w") as f:
-        json.dump(data, f)
-
-    with pytest.raises(KeyError, match="out_backlog"):
+    with pytest.raises(KeyError, match=field):
         proc._load_latest_checkpoint()
 
 
