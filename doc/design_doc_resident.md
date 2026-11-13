@@ -87,10 +87,11 @@ to it.
   built-in scheduler, and covered by the Contract. A **general program** is a
   DeBasher program as before, with none of this.
 - **node**: a process of a resident program seen as a vertex of its
-  communication graph, named by its process name or, for a task of an array
-  process, by `(process_name, task_idx)`. A business node is a subclass of
-  `FBPProcess`; the `Supervisor` is a process of the program but not a business
-  node, and it takes no part in the barrier.
+  communication graph, named by its process name when the process has a single
+  task, and by `(process_name, task_idx)`, written `<process>:<idx>`, when it
+  has several (see "Port declaration and node identity"). A business node is a
+  subclass of `FBPProcess`; the `Supervisor` is a process of the program but
+  not a business node, and it takes no part in the barrier.
 - **port**: an option of a node that is connected to a FIFO, named without its
   leading dash. The engine gives each node run by it its input and output ports,
   taken from the options of its module (see "Ports from the engine"), in
@@ -422,6 +423,8 @@ to it.
 - **heartbeat thread**: checks on a timer that every other thread is alive and,
   if so, sends the `Supervisor` an `INTERACT` `heartbeat`. An unhealthy node
   simply stops sending. At every tick it also writes the node info file.
+- **checker thread**: the thread of the `Supervisor`, not of a node, that
+  decides on a timer which nodes are down or done (see "Failure detection").
 - **observation thread**: only in a node whose class defines `observe()`. It
   runs `observe()` every `OBSERVE_INTERVAL_SECS`, which looks at the outside
   world and brings what it sees into the node with `inject()`, under the name of
@@ -1013,7 +1016,7 @@ is (see "Fields of each type"). Channel by channel:
 - From the supervisor to each initiator, a trigger port: a channel of commands
   that the supervisor owns and defines with the tag `--control`, so that the
   initiator reads it as a control port. It carries only `INTERACT`
-  (`start_snapshot`, `shutdown`, see "Trigger port(s)"), never a marker, so
+  (`start_snapshot`, `shutdown`, see "Trigger ports"), never a marker, so
   the round it opens never waits on it. A `CLOSE` on it does not close it, and
   the supervisor sends none when it stops (see control port in the
   Glossary).
@@ -1606,11 +1609,11 @@ nodes that a round has to reach.
 A round opens at a node in one of two ways. At an initiator, a trigger opens it:
 an `INTERACT` `start_snapshot`, or `shutdown` for a halt, on one of its control
 ports, written by the `Supervisor` through a trigger port or from outside the
-program (see "Trigger port(s): initiator(s) for snapshot/shutdown" and "Manual
-trigger channel"). At any node, the first marker of the round that arrives on an
-input port opens it. Either way, the node captures its state at once (see "State
-capture and checkpoint schema") and forwards the marker on every output port but
-the one to the `Supervisor`, which takes no part in the barrier.
+program (see "Trigger ports" and "Manual trigger channel"). At any node, the
+first marker of the round that arrives on an input port opens it. Either way,
+the node captures its state at once (see "State capture and checkpoint schema")
+and forwards the marker on every output port but the one to the `Supervisor`,
+which takes no part in the barrier.
 
 The round then waits for a marker on every input port that is pending: all of
 them but the control ports, the external ports, the ports whose writer has
@@ -2568,7 +2571,7 @@ starts afresh. Besides those threads it runs one of its own, the checker
 thread, which decides on a timer which nodes are down.
 
 The section first covers the ports of the `Supervisor` ("Port declaration and
-node identity", "Trigger port(s)", "Manual trigger channel") and the FIFOs it
+node identity", "Trigger ports", "Manual trigger channel") and the FIFOs it
 holds ("Holding the business channels"). It then follows a node through its
 failures: how it is found down or finished ("Failure detection",
 "Clean-completion detection"), relaunched ("Relaunching a downed node") and
@@ -2579,77 +2582,84 @@ one that resets a program, in "Tools for resident programs".
 
 ## Port declaration and node identity
 
-- **`NODE_PORTS`**: a dict `{node_name: option_name}`, which the engine gives
-  the `Supervisor` from the options of its module, with its other ports (see
-  "Ports from the engine"); a `Supervisor` built without the engine, as the
-  unit tests build it, declares it in its class. A dict, and not a list of
-  ports, is needed here specifically because, unlike `FBPProcess`'s barrier
-  logic, which only ever needs "did this pending port's marker arrive yet, yes
-  or no", treating every input port interchangeably, `Supervisor`'s detection
-  and relaunch logic inherently act on a *specific node's identity*, not just
-  "which port". The key is a label `Supervisor`'s own code uses internally
-  (logs, detection, relaunch); the value is the option name resolved through
-  `self.opts` (the same `-optname value` CLI convention) to the actual FIFO
-  path opened by that node's reader thread. At startup, each
-  `(node_name, option_name)` pair is resolved once; the reader thread spawned
-  for it tags every message pushed to the shared inbound queue with `node_name`,
-  not the raw option name, so all downstream `Supervisor` logic works purely in
-  terms of node identity.
-- **A node is a string or a `(process_name, task_idx)` tuple.** The key is the
-  name of a non-array process, or a tuple naming one task of an array process (a
-  `resident` program is not assumed to be array-free). The index is not only for
-  relaunching: the engine names an array task's files
-  `<process>_<idx>.id`/`<process>_<idx>.finished`
-  (`debasher::_get_array_taskid_filename`,
-  `debasher::_get_task_finished_filename`) instead of
-  `<process>.id`/`<process>.finished`, so every per-node path used by detection
-  depends on it. Malformed keys are rejected at construction.
+The `Supervisor` acts on nodes, not on ports: for each node it has to know which
+channel carries its heartbeats, and which process or task it is, so as to find
+its files and relaunch it. So it keeps its heartbeat channels in `NODE_PORTS`, a
+dict `{node: option_name}`, where `FBPProcess` keeps a plain list of input
+ports, all alike to its barrier. The engine gives `NODE_PORTS`, with the other
+ports of the `Supervisor`, from the options of its module, as the field
+`nodes=<node>=<port>,...` (see "Ports from the engine"); a `Supervisor` built
+without the engine, as the unit tests build it, declares it in its class. At
+startup, each option is resolved once through `self.opts`, like any port, to the
+path of its FIFO, and the reader thread of the channel hands every envelope to
+the inbound queue tagged with the node, not with the option, so the rest of the
+`Supervisor` works in terms of nodes alone.
 
-## Trigger port(s): initiator(s) for snapshot/shutdown
+A node is named by its process when the process has a single task, and by its
+process and the index of its task when it has several: a string, or a tuple
+`(process_name, task_idx)`, which the engine writes `<process>:<idx>`. The rule
+is the number of tasks, not whether the process is an array, so an array or a
+generator of one task is named by its process alone. A resident program is not
+assumed to be free of arrays, and the index is not only for the relaunch: the
+engine names the files of a task of a process with several tasks
+`<process>_<idx>.id` and `<process>_<idx>.finished`
+(`debasher::_get_array_taskid_filename`,
+`debasher::_get_task_finished_filename`), and those of a process with one task
+`<process>.id` and `<process>.finished`, so every file that detection reads
+depends on it. A key of `NODE_PORTS` that is neither a string nor such a tuple
+is refused when the `Supervisor` is built.
 
-- **`TRIGGER_PORT` is a list of zero or more output option names**, not a single
-  scalar, each wired to a different initiator node. This covers a `resident`
-  program made of multiple genuinely independent subgraphs: a single initiator
-  can never reach a disjoint subgraph no matter what, so the module wires the
-  `Supervisor` to one initiator per subgraph it actually needs to reach, each
-  through a fifo that the `Supervisor` defines with the tag `--control`, and
-  the engine lists them (see "Ports from the engine"). `Supervisor` sends
-  `start_snapshot`/`shutdown` to every configured initiator when triggered
-  (manually, or by `on_node_permanently_failed`, see "Escalation on a permanent
-  node failure"). Empty when there
-  is no such fifo: a `Supervisor` doing pure monitoring + relaunch, with no
-  snapshot/shutdown-triggering capability at all, is a valid configuration.
-- An initiator that receives its triggers through a trigger port has the port
-  on which it reads them in `CONTROL_PORTS`, since the `Supervisor` defines
-  that fifo with the tag `--control`. Without the tag the channel would be a
-  data port: the round would open, the marker would go downstream and the
-  initiator would wait for ever for a marker from the `Supervisor`. A
-  `Supervisor` sends no `CLOSE` when it stops, since another one, of a resumed
-  program, writes into the same ports; a `CLOSE` written there by anyone else
-  changes nothing either (see control port in the Glossary).
-- This is a convenience, not the only way to trigger a round: a direct
-  external `INTERACT` write into an initiator's own FIFO (e.g. via
-  Talk-to-FIFOs, or `debasher_snapshot_resident`, which writes into the
-  control ports of every node) remains independent of whether a `Supervisor`
-  exists at all or how it is configured, and so would a snapshot timer of the
-  initiator's own (not built, see "Periodic snapshots from a node's own timer"
-  in Future work).
+## Trigger ports
+
+An initiator opens a round when a trigger arrives on one of its control ports
+(see "Chandy-Lamport barrier propagation"), and the `Supervisor` can send those
+triggers itself, through its trigger ports. `TRIGGER_PORT` lists them: zero or
+more output options, each wired to a different initiator through a fifo that
+the `Supervisor` defines with the tag `--control`, and which the engine lists
+(see "Ports from the engine"). It is a list, and not a single port, because a
+resident program may be made of several independent subgraphs, and a marker
+never leaves the subgraph of the initiator that opened its round: the module
+wires the `Supervisor` to one initiator in each subgraph that it has to reach.
+When it is triggered, by hand (see "Manual trigger channel") or by its
+escalation (see "Escalation on a permanent node failure"), the `Supervisor`
+sends `start_snapshot` or `shutdown` to every initiator it lists. The list is
+empty when there is no such fifo: a `Supervisor` that only watches and
+relaunches nodes, and triggers no round, is a valid configuration.
+
+The initiator reads a trigger port as a control port, in its `CONTROL_PORTS`,
+because the `Supervisor` defines the fifo with the tag `--control`. Without the
+tag the channel would be a data port: the round would open, its marker would go
+downstream, and the initiator would wait for ever for a marker from the
+`Supervisor`, which sends none. The `Supervisor` sends no `CLOSE` on a trigger
+port when it stops, since another `Supervisor`, that of a resumed program,
+writes into the same ports; and a `CLOSE` that anyone else writes there changes
+nothing either (see control port in the Glossary).
+
+The trigger ports are a convenience, not the only way to open a round. Anyone
+outside the program can write an `INTERACT` straight into a control port of an
+initiator, whether or not the program has a `Supervisor` and however it is
+configured: through Talk-to-FIFOs, or with `debasher_snapshot_resident`, which
+writes into the control ports of every node; and so could a snapshot timer of
+the initiator's own, which is not built (see "Periodic snapshots from a node's
+own timer" in Future work).
 
 ## Manual trigger channel
 
-- **`MANUAL_TRIGGER_PORT`**: an optional single input option name, distinct from
-  `NODE_PORTS` (carries no per-node identity, it is an external control channel,
-  not a supervised node's heartbeat): the fifo that the `Supervisor` defines
-  with the tag `--control` and that is fed from outside the program, at most
-  one. Any `INTERACT` envelope arriving there is relayed to every configured
-  `TRIGGER_PORT` initiator, with an epoch added to its `args` when they carry
-  none (see numbered trigger in the Glossary), so that every initiator opens
-  the same round; a command that starts no round never reads it. Beyond its
-  being a string (see "Fields of each type"), `Supervisor` does not validate or
-  interpret `command`, matching the deliberately open-ended `INTERACT` catalog
-  convention used everywhere else in this design (see "Control envelope").
-  Whatever ends up unrecognized is still handled safely at the far end, by the
-  initiator's own `_on_interact` (logs a warning and ignores it, never aborts).
+The `Supervisor` takes the triggers it relays from its manual trigger port,
+`MANUAL_TRIGGER_PORT`: at most one input option, a fifo that the `Supervisor`
+defines with the tag `--control` and that is written from outside the program.
+It is not one of `NODE_PORTS`, since it carries no node's identity: it is a
+channel of commands, not the heartbeat channel of a supervised node. The
+`Supervisor` relays every `INTERACT` that arrives there to every initiator of
+`TRIGGER_PORT`, adding an epoch to its `args` when they carry none (see
+numbered trigger in the Glossary), so that every initiator opens the same
+round; a command that starts no round never reads it.
+
+The `Supervisor` checks no more of the command than that it is a string (see
+"Fields of each type"), and does not interpret it, as the catalog of `INTERACT`
+commands is open everywhere else in this design (see "Control envelope"). An
+initiator that does not recognize a command handles it in its own
+`_on_interact`, which logs a warning and ignores it, and never aborts.
 
 ## Holding the business channels
 
@@ -2672,48 +2682,48 @@ that the reader had begun to take when it died, is the limit of "Messages read
 from a FIFO but not yet written to the input log" (see the Contract's limits),
 as when the reader alone crashes.
 
-- **Which FIFOs.** The engine gives them, `HOLD_FIFOS`, with the other ports
-  of the `Supervisor` (see "Ports from the engine"): every fifo without a tag
-  whose two ends are nodes, the loop of a node that emits on its own and the
-  channels of the tasks of an array included. The heartbeat channels and the
-  triggers are left out, since the `Supervisor` already holds them as one of
-  their endpoints, and so is a fifo with one end outside the program: delivery
-  there is at most once in any case (see "External inputs" in the Contract's
-  limits), and a holder would change what the process outside sees, whose
-  `open()` would no longer wait for the node while it is down. A fifo is not an
-  option of the `Supervisor`, so the engine names it by its path under the
-  fifo directory of the program, `<owner process>/<fifo>`, which the
-  `Supervisor` resolves against the output directory that it already finds
-  from its own execdir. A fifo that is missing stops the `Supervisor` with an
-  error.
-- **First thing at startup.** The `Supervisor` opens the held FIFOs before its
-  own ports, and before its checker thread can relaunch any node, so that a
-  `Supervisor` relaunched by hand holds every channel before it recovers
-  anything. A FIFO whose contents were destroyed while it was down is empty
-  when it opens it again, which does no harm. A second `Supervisor` running
-  at the same time, a new one while the old one hangs, is only a second holder.
-- **Released when the `Supervisor` ends**, never one channel at a time. A
-  node's `.finished` does not say whether it halted or finished for good, and
-  both a halt and an escalation end with the `Supervisor` itself stopping.
-  Holding the FIFO of a channel whose reader is gone for good costs one
-  descriptor and at most what a pipe holds, and changes nothing for its writer,
-  which already blocks once the pipe is full, since its own ghost end keeps the
-  pipe alive (see "A node that finishes for good" in Future work).
-- **When nothing is held.** While the `Supervisor` is down, which nothing
-  watches (see the Contract's failure model), in a program without a
-  `Supervisor`, and during a graceful stop, since `debasher_stop_resident`
-  stops the `Supervisor` first (a crash during a halt is already outside the
-  guarantees, see "A crash while a round is open" in the Contract's limits).
-- **The switch.** Given the flag `-no-hold-fifos`, the `Supervisor` holds
-  nothing and logs a warning that says what is at stake. Its module offers it
-  as an option of the command line of the program, a flag like any other
-  (`explain_flag`, `opt_is_non_mandatory_cmdline`,
-  `define_cmdline_flag_if_given`), so that a run can choose; the chaos test
-  uses it to reach the limit it would otherwise never reach. A module that
-  does not offer it holds the FIFOs in every run.
-- **Descriptors.** One for each held FIFO, which the `Supervisor` counts in
-  the limit it raises before it opens anything (see "Computational
-  specifications of a resident process").
+The engine gives the FIFOs to hold, `HOLD_FIFOS`, with the other ports of the
+`Supervisor` (see "Ports from the engine"): every fifo without a tag whose two
+ends are nodes, the loop of a node that emits on its own and the channels of
+the tasks of an array included. It leaves out the heartbeat channels and the
+trigger ports, which the `Supervisor` already holds as one of their endpoints,
+and every fifo with one end outside the program: delivery there is at most once
+in any case (see "External inputs" in the Contract's limits), and a holder
+would change what the process outside sees, whose `open()` would no longer wait
+for the node while it is down. A fifo to hold is not an option of the
+`Supervisor`, so the engine names it by its path under the fifo directory of
+the program, `<owner process>/<fifo>`, which the `Supervisor` resolves against
+the output directory that it already finds from its own execdir. A fifo that is
+missing stops the `Supervisor` with an error.
+
+Holding the FIFOs is the first thing the `Supervisor` does when it starts,
+before it opens its own ports and before its checker thread can relaunch any
+node, so that a `Supervisor` relaunched by hand holds every channel before it
+recovers anything. A FIFO whose contents were destroyed while it was down is
+empty when it opens it again, which does no harm; and a second `Supervisor`
+running at the same time, a new one while the old one hangs, is only a second
+holder. The `Supervisor` releases the FIFOs when it ends, all at once, never one
+channel at a time: a node's `.finished` does not say whether it halted or
+finished for good, and both a halt and an escalation end with the `Supervisor`
+itself stopping. Holding the FIFO of a channel whose reader is gone for good
+costs one descriptor and at most what a pipe holds, and changes nothing for its
+writer, which already blocks once the pipe is full, since its own ghost end
+keeps the pipe alive (see "A node that finishes for good" in Future work).
+
+Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
+(see the Contract's failure model), in a program without a `Supervisor`, and
+during a graceful stop, since `debasher_stop_resident` stops the `Supervisor`
+first (a crash during a halt is already outside the guarantees, see "A crash
+while a round is open" in the Contract's limits); nor when the `Supervisor` is
+given the flag `-no-hold-fifos`, with which it holds nothing and logs a warning
+that says what is at stake. Its module offers the flag as an option of the
+command line of the program, a flag like any other (`explain_flag`,
+`opt_is_non_mandatory_cmdline`, `define_cmdline_flag_if_given`), so that a run
+can choose; the chaos test uses it to reach the limit it would otherwise never
+reach. A module that does not offer it holds the FIFOs in every run. Each held
+FIFO takes one descriptor, which the `Supervisor` counts in the limit it raises
+before it opens anything (see "Computational specifications of a resident
+process").
 
 `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
 node opens them, with a single `SIGKILL`, at random moments and with lines
@@ -2727,193 +2737,184 @@ with it the trace is exact.
 
 ## Failure detection
 
-- **One dedicated checker thread, not a `threading.Timer` per node**: chosen
-  specifically for scalability to hundreds or thousands of supervised nodes: a
-  single thread doing O(N) cheap comparisons per wake stays flat in thread count
-  regardless of N, whereas a `Timer`-per-node design means a real OS thread per
-  node *and* continuous thread churn proportional to (node count x heartbeat
-  frequency), since a fired-or-cancelled `Timer` instance is not reusable and
-  must be recreated on every heartbeat received.
-- **State per node**: `_last_heartbeat[node]` (timestamp of the last real
-  heartbeat, updated only by the brain thread when it dispatches an
-  `INTERACT{"command":"heartbeat"}`), guarded by a lock: read by the checker
-  thread, written by the brain thread, a cross-thread hazard resolved with an
-  explicit lock since two threads legitimately need to touch this state.
-- **`HEARTBEAT_TIMEOUT_SECS` / `HEARTBEAT_CHECK_INTERVAL_SECS`**: the checker
-  thread wakes every `HEARTBEAT_CHECK_INTERVAL_SECS` and, for each node not yet
-  resolved (see "Clean-completion detection"), compares
-  `now - _last_heartbeat[node]` against `HEARTBEAT_TIMEOUT_SECS`. A program
-  sets the timeout of its `Supervisor` in the computational specifications of
-  that process, `heartbeat_timeout_s`, in seconds, the same way as the limits
-  of a node (see "Computational specifications of a resident process").
-- **Startup deadline**: from each launch until its first heartbeat, a node's
-  silence is measured against its startup deadline instead (Glossary), kept in
-  `_starting` and applied by `_silence_limit`: from its launch the node
-  restores its checkpoint, runs `initialize_runtime()` and replays its input
-  log before its heartbeat thread starts, and that can take much longer than the
-  interval between two heartbeats. The first heartbeat still comes one
-  `HEARTBEAT_INTERVAL_SECONDS` after the threads start, not at once: it resets
-  the relaunch budget (see "Relaunching a downed node"), so it has to show
-  that the node has run healthy for a while, not only that it started; sent at
-  once, it would reset the budget of a node whose reader fails on the first
-  live message after every relaunch, such as one past a gap in its sequence
-  numbers that no relaunch can fill, and that node would be relaunched for
-  ever. A node gives it in its computational specifications,
-  `startup_timeout_s`, which the engine passes to the `Supervisor` in
-  `NODE_STARTUP_TIMEOUT_SECS` (see "Ports from the engine"); the
-  `startup_timeout_s` of the `Supervisor` itself, `STARTUP_TIMEOUT_SECS`, is
-  the deadline of every node that gives none; and neither is ever shorter than
-  `HEARTBEAT_TIMEOUT_SECS`, which is also the deadline when neither is given.
-  A long deadline delays only the detection of a node that is alive and silent
-  at startup: a node that crashes during its startup, for example on the same
-  record at every replay, is declared down at once by the PID-based fast path
-  below, and uses up its relaunch attempts as before.
-- **Monotonic clock**: every time kept to measure the silence of a node is
-  taken from the monotonic clock (`time.monotonic()`), never from the wall
-  clock, which can jump forward (an NTP correction, a machine coming back from
-  suspend) and make every node look silent at once.
-- **A `Supervisor` that did not run for a while**: when it is starved of CPU,
-  stopped or paused, the heartbeats that the nodes send meanwhile wait unread
-  in its FIFOs, and when it runs again its checker thread may run before the
-  threads that read them, and declare a live node down. So the checker
-  measures the time since its previous tick, and when a tick comes more than
-  one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves every node's
-  `_last_heartbeat` forward by as much as the tick was late
-  (`_credit_own_stall`): the time the `Supervisor` did not run is not counted
-  against any node. A node whose process is gone is still declared down at
-  once, by the PID-based fast path below, which does not depend on elapsed
-  time.
-- **A thread of the `Supervisor` that dies**: nothing supervises the
-  `Supervisor` (see "Failure model"), so it must not live on without its brain
-  thread, deaf to the heartbeats while its checker thread declares healthy
-  nodes down, or without its checker thread, blind to nodes that do go down. An
-  exception that ends either thread is logged and ends the `Supervisor` with an
-  error (its `run()` raises one that carries it), which then counts as a
-  `Supervisor` that died: the nodes keep running, unsupervised, until it is
-  relaunched by hand (see "Failure model"). What a writer of its
-  channels can get wrong, a malformed command or a type that does not belong
-  there, is dropped by the reader before it reaches the brain thread (see
-  "Fields of each type").
-- **PID-based fast path**: every BUILTIN-scheduler process gets a `.id` file
-  holding the PID of its script with the time at which that PID's process
-  started (written by `debasher_builtin_sched::_launch`, for every process, not
-  only resident ones), at `__exec__/<node>/<node>.id`; the `Supervisor` reads
-  only the PID. If that PID no longer exists (checked directly, no need to wait
-  for the heartbeat timeout) and `<node>.finished` is absent, the node is
-  declared down immediately: a gone PID is unambiguous, whereas a live PID
-  proves nothing about whether the node is actually *functioning* (a
-  stuck/deadlocked process still holds its PID). So PID-dead is a fast, certain
-  shortcut to "down"; heartbeat timeout remains the only judge of "alive but not
-  really working"; PID-alive is never, by itself, treated as "healthy".
-- **No new `.failed` marker file.** A deliberate application-level error exit
-  and a real crash already leave the same signature (no `.finished`, eventually
-  no heartbeat, dead PID) and are treated identically. No behavioral difference
-  is needed between the two. If a future need arises to tell them apart, the
-  better mechanism is the process itself sending a richer `INTERACT` before it
-  exits (still alive at that point, knows why), not a new engine-level boolean
-  file written by the wrapper script after the fact.
+The `Supervisor` decides which nodes are down in a single thread of its own, the
+checker thread. It wakes every `HEARTBEAT_CHECK_INTERVAL_SECS` and, for each
+node not yet resolved (see "Clean-completion detection"), compares the time
+since its last heartbeat with `HEARTBEAT_TIMEOUT_SECS`. One thread does a cheap
+comparison per node at each tick, so the number of threads stays the same
+whatever the number of nodes; a `threading.Timer` per node would instead take a
+thread of the operating system per node, and a new one at every heartbeat, since
+a `Timer` that has fired or been cancelled cannot be reused. The time of the
+last heartbeat of each node, `_last_heartbeat[node]`, is written by the brain
+thread when it dispatches an `INTERACT` `heartbeat`, and read and moved forward
+by the checker thread, so a lock guards it. A program sets the timeout of its
+`Supervisor` with the computational specification `heartbeat_timeout_s` of that
+process, in seconds, in the same way as the limits of a node (see "Computational
+specifications of a resident process").
+
+From each launch of a node until its first heartbeat, the silence of the node is
+measured against its startup deadline (see the Glossary) instead: the node is
+kept in `_starting`, and `_silence_limit` gives the limit. A node restores its
+checkpoint, runs `initialize_runtime()` and replays its input log before its
+heartbeat thread starts, which can take much longer than the interval between
+two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECONDS`
+after the threads start, not at once: it resets the relaunch budget (see
+"Relaunching a downed node"), so it has to show that the node has run healthy
+for a while, not only that it started. Sent at once, it would reset the budget
+of a node whose reader fails on the first live message after every relaunch,
+such as one past a gap in its sequence numbers that no relaunch can fill, and
+that node would be relaunched for ever. A node gives its deadline with its
+computational specification `startup_timeout_s`, which the engine passes to the
+`Supervisor` in `NODE_STARTUP_TIMEOUT_SECS` (see "Ports from the engine"); the
+`startup_timeout_s` of the `Supervisor` itself, `STARTUP_TIMEOUT_SECS`, is the
+deadline of every node that gives none; neither is ever shorter than
+`HEARTBEAT_TIMEOUT_SECS`, which is also the deadline when neither is given. A
+long deadline delays only the detection of a node that is alive and silent at
+startup: a node that crashes during its startup, for example on the same record
+at every replay, is declared down at once, by its PID, and uses up its relaunch
+attempts as any other.
+
+The PID is the fast path to "down". The built-in scheduler gives every process
+it launches, resident or not, a `.id` file, `__exec__/<node>/<node>.id`
+(`debasher_builtin_sched::_launch`), which holds the PID of its script with the
+time at which the process of that PID started; the `Supervisor` reads only the
+PID. If that PID no longer exists and the node has no `.finished` file, the node
+is declared down at once, without waiting for the timeout. The two signals are
+not symmetric: a PID that is gone is certain, whereas a live PID proves nothing
+about whether the node works, since a process that is stuck or deadlocked still
+holds its PID. So a dead PID is a certain shortcut to "down", the heartbeat
+timeout is the only judge of a node that is alive but not working, and a live
+PID is never taken by itself as a sign of health.
+
+Two things could make a live node look silent without being so. The first is
+the clock: every time kept to measure the silence of a node is taken from the
+monotonic clock (`time.monotonic()`), never from the wall clock, which can jump
+forward (an NTP correction, a machine coming back from suspend) and make every
+node look silent at once. The second is the `Supervisor` itself not running for
+a while, starved of CPU, stopped or paused: the heartbeats that the nodes send
+meanwhile wait unread in its FIFOs, and when it runs again its checker thread
+may run before the threads that read them, and declare a live node down. So the
+checker thread measures the time since its previous tick, and when a tick comes
+more than one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves the
+`_last_heartbeat` of every node forward by as much as the tick was late
+(`_credit_own_stall`): the time the `Supervisor` did not run is not counted
+against any node. A node whose process is gone is still declared down at once,
+by its PID, which does not depend on the time elapsed.
+
+Nothing supervises the `Supervisor` (see "Failure model"), so it must not live
+on without its brain thread, deaf to the heartbeats while its checker thread
+declares healthy nodes down, or without its checker thread, blind to the nodes
+that do go down. An exception that ends either thread is logged and ends the
+`Supervisor` with an error (its `run()` raises one that carries it), which then
+counts as a `Supervisor` that died: the nodes keep running, unsupervised, until
+it is relaunched by hand. What a writer of its channels can get wrong, a
+malformed command or a type that does not belong there, is dropped by the
+reader before it reaches the brain thread (see "Fields of each type").
+
+A node that exits with an error on purpose leaves the same signs as one that
+crashes (no `.finished`, no more heartbeats, a dead PID), and both are treated
+alike; there is no `.failed` file to tell them apart, since nothing needs to.
+Should a need arise, a better way than a file that the wrapper script writes
+after the fact is for the node to send a richer `INTERACT` before it exits,
+while it is still alive and knows why.
 
 ## Clean-completion detection (and the `Supervisor`'s own shutdown)
 
-- **The checker thread also checks `<node>.finished`, every tick, for every node
-  not yet resolved**: cheap (one `os.path.exists()` per node per tick, same cost
-  class as the heartbeat comparison), and checked unconditionally rather than
-  only as a tie-break right before declaring a heartbeat timeout, specifically
-  so a node's clean completion is noticed within one
-  `HEARTBEAT_CHECK_INTERVAL_SECS`, not delayed by up to a full
-  `HEARTBEAT_TIMEOUT_SECS`.
-- `debasher::_signal_process_completion` (`engine/debasher_lib_sched_procs.sh`),
-  which writes `.finished`, is only reached when the task succeeds or its
-  `_skip` method skips it (`debasher::_execute_task`): a non-zero exit code
-  returns before it. So `.finished` reliably means "exited cleanly, code 0", or
-  skipped.
-- Once `.finished` is seen for a node, it moves to a **"done"** state,
-  permanently excluded from further heartbeat/PID checks and never again a
-  candidate for `on_node_down`. This is what keeps an intentional ordered
-  shutdown from ever looking like a crash: a node that stopped on purpose simply
-  stops sending heartbeats *and* leaves `.finished` behind, the two together are
-  what distinguish it from a real failure.
-- **Once every node in `NODE_PORTS` is "done", `Supervisor` stops its own
-  threads and exits.** This answers "who tells the `Supervisor` to stop":
-  nothing external needs to signal it explicitly, it infers whole-program
-  completion from the same state it already tracks for every other purpose.
-- **`Supervisor` also stops on a stop signal**, like `FBPProcess` (see
-  "Ordered shutdown"): `run()` installs a `SIGTERM` handler on the main thread
-  (same reasoning, and same off-main-thread exception for tests driving
-  `run()` on a background thread), whose handler just sets `_all_resolved`
-  directly. Unlike `FBPProcess`, nothing here needs to tell "resolved
-  naturally" apart from "told to stop", so the one event that `run()`'s own
-  `_all_resolved.wait()` waits on covers both. This exists so that a
-  graceful-stop tool that finds a `Supervisor` present can end it first,
-  deliberately, before touching any node it watches, so that it cannot
-  relaunch one out from under the rest of what that tool does (see
-  "`debasher_stop_resident`").
+At every tick, the checker thread also looks for the `.finished` file of every
+node not yet resolved. It costs one `os.path.exists()` per node, as cheap as
+the comparison of the heartbeat, and it is done at every tick rather than only
+before a node is declared down, so that the clean end of a node is noticed
+within one `HEARTBEAT_CHECK_INTERVAL_SECS`, not up to a whole
+`HEARTBEAT_TIMEOUT_SECS` later. The file is written by
+`debasher::_signal_process_completion` (`engine/debasher_lib_sched_procs.sh`),
+which `debasher::_execute_task` reaches only when the task succeeds or its
+`_skip` method skips it: a non-zero exit code returns before it. So `.finished`
+means that the node exited cleanly, with code 0, or was skipped.
+
+Once its `.finished` is seen, the node is done: it is never checked again,
+neither its heartbeat nor its PID, and `on_node_down` is never called for it.
+This is what keeps an ordered shutdown from looking like a crash: a node that
+stops on purpose stops sending heartbeats and leaves its `.finished` behind,
+and the two together tell it from a node that failed.
+
+The same state tells the `Supervisor` when to stop: once every node of
+`NODE_PORTS` is resolved, done or given up on (see "Relaunching a downed
+node"), and no escalation is still running, it stops its own threads and
+exits, with no signal from outside. It also stops on a stop signal, like
+`FBPProcess` (see "Ordered shutdown"): `run()` installs a handler of `SIGTERM`
+when it runs on the main thread (not when a test drives it on another thread),
+and the handler only sets `_all_resolved`, the event that `run()` waits on.
+Unlike `FBPProcess`, the `Supervisor` has no need to tell an end that came by
+itself from one it was told to make, so one event covers both. The signal lets
+a tool that stops the program gracefully end the `Supervisor` first, before it
+touches any node, so that the `Supervisor` cannot relaunch one of them under it
+(see "`debasher_stop_resident`").
 
 ## Relaunching a downed node
 
-- **`on_node_down(node_name)` is a hook with a concrete default
-  implementation**, not a pure `NotImplementedError` abstract method like
-  `FBPProcess.process_data`/etc. Unlike those, there *is* one universal, correct
-  default action here, since every `resident` process is relaunched the exact
-  same mechanical way. Overridable, for a module author who needs something
-  non-standard.
-- **The default relaunches through an installed tool,
-  `debasher_launch_process -d <outdir> -p <process> [-t <idx>]`**
-  (`engine/debasher_launch_process.sh`, installed in `libexec`), which calls the
-  built-in scheduler's own `debasher_builtin_sched::_launch`. The tool takes the
-  program's output directory (not the process's) and, for an array task, the
-  index; without `-t` it passes `NO_ARRAY_TASK`. Relaunching is therefore the
-  same code path as the original launch, as "Startup sequence: `run()`"
-  requires: launching a node for the first time and relaunching it after a
-  failure are the same operation.
-- **Why not simply re-execute `__exec__/<node>/<node>`?** That generated
-  script does not carry the per-launch state. `BUILTIN_ARRAY_TASK_ID` is
-  exported by `_launch` just before it starts the script, and is not among
-  the variables dumped into the script itself (that dump is a deliberate
-  allowlist, and it runs once per process at generation time, while this
-  value is per launch), and the `.id` file is written by `_launch`, not by
-  the script. A bare `subprocess.Popen` from the Supervisor would inherit
-  the Supervisor's own `BUILTIN_ARRAY_TASK_ID` instead, and the relaunched
-  node's `.id` would never be updated: a stale PID that `_node_pid_alive`
-  reports "dead" forever, and since a real heartbeat resets
-  `_relaunch_attempts` on every recovery, the budget never trips, an
-  endless relaunch loop. It would also leave the node in the Supervisor's
-  own process group, which `debasher_stop` (`kill -9 -- -$pid`) relies on
-  being one per process. `_launch` avoids all of it, since it writes the
-  `.id` itself and its explicit export overrides whatever the caller
-  inherited.
-- **What `_launch` does for this** (`engine/debasher_builtin_sched_lib.sh`): it
-  writes the new process's id, its PID with the start time of its process, into
-  the `.id` itself, as soon as the process starts and without waiting for it,
-  through a temporary file renamed into place, so that a reader sees either the
-  old id or the new one, never an empty file; it exports `DEBASHER_LIBEXECDIR`
-  so a running process can find the installed tools (`debasher_libexecdir` is
-  deliberately excluded from what generated scripts carry); and it unsets
-  `BUILTIN_ARRAY_TASK_ID` before a non-array launch.
-- The launcher runs without blocking the checker thread; a short-lived
-  thread reaps it and logs a non-zero exit.
-- **`MAX_RELAUNCH_ATTEMPTS` per node**: a plain counter, incremented each time
-  `on_node_down` actually fires for that node, **reset to 0 on that node's next
-  real heartbeat** (proof of actual recovery, not just that its PID exists
-  again, consistent with "PID-alive proves nothing about health" in "Failure
-  detection": the first heartbeat goes out one interval after the startup,
-  restore and replay included, is over). This distinguishes a node that keeps
-  crashing during its startup, or right after it, after every relaunch
-  (counter climbs, never resets, eventually exhausts the budget) from one that
-  crashes rarely over a very long run and always recovers cleanly each time
-  (counter keeps resetting, never exhausted just by accumulating spaced-out
-  incidents).
-- Exceeding the limit calls **`on_node_permanently_failed(node_name)`** instead
-  of relaunching again; that node moves to its own terminal "given up" state
-  (distinct from "done"), never automatically retried again.
-- **The relaunch subprocess also has to leave `stdout`/`stderr` alone, not just
-  `stdin`.** `on_node_down`'s `subprocess.Popen` redirects `stdin`, and also
-  redirects `stdout`/`stderr` to `DEVNULL`: left alone, they would be inherited
-  from the Supervisor's own process (its `.stdout` file and its log, see
-  `debasher::_execute_task`), and `debasher_launch_process`, and in turn the
-  resident process it backgrounds, would hold them open and write into them for
-  as long as the relaunched node keeps running, long after the Supervisor's own
-  Python interpreter has exited.
+When it declares a node down, the `Supervisor` calls `on_node_down(node_name)`,
+a hook with a default that relaunches the node. Unlike the hooks of
+`FBPProcess` that raise `NotImplementedError`, such as `process_data`, this one
+has a single right default, since every node of a resident program is
+relaunched in the same way; a module may still override it.
+
+The default runs an installed tool,
+`debasher_launch_process -d <outdir> -p <process> [-t <idx>]`
+(`engine/debasher_launch_process.sh`, in `libexec`), which calls
+`debasher_builtin_sched::_launch`, the function of the built-in scheduler that
+launched the node the first time. The tool takes the output
+directory of the program, not that of the process, and the index of the task
+for a node named with one; without `-t` it passes `NO_ARRAY_TASK`. A relaunch
+is therefore the same operation as the first launch, as "Startup sequence:
+`run()`" requires.
+
+Running the script of the node, `__exec__/<node>/<node>`, again would not do,
+since the script does not carry what changes from one launch to the next.
+`_launch` exports `BUILTIN_ARRAY_TASK_ID` just before it starts the script, and
+the variable is not among those written into the script, an allowlist written
+once per process when the script is generated, while this value changes with
+every launch; and `_launch`, not the script, writes the `.id` file. A plain
+`subprocess.Popen` from the `Supervisor` would give the node the
+`BUILTIN_ARRAY_TASK_ID` of the `Supervisor` instead, and would never update its
+`.id`: `_node_pid_alive` would report the stale PID dead for ever, and since a
+real heartbeat resets the relaunch budget at every recovery, the budget would
+never run out, an endless loop of relaunches. It would also leave the node in
+the process group of the `Supervisor`, while `debasher_stop`
+(`kill -9 -- -$pid`) relies on one group per process. `_launch` avoids all of
+it: it writes the `.id`, and its own export overrides whatever the caller
+inherited.
+
+What `_launch` (`engine/debasher_builtin_sched_lib.sh`) does for this is three
+things. It writes the id of the new process, its PID with the time at which its
+process started, into the `.id` file as soon as the process starts, without
+waiting for it, through a temporary file renamed into place, so that a reader
+sees either the old id or the new one, never an empty file. It exports
+`DEBASHER_LIBEXECDIR`, so that a running process can find the installed tools
+(`debasher_libexecdir` is left out of what generated scripts carry on
+purpose). And it unsets `BUILTIN_ARRAY_TASK_ID` before a launch with no task
+index.
+
+The `Supervisor` runs the tool without blocking its checker thread: a
+short-lived thread waits for it and logs a non-zero exit. The tool runs with
+its `stdin` redirected, and with its `stdout` and `stderr` sent to `DEVNULL`
+too: otherwise they would be those of the `Supervisor`'s own process, its
+`.stdout` file and its log (see `debasher::_execute_task`), and
+`debasher_launch_process`, and in turn the node it starts in the background,
+would hold them open and write into them for as long as the node runs, long
+after the `Supervisor` has exited.
+
+A node is relaunched at most `MAX_RELAUNCH_ATTEMPTS` times in a row. The counter
+of a node grows each time the node is declared down, and goes back to 0 at its
+next heartbeat, the proof that it has recovered, not only that its PID exists
+again (see "Failure detection": the first heartbeat goes out one interval after
+the startup, restore and replay included, is over). This tells a node that
+crashes after every relaunch, during its startup or right after it, whose
+counter grows until the budget runs out, from one that crashes now and then over
+a long run and recovers each time, whose counter goes back to 0 and never runs
+out from incidents far apart. Past the limit, the `Supervisor` calls
+`on_node_permanently_failed(node_name)` instead of relaunching the node again,
+and the node is given up on: a state of its own, distinct from done, which is
+never retried.
 
 ## Escalation on a permanent node failure
 
@@ -3507,8 +3508,9 @@ the chaos reference program:
 input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
 ```
 
-and for its `Supervisor`, `sup`, where a task of an array would be named
-`<process>:<idx>`, as `debasher_stop_resident -x` names it:
+and for its `Supervisor`, `sup`, where a task of a process with several tasks
+would be named `<process>:<idx>`, as `debasher_stop_resident -x` names it (see
+"Port declaration and node identity"):
 
 ```
 nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
