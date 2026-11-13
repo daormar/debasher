@@ -54,18 +54,19 @@ precisely what is promised.
   the violation is detected and reported, instead of the program carrying on
   with silently wrong state.
 
-The Glossary comes first, with the meaning of the words that the rest uses.
-The Contract follows: it says precisely what these goals do and do not
-promise. Then comes the design of the mechanism that provides
-them, from the wire up: the "Control envelope" that every line of a FIFO
-carries; the node ("`FBPProcess` class") and its "Input log"; the "`Supervisor`
-class", which watches the nodes; the "Tools for resident programs", which act
+The Glossary comes first, with the meaning of the words that the rest uses. The
+Contract follows: it says precisely what these goals do and do not promise. Then
+comes the design of the mechanism that provides them, from the wire up: the
+"Control envelope" that every line of a FIFO carries; the node ("`FBPProcess`
+class") and its "Input log", which together give a relaunched node back its
+state; "Reconnecting after a node failure", which gives it back its channels;
+the "`Supervisor` class", which watches the nodes, relaunches them and holds the
+FIFOs of their business channels; the "Tools for resident programs", which act
 on a live program from outside; the "Channel kinds declared with the fifo",
-which tell the engine what each FIFO is for; "Recovery from a node failure",
-which joins the pieces above when a node comes back; and "`ProgramLauncher`",
-a node that launches batch runs. The document ends with what is still open:
-"Loose ends to check before considering the design closed", "Extensions" and
-"Future work". Sections are cited in the text by name, as here.
+which tell the engine what each FIFO is for; and "`ProgramLauncher`", a node
+that launches batch runs. The document ends with what is still open: "Loose ends
+to check before considering the design closed", "Extensions" and "Future work".
+Sections are cited in the text by name, as here.
 
 # Glossary
 
@@ -949,7 +950,7 @@ interpreting `payload`):
   whatever follows it (a `Supervisor` reader delivers it).
 - `HELLO`: empty payload, sent as the first line of every incarnation of a
   writer, together with a leading blank line (see "resync line" in the
-  Glossary; the transport decision of "Recovery from a node failure").
+  Glossary; the transport decision of "Reconnecting after a node failure").
   Consumed by the reader thread.
 - No `port_name` field on any type: each reader thread (see "`FBPProcess`
   class") already knows which port a message came from by construction (it is
@@ -1541,8 +1542,8 @@ with a `NotImplementedError`.
 A node has one way to start, whether it is launched for the first time or
 relaunched after a failure. Which of the two it is shows only in what it finds
 on disk: with a checkpoint it restores it, and without one it starts from
-default values. The `Supervisor` needs no recovery mode: it runs the same
-script in both cases, and the process does the rest (see "Recovery from a node
+default values. The `Supervisor` needs no recovery mode: it runs the same script
+in both cases, and the process does the rest (see "Reconnecting after a node
 failure").
 
 `run()` follows these steps:
@@ -2331,7 +2332,7 @@ The first reason is that the tap changes the channel it observes. It is a
 process of its own between the writer and the real FIFO: the writer writes into
 a shim FIFO, and the tap reads the shim line by line and writes each line again
 into the real FIFO, whose write end it holds itself. The reconnection of
-"Recovery from a node failure" rests on the two processes at the ends of a
+"Reconnecting after a node failure" rests on the two processes at the ends of a
 channel both holding its FIFO (ghost connections). With a tap in between, the
 writer would hold the shim, not the real FIFO, and the real FIFO would be held
 by the tap, a process with a life of its own, so the channel would no longer
@@ -2347,6 +2348,182 @@ A resident program that declares `--mirror` on a fifo is therefore refused when
 it is loaded, before anything is launched, so a mirror tap never sits between
 two resident processes (see "Limits and non-goals"). `--mirror` remains a
 debugging aid of general programs, behind the "Watch FIFO" of the web UI.
+
+# Reconnecting after a node failure
+
+A node that crashes is relaunched while the rest of the program keeps running,
+and it has to get back both its state and its connections. Its state comes back
+from its checkpoint and its input log (see "Input log"). This section is about
+its connections: how the nodes that keep running reconnect with a peer that
+crashed and is relaunched, in both directions of a channel, without losing what
+the channel held. Nothing here is specific to a relaunch: every channel works
+this way from the first start of its nodes, and a relaunch is only the moment
+when that matters.
+
+Recovery is localized: only the downed node is relaunched, never the whole
+program. A global rollback is kept as a possible future fallback for the cases
+the Contract leaves out (see Future work). The `Supervisor` detects a downed
+node from the absence of a heartbeat (or, faster, a dead PID, see "Failure
+detection") and relaunches it through `debasher_launch_process`, the same
+operation as an initial launch (see "Startup sequence: `run()`"), with no
+special "recovery mode" logic (see "Relaunching a downed node"). The
+relaunched node reconnects to the `Supervisor` on its own: with ghost
+connections (see "Ghost connections"), the `Supervisor`'s own reader never
+needs to reopen anything, and it learns that a node finished only from its
+`.finished` file. Reconnecting to its business peers, the FBP graph's own
+channels, is what the rest of this section designs.
+
+The section first states the problem ("The gap"), then the pieces that solve
+it: an envelope that tells a finished peer from a crashed one ("`CLOSE`"),
+FIFOs whose two ends every endpoint holds, so that none ever sees EOF or
+`EPIPE` ("Ghost connections"), the line that resynchronizes a reader after a
+writer died in the middle of a message ("The resync line"), and the order in
+which a relaunched node opens its FIFOs ("Opening the FIFOs first in
+recovery"). It ends with the case in which the reader is the one that dies
+("The reader-dies direction").
+
+## The gap: a node cut off from its business peers
+
+When one node crashes while its neighbors keep running, the channels between
+them have to survive the crash, and plain FIFOs do not. With plain FIFO
+endpoints (a reader that opens its FIFO once and reads until EOF, a writer that
+opens it once and writes), the reader of the crashed node's output sees EOF and
+ends, never to reopen; a writer to the crashed node gets `BrokenPipeError` and
+its thread dies; and the relaunched node blocks for ever in `open()`, with
+nobody left at the other end. It would talk to the `Supervisor` again but be cut
+off from every peer, and the first goal of the introduction would hold only for
+a node whose sole connection is the `Supervisor`. Restarting the whole program,
+with a new `debasher_exec` against the same output directory, has none of these
+problems: the engine recreates every FIFO, and every node opens them anew.
+
+Reconnecting also needs every endpoint to know what the `Supervisor` learns
+from `.finished`: whether a peer's silence means "crashed, will return" or
+"finished on purpose". The rest of this section is that signal and its
+consequences.
+
+## `CLOSE`: telling a finished peer from a crashed one
+
+A process keeps its FIFOs open for its whole life (it opens them as it starts,
+and holds them until it stops: their descriptors are closed once its threads
+end, or at its exit for a writer abandoned on a full pipe), so a reader cannot
+tell a clean close from a crash from EOF alone: the EOF is identical for a
+normal exit and for `SIGKILL`. `CLOSE` is an envelope type of its own (see
+"Control envelope"), decentralized (it works without a `Supervisor`, which is
+optional, and for a manual relaunch too, once a node can finish for good), sent
+by the writer in band when it has finished for good; a halt sends none (see
+"Ordered shutdown"). The idea mirrors FIN versus RST in TCP: a `CLOSE` means
+"finished, do not wait"; its absence means "may still return". The signal is
+designed for a node that finishes for good, which no process of a resident
+program does (see "A node that finishes for good" in Future work), so only a
+writer outside the program sends it, on an external or a control port.
+
+The reader hands `CLOSE` to the brain thread in order, like any other envelope,
+so it is logged and its port can leave the barrier's pending set. Why the
+reader then keeps reading and drops what follows instead of ending, and what
+`closed_ports` records, is in "`CLOSE` and closed ports".
+
+A process that exits with an error (an exception, a non-zero exit) sends no
+`CLOSE` and is treated as a crash, consistent with the `Supervisor`'s own
+detection. Once a node can finish for good, a `CLOSE` followed by a later
+failure is harmless, since peers keep reading and drop whatever the relaunched
+node sends afterward (see "`CLOSE` and closed ports"). The `Supervisor`'s own
+channel does not need `CLOSE`: it keeps using the node's `.finished` file, since
+a `CLOSE` does not prove the node succeeded, and a node that closed and then
+failed must still be heard again when relaunched.
+
+## Ghost connections: holding both ends of a FIFO
+
+`CLOSE` alone does not solve reconnection. A reader that closes and reopens
+its FIFO after EOF still has a window, between its own `close()` and
+`open()`, in which a writer relaunched inside it gets `EPIPE` and dies, and
+EOF is not a reliable event in the first place: with no gap between the old
+and the new writer the reader can miss the EOF entirely, and with a backlog
+already in the pipe it never sees one at all, since the new writer's data
+just follows on the same file descriptor. So a reader has to be correct
+whether or not it ever sees EOF, which the transport guarantees by never
+producing one.
+
+Every endpoint holds both ends of its FIFO, the real one and a ghost of the
+opposite direction. A reader opens `O_RDONLY | O_NONBLOCK` (which returns at
+once) and then `O_WRONLY` (a reader now exists, from the FIFO's point of
+view); a writer does the same, its real end being the `O_WRONLY` one.
+`O_RDWR` is not used: POSIX leaves it undefined for FIFOs. No open ever
+blocks, whatever the start order. A writer's crash and relaunch, with the
+reader holding a ghost write end, never hangs or raises `EPIPE`; a reader's
+crash and relaunch, with the writer holding a ghost read end, never kills
+the writer and loses nothing inside the pipe, only whatever the killed
+reader had already consumed before it died.
+
+With no EOF, a reader never ends because its peer crashed or was relaunched. It
+ends only on a stop request, woken through a blank line written to its own ghost
+write end even if it is blocked in `read()`, or on an error, which the heartbeat
+then reports: of its stream (an unparsable line not followed by `HELLO`, a gap
+in the sequence numbers, a `CLOSE` that claims more than was accepted) or of its
+input log (at its size cap, or a failed write to it). The writer never sees
+`EPIPE` either: a dead peer means backpressure instead, the writer blocks once
+the pipe holds 64 KiB, and since a blocked writer cannot be woken,
+`stop_threads()` joins writer threads with a bounded timeout.
+
+The `Supervisor` learns that a node finished only from its `.finished` file, and
+none of its readers can hang waiting for an EOF that never comes.
+
+The ghost ends die with their processes, so both endpoints of a channel
+dying together, before either has reopened the FIFO, would destroy the unread
+messages: the `Supervisor` holds the FIFO of every business channel as a third
+process, which keeps them (see "Holding the business channels").
+
+## The resync line (`HELLO`)
+
+Ghost connections have a price. With no EOF to delimit a message, a
+fragment left by a writer killed in the middle of one larger than
+`PIPE_BUF` (4096 bytes on Linux; truncation only happens above it) would
+merge with the next good message into one unparsable line and swallow it.
+
+Every incarnation of a writer starts with one atomic write, a blank line
+followed by a `HELLO` line (an envelope type of its own, consumed by the reader
+thread, see "Control envelope"). A reader that finds one unparsable line
+tolerates it if the next line is `HELLO`, and drops it; in any other case it is
+an error, so a corrupt line is never skipped silently. The resync puts no limit
+on the size of a message, unlike a protocol that relied on writes up to
+`PIPE_BUF` being atomic; the only limit is that of the outbound backlog,
+`OUT_BACKLOG_FAIL_BYTES` (see "Checkpoint persistence"). Only the framework
+writes to these channels: an external writer must send complete lines, and a
+fragment from one shows up as an error. `HELLO` also tells the reader that its
+peer (re)connected.
+
+## Opening the FIFOs first in recovery
+
+A relaunched node opens its FIFOs before restoring its checkpoint or replaying
+its input log (`_open_fifos()`, before `run()` does anything that takes time,
+which `start_threads()` also calls for the ports that are not open yet, so that
+a node driven without `run()` opens them too). Opening them only later, in
+`start_threads()`, would put the time spent recovering inside the window in
+which the crash of a neighbor could destroy what the neighbor had sent it (this
+is about the channel, not the log; "Input log" covers what a node keeps of its
+own history). Opening first is what protects a channel when no other process
+holds its FIFO: in a program without a `Supervisor`, in one whose `Supervisor`
+is given `-no-hold-fifos`, or while the `Supervisor` is down. What remains of
+the window is then the time to notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS`
+when the process is gone) and to start the new process. When the `Supervisor`
+holds the FIFO of a business channel, the default, there is no such window: what
+a neighbor sent survives its crash even before the relaunched node opens
+anything (see "Holding the business channels").
+
+## The reader-dies direction
+
+Ghost connections answer the crash of a reader: the writer never sees
+`BrokenPipeError` (it blocks on backpressure instead, so there is nothing to
+reopen or resend), and unread data in the pipe survives a reader's crash and
+relaunch (see "Ghost connections").
+
+`CLOSE` travels only in the direction the data does, from a writer to its
+readers, so a node that stops reading from one of its inputs sends nothing
+back to whatever writes to it. A writer therefore cannot tell a reader that
+stopped for good from one that crashed and may relaunch: both look the same,
+the writer just blocks once the pipe fills, and its outbound backlog grows
+until `OUT_BACKLOG_FAIL_BYTES` stops it with an error that names the port (see
+"Checkpoint persistence"). A signal in the other direction, symmetric to
+`CLOSE`, is in Future work.
 
 # `Supervisor` class
 
@@ -3337,180 +3514,6 @@ is port by port.
 - A node cut off at run time, by a node that fails for good, is a separate case,
   handled by "Escalation on a permanent node failure".
 
-# Recovery from a node failure
-
-A node that crashes is relaunched while the rest of the program keeps running,
-and it has to get back both its state and its connections. Its state comes
-back from its checkpoint and its input log (see "Input log"). This section is
-about its connections: how the nodes that keep running reconnect with a peer
-that crashed and is relaunched, in both directions of a channel, without
-losing what the channel held.
-
-Recovery is localized: only the downed node is relaunched, never the whole
-program. A global rollback is kept as a possible future fallback for the cases
-the Contract leaves out (see Future work). The `Supervisor` detects a downed
-node from the absence of a heartbeat (or, faster, a dead PID, see "Failure
-detection") and relaunches it through `debasher_launch_process`, the same
-operation as an initial launch (see "Startup sequence: `run()`"), with no
-special "recovery mode" logic (see "Relaunching a downed node"). The
-relaunched node reconnects to the `Supervisor` on its own: with ghost
-connections (see "Ghost connections"), the `Supervisor`'s own reader never
-needs to reopen anything, and it learns that a node finished only from its
-`.finished` file. Reconnecting to its business peers, the FBP graph's own
-channels, is what the rest of this section designs.
-
-The section first states the problem ("The gap"), then the pieces that solve
-it: an envelope that tells a finished peer from a crashed one ("`CLOSE`"),
-FIFOs whose two ends every endpoint holds, so that none ever sees EOF or
-`EPIPE` ("Ghost connections"), the line that resynchronizes a reader after a
-writer died in the middle of a message ("The resync line"), and the order in
-which a relaunched node opens its FIFOs ("Opening the FIFOs first in
-recovery"). It ends with the case in which the reader is the one that dies
-("The reader-dies direction").
-
-## The gap: a node cut off from its business peers
-
-When one node crashes while its neighbors keep running, the channels between
-them have to survive the crash, and plain FIFOs do not. With plain FIFO
-endpoints (a reader that opens its FIFO once and reads until EOF, a writer that
-opens it once and writes), the reader of the crashed node's output sees EOF and
-ends, never to reopen; a writer to the crashed node gets `BrokenPipeError` and
-its thread dies; and the relaunched node blocks for ever in `open()`, with
-nobody left at the other end. It would talk to the `Supervisor` again but be cut
-off from every peer, and the first goal of the introduction would hold only for
-a node whose sole connection is the `Supervisor`. Restarting the whole program,
-with a new `debasher_exec` against the same output directory, has none of these
-problems: the engine recreates every FIFO, and every node opens them anew.
-
-Reconnecting also needs every endpoint to know what the `Supervisor` learns
-from `.finished`: whether a peer's silence means "crashed, will return" or
-"finished on purpose". The rest of this section is that signal and its
-consequences.
-
-## `CLOSE`: telling a finished peer from a crashed one
-
-A process keeps its FIFOs open for its whole life (it opens them as it starts,
-and holds them until it stops: their descriptors are closed once its threads
-end, or at its exit for a writer abandoned on a full pipe), so a reader cannot
-tell a clean close from a crash from EOF alone: the EOF is identical for a
-normal exit and for `SIGKILL`. `CLOSE` is an envelope type of its own (see
-"Control envelope"), decentralized (it works without a `Supervisor`, which is
-optional, and for a manual relaunch too, once a node can finish for good), sent
-by the writer in band when it has finished for good; a halt sends none (see
-"Ordered shutdown"). The idea mirrors FIN versus RST in TCP: a `CLOSE` means
-"finished, do not wait"; its absence means "may still return". The signal is
-designed for a node that finishes for good, which no process of a resident
-program does (see "A node that finishes for good" in Future work), so only a
-writer outside the program sends it, on an external or a control port.
-
-The reader hands `CLOSE` to the brain thread in order, like any other envelope,
-so it is logged and its port can leave the barrier's pending set. Why the
-reader then keeps reading and drops what follows instead of ending, and what
-`closed_ports` records, is in "`CLOSE` and closed ports".
-
-A process that exits with an error (an exception, a non-zero exit) sends no
-`CLOSE` and is treated as a crash, consistent with the `Supervisor`'s own
-detection. Once a node can finish for good, a `CLOSE` followed by a later
-failure is harmless, since peers keep reading and drop whatever the relaunched
-node sends afterward (see "`CLOSE` and closed ports"). The `Supervisor`'s own
-channel does not need `CLOSE`: it keeps using the node's `.finished` file, since
-a `CLOSE` does not prove the node succeeded, and a node that closed and then
-failed must still be heard again when relaunched.
-
-## Ghost connections: holding both ends of a FIFO
-
-`CLOSE` alone does not solve reconnection. A reader that closes and reopens
-its FIFO after EOF still has a window, between its own `close()` and
-`open()`, in which a writer relaunched inside it gets `EPIPE` and dies, and
-EOF is not a reliable event in the first place: with no gap between the old
-and the new writer the reader can miss the EOF entirely, and with a backlog
-already in the pipe it never sees one at all, since the new writer's data
-just follows on the same file descriptor. So a reader has to be correct
-whether or not it ever sees EOF, which the transport guarantees by never
-producing one.
-
-Every endpoint holds both ends of its FIFO, the real one and a ghost of the
-opposite direction. A reader opens `O_RDONLY | O_NONBLOCK` (which returns at
-once) and then `O_WRONLY` (a reader now exists, from the FIFO's point of
-view); a writer does the same, its real end being the `O_WRONLY` one.
-`O_RDWR` is not used: POSIX leaves it undefined for FIFOs. No open ever
-blocks, whatever the start order. A writer's crash and relaunch, with the
-reader holding a ghost write end, never hangs or raises `EPIPE`; a reader's
-crash and relaunch, with the writer holding a ghost read end, never kills
-the writer and loses nothing inside the pipe, only whatever the killed
-reader had already consumed before it died.
-
-With no EOF, a reader never ends because its peer crashed or was relaunched. It
-ends only on a stop request, woken through a blank line written to its own ghost
-write end even if it is blocked in `read()`, or on an error, which the heartbeat
-then reports: of its stream (an unparsable line not followed by `HELLO`, a gap
-in the sequence numbers, a `CLOSE` that claims more than was accepted) or of its
-input log (at its size cap, or a failed write to it). The writer never sees
-`EPIPE` either: a dead peer means backpressure instead, the writer blocks once
-the pipe holds 64 KiB, and since a blocked writer cannot be woken,
-`stop_threads()` joins writer threads with a bounded timeout.
-
-`Supervisor` learns that a node finished only from its `.finished` file, and
-none of its readers can hang waiting for an EOF that never comes.
-
-The ghost ends die with their processes, so both endpoints of a channel
-dying together, before either has reopened the FIFO, would destroy the unread
-messages: the `Supervisor` holds the FIFO of every business channel as a third
-process, which keeps them (see "Holding the business channels").
-
-## The resync line (`HELLO`)
-
-Ghost connections have a price. With no EOF to delimit a message, a
-fragment left by a writer killed in the middle of one larger than
-`PIPE_BUF` (4096 bytes on Linux; truncation only happens above it) would
-merge with the next good message into one unparsable line and swallow it.
-
-Every incarnation of a writer starts with one atomic write, a blank line
-followed by a `HELLO` line (an envelope type of its own, consumed by the reader
-thread, see "Control envelope"). A reader that finds one unparsable line
-tolerates it if the next line is `HELLO`, and drops it; in any other case it is
-an error, so a corrupt line is never skipped silently. The resync puts no limit
-on the size of a message, unlike a protocol that relied on writes up to
-`PIPE_BUF` being atomic; the only limit is that of the outbound backlog,
-`OUT_BACKLOG_FAIL_BYTES` (see "Checkpoint persistence"). Only the framework
-writes to these channels: an external writer must send complete lines, and a
-fragment from one shows up as an error. `HELLO` also tells the reader that its
-peer (re)connected.
-
-## Opening the FIFOs first in recovery
-
-A relaunched node opens its FIFOs before restoring its checkpoint or replaying
-its input log (`_open_fifos()`, before `run()` does anything that takes time,
-which `start_threads()` also calls for the ports that are not open yet, so that
-a node driven without `run()` opens them too). Opening them only later, in
-`start_threads()`, would put the time spent recovering inside the window in
-which the crash of a neighbor could destroy what the neighbor had sent it (this
-is about the channel, not the log; "Input log" covers what a node keeps of its
-own history). Opening first is what protects a channel when no other process
-holds its FIFO: in a program without a `Supervisor`, in one whose `Supervisor`
-is given `-no-hold-fifos`, or while the `Supervisor` is down. What remains of
-the window is then the time to notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS`
-when the process is gone) and to start the new process. When the `Supervisor`
-holds the FIFO of a business channel, the default, there is no such window: what
-a neighbor sent survives its crash even before the relaunched node opens
-anything (see "Holding the business channels").
-
-## The reader-dies direction
-
-Ghost connections answer the crash of a reader: the writer never sees
-`BrokenPipeError` (it blocks on backpressure instead, so there is nothing to
-reopen or resend), and unread data in the pipe survives a reader's crash and
-relaunch (see "Ghost connections").
-
-`CLOSE` travels only in the direction the data does, from a writer to its
-readers, so a node that stops reading from one of its inputs sends nothing
-back to whatever writes to it. A writer therefore cannot tell a reader that
-stopped for good from one that crashed and may relaunch: both look the same,
-the writer just blocks once the pipe fills, and its outbound backlog grows
-until `OUT_BACKLOG_FAIL_BYTES` stops it with an error that names the port (see
-"Checkpoint persistence"). A signal in the other direction, symmetric to
-`CLOSE`, is in Future work.
-
 # `ProgramLauncher`: batch runs from a node
 
 A resident program processes a stream of messages; a general program processes
@@ -3828,8 +3831,8 @@ open.
   Slurm, now makes the tools report that Slurm is not installed, exactly as
   it already does when `--sched SLURM` is typed explicitly, where before the
   tools silently used the built-in scheduler.
-- Maximum packet size relative to `PIPE_BUF`: truncation only happens above
-  4096 bytes and is handled by the resync line (see "Recovery from a node
+- Maximum packet size relative to `PIPE_BUF`: truncation only happens above 4096
+  bytes and is handled by the resync line (see "Reconnecting after a node
   failure"), so there is no size limit.
 - **A relaunched node that dies before its first heartbeat was never
   noticed again.** After `_declare_down` a node stayed in `_down` until a
@@ -4209,26 +4212,24 @@ Design ideas from Future work move here once they are actually built.
   its own checkpoint and environment, whose crash touches nobody else. It
   stays here until a program asks for it.
 - **Global (coordinated) rollback, as a fallback to localized recovery**: noted
-  here, not designed and not built. Localized recovery (see "Recovery from a
-  node failure") remains the policy for the ordinary crash of a node. A
-  global rollback would be the safe
-  harbor for the cases the Contract leaves outside its guarantees, an
-  alternative to the narrower, targeted repairs "Repairing messages destroyed
-  with a FIFO" below lists for one of them specifically: detect the
-  violation, stop, rewind every node to the last consistent cut, resume.
-  Cases where it would be used: a guarantee that cannot be kept is detected
-  (a hole in a channel's sequence numbers, a missing or
-  corrupt checkpoint or log, an incompatible schema version); a node fails
-  permanently (today the `Supervisor`'s own escalation ends in
-  `debasher_stop`; with a rollback it becomes "stop, fix, rewind, resume");
-  several connected nodes, or
+  here, not designed and not built. Localized recovery (see "Reconnecting after
+  a node failure") remains the policy for the ordinary crash of a node. A global
+  rollback would be the safe harbor for the cases the Contract leaves outside
+  its guarantees, an alternative to the narrower, targeted repairs "Repairing
+  messages destroyed with a FIFO" below lists for one of them specifically:
+  detect the violation, stop, rewind every node to the last consistent cut,
+  resume. Cases where it would be used: a guarantee that cannot be kept is
+  detected (a hole in a channel's sequence numbers, a missing or corrupt
+  checkpoint or log, an incompatible schema version); a node fails permanently
+  (today the `Supervisor`'s own escalation ends in `debasher_stop`; with a
+  rollback it becomes "stop, fix, rewind, resume"); several connected nodes, or
   all of them, crash together with inputs that cannot be regenerated (the
-  contents of the FIFOs are gone, with no process holding them); a crash
-  during a snapshot round, if aborting rounds turns out to be harder than
-  falling back to the last complete epoch; a deliberate rewind requested by
-  an operator. Not for the crash of a single node. The price is the work done
-  since the chosen epoch, and the external inputs received since then
-  (delivery at that boundary is at most once).
+  contents of the FIFOs are gone, with no process holding them); a crash during
+  a snapshot round, if aborting rounds turns out to be harder than falling back
+  to the last complete epoch; a deliberate rewind requested by an operator. Not
+  for the crash of a single node. The price is the work done since the chosen
+  epoch, and the external inputs received since then (delivery at that boundary
+  is at most once).
 
   Like a clean start (see "`debasher_reset_resident`: a clean start"), it can
   be done from outside, by manipulating files, with no special mode in the
