@@ -785,16 +785,16 @@ effects outside the graph).
   `HELLO` follows, which stops it (keeping that first part on disk is in
   Future work). A FIFO offers no way to look at what it holds without taking
   it, so the window can be made short but not closed. A stop signal loses
-  nothing that a reader has taken from its FIFO, except the first part of a
-  message longer than one read, which the reader holds in memory when it stops:
-  a reader stops only between two blocks, and hands over every message of the
-  block it holds. After a halt that message follows the marker of the halt on
-  its channel, so its writer sends it again on resume; a stop signal with no
-  halt behind it loses it like anything else the FIFO held, and G8 reports the
-  hole. Its rest stays in the FIFO, and matters only if the FIFO outlives the
-  stop, as on an external port whose source keeps it open, where the reader of
-  the node's next incarnation finds it as a fragment that no `HELLO` follows,
-  which stops it.
+  nothing that a reader has taken from its FIFO, except the part already read of
+  a message whose end has not arrived yet, which the reader holds in memory when
+  it stops: a reader stops only between two blocks, and hands over every message
+  of the block it holds. After a halt that message follows the marker of the
+  halt on its channel, so its writer sends it again on resume; a stop signal
+  with no halt behind it loses it like anything else the FIFO held, and G8
+  reports the hole. Its rest stays in the FIFO, and matters only if the FIFO
+  outlives the stop, as on an external port whose source keeps it open, where
+  the reader of the node's next incarnation finds it as a fragment that no
+  `HELLO` follows, which stops it.
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
   loop, deadlock) is not detected today: the heartbeat proves that its threads
   are alive, not that they make progress. Not a goal for now (see "Progress in
