@@ -1137,21 +1137,21 @@ node test builds a node without the engine to check its business logic.
   rest of the process); a single brain thread consuming the shared inbound
   queue; an independent heartbeat thread with its own timer; and, in a node
   whose class defines `observe()`, the observation thread.
-- **Which threads keep the process alive**: a thread is a daemon exactly when
-  nothing can wake it. A daemon thread dies with the process, unwarned and
-  unjoined; a thread that is not a daemon keeps the process from ending until
-  it has returned. The reader, brain, heartbeat and observation threads can
-  always be woken, each from where it blocks: a reader by a blank line written
-  through its own ghost write end, the brain by the `_STOP` sentinel on its
-  queue, the other two by an event. So they are not daemons: `stop_threads`
-  wakes them and waits for them with no limit, and each one finishes what it was
-  doing, the brain thread the message in hand, instead of being cut in the
-  middle of it.
+- **Which threads keep the process alive**: a thread is a daemon exactly when it
+  cannot always be stopped. A daemon thread dies with the process, unwarned and
+  unjoined; a thread that is not a daemon keeps the process from ending until it
+  has returned. The reader, brain, heartbeat and observation threads can always
+  be stopped, each seeing the stop from where it waits: a reader at the end of
+  its wait for data, which lasts at most `_READER_POLL_MS` (200 ms), the brain
+  in the `_STOP` sentinel on its queue, the other two in an event. So they are
+  not daemons: `stop_threads` stops them and waits for them with no limit, and
+  each one finishes what it was doing, the brain thread the message in hand,
+  instead of being cut in the middle of it.
 
-  A writer thread cannot be woken. When its reader is down and the pipe is full
-  it stays blocked in `write()`, and the write does not even fail, since the
-  node holds both ends of the FIFO so that the channel outlives a crash. If it
-  were not a daemon, a node with a stalled neighbor would never end. So it is
+  A writer thread cannot always be stopped. When its reader is down and the pipe
+  is full it stays blocked in `write()`, and the write does not even fail, since
+  the node holds both ends of the FIFO so that the channel outlives a crash. If
+  it were not a daemon, a node with a stalled neighbor would never end. So it is
   one: `stop_threads` waits for it for `WRITER_STOP_TIMEOUT_SECS`, then abandons
   it, and the process ends anyway. All it loses is its outbound queue, which the
   checkpoint and the replay of the input log cover.
@@ -2468,14 +2468,18 @@ the writer and loses nothing inside the pipe, only whatever the killed
 reader had already consumed before it died.
 
 With no EOF, a reader never ends because its peer crashed or was relaunched. It
-ends only on a stop request, woken through a blank line written to its own ghost
-write end even if it is blocked in `read()`, or on an error, which the heartbeat
-then reports: of its stream (an unparsable line not followed by `HELLO`, a gap
-in the sequence numbers, a `CLOSE` that claims more than was accepted) or of its
-input log (at its size cap, or a failed write to it). The writer never sees
-`EPIPE` either: a dead peer means backpressure instead, the writer blocks once
-the pipe holds 64 KiB, and since a blocked writer cannot be woken,
-`stop_threads()` joins writer threads with a bounded timeout.
+ends only on a stop request, or on an error, which the heartbeat then reports:
+of its stream (an unparsable line not followed by `HELLO`, a gap in the sequence
+numbers, a `CLOSE` that claims more than was accepted) or of its input log (at
+its size cap, or a failed write to it). The writer never sees `EPIPE` either: a
+dead peer means backpressure instead, the writer blocks once the pipe holds 64
+KiB, and since a blocked writer cannot be woken, `stop_threads()` joins writer
+threads with a bounded timeout. A reader, unlike a writer, never blocks for
+long: it waits for data with `poll`, at most `_READER_POLL_MS` (200 ms) at a
+time, and looks between two waits whether its node is stopping, so it sees a
+stop even on a quiet FIFO. Nothing is written into the FIFO to wake it: a write
+there could land in the middle of a message longer than `PIPE_BUF` that its
+writer is writing, and cut it in two.
 
 The `Supervisor` learns that a node finished only from its `.finished` file, and
 none of its readers can hang waiting for an EOF that never comes.

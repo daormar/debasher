@@ -25,6 +25,7 @@ import json
 import logging
 import queue
 import resource
+import select
 import threading
 
 from debasher_runtime_envelope import (
@@ -96,26 +97,22 @@ def _parse_opts(argv, flags=()):
 def _open_fifo_reader(path):
     """
     Opens a fifo for the process that reads it and returns (real read end,
-    ghost write end). Holding a write end of its own means the reader never
-    sees EOF, whether its peer finished or crashed: a fifo delivers no
-    signal that tells the two apart, so any such event would be ambiguous,
-    and the peer's liveness is decided elsewhere (heartbeats, CLOSE). The
-    ghost end is non-blocking and is only ever used to wake the reader
-    (see _PortWorker.stop_threads).
-
-    The order never blocks, whatever the state of the peer: a read-only
-    open with O_NONBLOCK returns at once even with no writer around, and
-    the write-only open that follows finds the reader just opened. O_RDWR
-    is not used because POSIX leaves it undefined for fifos.
+    ghost write end), without blocking whatever the state of its peer.
     """
+    # With O_NONBLOCK a read-only open returns at once even with no writer
+    # around. O_RDWR is not used: POSIX leaves it undefined for fifos.
     rfd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     try:
+        # Finds the reader just opened, so it does not block either. Holding
+        # a write end of its own, the reader never sees EOF, whether its peer
+        # finished or crashed: a fifo has no signal that tells the two apart,
+        # and the liveness of the peer is decided elsewhere (heartbeats,
+        # CLOSE). The engine never writes through it.
         gfd = os.open(path, os.O_WRONLY)
     except BaseException:
         os.close(rfd)
         raise
     os.set_blocking(rfd, True)
-    os.set_blocking(gfd, False)
     return rfd, gfd
 
 
@@ -123,16 +120,20 @@ def _open_fifo_reader(path):
 # capacity on Linux, so that one read can empty a full pipe.
 _READ_BLOCK_BYTES = 65536
 
+# How long a reader thread waits for data before it looks again whether its
+# node is stopping: the longest a stop waits for a reader of a quiet fifo.
+_READER_POLL_MS = 200
+
 
 def _open_fifo_writer(path):
     """
     Opens a fifo for the process that writes it and returns (real write end,
-    ghost read end). Holding a read end of its own means the writer never
-    gets EPIPE: while its peer is down, what it writes waits in the pipe
-    (which the ghost end keeps alive, unread data included) and the writer
-    only blocks once the pipe is full, until a reader comes back. Same
-    non-blocking open order as _open_fifo_reader.
+    ghost read end), without blocking whatever the state of its peer.
     """
+    # The same order as _open_fifo_reader. Holding a read end of its own, the
+    # writer never gets EPIPE: while its peer is down, what it writes waits
+    # in the pipe, which the ghost end keeps alive, and the writer only
+    # blocks once the pipe is full, until a reader comes back.
     gfd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
     try:
         wfd = os.open(path, os.O_WRONLY)
@@ -427,7 +428,7 @@ class _PortWorker:
 
         Brain and reader threads are not daemons: this process is meant to
         keep running until explicitly told to stop, and stop_threads() can
-        always wake and join them. Writer threads are daemons, because one
+        always stop and join them. Writer threads are daemons, because one
         can stay blocked in a write while its peer is down and must never
         keep the process alive.
         """
@@ -461,37 +462,28 @@ class _PortWorker:
 
     def stop_threads(self, timeout=None, close=True):
         """
-        Signals every thread to stop and waits for them. A reader blocked
-        in read() is woken by a blank line written through its own ghost
-        write end (that write is non-blocking, so a full pipe cannot hold
-        this up: a reader with a full pipe in front of it is not blocked).
-        A writer sends what is already queued, then CLOSE, and ends; one
-        that cannot finish because its peer is down and the pipe is full is
-        abandoned after `timeout` (WRITER_STOP_TIMEOUT_SECS if none is
-        given), and its descriptors are left open for it.
-
-        CLOSE tells the peer that this writer has finished for good, so a
-        caller that stops for any other reason passes close=False and the
-        writers send nothing after what is queued. A halt is such a reason:
-        the node is resumed later, and a peer that had read a CLOSE would
-        take it for a finished one.
+        Tells every thread to stop and waits for them: the readers and the
+        brain thread for up to `timeout` each (for ever if None), and each
+        writer for up to `timeout`, or WRITER_STOP_TIMEOUT_SECS if None.
+        With close=True each writer sends CLOSE after what is queued; with
+        close=False it sends nothing more. Then closes the descriptors of
+        every port whose thread has ended.
         """
         self._close_on_stop = close
+        # A reader sees the flag within _READER_POLL_MS, without anything
+        # written into its fifo; the brain thread and the writers see the
+        # sentinel in their queues, after what is already queued.
         self._stopping.set()
         self._inbound_queue.put(_STOP)
         for q in self._outbound_queues.values():
             q.put(_STOP)
 
-        for _, ghost_fd in self._reader_fds.values():
-            try:
-                os.write(ghost_fd, b"\n")
-            except OSError:
-                pass
-
         for thread in [*self._reader_threads.values(), self._brain_thread]:
             if thread is not None:
                 thread.join(timeout)
 
+        # A writer whose peer is down and whose pipe is full cannot finish:
+        # it is abandoned, and its descriptors are left open for it.
         writer_timeout = self.WRITER_STOP_TIMEOUT_SECS if timeout is None else timeout
         for tag, thread in self._writer_threads.items():
             thread.join(writer_timeout)
@@ -629,7 +621,13 @@ class _PortWorker:
         # many reads, and only the read that brings its end is searched and
         # joined, so that reading it costs time in proportion to its size.
         partial = []
+        poller = select.poll()
+        poller.register(rfd, select.POLLIN)
         while not self._stopping.is_set():
+            # Waits a while at a time, so that a stop is seen even on a quiet
+            # fifo. poll, not select, which refuses a descriptor above 1024.
+            if not poller.poll(_READER_POLL_MS):
+                continue
             block = os.read(rfd, _READ_BLOCK_BYTES)
             if block:
                 if b"\n" not in block:

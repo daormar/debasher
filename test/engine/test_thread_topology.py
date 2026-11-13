@@ -487,15 +487,27 @@ def test_reader_thread_dies_on_two_unparsable_lines_in_a_row(fifo_path):
         proc.stop_threads(timeout=2)
 
 
-def test_stop_threads_wakes_a_reader_that_no_writer_ever_connected_to(fifo_path):
+def test_stop_threads_ends_a_reader_of_a_quiet_fifo_without_writing_into_it(fifo_path, monkeypatch):
+    # A write into the fifo to wake its reader could land in the middle of
+    # a message longer than PIPE_BUF that a writer is writing, and cut it.
     proc = _ReaderOnly(opts={"inf": fifo_path})
     proc.start_threads()
+    fifo_fds = set(proc._reader_fds["inf"])
+    written = []
+    real_write = os.write
+
+    def recording_write(fd, data):
+        written.append(fd)
+        return real_write(fd, data)
+
+    monkeypatch.setattr(transport.os, "write", recording_write)
 
     started = time.monotonic()
     proc.stop_threads(timeout=2)
 
     assert not proc._reader_threads["inf"].is_alive()
     assert time.monotonic() - started < 1
+    assert not fifo_fds & set(written)
 
 
 def test_start_threads_does_not_wait_for_any_peer(fifo_path):
