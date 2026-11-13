@@ -469,8 +469,8 @@ debasher::_call_generate_opts()
 ########
 # Reads the optional flags of define_fifo_opt and define_fifo_opt_generator:
 # --mirror, and at most one of --control and --external (the fifo's tag, see
-# DEBASHER_FIFO_KINDS). Whether a tag is allowed in the program is checked
-# once the program is loaded (see debasher::_validate_program_fifo_kinds),
+# DEBASHER_FIFO_KINDS). Whether a flag is allowed in the program is checked
+# once the program is loaded (see debasher::_validate_program_fifo_flags),
 # not here: an option generator also runs again inside the script of each of
 # its tasks, where the program type is not known.
 #
@@ -493,7 +493,6 @@ debasher::_read_fifo_opt_flags()
     for flag in "$@"; do
         case "${flag}" in
             "--mirror")
-                debasher::_check_fifo_mirror_allowed "${funcname}" || return 1
                 fifo_flags_mirrored_ref=1
                 ;;
             "--control"|"--external")

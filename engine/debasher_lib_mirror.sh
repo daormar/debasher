@@ -27,7 +27,7 @@
 #
 # It is a debugging aid for general programs. Resident programs keep their
 # own message log inside their processes and do not use it: declaring
-# --mirror in one is refused (see debasher::_check_fifo_mirror_allowed).
+# --mirror in one is refused (see debasher::_validate_program_fifo_flags).
 #
 # The --mirror flag and DEBASHER_FIFO_MIRRORED, which records the fifos that
 # carry it, belong to the definition of the fifo options in
@@ -58,33 +58,6 @@ debasher::_get_fifo_mirror_filename()
     local augm_fifoname=$1
 
     echo "$(debasher::_get_fifo_mirror_dir)/${augm_fifoname}.log"
-}
-
-########
-# Refuses a fifo declared with --mirror when the program is a resident
-# one. Resident processes exchange messages through their own runtime
-# (engine/debasher_runtime_lib.py and the modules behind it), which keeps
-# its own input log and expects to talk to its neighbors directly; a
-# mirror tap between a writer and the real fifo is not part of that
-# design (it re-frames the traffic line by line and holds the real
-# fifo's write end itself), so it is refused when the program is loaded
-# instead of being left to misbehave while the program runs.
-#
-# $1 - Name of the public function that received --mirror, for the error
-#      message.
-#
-# Returns 0 if mirroring is allowed; otherwise prints an error and
-# returns 1.
-debasher::_check_fifo_mirror_allowed()
-{
-    local funcname=$1
-
-    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
-        echo "${funcname}: Error, --mirror cannot be used in a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program" >&2
-        return 1
-    fi
-
-    return 0
 }
 
 ########

@@ -735,9 +735,9 @@ check_process_opts()
     # Register fifo readers
     debasher::_register_program_fifo_readers "${cmdline}" || return 1
 
-    # Check the tags of the fifos, now that the other end of every fifo is
-    # known (see debasher::_validate_program_fifo_kinds)
-    debasher::_validate_program_fifo_kinds || return 1
+    # Check the flags of the fifos, now that the other end of every fifo is
+    # known (see debasher::_validate_program_fifo_flags)
+    debasher::_validate_program_fifo_flags || return 1
 
     # Check that the fifos that the tasks of a process define through the
     # same option are read inside the program for every task or for none

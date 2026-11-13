@@ -2345,9 +2345,10 @@ make a recovery reach into a neighbor, and would add a process of its own, with
 its own opens and closes of the FIFO, to every channel.
 
 A resident program that declares `--mirror` on a fifo is therefore refused when
-it is loaded, before anything is launched, so a mirror tap never sits between
-two resident processes (see "Limits and non-goals"). `--mirror` remains a
-debugging aid of general programs, behind the "Watch FIFO" of the web UI.
+it is loaded, before anything is launched (rule 4 of "Validation when the
+program is loaded"), so a mirror tap never sits between two resident processes
+(see "Limits and non-goals"). `--mirror` remains a debugging aid of general
+programs, behind the "Watch FIFO" of the web UI.
 
 # Reconnecting after a node failure
 
@@ -3401,10 +3402,11 @@ loaded, as a resident program that uses `--mirror` is.
 ## Validation when the program is loaded
 
 With the direction and the kind of every fifo, the engine builds the graph of
-the business channels between the business nodes, task by task (the
-`Supervisor` takes no part in rounds, so its channels are left out), and checks
-it before launching anything, in `debasher::_validate_program_fifo_kinds`,
-which `debasher_exec` calls once the other end of every fifo is known:
+the business channels between the business nodes, task by task (the `Supervisor`
+takes no part in rounds, so its channels are left out), and checks it, with the
+flags of every fifo, before launching anything, in
+`debasher::_validate_program_fifo_flags`, which `debasher_exec` calls once the
+other end of every fifo is known:
 
 1. Every node can be reached from an initiator, a node that reads a control
    channel, through business channels in the direction in which they carry a
@@ -3416,17 +3418,19 @@ which `debasher_exec` calls once the other end of every fifo is known:
 3. The owner of a fifo defines it through an output option, except a tagged
    fifo fed from outside, which it defines through an input option. A fifo that
    a node reads from outside and that lacks its tag is refused by this rule.
+4. No fifo is declared with `--mirror` (see "Why the log is not built on the
+   mirror tap").
 
 A fifo without a tag whose other end is outside is a business channel from its
 owner to someone outside the program, a node that writes its results out.
 
 A violation stops the load with an error that names the node or the fifo, and
-the rule. The check walks the fifos once; the registries it reads are already
-built by then, for every task of every array and generator. In the fan-in of
-two nodes fed from outside (see "Initiators numbered their rounds independently"
-in "Loose ends"), where nodes `a` and `b`, whose only inputs come from
-outside, both write to a node `c`, a program in which only `a` has a control
-channel is refused by rule 1, since `b` cannot be reached.
+the rule. Each check walks the fifos once; the registries it reads are already
+built by then, for every task of every array and generator. In the fan-in of two
+nodes fed from outside (see "Initiators numbered their rounds independently" in
+"Loose ends"), where nodes `a` and `b`, whose only inputs come from outside,
+both write to a node `c`, a program in which only `a` has a control channel is
+refused by rule 1, since `b` cannot be reached.
 
 ## Ports from the engine
 

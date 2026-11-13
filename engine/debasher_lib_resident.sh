@@ -410,14 +410,15 @@ debasher::_validate_resident_program_processes()
 }
 
 ########
-# Checks the tags of the program's fifos (see DEBASHER_FIFO_KINDS) once
-# every process has defined its options and the other end of every fifo is
-# known (see debasher::_register_fifos_read_by_process). A general program
-# may not use them. In a resident program they have to be used as they say,
-# and a round has to be able to reach every node (see the design doc's
-# "Channel kinds declared with the fifo"). Prints an error and returns 1 on
-# the first violation found.
-debasher::_validate_program_fifo_kinds()
+# Checks the flags of the program's fifos (see DEBASHER_FIFO_KINDS and
+# DEBASHER_FIFO_MIRRORED) once every process has defined its options and
+# the other end of every fifo is known (see
+# debasher::_register_fifos_read_by_process). A general program may not use
+# the tags, and a resident program may not use --mirror. In a resident
+# program the tags have to be used as they say, and a round has to be able
+# to reach every node (see the design doc's "Channel kinds declared with the
+# fifo"). Prints an error and returns 1 on the first violation found.
+debasher::_validate_program_fifo_flags()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
         local augm_fifoname
@@ -427,6 +428,15 @@ debasher::_validate_program_fifo_kinds()
         done
         return 0
     fi
+
+    # The mirror tap sits between the writer and the real fifo and holds the
+    # fifo's write end itself, while the runtime of a resident program needs
+    # both ends of a channel to hold the fifo, and keeps its own input log
+    local augm_fifoname
+    for augm_fifoname in "${!DEBASHER_FIFO_MIRRORED[@]}"; do
+        echo "Error: fifo ${augm_fifoname} is declared with --mirror, which a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program may not use: its nodes keep their own input log" >&2
+        return 1
+    done
 
     debasher::_validate_resident_channels
 }

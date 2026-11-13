@@ -539,7 +539,7 @@ EOF
 
 # --- fifo tags and the channels of a resident program --------------------
 
-@test "debasher::_validate_program_fifo_kinds accepts the channels of the chaos reference program" {
+@test "debasher::_validate_program_fifo_flags accepts the channels of the chaos reference program" {
     set_up_registries
     add_process fanin fbpprocess
     add_process loop fbpprocess
@@ -554,12 +554,12 @@ EOF
     add_fifo fanin/fanin_hb "$(end_of fanin)" "$(end_of sup)"
     add_fifo sink/sink_hb "$(end_of sink)" "$(end_of sup)"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 0 ]
     [ -z "${output}" ]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses a node that no round can reach" {
+@test "debasher::_validate_program_fifo_flags refuses a node that no round can reach" {
     # Two nodes fed from outside fan in to c, and only a can be triggered.
     set_up_registries
     add_process a fbpprocess
@@ -571,12 +571,12 @@ EOF
     add_fifo a/a_out "$(end_of a)" "$(end_of c)"
     add_fifo b/b_out "$(end_of b)" "$(end_of c)"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: no round can reach b:"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds follows the fifos in the direction they carry a marker" {
+@test "debasher::_validate_program_fifo_flags follows the fifos in the direction they carry a marker" {
     # b only writes to the initiator a, so nothing reaches b.
     set_up_registries
     add_process a fbpprocess
@@ -584,12 +584,12 @@ EOF
     add_fifo a/a_trigger "$(end_of a)" outside control
     add_fifo b/b_out "$(end_of b)" "$(end_of a)"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: no round can reach b:"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds names an unreachable task of an array with its index" {
+@test "debasher::_validate_program_fifo_flags names an unreachable task of an array with its index" {
     set_up_registries
     add_process start fbpprocess
     add_process worker fbpprocess 3
@@ -597,65 +597,89 @@ EOF
     add_fifo start/start_out_0 "$(end_of start)" "$(end_of worker 0)"
     add_fifo start/start_out_1 "$(end_of start)" "$(end_of worker 1)"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: no round can reach worker:2:"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses an external fifo with its other end inside the program" {
+@test "debasher::_validate_program_fifo_flags refuses an external fifo with its other end inside the program" {
     set_up_registries
     add_process a fbpprocess
     add_process b fbpprocess
     add_fifo a/a_trigger "$(end_of a)" outside control
     add_fifo a/a_ext "$(end_of a)" "$(end_of b)" external
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo a/a_ext is tagged --external, but process b of the program reads it"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses a control fifo between two nodes" {
+@test "debasher::_validate_program_fifo_flags refuses a control fifo between two nodes" {
     set_up_registries
     add_process a fbpprocess
     add_process b fbpprocess
     add_fifo a/a_trigger "$(end_of a)" outside control
     add_fifo a/a_to_b "$(end_of a)" "$(end_of b)" control
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo a/a_to_b is tagged --control, but it is neither fed from outside the program nor written by the Supervisor to a node"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses a fifo defined by its reader without a tag" {
+@test "debasher::_validate_program_fifo_flags refuses a fifo defined by its reader without a tag" {
     # a reads a fifo fed from outside, and forgot to tag it.
     set_up_registries
     add_process a fbpprocess
     add_fifo a/a_trigger "$(end_of a)" outside control
     add_fifo a/a_in "$(end_of a)" outside "" "-inf"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo a/a_in is defined by process a through the input option -inf: a fifo is defined by the process that writes it"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses a tagged fifo fed from outside defined through an output option" {
+@test "debasher::_validate_program_fifo_flags refuses a tagged fifo fed from outside defined through an output option" {
     set_up_registries
     add_process a fbpprocess
     add_fifo a/a_trigger "$(end_of a)" outside control "-outtrigger"
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo a/a_trigger is tagged --control and fed from outside the program, so process a reads it, but defines it through the output option -outtrigger"* ]]
 }
 
-@test "debasher::_validate_program_fifo_kinds refuses a fifo tag in a general program" {
+@test "debasher::_validate_program_fifo_flags refuses a fifo tag in a general program" {
     set_up_registries
     DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
     add_fifo p/p_in "$(end_of p)" outside external
 
-    run debasher::_validate_program_fifo_kinds
+    run debasher::_validate_program_fifo_flags
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"Error: fifo p/p_in is tagged --external, which only a 'resident' program may use"* ]]
+}
+
+@test "debasher::_validate_program_fifo_flags refuses a fifo declared with --mirror in a resident program" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process b fbpprocess
+    add_fifo a/a_trigger "$(end_of a)" outside control
+    add_fifo a/a_out "$(end_of a)" "$(end_of b)"
+    DEBASHER_FIFO_MIRRORED["a/a_out"]=1
+
+    run debasher::_validate_program_fifo_flags
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: fifo a/a_out is declared with --mirror, which a 'resident' program may not use"* ]]
+}
+
+@test "debasher::_validate_program_fifo_flags accepts a fifo declared with --mirror in a general program" {
+    set_up_registries
+    DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+    add_fifo p/p_out "$(end_of p)" "$(end_of q)"
+    DEBASHER_FIFO_MIRRORED["p/p_out"]=1
+
+    run debasher::_validate_program_fifo_flags
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
 }
 
 # --- the ports of the nodes ----------------------------------------------
