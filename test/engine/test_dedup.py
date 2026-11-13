@@ -238,11 +238,7 @@ def test_a_restored_node_drops_what_its_own_log_already_covers():
 
     relaunched = _Recorder(opts=_OPTS)
     checkpoint = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(checkpoint.node_state)
-    relaunched._closed_ports = set(checkpoint.closed_ports)
-    relaunched._out_seq = dict(checkpoint.out_seq)
-    relaunched._last_seq = dict(checkpoint.last_seq)
-    relaunched._accepted_seq = dict(checkpoint.last_seq)
+    relaunched._restore_checkpoint(checkpoint)
     relaunched._open_input_log(checkpoint.capture_pos)
     relaunched._replay_input_log(checkpoint.capture_pos)  # reprocesses a (seq 1) and b (seq 2)
 

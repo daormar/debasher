@@ -553,19 +553,7 @@ class FBPProcess(_PortWorker):
         capture_pos = 0
         if checkpoint is not None:
             capture_pos = checkpoint.capture_pos
-            self.restore_node_state(checkpoint.node_state)
-            self._last_epoch = checkpoint.epoch
-            self._closed_ports = set(checkpoint.closed_ports)
-            self._out_seq = dict(checkpoint.out_seq)
-            self._last_seq = dict(checkpoint.last_seq)
-            # The reader threads' own counters start at the same point; if the
-            # log holds DATA after capture_pos, _replay_input_log advances them
-            # past it, to what the reader threads had already accepted before
-            # the crash, whether the brain had processed it or not.
-            self._accepted_seq = dict(checkpoint.last_seq)
-            # What was numbered but not yet written reaches a neighbor before
-            # anything process_data() sends again while replaying the log.
-            self._restore_out_backlog(checkpoint.out_backlog)
+            self._restore_checkpoint(checkpoint)
             self.log.info("restored checkpoint for epoch %s", checkpoint.epoch)
         else:
             self.log.info("no checkpoint found, starting with default values")
@@ -605,6 +593,26 @@ class FBPProcess(_PortWorker):
         returns, same as it always has.
         """
         self._stop_requested.set()
+
+    def _restore_checkpoint(self, checkpoint):
+        """
+        Restores what `checkpoint` holds: the node state, through
+        restore_node_state(), its epoch, the closed ports, the sequence
+        numbers and the outbound backlog. The input log is not touched.
+        """
+        self.restore_node_state(checkpoint.node_state)
+        self._last_epoch = checkpoint.epoch
+        self._closed_ports = set(checkpoint.closed_ports)
+        self._out_seq = dict(checkpoint.out_seq)
+        self._last_seq = dict(checkpoint.last_seq)
+        # The reader threads' own counters start at the same point; if the
+        # log holds DATA after capture_pos, _replay_input_log advances them
+        # past it, to what the reader threads had already accepted before
+        # the crash, whether the brain had processed it or not.
+        self._accepted_seq = dict(checkpoint.last_seq)
+        # What was numbered but not yet written reaches a neighbor before
+        # anything process_data() sends again while replaying the log.
+        self._restore_out_backlog(checkpoint.out_backlog)
 
     def _load_latest_checkpoint(self):
         """
@@ -1231,11 +1239,11 @@ class FBPProcess(_PortWorker):
         Re-enqueues, with their original numbers, the DATA that a round's
         capture found still unwritten (see _snapshot_out_backlog): what
         send_data had already numbered before the crash but the writer
-        thread had not yet gotten to. Called by run(), before anything else
-        is sent, so these reach a neighbor ahead of whatever process_data()
-        sends again while replaying the input log. Bypasses send_data itself
-        (its numbering has already happened, and this does not run from
-        inside process_data()).
+        thread had not yet gotten to. Called by _restore_checkpoint, before
+        anything else is sent, so these reach a neighbor ahead of whatever
+        process_data() sends again while replaying the input log. Bypasses
+        send_data itself (its numbering has already happened, and this does
+        not run from inside process_data()).
         """
         for tag, entries in out_backlog.items():
             for entry in entries:

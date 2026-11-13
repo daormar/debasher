@@ -404,15 +404,9 @@ class _PortWorker:
 
     def _open_fifos(self):
         """
-        Opens the fifo of every declared port that is not open yet, so that
-        calling it again does nothing. A fifo keeps what was written to it
-        and not yet read only while some process holds it open, and a node
-        holds it from the moment it opens it: a class whose startup takes a
-        while before its threads can run (FBPProcess restores a checkpoint
-        and replays a log) opens its fifos first, so that its neighbors'
-        messages wait for it in the fifos even if the neighbors crash
-        meanwhile. It raises the limit of open descriptors first, if the
-        ports need it (see _raise_fd_limit).
+        Opens the fifo of every declared port that is not open yet, so a
+        second call opens only what is missing. Raises the limit of open
+        descriptors first, if the ports need it (see _raise_fd_limit).
         """
         self._raise_fd_limit()
         for tag, option_name in self._input_ports().items():
@@ -529,18 +523,14 @@ class _PortWorker:
 
     def _drops_after_close(self, tag):
         """
-        Whether the reader of `tag`, once its writer has sent CLOSE, goes on
-        reading but drops everything that follows (the default), or delivers
-        it as usual. CLOSE says that the writer has finished for good, so
-        what a later incarnation of it sends can only repeat what was already
-        delivered, or be a fault of its own: it must not reach the node. The
-        reader keeps reading instead of ending so that such an incarnation
-        never blocks on a full pipe, and so that its thread stays alive,
-        which is what the heartbeat checks. Supervisor overrides it: a node
-        that closes its channel and is later relaunched must still be heard,
-        and it decides whether a node finished for good from the node's own
-        .finished file instead.
+        Whether the reader of `tag`, once its writer has sent CLOSE, drops
+        everything that follows (True, the default) or delivers it as usual
+        (False). A subclass overrides it for the ports it hears after a
+        CLOSE.
         """
+        # CLOSE says that the writer has finished for good: what a later
+        # incarnation of it sends can only repeat what was already delivered,
+        # or be a fault of its own, and must not reach the node.
         return True
 
     def _types_of_port(self, tag):
@@ -605,7 +595,10 @@ class _PortWorker:
                     if self._stopping.is_set():
                         break
                     # Nothing after a CLOSE is decoded, so that not even a
-                    # corrupt line can stop the reader.
+                    # corrupt line can stop the reader: it goes on reading, so
+                    # that a later incarnation of the writer never blocks on a
+                    # full pipe, and so that its thread stays alive, which is
+                    # what the heartbeat checks.
                     if state.closed:
                         self._warn_dropped_after_close(tag, state)
                         continue

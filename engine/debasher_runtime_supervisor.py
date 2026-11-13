@@ -721,10 +721,10 @@ class Supervisor(_PortWorker):
         """
         A Supervisor reader delivers what follows a CLOSE. A node that wrote
         CLOSE (none of the engine does) may crash later or be relaunched, and
-        must still be heard;
-        whether a node is done for good is decided from its own .finished
-        file (see _check_node), and the manual trigger channel is written
-        by an external actor that opens, writes and closes per message.
+        must still be heard; whether a node is done for good is decided from
+        its own .finished file (see _check_node), and the manual trigger
+        channel is written by an external actor that opens, writes and closes
+        per message.
         """
         return False
 

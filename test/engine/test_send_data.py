@@ -266,11 +266,7 @@ def test_a_restored_checkpoint_makes_the_numbering_go_on_after_it(execdir):
 
     relaunched = _Relay(opts=_OPTS)
     checkpoint = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(checkpoint.node_state)
-    relaunched._closed_ports = set(checkpoint.closed_ports)
-    relaunched._out_seq = dict(checkpoint.out_seq)
-    relaunched._last_seq = dict(checkpoint.last_seq)
-    relaunched._accepted_seq = dict(checkpoint.last_seq)
+    relaunched._restore_checkpoint(checkpoint)
 
     _run_brain(relaunched, [("inf", "d"), ("inf", "e")])
 
@@ -307,11 +303,7 @@ def test_replay_regenerates_the_same_numbers_a_crashed_incarnation_had_used(exec
 
     relaunched = _Relay(opts=_OPTS)
     checkpoint = relaunched._load_latest_checkpoint()
-    relaunched.restore_node_state(checkpoint.node_state)
-    relaunched._closed_ports = set(checkpoint.closed_ports)
-    relaunched._out_seq = dict(checkpoint.out_seq)
-    relaunched._last_seq = dict(checkpoint.last_seq)
-    relaunched._accepted_seq = dict(checkpoint.last_seq)
+    relaunched._restore_checkpoint(checkpoint)
     relaunched._open_input_log(checkpoint.capture_pos)
     relaunched._replay_input_log(checkpoint.capture_pos)
 
