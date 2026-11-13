@@ -409,7 +409,8 @@ to it.
   port does not carry (see "Fields of each type" and "Channel topology"), and
   hands everything else to the inbound queue (with the input-log
   redesign, after appending the record to the log). After a `CLOSE` it goes on
-  reading but drops everything that follows; only `stop_threads()` ends it.
+  reading but drops everything that follows. It ends only when its node stops,
+  or on an error of its stream or of its input log (see "Ghost connections").
 - **writer thread**: one per output port, with its own outbound queue. It sends
   `HELLO` first and, when its node has finished for good (not at a halt),
   `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it
@@ -3369,17 +3370,17 @@ recovery"). It ends with the case in which the reader is the one that dies
 
 ## The gap: a node cut off from its business peers
 
-Restarting the whole program, with a new `debasher_exec` against the same
-output directory, needs none of this: the engine recreates every FIFO, and
-every node opens them anew. The crash of one node while its neighbors keep
-running is different. With plain FIFO endpoints (a reader that opens its FIFO
-once and reads until EOF, a writer that opens it once and writes), the reader
-of the crashed node's output sees EOF and ends, never to reopen; a writer to
-the crashed node gets `BrokenPipeError` and its thread dies; and the
-relaunched node blocks for ever in `open()`, with nobody left at the other
-end. It would talk to the `Supervisor` again but be cut off from every peer,
-and the first goal of the introduction would hold only for a node whose sole
-connection is the `Supervisor`.
+When one node crashes while its neighbors keep running, the channels between
+them have to survive the crash, and plain FIFOs do not. With plain FIFO
+endpoints (a reader that opens its FIFO once and reads until EOF, a writer that
+opens it once and writes), the reader of the crashed node's output sees EOF and
+ends, never to reopen; a writer to the crashed node gets `BrokenPipeError` and
+its thread dies; and the relaunched node blocks for ever in `open()`, with
+nobody left at the other end. It would talk to the `Supervisor` again but be cut
+off from every peer, and the first goal of the introduction would hold only for
+a node whose sole connection is the `Supervisor`. Restarting the whole program,
+with a new `debasher_exec` against the same output directory, has none of these
+problems: the engine recreates every FIFO, and every node opens them anew.
 
 Reconnecting also needs every endpoint to know what the `Supervisor` learns
 from `.finished`: whether a peer's silence means "crashed, will return" or
@@ -3388,15 +3389,19 @@ consequences.
 
 ## `CLOSE`: telling a finished peer from a crashed one
 
-A process keeps its FIFOs open for its whole life (opens them as it starts,
-holds them until `_STOP`), so a reader cannot tell a clean close from a
-crash from EOF alone: the EOF is identical for a normal exit and for
-`SIGKILL`. `CLOSE` is an envelope type of its own (see "Control envelope"),
-decentralized (it works without a `Supervisor`, which is optional, and for a
-manual relaunch too), sent by the writer in band when it has finished for
-good; a halt sends none (see "Ordered shutdown"). The idea mirrors FIN versus
-RST in TCP: a `CLOSE` means "finished, do not wait"; its absence means "may
-still return".
+A process keeps its FIFOs open for its whole life (it opens them as it starts,
+and holds them until it stops: their descriptors are closed once its threads
+end, or at its exit for a writer abandoned on a full pipe), so a reader cannot
+tell a clean close from a crash from EOF alone: the EOF is identical for a
+normal exit and for `SIGKILL`. `CLOSE` is an envelope type of its own (see
+"Control envelope"), decentralized (it works without a `Supervisor`, which is
+optional, and for a manual relaunch too, once a node can finish for good), sent
+by the writer in band when it has finished for good; a halt sends none (see
+"Ordered shutdown"). The idea mirrors FIN versus RST in TCP: a `CLOSE` means
+"finished, do not wait"; its absence means "may still return". The signal is
+designed for a node that finishes for good, which no process of a resident
+program does (see "A node that finishes for good" in Future work), so only a
+writer outside the program sends it, on an external or a control port.
 
 The reader hands `CLOSE` to the brain thread in order, like any other envelope,
 so it is logged and its port can leave the barrier's pending set. Why the
@@ -3405,12 +3410,12 @@ reader then keeps reading and drops what follows instead of ending, and what
 
 A process that exits with an error (an exception, a non-zero exit) sends no
 `CLOSE` and is treated as a crash, consistent with the `Supervisor`'s own
-detection; a `CLOSE` followed by a later failure is harmless, since peers keep
-reading and drop whatever the relaunched node sends afterward (see "`CLOSE`
-and closed ports"). The `Supervisor`'s own channel does not need `CLOSE`: it
-keeps using the node's `.finished` file, since a `CLOSE` does not prove the
-node succeeded, and a node that closed and then failed must still be heard
-again when relaunched.
+detection. Once a node can finish for good, a `CLOSE` followed by a later
+failure is harmless, since peers keep reading and drop whatever the relaunched
+node sends afterward (see "`CLOSE` and closed ports"). The `Supervisor`'s own
+channel does not need `CLOSE`: it keeps using the node's `.finished` file, since
+a `CLOSE` does not prove the node succeeded, and a node that closed and then
+failed must still be heard again when relaunched.
 
 ## Ghost connections: holding both ends of a FIFO
 
@@ -3435,12 +3440,15 @@ crash and relaunch, with the writer holding a ghost read end, never kills
 the writer and loses nothing inside the pipe, only whatever the killed
 reader had already consumed before it died.
 
-With no EOF the reader never ends on its own: it ends only on a stop
-request, woken through a blank line written to its own ghost write end even
-if it is blocked in `read()`. The writer never sees `EPIPE` either: a dead
-peer means backpressure instead, the writer blocks once the pipe holds 64
-KiB, and since a blocked writer cannot be woken, `stop_threads()` joins
-writer threads with a bounded timeout.
+With no EOF, a reader never ends because its peer crashed or was relaunched. It
+ends only on a stop request, woken through a blank line written to its own ghost
+write end even if it is blocked in `read()`, or on an error, which the heartbeat
+then reports: of its stream (an unparsable line not followed by `HELLO`, a gap
+in the sequence numbers, a `CLOSE` that claims more than was accepted) or of its
+input log (at its size cap, or a failed write to it). The writer never sees
+`EPIPE` either: a dead peer means backpressure instead, the writer blocks once
+the pipe holds 64 KiB, and since a blocked writer cannot be woken,
+`stop_threads()` joins writer threads with a bounded timeout.
 
 `Supervisor` learns that a node finished only from its `.finished` file, and
 none of its readers can hang waiting for an EOF that never comes.
@@ -3458,26 +3466,34 @@ fragment left by a writer killed in the middle of one larger than
 merge with the next good message into one unparsable line and swallow it.
 
 Every incarnation of a writer starts with one atomic write, a blank line
-followed by a `HELLO` line (an envelope type of its own, consumed by the
-reader thread, see "Control envelope"). A reader that finds one unparsable
-line tolerates it if the next line is `HELLO`, and drops it; in any other case
-it is an error, so a corrupt line is never skipped silently. There is no limit
-on message size. Only the framework writes to these channels: an external
-writer must send complete lines, and a fragment from one shows up as an
-error. `HELLO` also tells the reader that its peer (re)connected.
+followed by a `HELLO` line (an envelope type of its own, consumed by the reader
+thread, see "Control envelope"). A reader that finds one unparsable line
+tolerates it if the next line is `HELLO`, and drops it; in any other case it is
+an error, so a corrupt line is never skipped silently. The resync puts no limit
+on the size of a message, unlike a protocol that relied on writes up to
+`PIPE_BUF` being atomic; the only limit is that of the outbound backlog,
+`OUT_BACKLOG_FAIL_BYTES` (see "Checkpoint persistence"). Only the framework
+writes to these channels: an external writer must send complete lines, and a
+fragment from one shows up as an error. `HELLO` also tells the reader that its
+peer (re)connected.
 
 ## Opening the FIFOs first in recovery
 
-A relaunched node opens its FIFOs before restoring its checkpoint or
-replaying its input log (`_open_fifos()`, before `run()` does anything that
-takes time, which `start_threads()` also calls for the ports that are not open
-yet, so that a node driven without `run()` opens them too). Opening them only
-later, in `start_threads()`, would put the time spent recovering inside the
-window in which the crash of a neighbor could destroy what the neighbor had
-sent it (this is about the channel, not the log; "Input log" covers what a node
-keeps of its own history). What remains of the window is the time to notice the
-crash (`HEARTBEAT_CHECK_INTERVAL_SECS` when the process is gone) and to start
-the new process.
+A relaunched node opens its FIFOs before restoring its checkpoint or replaying
+its input log (`_open_fifos()`, before `run()` does anything that takes time,
+which `start_threads()` also calls for the ports that are not open yet, so that
+a node driven without `run()` opens them too). Opening them only later, in
+`start_threads()`, would put the time spent recovering inside the window in
+which the crash of a neighbor could destroy what the neighbor had sent it (this
+is about the channel, not the log; "Input log" covers what a node keeps of its
+own history). Opening first is what protects a channel when no other process
+holds its FIFO: in a program without a `Supervisor`, in one whose `Supervisor`
+is given `-no-hold-fifos`, or while the `Supervisor` is down. What remains of
+the window is then the time to notice the crash (`HEARTBEAT_CHECK_INTERVAL_SECS`
+when the process is gone) and to start the new process. When the `Supervisor`
+holds the FIFO of a business channel, the default, there is no such window: what
+a neighbor sent survives its crash even before the relaunched node opens
+anything (see "Holding the business channels").
 
 ## The reader-dies direction
 
