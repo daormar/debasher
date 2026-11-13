@@ -585,15 +585,14 @@ class _PortWorker:
         # fifo exists only in this process until it is logged, and is lost if
         # the process dies before, so every envelope of a block is logged
         # together, without waiting for the others one by one (see the
-        # Contract's limits). The descriptor belongs to
-        # start_threads()/stop_threads().
+        # Contract's limits). For the same reason a stop does not cut a block:
+        # the reader stops only between blocks (see _blocks_of_lines). The
+        # descriptor belongs to start_threads()/stop_threads().
         state = _ReaderState(self._closed_at_start(tag) and self._drops_after_close(tag))
         for raw_lines in self._blocks_of_lines(rfd):
             envelopes = []
             try:
                 for raw_line in raw_lines:
-                    if self._stopping.is_set():
-                        break
                     # Nothing after a CLOSE is decoded, so that not even a
                     # corrupt line can stop the reader: it goes on reading, so
                     # that a later incarnation of the writer never blocks on a
@@ -623,8 +622,8 @@ class _PortWorker:
         """
         Reads the fifo a block at a time, and yields the complete lines of
         each block, without their newline. A line cut at the end of a block
-        waits for the next one. Ends when the node is stopping, or when the
-        fifo has no writer left.
+        waits for the next one. Ends, before its next read, when the node is
+        stopping, or when the fifo has no writer left.
         """
         # The pieces of a line not yet complete: a long message arrives in
         # many reads, and only the read that brings its end is searched and

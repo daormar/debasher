@@ -6,6 +6,7 @@ import time
 import pytest
 
 import debasher_runtime_lib as lib
+import debasher_runtime_transport as transport
 
 
 def _wait_until(predicate, timeout=10.0, interval=0.01):
@@ -306,3 +307,32 @@ def _drain(proc):
         if item is not lib._STOP:
             items.append(item)
     return items
+
+
+def test_a_reader_told_to_stop_in_the_middle_of_a_block_logs_the_whole_block(tmp_path):
+    # What the reader has taken from the fifo exists nowhere else: a stop
+    # that came while it went through a block must not leave the rest of
+    # the block unlogged.
+    fifo_path = str(tmp_path / "a.fifo")
+    os.mkfifo(fifo_path)
+    proc = _Node(opts={"a": fifo_path, "b": "/dev/null"})
+    proc._open_input_log(0)
+    proc._reader_fds["a"] = transport._open_fifo_reader(fifo_path)
+    lines = [lib.encode_data(payload, seq=seq) for seq, payload in enumerate("abc", start=1)]
+    _, ghost_fd = proc._reader_fds["a"]
+    os.write(ghost_fd, ("\n".join(lines) + "\n").encode("utf-8"))
+
+    decode_line = proc._decode_line
+
+    def decode_and_stop(*args):
+        proc._stopping.set()
+        return decode_line(*args)
+
+    proc._decode_line = decode_and_stop
+    try:
+        proc._reader_loop("a", "a")
+        logged = [record.envelope.payload for record in proc._input_log.replay(0)]
+    finally:
+        proc._input_log.close()
+        proc._close_finished_fifos()
+    assert logged == ["a", "b", "c"]
