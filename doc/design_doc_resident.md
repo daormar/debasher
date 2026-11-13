@@ -115,6 +115,11 @@ to it.
   `define_fifo_opt` and `define_fifo_opt_generator` that makes the reader's end
   of a fifo a control port or an external port (see "Channel kinds declared with
   the fifo").
+- **mirror tap**: as defined in the design of the engine, for a fifo declared
+  with `--mirror`, the background job of the task that owns it, which copies
+  each line that the owner writes into a shim FIFO to the real FIFO and to the
+  mirror log of the fifo. A resident program does not allow it (see "Why the log
+  is not built on the mirror tap").
 - **source**: whatever puts `DATA` into an input port of a node without being a
   node of the program: a person writing into a FIFO, an external program, a test
   harness. A node acts only inside `process_data`, in reaction to what it
@@ -388,14 +393,14 @@ to it.
 - **sequence number, `seq`**: the counter, per channel, that the sender puts in
   each `DATA` so that the receiver can drop a duplicate produced by a replay and
   detect a gap. `out_seq` (the counter of each output port) and `last_seq` (the
-  last number accepted on each input port) are stored in the checkpoint. Not the
-  same as `pos`: `seq` is per channel and assigned by the sender, `pos` is per
-  node and assigned by the receiver. On the receiver side `last_seq` is the
-  brain's own view, so the drop itself cannot use it directly: a reader thread
-  keeps a second counter of its own, `_accepted_seq`, ahead of the brain, which
-  the check actually consults; restored at startup from the checkpoint's
-  `last_seq` plus the log after `capture_pos`, it is never itself written to a
-  checkpoint (see "State variables, at a glance").
+  last number processed by the brain thread on each input port) are stored in
+  the checkpoint. Not the same as `pos`: `seq` is per channel and assigned by
+  the sender, `pos` is per node and assigned by the receiver. On the receiver
+  side `last_seq` is the brain's own view, so the drop itself cannot use it
+  directly: a reader thread keeps a second counter of its own, `_accepted_seq`,
+  ahead of the brain, which the check actually consults; restored at startup
+  from the checkpoint's `last_seq` plus the log after `capture_pos`, it is never
+  itself written to a checkpoint (see "State variables, at a glance").
 
 ## Threads of a node
 
@@ -545,6 +550,11 @@ inside `process_data`, checked by `send_data`),
 `_round.pending` (the input ports an open round still waits on),
 `_closed_at_start_ports` (what a relaunched node's readers of closed ports
 start out knowing, taken from `_closed_ports` once, when the threads start),
+`_ReaderState` (what each reader thread remembers from one line to the next:
+the fragment that a `HELLO` has yet to excuse, whether its writer has said
+`CLOSE`, and whether a line after that `CLOSE` has already warned; created
+afresh with every reader thread, closed from the start for a port in
+`_closed_at_start_ports`),
 `_accepted_seq` (the reader threads' own live view of `_last_seq`, ahead
 of it, which the dedup check of G5 actually consults; restored at startup
 from the checkpoint's `last_seq` plus the log after `capture_pos`, never
@@ -782,10 +792,10 @@ effects outside the graph).
   (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
   on the wire depends on Python (see "Nodes in a compiled language" in Future
   work).
-- **`--mirror`** (the debugging tap of a fifo, behind the frontend's "Watch
-  FIFO") is not available in resident programs: declaring it aborts the load of
-  the program, before anything is launched. Resident processes keep their own
-  input log.
+- **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
+  frontend's "Watch FIFO") is not available in resident programs: declaring it
+  aborts the load of the program, before anything is launched. Resident
+  processes keep their own input log.
 - **A node that has finished for good** takes no part in later rounds, so the
   consistent cut of an epoch that starts after it finished has no checkpoint of
   that node: its channel to the others is empty and its last state is its final
@@ -1487,7 +1497,7 @@ processing. A checkpoint is a JSON object with these fields:
   processed by then (see "`CLOSE` and closed ports").
 - `out_seq` and `last_seq`: for each output port, the last sequence number
   sent, and for each input port, the last one that the brain thread had
-  processed (see "Sequence numbers (G5) in the input log").
+  processed (see "Sequence numbers in the input log").
 - `out_backlog`: the copy of the outbound backlog (see the Glossary).
 - `channel_state`: for each port that was pending in the round, a copy of the
   `DATA` that arrived on it while it was still pending (before its marker).
@@ -1989,8 +1999,7 @@ have had without the crash. A checkpoint holds the node state as it was when a
 round opened; everything the node received from then on is in its input log,
 and replaying the log on top of the checkpoint brings the node state up to
 date. The log belongs to the node that receives, in its own execdir, since
-that is the node that replays it (see "Why not built on `--mirror`, and
-locality").
+that is the node that replays it (see "Log structure and record format").
 
 That use sets what the log has to guarantee:
 
@@ -2008,25 +2017,26 @@ That use sets what the log has to guarantee:
   capture and the close is not skipped; a node with no checkpoint yet replays
   its whole log.
 
-The section first describes the log itself ("Log structure and record
-format", "Arrival and positions"), then how a node recovers from it
-("Recovery: startup and replay") and how it is kept small ("Pruning and the
-size cap"); what a checkpoint keeps about the log is in "State capture and
-checkpoint schema".
-It ends with how the log carries the end of a writer ("`CLOSE` and closed
-ports") and the sequence numbers ("Sequence numbers (G5) in the input log"),
-and with why it is built into `FBPProcess` rather than on the engine's fifo
-taps ("Why not built on `--mirror`, and locality"). It comes right after
-"`FBPProcess` class", whose startup replays the log.
+The section first describes the log itself ("Log structure and record format",
+"Arrival and positions"), then how a node recovers from it ("Recovery: startup
+and replay") and how it is kept small ("Pruning and the size cap"); what a
+checkpoint keeps about the log is in "State capture and checkpoint schema". It
+ends with how the log carries the end of a writer ("`CLOSE` and closed ports")
+and the sequence numbers ("Sequence numbers in the input log"), and with why it
+is not built on the engine's mirror tap ("Why the log is not built on the mirror
+tap"). It comes right after "`FBPProcess` class", whose startup replays the log.
 
 ## Log structure and record format
 
-One input log per node, in `<execdir>/log/`, not one per port: everything that
-arrives at a node (`DATA`, `BARRIER`, `INTERACT`, `CLOSE`) is written to it, in
-the order the brain thread processes it. That order is guaranteed by one lock,
-shared with pruning (see "Pruning and the size cap"), that makes appending the
-record and queuing the envelope for the brain thread a single step. Only `DATA`
-is replayed.
+Each node keeps its input log in its own execdir, in `<execdir>/log/`. The node
+that replays a log is always the one relaunched after a crash, never one of its
+neighbors, so the log belongs to the side that receives, and a recovery never
+reaches into the directory of another node. There is one log per node, not one
+per port: everything that arrives at a node (`DATA`, `BARRIER`, `INTERACT`,
+`CLOSE`) is written to it, in the order the brain thread processes it. That
+order is guaranteed by one lock, shared with pruning (see "Pruning and the size
+cap"), that makes appending the record and queuing the envelope for the brain
+thread a single step. Only `DATA` is replayed.
 
 The log is split into segments, files named `<first pos>.log` after the
 position of their first record, ordered numerically like a checkpoint's
@@ -2200,6 +2210,17 @@ what arrives in `CHECKPOINT_RETENTION` rounds, plus a segment and a block.
 
 ## `CLOSE` and closed ports
 
+When a writer finishes for good, the node that reads it has to know it, for two
+reasons: a round must stop waiting for a marker on that port, since none will
+ever come, and the port must stay closed across a relaunch, or the relaunched
+node would wait for it again. Both rest on the input log, which records the
+`CLOSE` in order with the other envelopes, so that a checkpoint and a replay
+agree on which ports were closed at each point. This section says how a reader
+treats a `CLOSE`, what a checkpoint keeps of it, and how a round treats a
+closed port. Only a writer outside the program sends `CLOSE`, on an
+external or a control port: no process of a resident program does (see "Ordered
+shutdown").
+
 `CLOSE` means that a writer has finished for good, and only that; a halt sends
 none (see "Control envelope"). A reader hands it to the brain thread like any
 other envelope, so it is logged, and then keeps reading but drops everything
@@ -2209,30 +2230,33 @@ reasons: a reader that ended would leave the heartbeat unhealthy for good once
 its producer finished, and a node whose peer sent `CLOSE`, ended its reader, and
 was later relaunched would fill that peer's pipe with nobody reading, since the
 old reader is gone. Dropping instead of ending solves both. A control port (see
-the Glossary) is the exception: its reader goes on delivering what follows a
-`CLOSE`, and the `CLOSE` is neither recorded nor restored, since several
-writers feed the port in turn, and none of them ends it for the others.
+the Glossary) is the exception: its `CLOSE` is logged like any other envelope,
+but it closes nothing, live or in a replay, and its reader goes on delivering
+what follows, since several writers feed the port in turn, and none of them
+ends it for the others.
 
 `closed_ports`, sorted, is the checkpoint field that lists the input ports whose
 `CLOSE` the brain thread had processed at the capture, that is, those with a
-`CLOSE` record at a position at or below `capture_pos`: taken at the same moment
-and on the same thread as the node state and `capture_pos`, by the order in
-which the brain thread processes the envelopes, not by what the reader threads
-have already read, since they run ahead of it. Two other definitions would not
-work, as a node of three ports shows: a closes before a round opens and c closes
-while it is open, with a message of c in between. Neither "what the reader
-threads have logged by then" nor "what is closed when the round closes" agrees
-with what the checkpoint's own `capture_pos` reflects, and both would leave the
-checkpoint saying that c is closed while a message of c still lies after
-`capture_pos` and is due to be replayed. The definition that is used is what
-lets replay demand that no `DATA` record ever follows the `CLOSE` of its port,
-an error that means the log or the checkpoint is corrupt. Recovery restores the
-set and adds the port of each `CLOSE` record after `capture_pos`; the readers of
-the ports that are then closed start already dropping what follows, so a
-relaunched node behaves like the incarnation that read the `CLOSE`. A `CLOSE`
-between the capture and the close of a round is not stored in the checkpoint
-file, the same as any other envelope that arrives then: it is history after the
-cut, and recovery finds it in the log.
+`CLOSE` record at a position at or below `capture_pos`. It is taken at the same
+moment and on the same thread as the node state and `capture_pos`, so it follows
+the order in which the brain thread processes the envelopes. Two other
+definitions would seem natural, and neither works: the ports whose `CLOSE` the
+reader threads have logged by the capture, and the ports that are closed when
+the round closes. The reader threads run ahead of the brain thread, and a round
+closes after its capture, so both can count a `CLOSE` that lies after
+`capture_pos`. A node with three ports shows it: `a` closes before a round
+opens, and `c` closes while the round is open, with a message of `c` between the
+capture and its `CLOSE`. Either definition would leave the checkpoint saying
+that `c` is closed while that message still lies after `capture_pos` and is due
+to be replayed. The definition that is used is what lets replay demand that no
+`DATA` record ever follows the `CLOSE` of its port, an error that means the log
+or the checkpoint is corrupt. Recovery restores the set and adds the port of
+each `CLOSE` record after `capture_pos`; the readers of the ports that are then
+closed start already dropping what follows, so a relaunched node behaves like
+the incarnation that read the `CLOSE`. A `CLOSE` between the capture and the
+close of a round is not stored in the checkpoint file, the same as any other
+envelope that arrives then: it is history after the cut, and recovery finds it
+in the log.
 
 A round does not wait for a port whose writer has finished, since no marker
 will ever come from it. A `CLOSE` the brain thread processes while a round is
@@ -2249,50 +2273,79 @@ channel state. A module sees none of this: `capture_node_state()` and
 `restore_node_state()` handle the node state and nothing else, and no hook
 tells the module about a `CLOSE`.
 
-## Sequence numbers (G5) in the input log
+## Sequence numbers in the input log
 
-The mechanism itself, and the guarantee it gives (G5), are in the Contract;
-what follows is specific to how the input log carries it. A `DATA`'s `seq`
-travels inside its record's embedded `env`, with no change to the record
-format (see "Log structure and record format"). The receiver's own
-counters, `last_seq` and the reader threads' `_accepted_seq` (Glossary), are
-rebuilt at startup from the checkpoint plus the log: `_accepted_seq` starts
-at the checkpoint's `last_seq` and replay advances it, scanning the numbered
-`DATA` after `capture_pos`, to what the reader threads had already accepted
-before the crash, whether the brain had processed it or not.
+A node that replays its input log, after a crash or a halt, sends again what
+it had sent after its checkpoint, so its neighbors receive part of its messages
+twice; and a message can be lost, by a node that crashes after taking it from
+its FIFO and before logging it. Sequence numbers tell a receiver both: each
+`DATA` carries a number of its channel, the receiver drops one it has already
+accepted, and a number that skips another says that a message was lost. The
+mechanism and the guarantee it gives are G5 in the Contract, and the error of a
+loss is G8. This section says how the input log carries the numbers, and how a
+relaunched node rebuilds its own counters from it, so that it still drops what
+its log already covers.
 
-What is left uncovered: the window between a reader thread taking a block
-from the FIFO and the one write that logs its messages. A message lost there
-is not recovered, since its sender considers it delivered, but the jump in
-the sequence numbers detects it (G8).
+A `DATA`'s `seq` travels inside its record's embedded `env`, with no change to
+the record format (see "Log structure and record format"). The receiver keeps
+two counters per input port (Glossary). `last_seq` is the last number that the
+brain thread has processed, and is captured with the node state into the
+checkpoint. `_accepted_seq` is the last number that a reader thread has
+accepted: it runs ahead of `last_seq`, and it is the one that the dedup check
+consults, since a reader decides before the brain thread sees the
+message. At startup both start at the checkpoint's `last_seq`, and the replay
+advances them over the numbered `DATA` after `capture_pos`, up to what the
+reader threads had accepted before the crash, whether the brain thread had
+processed it or not.
 
-Alternatives to logging on arrival that are not used: a bounded inbound queue
-(the reader still consumes blocks of up to 64 KiB from the FIFO, unbounded); a
-log at the sender with acknowledgements (would need coordination and deletion
-between two processes); a second log with the order of processing (only
-needed if something reorders messages, and nothing does); accepting the loss
-of what waits in the inbound queue outright (it would happen exactly when a
-node is busy, the worst time for it).
+The numbers do not cover every loss. A reader thread takes a block from its
+FIFO and logs its messages in one write; between the two, the messages exist
+only in the memory of the process. A message lost there, in a crash, is not
+recovered, since its sender considers it delivered and does not send it again,
+but the receiver notices it, because the next message skips its number (G8).
+This is the Contract's limit "Messages read from a FIFO but not yet written to
+the input log".
 
-## Why not built on `--mirror`, and locality
+Four other designs were weighed and left out. A bounded inbound queue, between
+the reader threads and the brain thread, would not shorten that window: what a
+reader has taken from the FIFO is in memory whatever the size of the queue, and
+a bound would only make the reader wait with a block in its hands. A log at the
+sender, kept until the receiver acknowledges each message, would close the
+window, but needs the two processes to coordinate, and the sender to delete
+what each receiver has acknowledged. A second log, of the order in which the
+brain thread processes the envelopes, would only be needed if something
+reordered them between their arrival and their processing, and nothing does.
+Accepting the loss of what waits in the inbound queue, instead of logging on
+arrival, would lose messages exactly when a node is busy, the worst time for
+it.
 
-Implemented entirely inside `FBPProcess` itself, in Python, not on top of the
-engine's `--mirror` fifo tap: that mechanism is meant for occasional manual
-debug inspection (the frontend's "Watch FIFO", `debasher_get_fifo_mirror`),
-not for the load and traffic pattern a resident node's own input log needs
-(back-to-back messages, no reader-side pacing). `--mirror` keeps that one
-occasional debug use; nothing about it is forced on for `resident` programs,
-and a `resident` program that declares `--mirror` on a fifo is rejected when
-it is loaded (`debasher::_check_fifo_mirror_allowed`, called by
-`define_fifo_opt` and `define_fifo_opt_generator`), so a mirror tap can never
-sit between two resident processes.
+## Why the log is not built on the mirror tap
 
-The process that needs to replay a log is always the one relaunched after a
-crash (itself, not its neighbor), so the log belongs on the *reader* side, in
-the restarting process's own `DEBASHER_PROCESS_EXECDIR`, not the writer's.
-This locality removes any need to reach into a neighbor's directory, and
-removes the tap/shim mechanism from this feature entirely: no separate
-process, no fifo-open/close races, nothing to force on via `--mirror`.
+The engine already keeps a copy of what goes through a FIFO when asked to: the
+mirror tap of a fifo declared with `--mirror` (Glossary). The input log, which
+is `_InputLog` of the runtime library, does not use it, for two reasons, and a
+resident program does not allow `--mirror` at all.
+
+The first reason is that the tap changes the channel it observes. It is a
+process of its own between the writer and the real FIFO: the writer writes into
+a shim FIFO, and the tap reads the shim line by line and writes each line again
+into the real FIFO, whose write end it holds itself. The reconnection of
+"Recovery from a node failure" rests on the two processes at the ends of a
+channel both holding its FIFO (ghost connections). With a tap in between, the
+writer would hold the shim, not the real FIFO, and the real FIFO would be held
+by the tap, a process with a life of its own, so the channel would no longer
+be the one that the reconnection designs.
+
+The second reason is locality. The tap lives on the side of the writer, in the
+task that owns the FIFO, while the log belongs to the node that receives and
+replays it (see "Log structure and record format"). A log built on the tap would
+make a recovery reach into a neighbor, and would add a process of its own, with
+its own opens and closes of the FIFO, to every channel.
+
+A resident program that declares `--mirror` on a fifo is therefore refused when
+it is loaded, before anything is launched, so a mirror tap never sits between
+two resident processes (see "Limits and non-goals"). `--mirror` remains a
+debugging aid of general programs, behind the "Watch FIFO" of the web UI.
 
 # `Supervisor` class
 
