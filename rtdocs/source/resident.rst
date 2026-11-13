@@ -599,7 +599,10 @@ next to ``cpus``, ``mem`` and ``time``:
   node skips a checkpoint (8 MiB by default).
 * ``out_backlog_fail_mb`` sets ``OUT_BACKLOG_FAIL_BYTES``, the size of
   those messages over which ``send_data`` raises an error, since a
-  reader is not reading (64 MiB by default). While the node replays its
+  reader is not reading (64 MiB by default). The error names the output
+  port that holds the most of those messages, whose reader is the one to
+  look at; it need not be the port of the message that went over the
+  limit. While the node replays its
   input log, ``send_data`` waits for room instead. A single message
   larger than the limit never fits: ``send_data`` raises at once, live
   or in a replay, with an error that names the size of the message, its

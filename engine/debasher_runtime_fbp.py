@@ -402,7 +402,8 @@ class FBPProcess(_PortWorker):
         # OUT_BACKLOG_FAIL_BYTES at no cost.
         self._unwritten_bytes = 0
         # The same, for each output port, which the node info file reports
-        # (see _write_node_info) with no need to go through the backlog.
+        # (see _write_node_info) and the error of send_data names, with no
+        # need to go through the backlog.
         self._unwritten_port_bytes = {}
         self._out_backlog_lock = threading.Lock()
         # Whether this replay has already said that it waits for room in the
@@ -1169,13 +1170,19 @@ class FBPProcess(_PortWorker):
             self._wait_for_room_in_backlog(len(line))
         with self._out_backlog_lock:
             if self._unwritten_bytes + len(line) > self.OUT_BACKLOG_FAIL_BYTES:
-                port_bytes = self._unwritten_port_bytes.get(tag, 0)
+                # The limit is one for all the ports together, so the port
+                # that fills the backlog, the one whose reader is not reading,
+                # need not be the port of this message.
+                fullest, fullest_bytes = max(
+                    self._unwritten_port_bytes.items(), key=lambda item: item[1]
+                )
                 raise RuntimeError(
                     f"{type(self).__name__}: the outbound backlog would go over "
                     f"OUT_BACKLOG_FAIL_BYTES ({self.OUT_BACKLOG_FAIL_BYTES} bytes) with this "
-                    f"message on {tag!r}, which holds {port_bytes} bytes not yet written: "
-                    "a reader of this node is not reading (it was stopped, is down or "
-                    "stuck, or is slower than this node)"
+                    f"message on {tag!r}; the port that holds the most not yet written "
+                    f"is {fullest!r}, with {fullest_bytes} bytes: its reader is not "
+                    "reading (it was stopped, is down or stuck, or is slower than this "
+                    "node)"
                 )
             self._add_to_out_backlog(tag, seq, line)
         self._out_seq[tag] = seq

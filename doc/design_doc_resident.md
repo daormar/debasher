@@ -1814,24 +1814,26 @@ rounds themselves do close.
 When a message would take what the node has not yet written into its FIFOs, on
 all its output ports together, over `OUT_BACKLOG_FAIL_BYTES` (64 MiB by
 default), `send_data` raises a `RuntimeError` instead of sending it: the message
-is neither numbered nor queued, and the error names the port it was for and how
-much that port holds unwritten. A backlog that keeps growing means a reader that
-is not reading: stopped, down or stuck, or slower than this node for good. The
-exception ends the brain thread, which the heartbeat reports, and the
-`Supervisor` relaunches the node. The relaunch restores the backlog of its
-checkpoint, which counts against the same limit, and replays its input log,
-which sends again what the node had sent since; while it replays, it waits for
-room instead of raising (see the next paragraph). So if the reader still does
-not read, the relaunch waits in its replay, with no heartbeats, until the
-`Supervisor` relaunches it again (see "Failure detection"), and the node ends in
-"Escalation on a permanent node failure" when the attempts run out; only a
-replay that gets through can raise the error again, live. A message larger than
-the limit never fits: `send_data` raises a `RuntimeError` of its own at once,
-live and in a replay, which gives its size and the limit. The replay sends it
-again, so the node fails at every relaunch and ends in "Escalation on a
-permanent node failure". The memory a node takes for its messages is thus
-bounded by this limit and by `INPUT_LOG_MAX_BYTES`, which also bounds what waits
-in its inbound queue, since every queued envelope is logged first.
+is neither numbered nor queued, and the error names the port it was for and the
+port that holds the most bytes not yet written, with how many: the limit is one
+for all the ports, so the port that fills the backlog need not be that of the
+message. A backlog that keeps growing means a reader that is not reading:
+stopped, down or stuck, or slower than this node for good. The exception ends
+the brain thread, which the heartbeat reports, and the `Supervisor` relaunches
+the node. The relaunch restores the backlog of its checkpoint, which counts
+against the same limit, and replays its input log, which sends again what the
+node had sent since; while it replays, it waits for room instead of raising (see
+the next paragraph). So if the reader still does not read, the relaunch waits in
+its replay, with no heartbeats, until the `Supervisor` relaunches it again (see
+"Failure detection"), and the node ends in "Escalation on a permanent node
+failure" when the attempts run out; only a replay that gets through can raise
+the error again, live. A message larger than the limit never fits: `send_data`
+raises a `RuntimeError` of its own at once, live and in a replay, which gives
+its size and the limit. The replay sends it again, so the node fails at every
+relaunch and ends in "Escalation on a permanent node failure". The memory a node
+takes for its messages is thus bounded by this limit and by
+`INPUT_LOG_MAX_BYTES`, which also bounds what waits in its inbound queue, since
+every queued envelope is logged first.
 
 While the node replays its input log, the same limit makes `send_data` wait for
 room instead of raising, with one warning in the log: a replay can run faster
@@ -2518,13 +2520,13 @@ reopen or resend), and unread data in the pipe survives a reader's crash and
 relaunch (see "Ghost connections").
 
 `CLOSE` travels only in the direction the data does, from a writer to its
-readers, so a node that stops reading from one of its inputs sends nothing
-back to whatever writes to it. A writer therefore cannot tell a reader that
-stopped for good from one that crashed and may relaunch: both look the same,
-the writer just blocks once the pipe fills, and its outbound backlog grows
-until `OUT_BACKLOG_FAIL_BYTES` stops it with an error that names the port (see
-"Checkpoint persistence"). A signal in the other direction, symmetric to
-`CLOSE`, is in Future work.
+readers, so a node that stops reading from one of its inputs sends nothing back
+to whatever writes to it. A writer therefore cannot tell a reader that stopped
+for good from one that crashed and may relaunch: both look the same, the writer
+just blocks once the pipe fills, and its outbound backlog grows until
+`OUT_BACKLOG_FAIL_BYTES` stops it with an error (see "Checkpoint persistence")
+that names the port that holds the most, the one whose reader is not reading. A
+signal in the other direction, symmetric to `CLOSE`, is in Future work.
 
 # `Supervisor` class
 

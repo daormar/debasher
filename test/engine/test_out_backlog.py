@@ -234,6 +234,28 @@ def test_send_data_raises_past_the_fail_cap_with_nothing_sent_or_numbered():
     assert proc._outbound_queues["outf"].qsize() == 2
 
 
+class _TwoOutputs(_SmallFailCap):
+    OUTPUT_PORTS = ["p1", "p2"]
+
+
+def test_the_error_past_the_fail_cap_names_the_port_that_holds_the_most():
+    # The reader of p1 is not reading, so the backlog is full of p1; the
+    # message that goes over the limit is one of p2.
+    proc = _TwoOutputs(opts={"inf": "/dev/null", "p1": "/dev/null", "p2": "/dev/null"})
+    proc._handler_thread = threading.get_ident()
+    proc.send_data("p1", "p" * 50)
+    proc.send_data("p1", "p" * 50)
+
+    with pytest.raises(RuntimeError) as info:
+        proc.send_data("p2", "p" * 50)
+
+    held = proc._unwritten_port_bytes["p1"]
+    assert (
+        "with this message on 'p2'; the port that holds the most not yet "
+        f"written is 'p1', with {held} bytes"
+    ) in str(info.value)
+
+
 def test_a_written_line_makes_room_under_the_fail_cap_again():
     proc = _SmallFailCap(opts=_OPTS)
     proc._handler_thread = threading.get_ident()
