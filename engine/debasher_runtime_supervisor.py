@@ -275,14 +275,14 @@ class Supervisor(_PortWorker):
     def run(self):
         """
         Supervisor carries no state of its own to restore: it always
-        starts fresh, and the first thing it does is hold the fifos of the
-        business channels (see _open_held_fifos), before it can relaunch any
-        node. Runs until every supervised node is resolved
-        (cleanly done, or given up on after exhausting its relaunch
-        budget) and no shutdown escalation is still in flight, or until
-        told to stop by signal (see _on_stop_signal): a graceful-stop tool
-        that finds a Supervisor stops it first, before touching any node
-        it watches, precisely so it cannot relaunch one out from under it.
+        starts fresh, and holds the fifos of the business channels (see
+        _open_held_fifos) before it can relaunch any node. Runs until
+        every supervised node is resolved (cleanly done, or given up on
+        after exhausting its relaunch budget) and no shutdown escalation
+        is still in flight, or until told to stop by signal (see
+        _on_stop_signal): a graceful-stop tool that finds a Supervisor
+        stops it first, before touching any node it watches, precisely
+        so it cannot relaunch one out from under it.
         """
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._on_stop_signal)
@@ -338,24 +338,21 @@ class Supervisor(_PortWorker):
 
     def _open_fifos(self):
         """
-        Holds the fifos of the business channels, then opens those of its
-        own ports (see _PortWorker._open_fifos).
+        Opens the fifos of its own ports (see _PortWorker._open_fifos), then
+        holds those of the business channels.
         """
-        self._raise_fd_limit()
-        self._open_held_fifos()
+        # Opening a port never blocks, so the order only has to put the held
+        # fifos before the checker thread, which start_threads starts after
+        # this; the limit of descriptors, raised by _PortWorker._open_fifos,
+        # counts them too (see _count_fds_needed)
         super()._open_fifos()
+        self._open_held_fifos()
 
     def _open_held_fifos(self):
         """
         Opens a read end of every fifo of HOLD_FIFOS that is not open yet,
-        without blocking, and never reads from it. A fifo keeps what it holds
-        while some process has it open: its two nodes each hold both of its
-        ends, so without a third holder, what a writer had sent and its
-        reader had not yet read is destroyed when both nodes are down at
-        once. With the Supervisor holding it, the relaunched reader finds it
-        there, and what the relaunched writer sends again from its input log
-        comes after it, with the same numbers, as duplicates that the reader
-        drops. A missing fifo stops the Supervisor with an error.
+        without blocking, and never reads from it. Raises FileNotFoundError
+        for a fifo that is missing.
         """
         for path in self._get_held_fifo_paths():
             if path not in self._held_fds:
@@ -630,11 +627,10 @@ class Supervisor(_PortWorker):
         return os.path.dirname(self._execdir())
 
     def _get_program_outdir(self):
-        # debasher_stop -d wants the program's own base output
-        # directory, i.e. the parent of __exec__ itself, confirmed
-        # against debasher::get_prg_exec_dir_given_basedir
-        # (<dirname>/__exec__/<processname>), no new engine export
-        # needed.
+        # The output directory of the program, which debasher_stop -d and
+        # the other tools take, is the parent of __exec__ (see
+        # debasher::get_prg_exec_dir_given_basedir:
+        # <dirname>/__exec__/<processname>)
         return os.path.dirname(self._get_program_exec_dir())
 
     # A node is identified by a NODE_PORTS key that is either a plain

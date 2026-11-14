@@ -76,6 +76,7 @@ def test_the_flag_no_hold_fifos_makes_the_supervisor_hold_nothing(tmp_path, monk
         "DEBASHER_PROCESS_PORTS", "nodes=;trigger=;manual_trigger=;startup=;hold=a/a_to_b"
     )
     proc = _Holder(argv=["-c", "--", "-no-hold-fifos"])
+    assert "lost if both nodes of its channel are down at once" in caplog.text
     assert proc.opts == {"no-hold-fifos": True}
     assert proc.HOLD_FIFOS == []
     assert proc._count_fds_needed() == lib.Supervisor.FD_MARGIN
@@ -282,6 +283,30 @@ def test_what_the_supervisor_holds_survives_both_nodes_killed_at_any_instant(tmp
             seqs.append(envelope["seq"])
     assert seqs, (capacity, line_sizes, read_sizes, len(left), left[:200])
     assert seqs == list(range(seqs[0], seqs[0] + len(seqs)))
+
+
+def test_the_supervisor_holds_its_fifos_before_its_checker_thread_first_runs(tmp_path):
+    # A Supervisor relaunched by hand must hold every channel before it can
+    # relaunch any node
+    path = str(tmp_path / "f")
+    os.mkfifo(path)
+    proc = _holder([path])
+    proc.HEARTBEAT_CHECK_INTERVAL_SECS = 0.01
+    held_at_first_tick = []
+
+    def record_first_tick():
+        if not held_at_first_tick:
+            held_at_first_tick.append(list(proc._held_fds))
+
+    proc._check_once = record_first_tick
+    proc.start_threads()
+    try:
+        deadline = time.monotonic() + 5
+        while not held_at_first_tick and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        proc.stop_threads(timeout=5)
+    assert held_at_first_tick == [[path]]
 
 
 def test_the_supervisor_lets_go_of_what_it_holds_when_it_stops(tmp_path):

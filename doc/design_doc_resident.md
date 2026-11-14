@@ -2913,19 +2913,20 @@ the program, `<owner process>/<fifo>`, which the `Supervisor` resolves against
 the output directory that it already finds from its own execdir. A fifo that is
 missing stops the `Supervisor` with an error.
 
-Holding the FIFOs is the first thing the `Supervisor` does when it starts,
-before it opens its own ports and before its checker thread can relaunch any
-node, so that a `Supervisor` relaunched by hand holds every channel before it
-recovers anything. A FIFO whose contents were destroyed while it was down is
-empty when it opens it again, which does no harm; and a second `Supervisor`
-running at the same time, a new one while the old one hangs, is only a second
-holder. The `Supervisor` releases the FIFOs when it ends, all at once, never one
-channel at a time: a node's `.finished` does not say whether it halted or
-finished for good, and both a halt and an escalation end with the `Supervisor`
-itself stopping. Holding the FIFO of a channel whose reader is gone for good
-costs one descriptor and at most what a pipe holds, and changes nothing for its
-writer, which already blocks once the pipe is full, since its own ghost end
-keeps the pipe alive (see "A node that finishes for good" in Future work).
+The `Supervisor` holds the FIFOs when it starts, right after it opens the FIFOs
+of its own ports (an open that never blocks) and before any of its threads
+starts, so that its checker thread cannot relaunch a node first: a `Supervisor`
+relaunched by hand holds every channel before it recovers anything. A FIFO whose
+contents were destroyed while it was down is empty when it opens it again, which
+does no harm; and a second `Supervisor` running at the same time, a new one
+while the old one hangs, is only a second holder. The `Supervisor` releases the
+FIFOs when it ends, all at once, never one channel at a time: a node's
+`.finished` does not say whether it halted or finished for good, and both a halt
+and an escalation end with the `Supervisor` itself stopping. Holding the FIFO of
+a channel whose reader is gone for good costs one descriptor and at most what a
+pipe holds, and changes nothing for its writer, which already blocks once the
+pipe is full, since its own ghost end keeps the pipe alive (see "A node that
+finishes for good" in Future work).
 
 Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
 (see the Contract's failure model), in a program without a `Supervisor`, and
