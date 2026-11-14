@@ -698,8 +698,8 @@ debasher::_sorted_comma_list()
 # heartbeat channel), or none while the program has a Supervisor (the node
 # would run unsupervised, with nothing to say so, as a task of an array
 # beyond those the Supervisor connects to would), if the Supervisor has more
-# than one manual trigger, or one with no initiator port, or if it defines a
-# fifo that is neither.
+# than one task, more than one manual trigger, or one with no initiator port,
+# or if it defines a fifo that is neither.
 debasher::_register_resident_task_ports()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
@@ -735,17 +735,21 @@ debasher::_register_resident_task_ports()
         done
     done
 
-    # The same for the Supervisor, if there is one
-    for processname in "${!DEBASHER_RESIDENT_PROCESS_ROLES[@]}"; do
-        [ "${DEBASHER_RESIDENT_PROCESS_ROLES[${processname}]}" = "supervisor" ] || continue
-        num_tasks=$(debasher::_get_numtasks_for_process "${processname}")
-        for (( idx = 0; idx < num_tasks; idx++ )); do
-            node="${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${idx}"
-            ports["${node}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}hold"]="${held}"
-            entry=$(debasher::_resident_supervisor_ports_entry ports "${node}") || return 1
-            DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry}"
-        done
-    done
+    # The same for the Supervisor, if there is one. It has a single task:
+    # every task would get every held fifo and the heartbeat channels would
+    # be split among them, and debasher_stop_resident waits for the
+    # .finished of the process, not of a task
+    if [ -n "${supervisor}" ]; then
+        num_tasks=$(debasher::_get_numtasks_for_process "${supervisor}")
+        if [ "${num_tasks}" -ne 1 ]; then
+            echo "Error: the Supervisor ${supervisor} has ${num_tasks} tasks, but a resident program has a single Supervisor of a single task" >&2
+            return 1
+        fi
+        node="${supervisor}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}0"
+        ports["${node}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}hold"]="${held}"
+        entry=$(debasher::_resident_supervisor_ports_entry ports "${node}") || return 1
+        DEBASHER_RESIDENT_TASK_PORTS["${node}"]="${entry}"
+    fi
 }
 
 ########

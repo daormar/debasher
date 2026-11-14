@@ -405,6 +405,14 @@ def _refused(program, match):
         generate_script(program)
 
 
+@pytest.mark.parametrize("mode", ["array", "generator"])
+def test_a_supervisor_of_several_tasks_is_refused(mode):
+    program = _relay()
+    supervisor = next(p for p in program.processes if p.nodeKind == "Supervisor")
+    supervisor.optionsHandler = OptionsHandler(mode=mode, arrayCode=_ARRAY_CODE if mode == "array" else None)
+    _refused(program, 'The Supervisor "sup" cannot be an array or a generator')
+
+
 def test_a_second_supervisor_is_refused():
     program = _relay()
     program.processes.append(_process("monitor", "Supervisor"))

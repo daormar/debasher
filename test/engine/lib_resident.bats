@@ -793,6 +793,17 @@ EOF
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=counter=hb_counter,start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;initiators=outtrig;manual_trigger=;startup=;hold=counter/counter_self,start/start_out_0,start/start_out_1,worker/worker_out_1" ]
 }
 
+@test "debasher::_register_resident_task_ports refuses a Supervisor of several tasks" {
+    set_up_registries
+    add_process a fbpprocess
+    add_process sup supervisor 2
+    add_fifo a/a_hb "$(end_of a)" "$(end_of sup 0)" "" -outhb -hb_a
+
+    run debasher::_register_resident_task_ports
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: the Supervisor sup has 2 tasks, but a resident program has a single Supervisor of a single task"* ]]
+}
+
 @test "debasher::_register_resident_task_ports refuses a Supervisor with two manual triggers" {
     set_up_registries
     add_process a fbpprocess

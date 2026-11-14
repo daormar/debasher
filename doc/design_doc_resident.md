@@ -137,9 +137,9 @@ to it.
   message in. It is the simplest node that has both an input log and outputs, so
   tests and measurements use it as the node in the middle; a real node would
   transform the data, or send zero or several messages per input.
-- **`Supervisor`**: the optional process (0 or 1 per program) that receives
-  heartbeats, relaunches downed nodes and can start rounds. It is not itself
-  supervised.
+- **`Supervisor`**: the optional process (0 or 1 per program, of a single task)
+  that receives heartbeats, relaunches downed nodes and can start rounds. It is
+  not itself supervised.
 - **initiator**: the node at which a round starts, because it receives an
   `INTERACT` `start_snapshot` or `shutdown`. It has to be able to reach every
   other node through the channels; a program made of independent subgraphs needs
@@ -1195,6 +1195,9 @@ For the `Supervisor`, the same fifos seen from its end:
   FIFO the `Supervisor` holds (see "Holding the business channels"): an entry
   of `HOLD_FIFOS`, named by its path under the fifo directory of the program,
   `<owner process>/<fifo>`, since it is not an option of the `Supervisor`.
+
+A `Supervisor` of more than one task is refused too (see "Port declaration and
+node identity").
 
 With them goes the startup deadline of each node whose computational
 specifications give one, `startup_timeout_s` (see "Computational
@@ -2785,17 +2788,17 @@ the other direction, symmetric to `CLOSE`, is in Future work.
 
 # `Supervisor` class
 
-The `Supervisor` is the optional process of a resident program, at most one,
-that watches its nodes and acts when one of them goes down. Every node sends it
-heartbeats on a channel of its own; the `Supervisor` declares a node down when
-they stop or when its process is gone, relaunches it, and, when a node keeps
-failing, gives up on it and stops the rest of the program in order. It also
-relays to the initiators the triggers that start a snapshot or a shutdown, and
-it holds the FIFO of every business channel, so that what a channel holds
-outlives the crash of both of its endpoints. A program without a `Supervisor`
-still runs, and a node of it relaunched by hand still recovers; what the
-program loses is the detection and relaunch, the relay of triggers and the
-held FIFOs.
+The `Supervisor` is the optional process of a resident program (at most one, of
+a single task) that watches its nodes and acts when one of them goes down. Every
+node sends it heartbeats on a channel of its own; the `Supervisor` declares a
+node down when they stop or when its process is gone, relaunches it, and, when a
+node keeps failing, gives up on it and stops the rest of the program in order.
+It also relays to the initiators the triggers that start a snapshot or a
+shutdown, and it holds the FIFO of every business channel, so that what a
+channel holds outlives the crash of both of its endpoints. A program without a
+`Supervisor` still runs, and a node of it relaunched by hand still recovers;
+what the program loses is the detection and relaunch, the relay of triggers and
+the held FIFOs.
 
 The `Supervisor` derives, like `FBPProcess`, from `_PortWorker` (see
 "`FBPProcess` class"), which gives it the same thread-per-port plumbing: the
@@ -2846,6 +2849,14 @@ engine names the files of a task of a process with several tasks
 `<process>.id` and `<process>.finished`, so every file that detection reads
 depends on it. A key of `NODE_PORTS` that is neither a string nor such a tuple
 is refused when the `Supervisor` is built.
+
+The `Supervisor` itself is never named with an index: a program has at most one,
+of a single task, and the engine refuses, when the program is loaded, a second
+process that derives from `Supervisor` and a `Supervisor` of several tasks (the
+web UI refuses any array or generator for it). With several tasks, each would
+hold every business channel and read only some of the heartbeat channels, and
+`debasher_stop_resident` waits for the `.finished` of the process, not of a
+task.
 
 ## Initiator ports
 
