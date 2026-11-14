@@ -571,8 +571,8 @@ they are computed again as a restore queues the backlog of the checkpoint).
 
 # Contract: assumptions, guarantees and non-goals
 
-The mechanisms that provide these guarantees are designed in the numbered
-sections after this one. It applies to programs whose `_program_type` is
+The mechanisms that provide the guarantees below are designed in the sections
+after this one. The Contract applies to programs whose `_program_type` is
 `resident`; general programs keep today's behavior.
 
 The purpose of this section is that "reliable" has a precise meaning here:
@@ -581,7 +581,17 @@ detected and reported. Never "it usually works". Every guarantee must be backed
 by at least one end-to-end test that states it in the same words (see
 "Acceptance").
 
+This section states what it assumes, what it promises and where the promise
+ends: the failures it tolerates ("Failure model"), what the code of a module
+must do in return ("Obligations of module authors"), the guarantees themselves
+("Guarantees"), where they stop ("Limits and non-goals"), and how they are shown
+to hold ("Acceptance").
+
 ## Failure model
+
+A guarantee means something only against a list of what can go wrong. This
+section says which failures the guarantees survive, what they assume keeps
+working, and which failures they do not cover.
 
 - **Tolerated**: the crash of any process of a `resident` program (SIGKILL,
   uncaught exception, out-of-memory kill) and its relaunch, by the `Supervisor`
@@ -631,8 +641,11 @@ noted in Future work.
 ## Obligations of module authors
 
 The guarantees hold only if the module code keeps its side of the bargain. The
-framework cannot enforce these; the chaos test (see "Acceptance") is what
-exposes a violation.
+first four obligations concern the code of a node: what `process_data` does,
+when it sends, what its state captures, and its effects outside the graph; the
+others concern the messages and how the program declares its fifos. The
+framework enforces some of them, and their entries say how; for the rest, the
+chaos test (see "Acceptance") is what exposes a violation.
 
 - **`process_data` is deterministic**: given the same starting state and the
   same sequence of received messages, it produces the same new state and the
@@ -674,6 +687,11 @@ exposes a violation.
   a FIFO" in `doc/design_doc_engine.md`).
 
 ## Guarantees
+
+What a resident program promises, within the failure model and given the
+obligations: the order and the delivery on a channel (G1, G2), what a crash and
+a relaunch preserve (G3 to G5), snapshots and halts (G6), and how a failure is
+noticed and reported (G7, G8).
 
 Numbered so that this document can cite them; tests and code comments state the
 guarantee in words and never cite these numbers, which may change.
@@ -725,10 +743,12 @@ guarantee in words and never cite these numbers, which may change.
 
 ## Limits and non-goals
 
-Besides the limits below, the Contract holds only within its "Failure model"
-(the built-in scheduler, no failure of the machine) and only for nodes that keep
-the "Obligations of module authors" (a deterministic `process_data`, idempotent
-effects outside the graph).
+Each entry below is a case that the guarantees do not cover, or cover only in
+part, even within the failure model, or a use that the design does not support
+(a non-goal); each says what happens then. Besides the limits below, the
+Contract holds only within its "Failure model" (the built-in scheduler, no
+failure of the machine) and only for nodes that keep the "Obligations of module
+authors" (a deterministic `process_data`, idempotent effects outside the graph).
 
 - **Both endpoints of a channel crashed while no other process held the
   FIFO.** When one endpoint of a channel crashes, nothing is lost: the other
