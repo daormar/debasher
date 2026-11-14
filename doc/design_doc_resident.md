@@ -2720,10 +2720,11 @@ that says what is at stake. Its module offers the flag as an option of the
 command line of the program, a flag like any other (`explain_flag`,
 `opt_is_non_mandatory_cmdline`, `define_cmdline_flag_if_given`), so that a run
 can choose; the chaos test uses it to reach the limit it would otherwise never
-reach. A module that does not offer it holds the FIFOs in every run. Each held
-FIFO takes one descriptor, which the `Supervisor` counts in the limit it raises
-before it opens anything (see "Computational specifications of a resident
-process").
+reach. The flag reaches the `Supervisor` only through an option of its module;
+a module that does not define it gives no way to turn the holding off, and its
+`Supervisor` holds the FIFOs in every run. Each held FIFO takes one descriptor,
+which the `Supervisor` counts in the limit it raises before it opens anything
+(see "Computational specifications of a resident process").
 
 `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
 node opens them, with a single `SIGKILL`, at random moments and with lines
@@ -2884,15 +2885,28 @@ the process group of the `Supervisor`, while `debasher_stop`
 it: it writes the `.id`, and its own export overrides whatever the caller
 inherited.
 
-What `_launch` (`engine/debasher_builtin_sched_lib.sh`) does for this is three
-things. It writes the id of the new process, its PID with the time at which its
-process started, into the `.id` file as soon as the process starts, without
-waiting for it, through a temporary file renamed into place, so that a reader
-sees either the old id or the new one, never an empty file. It exports
-`DEBASHER_LIBEXECDIR`, so that a running process can find the installed tools
-(`debasher_libexecdir` is left out of what generated scripts carry on
-purpose). And it unsets `BUILTIN_ARRAY_TASK_ID` before a launch with no task
-index.
+What `_launch` (`engine/debasher_builtin_sched_lib.sh`) does for this is four
+things. First, it exports the index of the task, `BUILTIN_ARRAY_TASK_ID`, 0
+for a launch with no task index, and unsets it once the script is started and
+its id written, so that the caller keeps none. Second, if the `.id` names an
+earlier incarnation that still runs (its PID, with the time at which its
+process started, so that a PID reused by another process is not taken for it),
+it kills its whole process group with `SIGKILL` (`debasher::_stop_pid`). A
+node declared down by its silence may still be alive, stuck; it is killed by
+its relaunch, not stopped gracefully, so that the earlier incarnation does not
+go on holding its FIFOs next to the new one. Third, it exports
+`DEBASHER_LIBEXECDIR` and `DEBASHER_BINDIR`, so that a running process can find
+the installed tools (`debasher_libexecdir` and `debasher_bindir` are variables
+of the context of the script, which do not reach the programs it runs).
+Fourth, it starts the script as the leader of a process group of its own and
+writes the id of the new process into the `.id` file as soon as the process
+starts, without waiting for it, through a temporary file renamed into place, so
+that a reader sees either the old id or the new one, never an empty file.
+
+Before it calls `_launch`, `debasher_launch_process` removes the `.finished` of
+the task, so that the relaunched node reads `IN-PROGRESS` while it runs and
+`UNFINISHED` if it fails, not `FINISHED`. It removes it before the launch, not
+after, since a task that ends at once may already have written its new one.
 
 The `Supervisor` runs the tool without blocking its checker thread: a
 short-lived thread waits for it and logs a non-zero exit. The tool runs with
@@ -2935,7 +2949,7 @@ own, past its own `--timeout` (`FORCE_STOP_TIMEOUT_SECS`), to
 `debasher_stop -d <dirname>`, the engine's general stop tool
 (`engine/debasher_stop.sh`), which walks every process of the program and
 sends `kill -9 -- "-$pid"` (a process-group `SIGKILL`) to any still
-`INPROGRESS`, regardless of the graph's connectivity. So
+`IN-PROGRESS`, regardless of the graph's connectivity. So
 `on_node_permanently_failed` itself does not reimplement any of that sequence
 by hand.
 
@@ -3873,7 +3887,7 @@ open.
   `on_node_down` would start a second copy while the first still held its FIFOs,
   and since `_launch` removed the old `.id`, the old process would no longer be
   reachable by `debasher_stop` either. Now `debasher_builtin_sched::_launch`
-  reads the old `.id` file, if there is one, before removing it, and kills that
+  reads the old `.id` file, if there is one, before replacing it, and kills that
   process group with the same `debasher::_stop_pid` a manual `debasher_stop`
   already uses (only while it still runs, never a process that merely got its
   PID after it ended): one code path for an initial launch and every relaunch,
