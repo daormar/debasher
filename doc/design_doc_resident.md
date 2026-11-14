@@ -2972,8 +2972,8 @@ specifications of a resident process").
 
 From each launch of a node until its first heartbeat, the silence of the node is
 measured against its startup deadline (see the Glossary) instead: the node is
-kept in `_starting`, and `_silence_limit` gives the limit. A node restores its
-checkpoint, runs `initialize_runtime()` and replays its input log before its
+kept in `_starting`, and `_get_silence_limit` gives the limit. A node restores
+its checkpoint, runs `initialize_runtime()` and replays its input log before its
 heartbeat thread starts, which can take much longer than the interval between
 two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECONDS`
 after the threads start, not at once: it resets the relaunch budget (see
@@ -3098,8 +3098,8 @@ once per process when the script is generated, while this value changes with
 every launch; and `_launch`, not the script, writes the `.id` file. A plain
 `subprocess.Popen` from the `Supervisor` would give the node the
 `BUILTIN_ARRAY_TASK_ID` of the `Supervisor` instead, and would never update its
-`.id`: `_node_pid_alive` would report the stale PID dead for ever, and since a
-real heartbeat resets the relaunch budget at every recovery, the budget would
+`.id`: `_is_node_pid_alive` would report the stale PID dead for ever, and since
+a real heartbeat resets the relaunch budget at every recovery, the budget would
 never run out, an endless loop of relaunches. It would also leave the node in
 the process group of the `Supervisor`, while `debasher_stop`
 (`kill -9 -- -$pid`) relies on one group per process. `_launch` avoids all of
@@ -3183,7 +3183,7 @@ dir) is `dirname(dirname(DEBASHER_PROCESS_EXECDIR))`
 it. The tool's own absolute path comes from `DEBASHER_BINDIR`, which
 `debasher_builtin_sched::_launch` (`engine/debasher_builtin_sched_lib.sh`)
 exports next to `DEBASHER_LIBEXECDIR`, the one that
-`_launch_process_command` uses to find `debasher_launch_process`.
+`_get_launch_process_command` uses to find `debasher_launch_process`.
 
 This deliberately accepts an asymmetry: the graceful phase preserves every
 checkpoint/input-log consistency guarantee already built; the hard-kill fallback

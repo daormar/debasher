@@ -282,7 +282,7 @@ class _PortWorker:
         Sets the ports of this process, on this instance, from what the
         engine exports to it as DEBASHER_PROCESS_PORTS: fields `name=value`
         separated by ";" (see _PORT_FIELDS), each value a list separated by
-        ",", which _port_field_value turns into the value of the attribute.
+        ",", which _parse_port_field turns into the value of the attribute.
         Empty when the engine does not run the process: the class attributes
         are then its ports. When the engine gives them, the class must not
         declare any, so that the options of the module are the only place
@@ -315,9 +315,9 @@ class _PortWorker:
                     f"engine gave: {ports!r}"
                 )
             items = [item for item in value.split(",") if item]
-            setattr(self, attribute, self._port_field_value(attribute, items))
+            setattr(self, attribute, self._parse_port_field(attribute, items))
 
-    def _port_field_value(self, attribute, items):
+    def _parse_port_field(self, attribute, items):
         """
         The value of the class attribute `attribute` from the items of its
         field in DEBASHER_PROCESS_PORTS (see _take_ports_from_engine).
@@ -366,7 +366,7 @@ class _PortWorker:
     # of a subprocess it launches and the interpreter's own.
     FD_MARGIN = 64
 
-    def _fds_needed(self):
+    def _count_fds_needed(self):
         """
         How many descriptors this process needs open at once: both ends of
         the fifo of every port (see _open_fifo_reader and _open_fifo_writer),
@@ -377,13 +377,13 @@ class _PortWorker:
     def _raise_fd_limit(self):
         """
         Raises this process's limit of open descriptors (RLIMIT_NOFILE) to
-        what it needs (see _fds_needed), which grows with the number of its
+        what it needs (see _count_fds_needed), which grows with the number of its
         ports, and so with the options of the program for a fan-in node or a
         Supervisor. A process may raise its soft limit up to its hard limit;
         when the hard limit is lower than what it needs, it stops with an
         error that says both, before it opens anything.
         """
-        needed = self._fds_needed()
+        needed = self._count_fds_needed()
         soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
         if soft == resource.RLIM_INFINITY or soft >= needed:
             return

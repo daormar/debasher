@@ -81,8 +81,8 @@ class Supervisor(_PortWorker):
 
     # Its ports are NODE_PORTS = {node: option_name} (one entry per
     # supervised node's heartbeat channel), where node is either a string
-    # (the name of a non-array process) or a (process_name, task_idx)
-    # tuple (one task of an array process), TRIGGER_PORT (a list of output
+    # (the name of a process with one task) or a (process_name, task_idx)
+    # tuple (one task of a process with several), TRIGGER_PORT (a list of output
     # option names, one per initiator to send start_snapshot/shutdown to)
     # and MANUAL_TRIGGER_PORT (a single input option name for an external
     # manual trigger, relayed to every TRIGGER_PORT entry with an epoch
@@ -180,12 +180,15 @@ class Supervisor(_PortWorker):
         self._last_heartbeat = {node: now for node in self.NODE_PORTS}
         self._relaunch_attempts = {node: 0 for node in self.NODE_PORTS}
         # The nodes launched and not heard from since: their silence is
-        # measured against their startup deadline (see _silence_limit).
+        # measured against their startup deadline (see _get_silence_limit).
         self._starting = set(self.NODE_PORTS)
         self._down = set()
         self._done = set()
         self._given_up = set()
-        self._active_escalations = 0
+        # Set while an escalation runs (see on_node_permanently_failed): it
+        # suspends failure detection and keeps run() from ending. At most
+        # one runs, since no node is declared down meanwhile.
+        self._escalating = threading.Event()
         # The epoch put on the last trigger relayed (see _stamp_epoch).
         self._last_stamped_epoch = -1
         # The read end of every fifo of HOLD_FIFOS, by path (see
@@ -203,10 +206,10 @@ class Supervisor(_PortWorker):
         # naturally" apart from "told to stop", so one event covers both.
         self._all_resolved = threading.Event()
         # The exception that ended the brain thread or the checker thread,
-        # if one did (see _guarded): run() raises it.
+        # if one did (see _run_guarded): run() raises it.
         self._thread_error = None
 
-    def _port_field_value(self, attribute, items):
+    def _parse_port_field(self, attribute, items):
         """
         NODE_PORTS from items `<node>=<option>`, and
         NODE_STARTUP_TIMEOUT_SECS from items `<node>=<seconds>`, where a node
@@ -220,14 +223,14 @@ class Supervisor(_PortWorker):
                 label, _, value = item.rpartition("=")
                 if attribute == "NODE_STARTUP_TIMEOUT_SECS":
                     value = float(value)
-                by_node[self._node_from_label(label)] = value
+                by_node[self._parse_node_name(label)] = value
             return by_node
         if attribute == "MANUAL_TRIGGER_PORT":
             return items[0] if items else None
         return items
 
     @staticmethod
-    def _node_from_label(label):
+    def _parse_node_name(label):
         """A node from its name in DEBASHER_PROCESS_PORTS: a process name,
         or `<process>:<idx>` for a task of an array."""
         process_name, sep, task_idx = label.rpartition(":")
@@ -307,7 +310,7 @@ class Supervisor(_PortWorker):
     def start_threads(self):
         super().start_threads()
         self._checker_thread = threading.Thread(
-            target=self._guarded, args=(self._check_loop,), name="checker"
+            target=self._run_guarded, args=(self._check_loop,), name="checker"
         )
         self._checker_thread.start()
 
@@ -320,18 +323,18 @@ class Supervisor(_PortWorker):
 
     # -- the fifos of the business channels --
 
-    def _held_fifo_paths(self):
+    def _get_held_fifo_paths(self):
         """The paths of HOLD_FIFOS, those the engine gives resolved
         against the fifo directory of the program."""
         paths = []
         for name in self.HOLD_FIFOS:
             if not os.path.isabs(name):
-                name = os.path.join(self._program_outdir(), _FIFOS_DIRNAME, name)
+                name = os.path.join(self._get_program_outdir(), _FIFOS_DIRNAME, name)
             paths.append(name)
         return paths
 
-    def _fds_needed(self):
-        return super()._fds_needed() + len(self.HOLD_FIFOS)
+    def _count_fds_needed(self):
+        return super()._count_fds_needed() + len(self.HOLD_FIFOS)
 
     def _open_fifos(self):
         """
@@ -354,7 +357,7 @@ class Supervisor(_PortWorker):
         comes after it, with the same numbers, as duplicates that the reader
         drops. A missing fifo stops the Supervisor with an error.
         """
-        for path in self._held_fifo_paths():
+        for path in self._get_held_fifo_paths():
             if path not in self._held_fds:
                 self._held_fds[path] = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
 
@@ -368,7 +371,7 @@ class Supervisor(_PortWorker):
 
     # -- brain loop: heartbeat/checkpoint_saved from nodes, manual trigger --
 
-    def _guarded(self, loop):
+    def _run_guarded(self, loop):
         """
         Runs `loop`, the body of the brain thread or of the checker thread.
         Nothing supervises the Supervisor, so if either dies it must not
@@ -384,7 +387,7 @@ class Supervisor(_PortWorker):
             self._all_resolved.set()
 
     def _brain_loop(self):
-        self._guarded(self._dispatch_loop)
+        self._run_guarded(self._dispatch_loop)
 
     def _types_of_port(self, tag):
         # Every channel of a Supervisor, a node's heartbeat or the manual
@@ -414,7 +417,10 @@ class Supervisor(_PortWorker):
         # net is the initiator's own _on_interact, one hop further down
         # (unrecognized command logged and ignored, never aborts). The one
         # thing it adds is the epoch, the same for every initiator, which
-        # a command that does not start a round simply never reads.
+        # a command that does not start a round simply never reads: every
+        # initiator then opens a round with the same number, so a node that
+        # the rounds of several initiators reach waits for markers of one
+        # epoch, not of several.
         command = payload["command"]
         args = self._stamp_epoch(payload.get("args"))
         for port in self.TRIGGER_PORT:
@@ -422,20 +428,19 @@ class Supervisor(_PortWorker):
 
     def _stamp_epoch(self, args):
         """
-        Returns `args` with an "epoch" added, unless it already has one
-        (whoever wrote the trigger numbered it) or is not a JSON object.
-        Every initiator that gets the trigger then opens a round with the
-        same number, so a node that the rounds of several initiators reach
-        waits for markers of one epoch, not of several. The number is the
-        time in milliseconds, which needs no state to survive a relaunch
-        of this Supervisor and stays above the epochs that initiators
-        number themselves (the last one plus one); kept strictly
-        increasing in case two triggers fall on the same millisecond.
+        Returns `args` with an "epoch" added, unless it already has one or
+        is not a JSON object, in which case it is returned as it is.
         """
         if args is None:
             args = {}
+        # An epoch already there is that of whoever wrote the trigger, who
+        # numbered it; args that are not an object have nowhere to put one
         if not isinstance(args, dict) or "epoch" in args:
             return args
+        # The time in milliseconds needs no state to survive a relaunch of
+        # this Supervisor and stays above the epochs that initiators number
+        # themselves (the last one plus one); the max keeps it strictly
+        # increasing when two triggers fall on the same millisecond
         epoch = max(time.time_ns() // 1_000_000, self._last_stamped_epoch + 1)
         self._last_stamped_epoch = epoch
         return {**args, "epoch": epoch}
@@ -457,7 +462,7 @@ class Supervisor(_PortWorker):
             self._down.discard(node_name)
             self._starting.discard(node_name)
             # A real heartbeat is proof of actual recovery (unlike a
-            # merely-live PID, see _node_pid_alive). This is what
+            # merely-live PID, see _is_node_pid_alive). This is what
             # distinguishes a node crash-looping right after every
             # relaunch (never reaches here, budget keeps draining) from
             # one that fails rarely over a long run and always recovers.
@@ -483,7 +488,7 @@ class Supervisor(_PortWorker):
         may well run before the threads that read them. So that time is not
         counted against any node: every node's last heartbeat moves forward
         by as much as this tick was late. A node whose process is gone is
-        still declared down at once (see _node_pid_alive), which does not
+        still declared down at once (see _is_node_pid_alive), which does not
         depend on elapsed time.
         """
         stall = since_last_tick - self.HEARTBEAT_CHECK_INTERVAL_SECS
@@ -501,7 +506,7 @@ class Supervisor(_PortWorker):
     def _check_once(self):
         for node_name in self.NODE_PORTS:
             self._check_node(node_name)
-        self._maybe_resolve()
+        self._end_run_if_all_resolved()
 
     def _check_node(self, node_name):
         with self._lock:
@@ -514,7 +519,7 @@ class Supervisor(_PortWorker):
         # HEARTBEAT_CHECK_INTERVAL_SECS rather than waiting for a full
         # HEARTBEAT_TIMEOUT_SECS, and what keeps an intentional ordered
         # shutdown from ever looking like a crash.
-        if os.path.exists(self._node_finished_file(node_name)):
+        if os.path.exists(self._get_node_filename(node_name, "finished")):
             with self._lock:
                 self._done.add(node_name)
                 self._down.discard(node_name)
@@ -533,11 +538,11 @@ class Supervisor(_PortWorker):
             # failure during this window is left for the next tick once
             # the escalation itself has ended (gracefully, or by falling
             # back to debasher_stop, which ends the whole program anyway).
-            if self._active_escalations > 0:
+            if self._escalating.is_set():
                 return
             already_down = node_name in self._down
             last_seen = self._last_heartbeat[node_name]
-            silence_limit = self._silence_limit(node_name)
+            silence_limit = self._get_silence_limit(node_name)
         if already_down:
             # Already declared down and (by default) already being
             # relaunched: don't call on_node_down again for the same
@@ -553,21 +558,21 @@ class Supervisor(_PortWorker):
                 self._declare_down(node_name)
             return
 
-        if not self._node_pid_alive(node_name):
+        if not self._is_node_pid_alive(node_name):
             self._declare_down(node_name)
             return
 
         if time.monotonic() - last_seen > silence_limit:
             self._declare_down(node_name)
 
-    def _silence_limit(self, node_name):
+    def _get_silence_limit(self, node_name):
         """
         How long `node_name` may go without a heartbeat before it is declared
         down: HEARTBEAT_TIMEOUT_SECS, or its startup deadline while it has
         not sent one since it was launched (see STARTUP_TIMEOUT_SECS). Only a
         live, silent node waits that long: one whose process is gone, which
         is how a node that crashes during its replay ends, is declared down
-        at once (see _node_pid_alive), and uses up its relaunch attempts as
+        at once (see _is_node_pid_alive), and uses up its relaunch attempts as
         before. Called with the lock held.
         """
         if node_name not in self._starting:
@@ -609,68 +614,68 @@ class Supervisor(_PortWorker):
             )
             self.on_node_down(node_name)
 
-    def _maybe_resolve(self):
+    def _end_run_if_all_resolved(self):
         with self._lock:
             resolved = len(self._done) + len(self._given_up) == len(self.NODE_PORTS)
-            no_escalation_pending = self._active_escalations == 0
+            no_escalation_pending = not self._escalating.is_set()
         if resolved and no_escalation_pending:
             self._all_resolved.set()
 
     # -- paths shared with the engine's own conventions --
 
-    def _program_dir(self):
+    def _get_program_exec_dir(self):
         # DEBASHER_PROCESS_EXECDIR is this Supervisor's own
         # __exec__/<name>/ directory; every sibling node's own directory
         # hangs off the same __exec__ parent, one level up.
         return os.path.dirname(self._execdir())
 
-    def _program_outdir(self):
+    def _get_program_outdir(self):
         # debasher_stop -d wants the program's own base output
         # directory, i.e. the parent of __exec__ itself, confirmed
         # against debasher::get_prg_exec_dir_given_basedir
         # (<dirname>/__exec__/<processname>), no new engine export
         # needed.
-        return os.path.dirname(self._program_dir())
+        return os.path.dirname(self._get_program_exec_dir())
 
     # A node is identified by a NODE_PORTS key that is either a plain
-    # string (the name of a non-array process) or a (process_name,
-    # task_idx) tuple (one task of an array process).
+    # string (the name of a process with one task) or a (process_name,
+    # task_idx) tuple (one task of a process with several).
 
     @staticmethod
-    def _node_process_name(node):
+    def _get_node_process_name(node):
         return node if isinstance(node, str) else node[0]
 
     @staticmethod
-    def _node_task_idx(node):
+    def _get_node_task_idx(node):
         return None if isinstance(node, str) else node[1]
 
-    def _node_file_stem(self, node):
-        # Same naming as the engine's own per-task files
-        # (debasher::_get_array_taskid_filename,
-        # debasher::_get_task_finished_filename): "<process>_<idx>" for a
-        # task of an array process, plain "<process>" otherwise.
-        idx = self._node_task_idx(node)
-        name = self._node_process_name(node)
-        return name if idx is None else f"{name}_{idx}"
-
-    def _node_stop_resident_name(self, node):
+    def _format_node_for_stop_resident(self, node):
         # How debasher_stop_resident's -x names a node: "<process>:<idx>"
-        # for one task of an array process, so that the other tasks are
-        # still stopped, plain "<process>" otherwise.
-        idx = self._node_task_idx(node)
-        name = self._node_process_name(node)
+        # for one task of a process with several, so that the other tasks
+        # are still stopped, plain "<process>" otherwise.
+        idx = self._get_node_task_idx(node)
+        name = self._get_node_process_name(node)
         return name if idx is None else f"{name}:{idx}"
 
-    def _node_exec_dir(self, node):
-        return os.path.join(self._program_dir(), self._node_process_name(node))
+    def _get_node_exec_dir(self, node):
+        return os.path.join(self._get_program_exec_dir(), self._get_node_process_name(node))
 
-    def _node_finished_file(self, node):
-        return os.path.join(self._node_exec_dir(node), f"{self._node_file_stem(node)}.finished")
+    def _get_node_filename(self, node, extension):
+        """
+        Returns the path of the engine's file of `node` with `extension`
+        ("id", "finished"): <execdir>/<process>_<idx>.<extension> for a
+        task of a process with several tasks, <execdir>/<process>.<extension>
+        otherwise.
+        """
+        # Same naming as the engine's own per-task files
+        # (debasher::_get_array_taskid_filename,
+        # debasher::_get_task_finished_filename)
+        idx = self._get_node_task_idx(node)
+        name = self._get_node_process_name(node)
+        stem = name if idx is None else f"{name}_{idx}"
+        return os.path.join(self._get_node_exec_dir(node), f"{stem}.{extension}")
 
-    def _node_id_file(self, node):
-        return os.path.join(self._node_exec_dir(node), f"{self._node_file_stem(node)}.id")
-
-    def _launch_process_command(self, node):
+    def _get_launch_process_command(self, node):
         libexecdir = os.environ.get("DEBASHER_LIBEXECDIR")
         if not libexecdir:
             raise RuntimeError(
@@ -681,32 +686,27 @@ class Supervisor(_PortWorker):
         command = [
             os.path.join(libexecdir, "debasher_launch_process"),
             "-d",
-            self._program_outdir(),
+            self._get_program_outdir(),
             "-p",
-            self._node_process_name(node),
+            self._get_node_process_name(node),
         ]
-        idx = self._node_task_idx(node)
+        idx = self._get_node_task_idx(node)
         if idx is not None:
             command += ["-t", str(idx)]
         return command
 
-    def _node_pid_alive(self, node_name):
+    def _is_node_pid_alive(self, node_name):
         """
-        True unless the node's own .id file unambiguously shows its PID
-        is gone: the fast path for "definitely gone" (see
-        _check_node), never evidence of health by itself. Deliberately
-        conservative: no .id file yet (not launched yet) or an
-        unreadable one does NOT count as dead here, only an existing,
-        readable PID that really doesn't exist any more does. The .id
-        file holds "<pid>@<start time>" (see
-        debasher::_builtin_sched_launch_id_info); only the PID is read: a
-        PID that another process got since only keeps the node alive here,
-        which the heartbeat still judges.
+        Returns False only when the .id of `node_name` holds a readable
+        PID whose process is gone, True otherwise.
         """
+        # The .id holds "<pid>@<start time>" (see
+        # debasher::_builtin_sched_launch_id_info); only the PID is read
         try:
-            with open(self._node_id_file(node_name)) as f:
+            with open(self._get_node_filename(node_name, "id")) as f:
                 pid = int(f.read().strip().split("@", 1)[0])
         except (FileNotFoundError, ValueError):
+            # Not launched yet, or an unreadable .id: no proof of death
             return True
 
         try:
@@ -714,7 +714,10 @@ class Supervisor(_PortWorker):
         except ProcessLookupError:
             return False
         except PermissionError:
+            # The PID exists, owned by another user: a PID reused since
             return True
+        # Alive, or a PID that another process got since: the heartbeat
+        # still judges the node, a live PID is never taken for health
         return True
 
     def _drops_after_close(self, tag):
@@ -747,7 +750,7 @@ class Supervisor(_PortWorker):
         # relaunched node would write its PID into the Supervisor's .id
         # file, never its own. Overridable for a node that needs something
         # non-standard.
-        command = self._launch_process_command(node_name)
+        command = self._get_launch_process_command(node_name)
         # Non-blocking, so the checker thread keeps watching the other
         # nodes; a short-lived thread waits for the launcher itself (it
         # returns as soon as the relaunched process has written its PID
@@ -765,13 +768,19 @@ class Supervisor(_PortWorker):
             command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         threading.Thread(
-            target=self._reap_launcher,
+            target=self._wait_for_launcher,
             args=(node_name, proc),
             name=f"launcher:{node_name}",
             daemon=True,
         ).start()
 
-    def _reap_launcher(self, node_name, proc):
+    def _wait_for_launcher(self, node_name, proc):
+        """
+        Waits for `proc`, the process of debasher_launch_process that
+        relaunches `node_name`, so that it does not stay a zombie, and logs
+        an error naming the node and the exit code if it failed. The tool
+        ends once the node has started, not when the node ends.
+        """
         returncode = proc.wait()
         if returncode != 0:
             self.log.error(
@@ -803,8 +812,7 @@ class Supervisor(_PortWorker):
         # this Supervisor resolves on its own, the same way it always does,
         # once every node it watches is done or given up on (see
         # "Clean-completion detection").
-        with self._lock:
-            self._active_escalations += 1
+        self._escalating.set()
         thread = threading.Thread(
             target=self._escalate_shutdown, args=(node_name,), name=f"escalate:{node_name}"
         )
@@ -818,8 +826,8 @@ class Supervisor(_PortWorker):
     # relaunch Popen call, see its comment).
     _DEBASHER_STOP_RESIDENT_FORCED_EXIT = 2
 
-    def _debasher_stop_resident_command(self):
-        # Same reasoning as _launch_process_command's own DEBASHER_LIBEXECDIR
+    def _get_stop_resident_command(self):
+        # Same reasoning as _get_launch_process_command's own DEBASHER_LIBEXECDIR
         # lookup: PATH is not guaranteed to include bin/, so this bin_SCRIPTS
         # tool needs its own absolute path, found missing by a real
         # debasher_exec run, 2026-09-22 (see debasher_builtin_sched::_launch's
@@ -837,11 +845,11 @@ class Supervisor(_PortWorker):
         try:
             result = subprocess.run(
                 [
-                    self._debasher_stop_resident_command(),
+                    self._get_stop_resident_command(),
                     "-d",
-                    self._program_outdir(),
+                    self._get_program_outdir(),
                     "-x",
-                    self._node_stop_resident_name(node_name),
+                    self._format_node_for_stop_resident(node_name),
                     "--keep-supervisor",
                     "--timeout",
                     str(self.FORCE_STOP_TIMEOUT_SECS),
@@ -872,6 +880,5 @@ class Supervisor(_PortWorker):
                     node_name,
                 )
         finally:
-            with self._lock:
-                self._active_escalations -= 1
-            self._maybe_resolve()
+            self._escalating.clear()
+            self._end_run_if_all_resolved()

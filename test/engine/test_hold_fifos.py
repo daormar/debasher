@@ -55,7 +55,10 @@ def test_the_engine_gives_the_fifos_to_hold_relative_to_the_fifo_directory(tmp_p
     proc = _Holder(opts={})
     assert proc.HOLD_FIFOS == ["a/a_to_b", "worker/worker_out_1"]
     fifodir = tmp_path / "out" / "__fifos__"
-    assert proc._held_fifo_paths() == [str(fifodir / "a" / "a_to_b"), str(fifodir / "worker" / "worker_out_1")]
+    assert proc._get_held_fifo_paths() == [
+        str(fifodir / "a" / "a_to_b"),
+        str(fifodir / "worker" / "worker_out_1"),
+    ]
 
 
 def test_a_supervisor_that_lists_fifos_to_hold_is_refused_when_the_engine_gives_them(monkeypatch):
@@ -75,7 +78,7 @@ def test_the_flag_no_hold_fifos_makes_the_supervisor_hold_nothing(tmp_path, monk
     proc = _Holder(argv=["-c", "--", "-no-hold-fifos"])
     assert proc.opts == {"no-hold-fifos": True}
     assert proc.HOLD_FIFOS == []
-    assert proc._fds_needed() == lib.Supervisor.FD_MARGIN
+    assert proc._count_fds_needed() == lib.Supervisor.FD_MARGIN
     # Nothing is opened, so the missing fifo is no error.
     proc._open_fifos()
     assert proc._held_fds == {}
@@ -365,4 +368,4 @@ class _Node(lib.FBPProcess):
 
 def test_a_node_needs_both_ends_of_the_fifo_of_every_port():
     opts = {port: "/dev/null" for port in [*_Node.INPUT_PORTS, *_Node.OUTPUT_PORTS]}
-    assert _Node(opts=opts)._fds_needed() == 2 * 6 + lib.FBPProcess.FD_MARGIN
+    assert _Node(opts=opts)._count_fds_needed() == 2 * 6 + lib.FBPProcess.FD_MARGIN

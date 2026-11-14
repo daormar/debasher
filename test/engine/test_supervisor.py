@@ -314,24 +314,24 @@ def test_manual_trigger_does_not_validate_the_command():
     assert lib.decode_envelope(line).payload["command"] == "whatever_the_gui_sent"
 
 
-# --- _node_pid_alive -----------------------------------------------------
+# --- _is_node_pid_alive -----------------------------------------------------
 
 
 def test_node_pid_alive_true_when_no_id_file_yet(execdir):
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_pid_alive("a") is True
+    assert proc._is_node_pid_alive("a") is True
 
 
 def test_node_pid_alive_true_for_a_real_running_pid(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text(str(os.getpid()))
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_pid_alive("a") is True
+    assert proc._is_node_pid_alive("a") is True
 
 
 def test_node_pid_alive_false_for_a_pid_that_no_longer_exists(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_pid_alive("a") is False
+    assert proc._is_node_pid_alive("a") is False
 
 
 def test_node_pid_alive_reads_the_pid_of_an_id_with_its_start_time(execdir):
@@ -339,14 +339,14 @@ def test_node_pid_alive_reads_the_pid_of_an_id_with_its_start_time(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text(f"{os.getpid()}@Sun_Oct_11_10:00:00_2026")
     _node_dir(execdir, "b").joinpath("b.id").write_text(f"{_dead_pid()}@Sun_Oct_11_10:00:00_2026")
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_pid_alive("a") is True
-    assert proc._node_pid_alive("b") is False
+    assert proc._is_node_pid_alive("a") is True
+    assert proc._is_node_pid_alive("b") is False
 
 
 def test_node_pid_alive_true_for_malformed_id_file(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text("not-a-pid")
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_pid_alive("a") is True
+    assert proc._is_node_pid_alive("a") is True
 
 
 # --- _check_node: .finished / PID-dead fast path / heartbeat timeout ----
@@ -474,7 +474,7 @@ def test_check_node_suspends_failure_detection_while_an_escalation_is_in_flight(
     # produces would relaunch a node the escalation just told to leave.
     _node_dir(execdir, "a").joinpath("a.id").write_text(str(_dead_pid()))
     proc = _Sup(opts=_FAKE_OPTS)
-    proc._active_escalations = 1
+    proc._escalating.set()
     calls = []
     proc.on_node_down = lambda node: calls.append(node)
 
@@ -486,9 +486,9 @@ def test_check_node_suspends_failure_detection_while_an_escalation_is_in_flight(
 
 def test_check_node_still_detects_finished_while_an_escalation_is_in_flight(execdir):
     # The one thing that must keep working during an escalation: a node
-    # reaching "done" is what lets _maybe_resolve ever fire once it ends.
+    # reaching "done" is what lets _end_run_if_all_resolved ever fire once it ends.
     proc = _Sup(opts=_FAKE_OPTS)
-    proc._active_escalations = 1
+    proc._escalating.set()
     _node_dir(execdir, "a").joinpath("a.finished").write_text("ok")
 
     proc._check_node("a")
@@ -563,8 +563,10 @@ def test_recovering_between_outages_resets_the_budget():
 
 def test_plain_node_file_names_have_no_task_index(execdir):
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._node_id_file("a") == str(execdir / "__exec__" / "a" / "a.id")
-    assert proc._node_finished_file("a") == str(execdir / "__exec__" / "a" / "a.finished")
+    assert proc._get_node_filename("a", "id") == str(execdir / "__exec__" / "a" / "a.id")
+    assert proc._get_node_filename("a", "finished") == str(
+        execdir / "__exec__" / "a" / "a.finished"
+    )
 
 
 def test_array_task_node_file_names_carry_the_task_index(execdir):
@@ -572,8 +574,8 @@ def test_array_task_node_file_names_carry_the_task_index(execdir):
         NODE_PORTS = {("w", 3): "hb_w3"}
 
     proc = Sup(opts={"hb_w3": "/tmp/hb_w3"})
-    assert proc._node_id_file(("w", 3)) == str(execdir / "__exec__" / "w" / "w_3.id")
-    assert proc._node_finished_file(("w", 3)) == str(
+    assert proc._get_node_filename(("w", 3), "id") == str(execdir / "__exec__" / "w" / "w_3.id")
+    assert proc._get_node_filename(("w", 3), "finished") == str(
         execdir / "__exec__" / "w" / "w_3.finished"
     )
 
@@ -617,7 +619,7 @@ class _FakeLauncher:
 def test_launch_process_command_for_a_plain_process(execdir, monkeypatch):
     monkeypatch.setenv("DEBASHER_LIBEXECDIR", "/opt/libexec")
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._launch_process_command("a") == [
+    assert proc._get_launch_process_command("a") == [
         "/opt/libexec/debasher_launch_process",
         "-d",
         str(execdir),
@@ -633,7 +635,7 @@ def test_launch_process_command_for_an_array_task_adds_the_task_index(execdir, m
         NODE_PORTS = {("w", 3): "hb_w3"}
 
     proc = Sup(opts={"hb_w3": "/tmp/hb_w3"})
-    assert proc._launch_process_command(("w", 3)) == [
+    assert proc._get_launch_process_command(("w", 3)) == [
         "/opt/libexec/debasher_launch_process",
         "-d",
         str(execdir),
@@ -648,20 +650,20 @@ def test_launch_process_command_requires_the_libexec_env_var(monkeypatch):
     monkeypatch.delenv("DEBASHER_LIBEXECDIR", raising=False)
     proc = _Sup(opts=_FAKE_OPTS)
     with pytest.raises(RuntimeError, match="DEBASHER_LIBEXECDIR"):
-        proc._launch_process_command("a")
+        proc._get_launch_process_command("a")
 
 
 def test_debasher_stop_resident_command_uses_the_bindir_env_var(monkeypatch):
     monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._debasher_stop_resident_command() == "/opt/bin/debasher_stop_resident"
+    assert proc._get_stop_resident_command() == "/opt/bin/debasher_stop_resident"
 
 
 def test_debasher_stop_resident_command_requires_the_bindir_env_var(monkeypatch):
     monkeypatch.delenv("DEBASHER_BINDIR", raising=False)
     proc = _Sup(opts=_FAKE_OPTS)
     with pytest.raises(RuntimeError, match="DEBASHER_BINDIR"):
-        proc._debasher_stop_resident_command()
+        proc._get_stop_resident_command()
 
 
 def test_on_node_down_default_runs_the_launcher_tool(execdir, monkeypatch):
@@ -677,7 +679,7 @@ def test_on_node_down_default_runs_the_launcher_tool(execdir, monkeypatch):
 
     proc.on_node_down("a")
 
-    assert calls == [proc._launch_process_command("a")]
+    assert calls == [proc._get_launch_process_command("a")]
 
 
 def test_on_node_down_default_logs_a_failing_launcher(execdir, monkeypatch, caplog):
@@ -718,7 +720,7 @@ def test_escalation_calls_debasher_stop_resident_excluding_the_given_up_node(
 
     proc.on_node_permanently_failed("a")
 
-    assert _wait_until(lambda: proc._active_escalations == 0)
+    assert _wait_until(lambda: not proc._escalating.is_set())
     assert len(calls) == 1
     args, kwargs = calls[0]
     assert args == [
@@ -761,7 +763,7 @@ def test_escalation_excludes_only_the_failed_task_of_an_array(execdir, monkeypat
 
     proc.on_node_permanently_failed(("w", 1))
 
-    assert _wait_until(lambda: proc._active_escalations == 0)
+    assert _wait_until(lambda: not proc._escalating.is_set())
     assert calls[0][calls[0].index("-x") + 1] == "w:1"
 
 
@@ -779,7 +781,7 @@ def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
 
     proc.on_node_permanently_failed("a")
 
-    assert _wait_until(lambda: proc._active_escalations == 0)
+    assert _wait_until(lambda: not proc._escalating.is_set())
     # debasher_stop_resident itself already falls back to debasher_stop
     # internally on its own timeout: a nonzero exit here is logged, not
     # retried or escalated further from this side.
@@ -832,26 +834,26 @@ def test_escalation_logs_a_specific_message_when_the_tool_reports_a_forced_stop(
     assert proc._all_resolved.is_set()
 
 
-# --- _maybe_resolve -------------------------------------------------------
+# --- _end_run_if_all_resolved -------------------------------------------------------
 
 
-def test_maybe_resolve_sets_all_resolved_once_everything_is_settled():
+def test_end_run_if_all_resolved_sets_all_resolved_once_everything_is_settled():
     proc = _Sup(opts=_FAKE_OPTS)
     proc._done.add("a")
     proc._given_up.add("b")
 
-    proc._maybe_resolve()
+    proc._end_run_if_all_resolved()
 
     assert proc._all_resolved.is_set()
 
 
-def test_maybe_resolve_waits_for_pending_escalations():
+def test_end_run_if_all_resolved_waits_for_a_pending_escalation():
     proc = _Sup(opts=_FAKE_OPTS)
     proc._done.add("a")
     proc._given_up.add("b")
-    proc._active_escalations = 1
+    proc._escalating.set()
 
-    proc._maybe_resolve()
+    proc._end_run_if_all_resolved()
 
     assert not proc._all_resolved.is_set()
 
@@ -1220,7 +1222,7 @@ def test_a_relaunched_node_has_its_startup_deadline_again(execdir):
     proc.on_node_down = lambda node: None
     proc._declare_down("a")
     with proc._lock:
-        assert proc._silence_limit("a") == 60
+        assert proc._get_silence_limit("a") == 60
 
 
 def test_a_node_that_dies_during_its_startup_is_declared_down_at_once(execdir):
@@ -1244,8 +1246,8 @@ def test_the_startup_deadline_of_a_node_overrides_the_supervisors(execdir):
 
     proc = Sup(opts=_FAKE_OPTS)
     with proc._lock:
-        assert proc._silence_limit("a") == 60
-        assert proc._silence_limit("b") == 120
+        assert proc._get_silence_limit("a") == 60
+        assert proc._get_silence_limit("b") == 120
 
 
 def test_the_startup_deadline_is_never_shorter_than_the_heartbeat_timeout():
@@ -1255,8 +1257,8 @@ def test_the_startup_deadline_is_never_shorter_than_the_heartbeat_timeout():
 
     proc = Sup(opts=_FAKE_OPTS)
     with proc._lock:
-        assert proc._silence_limit("a") == 30
-        assert proc._silence_limit("b") == 30
+        assert proc._get_silence_limit("a") == 30
+        assert proc._get_silence_limit("b") == 30
 
 
 def test_the_computational_specs_set_the_startup_deadline_of_every_node(monkeypatch):

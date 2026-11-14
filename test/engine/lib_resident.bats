@@ -739,6 +739,20 @@ EOF
     [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker:0=hb_worker0,worker:1=hb_worker1;trigger=outtrig;manual_trigger=;startup=;hold=" ]
 }
 
+@test "debasher::_register_resident_task_ports names a node by its process alone when its process has one task, an array of one task too" {
+    set_up_registries
+    add_process start fbpprocess
+    add_process worker fbpprocess 1
+    add_process sup supervisor
+    add_fifo sup/sup_trig "$(end_of sup)" "$(end_of start)" control -outtrig -trigger
+    add_fifo start/start_out_0 "$(end_of start)" "$(end_of worker 0)" "" -outf0 -inf
+    add_fifo start/start_hb "$(end_of start)" "$(end_of sup)" "" -outhb -hb_start
+    add_fifo worker/worker_hb_0 "$(end_of worker 0)" "$(end_of sup)" "" -outhb -hb_worker0
+
+    debasher::_register_resident_task_ports
+    [ "${DEBASHER_RESIDENT_TASK_PORTS[$(end_of sup)]}" = "nodes=start=hb_start,worker=hb_worker0;trigger=outtrig;manual_trigger=;startup=;hold=start/start_out_0" ]
+}
+
 @test "debasher::_register_resident_task_ports gives the Supervisor the startup deadline of each node that sets one" {
     set_up_registries
     add_process slow fbpprocess

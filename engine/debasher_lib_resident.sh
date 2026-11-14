@@ -443,8 +443,8 @@ debasher::_validate_program_fifo_flags()
 
 ########
 # The name of a node for a message: the process name, or
-# <process>:<idx> for a task of an array (as debasher_stop_resident's -x
-# names it). $1 is a node as the fifo registries store it,
+# <process>:<idx> for a task of a process with several tasks (as
+# debasher_stop_resident's -x names it). $1 is a node as the fifo registries store it,
 # <process><DEBASHER_ASSOC_ARRAY_ELEM_SEP><idx>.
 debasher::_resident_node_display_name()
 {

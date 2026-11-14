@@ -458,7 +458,7 @@ class FBPProcess(_PortWorker):
         self._replayed_notice = _NO_NOTICE_REQUEST
         self._notice_lock = threading.Lock()
 
-    def _port_field_value(self, attribute, items):
+    def _parse_port_field(self, attribute, items):
         """
         A list of ports, except SUPERVISOR_PORT, a single port or None (see
         _PortWorker._take_ports_from_engine).
