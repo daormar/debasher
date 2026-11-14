@@ -65,9 +65,8 @@ node failure", which gives it back its channels; the "`Supervisor` class",
 which watches the nodes, relaunches them and holds the FIFOs of their business
 channels; the "Tools for resident programs", which act on a live program from
 outside; and "`ProgramLauncher`", a node that launches batch runs. The
-document ends with what is still open: "Loose ends to check before considering
-the design closed", "Extensions" and "Future work". Sections are cited in the
-text by name, as here.
+document ends with the extensions already built, "Extensions", and what is
+still open, "Future work". Sections are cited in the text by name, as here.
 
 # Glossary
 
@@ -1133,10 +1132,10 @@ owner to someone outside the program, a node that writes its results out.
 A violation stops the load with an error that names the node or the fifo, and
 the rule. Each check walks the fifos once; the registries it reads are already
 built by then, for every task of every array and generator. In the fan-in of two
-nodes fed from outside (see "Initiators numbered their rounds independently" in
-"Loose ends"), where nodes `a` and `b`, whose only inputs come from outside,
-both write to a node `c`, a program in which only `a` has a control channel is
-refused by rule 1, since `b` cannot be reached.
+nodes fed from outside (see "Chandy-Lamport barrier propagation"), where nodes
+`a` and `b`, whose only inputs come from outside, both write to a node `c`, a
+program in which only `a` has a control channel is refused by rule 1, since `b`
+cannot be reached.
 
 ## Ports from the engine
 
@@ -1836,10 +1835,34 @@ older epoch, or of a round that is over, is ignored. A trigger without an
 epoch that finds a snapshot open replaces it with a round numbered as the open
 one plus one, a number above it so that the nodes that have that round open
 replace it too; without this, an initiator whose marker was lost would keep
-its round open for ever. A trigger that finds a halt open, and any trigger
+its round open for ever, and so would every node of its cycle, whose input
+logs would grow until `INPUT_LOG_MAX_BYTES` ends their reader threads. A
+marker is lost when its node crashes after it has captured its state and
+queued the marker, and before its writer thread has written it, and in the
+cases of the Contract's limits (a message read from a FIFO and not yet
+written to the input log, a FIFO destroyed with both its endpoints down). A
+trigger that finds a halt open, and any trigger
 once the node has halted, are ignored (see "Ordered shutdown"). A numbered
 trigger follows the rule of a marker instead (see numbered trigger in the
 Glossary).
+
+The triggers are numbered because two initiators number the rounds they open
+on their own, each as the last epoch it closed, abandoned or has open, plus
+one, and
+nothing makes the two counters meet when no channel goes from one initiator to
+the other: they drift apart when a trigger reaches only one of them, or when a
+relaunched initiator restores a checkpoint older than a round it had
+abandoned. Take the fan-in of two nodes fed from outside, `a` and `b`, whose
+only inputs are external, so that each has to be an initiator, both writing to
+a node `c`. With rounds numbered apart, `c` replaces the lower round with the
+higher one and then waits for a marker of the higher epoch that the other
+initiator never sends: it writes no further checkpoint, its input log grows
+until `INPUT_LOG_MAX_BYTES` is reached, and a halt never closes there. The
+`Supervisor`, `debasher_snapshot_resident` and `debasher_stop_resident` number
+the triggers they send, so that every initiator opens the same round. A trigger
+without an epoch, written by an actor outside the program straight into the
+FIFO of an initiator, is still numbered from that initiator's own counter, and
+where the rounds of several initiators meet it can still lead to the same wait.
 
 A round has to be able to reach every node from an initiator, or it never
 opens at the nodes it cannot reach and never closes at the nodes they write
@@ -2731,8 +2754,13 @@ to whatever writes to it. A writer therefore cannot tell a reader that stopped
 for good from one that crashed and may relaunch: both look the same, the writer
 just blocks once the pipe fills, and its outbound backlog grows until
 `OUT_BACKLOG_FAIL_BYTES` stops it with an error (see "Checkpoint persistence")
-that names the port that holds the most, the one whose reader is not reading. A
-signal in the other direction, symmetric to `CLOSE`, is in Future work.
+that names the port that holds the most, the one whose reader is not reading. In
+a resident program a reader stops for good only when it is stopped on its own by
+hand (a graceful stop reaches every node together) or when it crashes with
+nobody to relaunch it; one slower than its writer for good has the same effect.
+No guarantee is at stake in any of them, since nothing is lost or duplicated:
+the limit keeps the memory of the writer from growing without end. A signal in
+the other direction, symmetric to `CLOSE`, is in Future work.
 
 # `Supervisor` class
 
@@ -2989,7 +3017,11 @@ more than one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves the
 `_last_heartbeat` of every node forward by as much as the tick was late
 (`_credit_own_stall`): the time the `Supervisor` did not run is not counted
 against any node. A node whose process is gone is still declared down at once,
-by its PID, which does not depend on the time elapsed.
+by its PID, which does not depend on the time elapsed. The other way round, a
+node that is itself starved of CPU for longer than `HEARTBEAT_TIMEOUT_SECS`, or
+its startup deadline, is declared down,
+since from outside it cannot be told from one that is stuck: a program where
+that is expected gives its `Supervisor` a longer `heartbeat_timeout_s`.
 
 Nothing supervises the `Supervisor` (see "Failure model"), so it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread
@@ -3090,7 +3122,9 @@ of the context of the script, which do not reach the programs it runs).
 Fourth, it starts the script as the leader of a process group of its own and
 writes the id of the new process into the `.id` file as soon as the process
 starts, without waiting for it, through a temporary file renamed into place, so
-that a reader sees either the old id or the new one, never an empty file.
+that a reader sees either the old id or the new one, never an empty file. A
+script that wrote its own id would make `_launch` wait for it, and a wait of a
+fixed length fails a script that is slow to start.
 
 Before it calls `_launch`, `debasher_launch_process` removes the `.finished` of
 the task, so that the relaunched node reads `IN-PROGRESS` while it runs and
@@ -3826,165 +3860,6 @@ root, the run directories stay where they are, with the results; their
 registrations belong to a life that has ended, so a request of the new life
 that names one of them is dropped, and reusing that name means removing the
 directory by hand.
-
-# Loose ends to check before considering the design closed
-
-The items below are split into what has already been fixed and what remains
-open.
-
-## Fixed
-
-- **A port that only a source writes to never carries a marker.** A round
-  waits for the marker of every input port that is not a control port, and a
-  source is outside the program, so it sends none: without a way to exclude
-  such a port, the round would never close, the node would write no
-  checkpoint and its input log would grow until `INPUT_LOG_MAX_BYTES` is
-  reached, an error. `EXTERNAL_PORTS` (see external port in the Glossary)
-  excludes such a port from the pending set the same way `CONTROL_PORTS`
-  does, but its `CLOSE` closes the port for good, unlike a control port's. A
-  source that does know the protocol may still write the marker of the round
-  the initiator opened: it is accepted like on any other port (`_on_barrier`
-  does not special-case a port that is not pending). A node whose only
-  inputs are external has no port left to receive a marker from, so it has
-  to be an initiator itself (see initiator in the Glossary), triggered the
-  same way a node with only a control port already is.
-- **`debasher_stop`, `debasher_status` and `debasher_stats` did not see a
-  resident program launched without `--sched BUILTIN`.** `debasher_exec`
-  forced the built-in scheduler for a resident program only in its own
-  memory, while the engine tools that operate on an outdir
-  (`debasher_status`, `debasher_stop`, `debasher_stats`,
-  `debasher_get_stdout`, `debasher_get_sched_out`, `debasher_get_fifo_mirror`)
-  read the scheduler from the command line saved in the outdir: without
-  `--sched` they fell back to the default, which is Slurm wherever `sbatch`
-  exists, so `debasher_status` would print UNFINISHED and `debasher_stop`
-  would stop nothing. The fix is general, not specific to resident programs:
-  once the scheduler is final (after the resident enforcement),
-  `debasher_exec` adds `--sched <scheduler in use>` to the command line it
-  saves whenever the user did not give one
-  (`record_effective_scheduler_in_command_line`, with
-  `debasher::_add_sched_to_serialized_cmdline`), so the tools no longer have
-  to work it out again, and a default that depends on the environment can no
-  longer differ between the launch and a later query. One consequence: an
-  outdir of a program that ran under Slurm, opened on a machine without
-  Slurm, now makes the tools report that Slurm is not installed, exactly as
-  it already does when `--sched SLURM` is typed explicitly, where before the
-  tools silently used the built-in scheduler.
-- Maximum packet size relative to `PIPE_BUF`: truncation only happens above 4096
-  bytes and is handled by the resync line (see "Reconnecting after a node
-  failure"), so there is no size limit.
-- **A relaunched node that dies before its first heartbeat was never
-  noticed again.** After `_declare_down` a node stayed in `_down` until a
-  real heartbeat arrived, and `_check_node` skipped nodes in `_down`
-  unconditionally: if the relaunch itself failed (a startup crash), nothing
-  re-detected it, `_relaunch_attempts` never grew past 1,
-  `MAX_RELAUNCH_ATTEMPTS` never tripped and the Supervisor never resolved.
-  Now `_declare_down` resets `_last_heartbeat` to the moment it triggers a
-  relaunch, the same grace period `__init__` already gives a brand new
-  node, and `_check_node` treats an already-`_down` node the same way once
-  that grace period elapses with still no real heartbeat: declared down
-  again, counted against the same budget, able to escalate like any other
-  outage.
-- **Relaunching while the old process is still alive.** The heartbeat-timeout
-  path also fires for a live but stuck process (PID alive, no heartbeat):
-  `on_node_down` would start a second copy while the first still held its FIFOs,
-  and since `_launch` removed the old `.id`, the old process would no longer be
-  reachable by `debasher_stop` either. Now `debasher_builtin_sched::_launch`
-  reads the old `.id` file, if there is one, before replacing it, and kills that
-  process group with the same `debasher::_stop_pid` a manual `debasher_stop`
-  already uses (only while it still runs, never a process that merely got its
-  PID after it ended): one code path for an initial launch and every relaunch,
-  with no need to tell a genuine crash apart from a stuck but live process.
-- **Initiators numbered their rounds independently.** Each initiator
-  numbered its next round as the last epoch it closed or abandoned plus one,
-  and nothing makes two counters meet when no channel goes from one
-  initiator to the other: they drift apart when a trigger is written into
-  the FIFO of only one of them, or when a relaunched initiator restores a
-  checkpoint older than a round it had abandoned. A node that both reach,
-  such as the fan-in of two nodes whose only inputs are external (each has
-  to be an initiator), replaced the lower round with the higher one and then
-  waited for a marker of the higher epoch that the other initiator would
-  never send: it wrote no further checkpoint, its input log grew until
-  `INPUT_LOG_MAX_BYTES` was reached, and a halt never closed there, so
-  `debasher_stop_resident` always ended in its hard kill. Now the
-  `Supervisor` and `debasher_stop_resident` number the triggers they send
-  (see numbered trigger in the Glossary), so that every initiator opens the
-  same round. A trigger without an epoch, written by an actor outside the
-  program straight into the FIFO of an initiator, still uses that
-  initiator's own counter, and with several initiators whose rounds meet it
-  can still lead to the same wait.
-- **A lost marker kept the round of an initiator open for ever.** A marker
-  is lost when a node crashes after it has captured its state and enqueued
-  its marker and before its writer thread has written it, and likewise with
-  a message read from a FIFO and not yet written to the input log, or a FIFO
-  destroyed with both its endpoints down (see the Contract's limits). The
-  round of its receiver then stays open. At a node that is not an initiator,
-  the marker of the next round, of a newer epoch, replaces it; at an
-  initiator, a `start_snapshot` without an epoch that found a round open was
-  ignored, so an initiator in a cycle whose marker never came back took no
-  further snapshot. No node of the cycle wrote another checkpoint, and their
-  input logs grew until `INPUT_LOG_MAX_BYTES` was reached, which ends the
-  reader thread and looks, to the `Supervisor`, like a crash. Now a trigger
-  without an epoch replaces an open snapshot too, as a numbered trigger of a
-  newer epoch already did (see "Chandy-Lamport barrier propagation"), so the
-  round with the lost marker is abandoned at the next trigger, whatever lost
-  it: that round has no complete cut, and the next one does.
-- **Nothing checked that a round can reach every node.** A node that no
-  round reaches never writes a checkpoint, and neither do the nodes it
-  writes to, which wait for its marker: their input logs grow until
-  `INPUT_LOG_MAX_BYTES` is reached, and a halt never closes there. The engine
-  could not check it, since which channels carry commands or come from
-  outside, and which end of a fifo writes it, were only in the Python classes
-  of the nodes. Now a fifo fed from outside, or carrying commands, carries a
-  fifo tag, the owner of any other fifo writes it, and the engine refuses a
-  program in which a node cannot be reached, when it is loaded (see "Channel
-  kinds declared with the fifo"). A node cut off at run time, by a node that
-  fails for good, is handled by "Escalation on a permanent node failure".
-- **A launch depended on the new process publishing its PID in time.** The
-  launched script wrote its own `.id`, and `_launch` waited for it with a
-  fixed number of turns of a `[ -f ]` loop, about 90 ms, not a time: a
-  script slower to start (it reads its whole dumped environment first) made
-  `_launch` return an error although the process was starting. Now
-  `_launch` writes the `.id` itself, from `$!`, which is the script's own
-  PID (the background job execs the script directly, and `set -m` makes it
-  the leader of its process group, which `debasher::_stop_pid` already
-  relies on), through a temporary file renamed into place. The file is
-  complete as soon as `_launch` returns, and nothing waits.
-- **A writer whose reader does not read could grow its outbound backlog
-  without limit.** A writer cannot tell a reader gone for good from one
-  that crashed or halted (see "The reader-dies direction"), and blocks on
-  backpressure in every case, but `send_data` kept accepting messages into
-  `_outbound_queues` and `_unwritten` with no limit, and
-  `OUT_BACKLOG_MAX_BYTES` only skipped checkpoints: the node took more and
-  more memory and ended, if at all, at the input log's cap, with an error
-  about rounds that do not close. A reader of a resident program stops for
-  good only if it is stopped on its own by hand (a node ends only on a stop
-  signal, and `debasher_stop_resident` sends it to every node together), or
-  crashes with nobody to relaunch it; one slower than its writer for good
-  has the same effect. Now `OUT_BACKLOG_FAIL_BYTES` bounds the backlog and
-  fails loudly, naming the port, and the input log's cap names the backlog
-  when checkpoints are being skipped (see "Checkpoint persistence"). No
-  guarantee was at stake (G1 to G8): nothing was lost or duplicated.
-- **A healthy node could be declared down when the `Supervisor` itself did
-  not run for a while.** Its checker thread, running again before the
-  threads that read the heartbeats still waiting in its FIFOs, found a live
-  node silent for longer than `HEARTBEAT_TIMEOUT_SECS`, and the relaunch
-  killed the node that was still running (`debasher_builtin_sched::_launch`
-  kills the previous incarnation first), at whatever moment it landed. The
-  wall clock it measured with could also jump and make every node look
-  silent at once. Now the checker measures on the monotonic clock and does
-  not count against any node the time it did not run itself (see "Failure
-  detection"). A node that is itself starved of CPU for longer than the
-  timeout is still declared down, since from outside it cannot be told from
-  one that is stuck: a program where that is expected sets a longer
-  `heartbeat_timeout_s` for its `Supervisor`.
-- Dedicated concurrency test for the fan-in case with more than one input
-  port pending on the barrier:
-  `test_two_pending_ports_waits_for_the_second_marker`.
-
-## Unfixed
-
-None at present.
-
 
 # Extensions
 
