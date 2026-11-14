@@ -101,13 +101,14 @@ export function OutsideMark({ kind }: { kind: "externalInput" | "readOutside" })
 }
 
 /**
- * A trigger port of the Supervisor wiring: a yellow lightning bolt, drawn in
- * place of the round handle on an initiator and on the Supervisor.
+ * A port of a channel of triggers in the Supervisor wiring: a yellow
+ * lightning bolt, drawn in place of the round handle on the control port of
+ * an initiator and on the initiator port of the Supervisor.
  */
 export function TriggerMark() {
   return (
-    <svg data-mark="trigger" width={12} height={14} viewBox="0 0 12 14" aria-label="Trigger port">
-      <title>Trigger port of the Supervisor wiring</title>
+    <svg data-mark="trigger" width={12} height={14} viewBox="0 0 12 14" aria-label="Port of a channel of triggers">
+      <title>Port of a channel of triggers in the Supervisor wiring</title>
       <path d="M 7 0.5 L 1 8 L 5.5 8 L 4.5 13.5 L 11 5.5 L 6.5 5.5 Z" fill="#f2c200" stroke="#9a7b00" strokeWidth={0.8} strokeLinejoin="round" />
     </svg>
   );

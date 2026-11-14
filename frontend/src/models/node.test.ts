@@ -91,7 +91,7 @@ describe("nodeNameProblem", () => {
 describe("the options of a node", () => {
   it("reserves the labels of the Supervisor wiring", () => {
     expect(isReservedNodeOptionLabel("-outhb")).toBe(true);
-    expect(isReservedNodeOptionLabel(" -trigger ")).toBe(true);
+    expect(isReservedNodeOptionLabel(" -control ")).toBe(true);
     expect(isReservedNodeOptionLabel("-outf")).toBe(false);
   });
 

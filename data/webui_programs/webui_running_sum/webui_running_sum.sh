@@ -30,7 +30,7 @@ Accumulate_explain_opts()
     debasher::explain_opt "-numbers" "<string>" "numbers written from outside the program, one per message"
     debasher::explain_opt "-outsum" "<string>" "the running sum after each number, read outside the program"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
-    debasher::explain_opt "-trigger" "<string>" "control port of this initiator"
+    debasher::explain_opt "-control" "<string>" "control port of this initiator"
 }
 
 
@@ -52,7 +52,7 @@ Accumulate_define_opts()
     debasher::define_fifo_opt "-numbers" "numbers" optlist --external || return 1
     debasher::define_fifo_opt "-outsum" "sum" optlist || return 1
     debasher::define_fifo_opt "-outhb" "Accumulate_hb" optlist || return 1
-    debasher::define_opt_from_proc_out "-trigger" "Sup" "-outAccumulate_trig" optlist || return 1
+    debasher::define_opt_from_proc_out "-control" "Sup" "-outAccumulate_initiator" optlist || return 1
 
     save_opt_list optlist
 }
@@ -98,7 +98,7 @@ Sup_document()
 Sup_explain_opts()
 {
     debasher::explain_opt "-Accumulate_hb" "<string>" "heartbeat channel of Accumulate"
-    debasher::explain_opt "-outAccumulate_trig" "<string>" "trigger port to Accumulate"
+    debasher::explain_opt "-outAccumulate_initiator" "<string>" "initiator port to Accumulate"
     debasher::explain_opt "-manual" "<string>" "manual trigger port, written from outside the program"
     debasher::explain_flag "-no-hold-fifos" "do not hold the FIFOs of the business channels"
 }
@@ -120,7 +120,7 @@ Sup_define_opts()
     local optlist=""
 
     debasher::define_opt_from_proc_out "-Accumulate_hb" "Accumulate" "-outhb" optlist || return 1
-    debasher::define_fifo_opt "-outAccumulate_trig" "Sup_Accumulate_trig" optlist --control || return 1
+    debasher::define_fifo_opt "-outAccumulate_initiator" "Sup_Accumulate_initiator" optlist --control || return 1
     debasher::define_fifo_opt "-manual" "Sup_manual" optlist --control || return 1
     debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1
 

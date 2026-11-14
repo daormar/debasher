@@ -75,7 +75,7 @@ def test_input_ports_adds_the_manual_trigger_tag_when_configured():
 def test_output_ports_covers_every_trigger_port():
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a", "init_b"]
+        INITIATOR_PORTS = ["init_a", "init_b"]
 
     proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
     assert proc._output_ports() == {"init_a": "init_a", "init_b": "init_b"}
@@ -93,7 +93,7 @@ def test_rejects_a_missing_declared_port():
 
 # --- ports from the engine ----------------------------------------------
 
-_ENGINE_PORTS = "nodes=start=hb_start,worker:0=hb_w0,worker:1=hb_w1;trigger=trig;manual_trigger=manual"
+_ENGINE_PORTS = "nodes=start=hb_start,worker:0=hb_w0,worker:1=hb_w1;initiators=trig;manual_trigger=manual"
 _ENGINE_OPTS = {port: "/dev/null" for port in ("hb_start", "hb_w0", "hb_w1", "trig", "manual")}
 
 
@@ -105,7 +105,7 @@ def test_a_supervisor_run_by_the_engine_takes_its_ports_from_it(monkeypatch):
     monkeypatch.setenv("DEBASHER_PROCESS_PORTS", _ENGINE_PORTS)
     proc = _UndeclaredSup(opts=_ENGINE_OPTS)
     assert proc.NODE_PORTS == {"start": "hb_start", ("worker", 0): "hb_w0", ("worker", 1): "hb_w1"}
-    assert proc.TRIGGER_PORT == ["trig"]
+    assert proc.INITIATOR_PORTS == ["trig"]
     assert proc.MANUAL_TRIGGER_PORT == "manual"
     assert set(proc._last_heartbeat) == {"start", ("worker", 0), ("worker", 1)}
     # The class itself is left as it was.
@@ -113,10 +113,10 @@ def test_a_supervisor_run_by_the_engine_takes_its_ports_from_it(monkeypatch):
 
 
 def test_empty_fields_from_the_engine_give_a_supervisor_no_trigger(monkeypatch):
-    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "nodes=a=hb_a;trigger=;manual_trigger=")
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "nodes=a=hb_a;initiators=;manual_trigger=")
     proc = _UndeclaredSup(opts={"hb_a": "/dev/null"})
     assert proc.NODE_PORTS == {"a": "hb_a"}
-    assert proc.TRIGGER_PORT == []
+    assert proc.INITIATOR_PORTS == []
     assert proc.MANUAL_TRIGGER_PORT is None
 
 
@@ -247,7 +247,7 @@ def test_a_supervisor_whose_brain_thread_dies_stops_with_an_error(execdir, tmp_p
 def test_manual_trigger_relays_the_command_to_every_trigger_port():
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a", "init_b"]
+        INITIATOR_PORTS = ["init_a", "init_b"]
 
     proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
     proc._on_manual_trigger({"command": "start_snapshot", "args": {"foo": 1, "epoch": 42}})
@@ -262,7 +262,7 @@ def test_manual_trigger_relays_the_command_to_every_trigger_port():
 def test_manual_trigger_gives_every_initiator_the_same_epoch_in_milliseconds(monkeypatch):
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a", "init_b"]
+        INITIATOR_PORTS = ["init_a", "init_b"]
 
     monkeypatch.setattr(time, "time_ns", lambda: 1_790_000_000_123_456_789)
     proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
@@ -276,7 +276,7 @@ def test_manual_trigger_gives_every_initiator_the_same_epoch_in_milliseconds(mon
 def test_manual_trigger_epochs_keep_growing_within_the_same_millisecond(monkeypatch):
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a"]
+        INITIATOR_PORTS = ["init_a"]
 
     monkeypatch.setattr(time, "time_ns", lambda: 5_000_000)
     proc = Sup(opts={"init_a": "/tmp/a"})
@@ -293,7 +293,7 @@ def test_manual_trigger_epochs_keep_growing_within_the_same_millisecond(monkeypa
 def test_manual_trigger_leaves_args_that_are_not_an_object_alone():
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a"]
+        INITIATOR_PORTS = ["init_a"]
 
     proc = Sup(opts={"init_a": "/tmp/a"})
     proc._on_manual_trigger({"command": "whatever_the_gui_sent", "args": [1, 2]})
@@ -305,7 +305,7 @@ def test_manual_trigger_leaves_args_that_are_not_an_object_alone():
 def test_manual_trigger_does_not_validate_the_command():
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a"]
+        INITIATOR_PORTS = ["init_a"]
 
     proc = Sup(opts={"init_a": "/tmp/a"})
     proc._on_manual_trigger({"command": "whatever_the_gui_sent", "args": None})
@@ -905,7 +905,7 @@ def test_stop_threads_passes_the_choice_of_saying_close_to_the_supervisors_write
 
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a"]
+        INITIATOR_PORTS = ["init_a"]
 
     for close, expected in ((True, ["HELLO", "CLOSE"]), (False, ["HELLO"])):
         proc = Sup(opts={"init_a": str(fifo_path)})
@@ -1052,7 +1052,7 @@ def test_a_supervisor_that_stops_sends_no_close_on_its_trigger_ports(tmp_path):
 
     class Sup(lib.Supervisor):
         NODE_PORTS = {}
-        TRIGGER_PORT = ["init_a"]
+        INITIATOR_PORTS = ["init_a"]
 
     proc = Sup(opts={"init_a": str(fifo_path)})
     runner = threading.Thread(target=proc.run, daemon=True)
@@ -1270,7 +1270,7 @@ def test_the_computational_specs_set_the_startup_deadline_of_every_node(monkeypa
 def test_the_engine_gives_the_startup_deadline_of_each_node(monkeypatch):
     monkeypatch.setenv(
         "DEBASHER_PROCESS_PORTS",
-        "nodes=a=hb_a,worker:1=hb_w1;trigger=;manual_trigger=;startup=worker:1=45",
+        "nodes=a=hb_a,worker:1=hb_w1;initiators=;manual_trigger=;startup=worker:1=45",
     )
     proc = _UndeclaredSup(opts={"hb_a": "/dev/null", "hb_w1": "/dev/null"})
     assert proc.NODE_STARTUP_TIMEOUT_SECS == {("worker", 1): 45.0}

@@ -104,7 +104,7 @@ of them is a FIFO:
   reads it, so its other end is left for someone outside the program.
 * ``-outhb`` is the channel on which the node sends its heartbeats to
   the ``Supervisor``.
-* ``-trigger`` is the control port on which the ``Supervisor`` tells
+* ``-control`` is the control port on which the ``Supervisor`` tells
   the node to start a snapshot or a stop, which makes ``Accumulate``
   an initiator.
 
@@ -129,11 +129,11 @@ serialize and back, so that it can be saved in a checkpoint.
 
 The ``Supervisor`` needs no code of its own: an empty subclass of
 ``Supervisor``, followed by the line that runs it, is enough. Its
-options connect it to the heartbeat
-channel of every node, to the control port of every initiator
-(``-outAccumulate_trig``, tagged ``--control``, since it carries
-orders), and to a *manual trigger port*, ``-manual``, where the tools
-described below write their orders:
+options connect it to the heartbeat channel of every node, to an
+*initiator port* for every initiator (``-outAccumulate_initiator``,
+tagged ``--control``, since it carries orders, and read by the
+``-control`` port of ``Accumulate``), and to a *manual trigger port*,
+``-manual``, where the tools described below write their orders:
 
 .. literalinclude:: ../../data/webui_programs/webui_running_sum/webui_running_sum.sh
    :language: bash
@@ -303,9 +303,12 @@ FIFO defines it:
   ``--control`` makes it a **control port**, which carries only orders
   to start a snapshot or a stop.
 
-The Supervisor defines the control ports of the initiators that it
-writes (with ``--control``) and its own manual trigger port, and it
-reads the heartbeat channel that every node defines. When a program is
+The Supervisor defines an *initiator port* for each initiator that it
+writes to (with ``--control``), which the initiator reads as its
+control port, and its own manual trigger port, and it reads the
+heartbeat channel that every node defines. A Supervisor with a manual
+trigger port has to have at least one initiator port, since an order
+written there would reach no node. When a program is
 loaded, DeBasher checks, before launching anything, that every FIFO
 follows these rules and that the marker of a snapshot can reach every
 node from an initiator. The tags are refused in a general program, and

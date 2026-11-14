@@ -476,12 +476,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   scheduler output: a node that stays in its startup with that warning has a
   reader that does not read, so look at that reader, at the nodes of a cycle
   that replay at once, or at a self-loop, whose reader starts after its replay.
-  The Supervisor wiring (heartbeats, triggers) is generated, not edited. Start a
-  round with `snapshot`, never by writing a control port or the manual trigger
-  port from a script: they take only `INTERACT` commands: the reader drops any
-  other type with a warning in the scheduler output, and the node ignores a
-  `CLOSE` written there. A Supervisor that fails (a thread of its own died)
-  leaves its traceback in its scheduler output; the nodes go on running
+  The Supervisor wiring (heartbeat channels, initiator ports and the control
+  ports of the initiators) is generated, not edited; its labels on a node,
+  `-outhb` and `-control`, are reserved: give an option of a node another label.
+  Start a round with `snapshot`, never by writing a control port or the manual
+  trigger port from a script: they take only `INTERACT` commands: the reader
+  drops any other type with a warning in the scheduler output, and the node
+  ignores a `CLOSE` written there. A Supervisor that fails (a thread of its own
+  died) leaves its traceback in its scheduler output; the nodes go on running
   unsupervised: stop the program and launch it again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the
   launch and resumes the saved program state; `stop_program` stops in order;

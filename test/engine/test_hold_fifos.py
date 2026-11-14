@@ -50,7 +50,7 @@ def _holder(paths):
 def test_the_engine_gives_the_fifos_to_hold_relative_to_the_fifo_directory(tmp_path, monkeypatch):
     monkeypatch.setenv(
         "DEBASHER_PROCESS_PORTS",
-        "nodes=;trigger=;manual_trigger=;startup=;hold=a/a_to_b,worker/worker_out_1",
+        "nodes=;initiators=;manual_trigger=;startup=;hold=a/a_to_b,worker/worker_out_1",
     )
     proc = _Holder(opts={})
     assert proc.HOLD_FIFOS == ["a/a_to_b", "worker/worker_out_1"]
@@ -62,7 +62,7 @@ def test_the_engine_gives_the_fifos_to_hold_relative_to_the_fifo_directory(tmp_p
 
 
 def test_a_supervisor_that_lists_fifos_to_hold_is_refused_when_the_engine_gives_them(monkeypatch):
-    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "nodes=;trigger=;manual_trigger=;startup=;hold=")
+    monkeypatch.setenv("DEBASHER_PROCESS_PORTS", "nodes=;initiators=;manual_trigger=;startup=;hold=")
 
     class Declares(_Holder):
         HOLD_FIFOS = ["/tmp/x"]
@@ -73,7 +73,7 @@ def test_a_supervisor_that_lists_fifos_to_hold_is_refused_when_the_engine_gives_
 
 def test_the_flag_no_hold_fifos_makes_the_supervisor_hold_nothing(tmp_path, monkeypatch, caplog):
     monkeypatch.setenv(
-        "DEBASHER_PROCESS_PORTS", "nodes=;trigger=;manual_trigger=;startup=;hold=a/a_to_b"
+        "DEBASHER_PROCESS_PORTS", "nodes=;initiators=;manual_trigger=;startup=;hold=a/a_to_b"
     )
     proc = _Holder(argv=["-c", "--", "-no-hold-fifos"])
     assert "lost if both nodes of its channel are down at once" in caplog.text

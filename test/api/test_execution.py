@@ -768,7 +768,7 @@ def test_the_state_of_a_node_is_read_by_the_engine_tool(tmp_path):
         assert [c["epoch"] for c in summary.result["checkpoints"]] == [epoch]
         assert checkpoint.result["readable"]
         assert checkpoint.result["epoch"] == epoch
-        assert {r["port"] for r in every_port.result["records"]} == {"ext", "trigger"}
+        assert {r["port"] for r in every_port.result["records"]} == {"ext", "control"}
         assert [(r["port"], r["payload"]) for r in one_port.result["records"]] == [("ext", "a1")]
     finally:
         _hard_kill(program)

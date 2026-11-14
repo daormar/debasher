@@ -382,7 +382,7 @@ describe("supervisorWiring", () => {
     expect(supervisorWiring(program([first, second, sup]))).toEqual({ handles: {}, edges: [] });
   });
 
-  it("gives every node a heartbeat channel and every initiator a trigger port", () => {
+  it("gives every node a heartbeat channel and every initiator a control port", () => {
     const { handles } = supervisorWiring(resident([first, second, sup]));
     expect(handles.first.map(h => h.kind)).toEqual(["heartbeat", "trigger"]);
     expect(handles.second.map(h => h.kind)).toEqual(["heartbeat"]);
@@ -390,7 +390,7 @@ describe("supervisorWiring", () => {
       "top:first heartbeat",
       "top:second heartbeat",
       "top:manual trigger",
-      "bottom:first trigger",
+      "bottom:first initiator",
     ]);
   });
 

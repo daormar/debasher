@@ -621,9 +621,9 @@ options: an external port is an input fed from outside the program
 (`interface(external=...)`), an output to another node or to the outside is a
 FIFO in its task options (`fifo(name)`), and an input from another node is a
 connection to the FIFO output of that node. The Supervisor wiring (heartbeat
-channels, trigger ports) is never declared: script generation derives it, as for
-a program of the editor. A `Supervisor(name, description="", base_dir=)` has no
-code and no options of its own, so it refuses an interface and task options;
+channels, initiator ports) is never declared: script generation derives it, as
+for a program of the editor. A `Supervisor(name, description="", base_dir=)` has
+no code and no options of its own, so it refuses an interface and task options;
 script generation writes its whole class.
 
 ```python

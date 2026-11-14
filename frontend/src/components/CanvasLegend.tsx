@@ -240,7 +240,9 @@ function ResidentLegend() {
         comes from (cmdline, shaping, spec, flag or fixed).
       </LegendRow>
       <LegendRow mark={<TriggerMark />}>
-        A trigger port of the Supervisor wiring.
+        A port of a channel of triggers in the Supervisor wiring: an
+        initiator port of the Supervisor, or the control port of an
+        initiator.
       </LegendRow>
 
       <Heading>Edges</Heading>

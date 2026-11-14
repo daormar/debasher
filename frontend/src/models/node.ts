@@ -255,7 +255,7 @@ export function nodeNameProblem(processName: string): string | null {
 
 // The labels of the options of the Supervisor wiring on a node, which
 // script generation writes and no option of the user may take.
-export const RESERVED_NODE_OPTION_LABELS = ["-outhb", "-trigger"];
+export const RESERVED_NODE_OPTION_LABELS = ["-outhb", "-control"];
 
 export function isReservedNodeOptionLabel(label: string): boolean {
   return RESERVED_NODE_OPTION_LABELS.includes(label.trim());

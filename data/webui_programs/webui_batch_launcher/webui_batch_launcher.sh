@@ -28,7 +28,7 @@ Sup_document()
 Sup_explain_opts()
 {
     debasher::explain_opt "-Launch_hb" "<string>" "heartbeat channel of Launch"
-    debasher::explain_opt "-outLaunch_trig" "<string>" "trigger port to Launch"
+    debasher::explain_opt "-outLaunch_initiator" "<string>" "initiator port to Launch"
     debasher::explain_opt "-Report_hb" "<string>" "heartbeat channel of Report"
     debasher::explain_opt "-manual" "<string>" "manual trigger port, written from outside the program"
     debasher::explain_flag "-no-hold-fifos" "do not hold the FIFOs of the business channels"
@@ -51,7 +51,7 @@ Sup_define_opts()
     local optlist=""
 
     debasher::define_opt_from_proc_out "-Launch_hb" "Launch" "-outhb" optlist || return 1
-    debasher::define_fifo_opt "-outLaunch_trig" "Sup_Launch_trig" optlist --control || return 1
+    debasher::define_fifo_opt "-outLaunch_initiator" "Sup_Launch_initiator" optlist --control || return 1
     debasher::define_opt_from_proc_out "-Report_hb" "Report" "-outhb" optlist || return 1
     debasher::define_fifo_opt "-manual" "Sup_manual" optlist --control || return 1
     debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1
@@ -86,7 +86,7 @@ Launch_explain_opts()
     debasher::explain_opt "-requests" "<string>" "requests written from outside the program, one batch run each: {\"opts\": {\"-text\": ..., \"-secs\": ...}, \"run\": ...}"
     debasher::explain_opt "-outdone" "<string>" "a message for each batch run that ends"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
-    debasher::explain_opt "-trigger" "<string>" "control port of this initiator"
+    debasher::explain_opt "-control" "<string>" "control port of this initiator"
 }
 
 
@@ -108,7 +108,7 @@ Launch_define_opts()
     debasher::define_fifo_opt "-requests" "requests" optlist --external || return 1
     debasher::define_fifo_opt "-outdone" "done" optlist || return 1
     debasher::define_fifo_opt "-outhb" "Launch_hb" optlist || return 1
-    debasher::define_opt_from_proc_out "-trigger" "Sup" "-outLaunch_trig" optlist || return 1
+    debasher::define_opt_from_proc_out "-control" "Sup" "-outLaunch_initiator" optlist || return 1
 
     save_opt_list optlist
 }

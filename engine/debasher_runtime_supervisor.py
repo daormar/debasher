@@ -82,11 +82,11 @@ class Supervisor(_PortWorker):
     # Its ports are NODE_PORTS = {node: option_name} (one entry per
     # supervised node's heartbeat channel), where node is either a string
     # (the name of a process with one task) or a (process_name, task_idx)
-    # tuple (one task of a process with several), TRIGGER_PORT (a list of output
-    # option names, one per initiator to send start_snapshot/shutdown to)
-    # and MANUAL_TRIGGER_PORT (a single input option name for an external
-    # manual trigger, relayed to every TRIGGER_PORT entry with an epoch
-    # added to it, see _stamp_epoch). A Supervisor run by the engine takes
+    # tuple (one task of a process with several), INITIATOR_PORTS (a list of
+    # output option names, one per initiator to send start_snapshot/shutdown
+    # to) and MANUAL_TRIGGER_PORT (a single input option name for an
+    # external manual trigger, relayed to every initiator port with an
+    # epoch added to it, see _stamp_epoch). A Supervisor run by the engine takes
     # them from the options of its module (see
     # _PortWorker._take_ports_from_engine); one built without the engine,
     # as the unit tests build them, declares them in the class attributes
@@ -99,7 +99,7 @@ class Supervisor(_PortWorker):
     # its module may offer as an option of the command line of the program.
 
     NODE_PORTS = {}
-    TRIGGER_PORT = []
+    INITIATOR_PORTS = []
     MANUAL_TRIGGER_PORT = None
     # The fifos of the business channels, those without a tag between two
     # nodes: the engine gives them relative to the fifo directory of the
@@ -147,7 +147,7 @@ class Supervisor(_PortWorker):
     # _PortWorker._take_ports_from_engine).
     _PORT_FIELDS = {
         "nodes": "NODE_PORTS",
-        "trigger": "TRIGGER_PORT",
+        "initiators": "INITIATOR_PORTS",
         "manual_trigger": "MANUAL_TRIGGER_PORT",
         "startup": "NODE_STARTUP_TIMEOUT_SECS",
         "hold": "HOLD_FIFOS",
@@ -214,8 +214,8 @@ class Supervisor(_PortWorker):
         NODE_PORTS from items `<node>=<option>`, and
         NODE_STARTUP_TIMEOUT_SECS from items `<node>=<seconds>`, where a node
         is a process name or, for a task of an array, `<process>:<idx>`;
-        TRIGGER_PORT and HOLD_FIFOS, lists; MANUAL_TRIGGER_PORT, a single port
-        or None (see _PortWorker._take_ports_from_engine).
+        INITIATOR_PORTS and HOLD_FIFOS, lists; MANUAL_TRIGGER_PORT, a single
+        port or None (see _PortWorker._take_ports_from_engine).
         """
         if attribute in ("NODE_PORTS", "NODE_STARTUP_TIMEOUT_SECS"):
             by_node = {}
@@ -268,7 +268,7 @@ class Supervisor(_PortWorker):
         return ports
 
     def _output_ports(self):
-        return {port: port for port in self.TRIGGER_PORT}
+        return {port: port for port in self.INITIATOR_PORTS}
 
     # -- startup sequence --
 
@@ -289,7 +289,7 @@ class Supervisor(_PortWorker):
 
         self.start_threads()
         self._all_resolved.wait()
-        # No CLOSE on the trigger ports: the stop of a Supervisor is no end
+        # No CLOSE on the initiator ports: the stop of a Supervisor is no end
         # for good, since another one, of a resumed program, writes into the
         # same ports.
         self.stop_threads(close=False)
@@ -420,7 +420,7 @@ class Supervisor(_PortWorker):
         # epoch, not of several.
         command = payload["command"]
         args = self._stamp_epoch(payload.get("args"))
-        for port in self.TRIGGER_PORT:
+        for port in self.INITIATOR_PORTS:
             self._send_interact(port, command, args)
 
     def _stamp_epoch(self, args):

@@ -30,7 +30,7 @@ Watch_explain_opts()
     debasher::explain_opt "-watchdir" "<string>" "directory to watch, given on the command line"
     debasher::explain_opt "-outrequests" "<string>" "one request for each complete text file"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
-    debasher::explain_opt "-trigger" "<string>" "control port of this initiator"
+    debasher::explain_opt "-control" "<string>" "control port of this initiator"
 }
 
 
@@ -52,7 +52,7 @@ Watch_define_opts()
     debasher::define_cmdline_opt "${cmdline}" "-watchdir" optlist || return 1
     debasher::define_fifo_opt "-outrequests" "requests" optlist || return 1
     debasher::define_fifo_opt "-outhb" "Watch_hb" optlist || return 1
-    debasher::define_opt_from_proc_out "-trigger" "Sup" "-outWatch_trig" optlist || return 1
+    debasher::define_opt_from_proc_out "-control" "Sup" "-outWatch_initiator" optlist || return 1
 
     save_opt_list optlist
 }
@@ -151,7 +151,7 @@ Sup_document()
 Sup_explain_opts()
 {
     debasher::explain_opt "-Watch_hb" "<string>" "heartbeat channel of Watch"
-    debasher::explain_opt "-outWatch_trig" "<string>" "trigger port to Watch"
+    debasher::explain_opt "-outWatch_initiator" "<string>" "initiator port to Watch"
     debasher::explain_opt "-Tally_hb" "<string>" "heartbeat channel of Tally"
     debasher::explain_opt "-manual" "<string>" "manual trigger port, written from outside the program"
     debasher::explain_flag "-no-hold-fifos" "do not hold the FIFOs of the business channels"
@@ -174,7 +174,7 @@ Sup_define_opts()
     local optlist=""
 
     debasher::define_opt_from_proc_out "-Watch_hb" "Watch" "-outhb" optlist || return 1
-    debasher::define_fifo_opt "-outWatch_trig" "Sup_Watch_trig" optlist --control || return 1
+    debasher::define_fifo_opt "-outWatch_initiator" "Sup_Watch_initiator" optlist --control || return 1
     debasher::define_opt_from_proc_out "-Tally_hb" "Tally" "-outhb" optlist || return 1
     debasher::define_fifo_opt "-manual" "Sup_manual" optlist --control || return 1
     debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1

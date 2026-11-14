@@ -147,10 +147,11 @@ function OptionHandle({
 
 /**
  * A handle of the Supervisor wiring, read only: it accepts no connection,
- * and its label is set apart from those of the options. A trigger port is a
- * lightning bolt instead of the round handle, and the manual trigger port
- * of the Supervisor carries the mark of what is written from outside the
- * program, as an external input does.
+ * and its label is set apart from those of the options. A port of a channel
+ * of triggers (the control port of an initiator, an initiator port of the
+ * Supervisor) is a lightning bolt instead of the round handle, and the
+ * manual trigger port of the Supervisor carries the mark of what is written
+ * from outside the program, as an external input does.
  */
 function WiringHandleView({ handle }: { handle: WiringHandle }) {
 

@@ -553,7 +553,10 @@ channels, and the control ports of the initiators) are the
 *Supervisor wiring*. The web interface writes them into the generated
 script by itself, and draws them, dotted and read only, only when
 "Show Supervisor wiring" is chosen in the right-button menu of the
-``Supervisor``.
+``Supervisor``. The channels of triggers are drawn with a lightning
+bolt: on an initiator, its control port, labeled ``control``; on the
+``Supervisor``, its initiator port to that node, named after the node
+and tagged ``initiator``.
 
 Running, Stopping and Resuming
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

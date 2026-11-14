@@ -328,14 +328,14 @@ def test_the_wiring_of_a_program_with_a_supervisor():
     counter = _function(script, "counter_define_opts")
     assert 'debasher::define_fifo_opt "-ext" "counter_ext" optlist --external || return 1' in counter
     assert 'debasher::define_fifo_opt "-outhb" "counter_hb" optlist || return 1' in counter
-    assert 'debasher::define_opt_from_proc_out "-trigger" "sup" "-outcounter_trig" optlist || return 1' in counter
+    assert 'debasher::define_opt_from_proc_out "-control" "sup" "-outcounter_initiator" optlist || return 1' in counter
     sink = _function(script, "sink_define_opts")
     assert 'debasher::define_fifo_opt "-outhb" "sink_hb" optlist || return 1' in sink
-    assert "-trigger" not in sink
+    assert '"-control"' not in sink
     sup = _function(script, "sup_define_opts")
     assert 'debasher::define_opt_from_proc_out "-counter_hb" "counter" "-outhb" optlist || return 1' in sup
     assert 'debasher::define_opt_from_proc_out "-sink_hb" "sink" "-outhb" optlist || return 1' in sup
-    assert 'debasher::define_fifo_opt "-outcounter_trig" "sup_counter_trig" optlist --control || return 1' in sup
+    assert 'debasher::define_fifo_opt "-outcounter_initiator" "sup_counter_initiator" optlist --control || return 1' in sup
     assert 'debasher::define_fifo_opt "-manual" "sup_manual" optlist --control || return 1' in sup
     assert 'debasher::define_cmdline_flag_if_given "${cmdline}" "-no-hold-fifos" optlist || return 1' in sup
     assert 'debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"' in _function(script, "sup_identify_cmdline_opts")
@@ -345,7 +345,7 @@ def test_without_a_supervisor_an_initiator_has_a_control_port_written_from_outsi
     script = generate_script(_relay(with_supervisor=False))
 
     counter = _function(script, "counter_define_opts")
-    assert 'debasher::define_fifo_opt "-trigger" "counter_trigger" optlist --control || return 1' in counter
+    assert 'debasher::define_fifo_opt "-control" "counter_control" optlist --control || return 1' in counter
     assert "-outhb" not in script
     assert "sup_" not in script
 
@@ -366,10 +366,10 @@ def test_the_supervisor_sends_to_the_tasks_of_an_array_initiator_as_a_fanout_fam
     script = generate_script(_fanout(array_initiator=True))
 
     worker = _function(script, "worker_define_opts")
-    assert 'debasher::define_opt_from_proc_out "-trigger" "sup" "-outworker_trig${task_idx}" optlist || return 1' in worker
+    assert 'debasher::define_opt_from_proc_out "-control" "sup" "-outworker_initiator${task_idx}" optlist || return 1' in worker
     sup = _function(script, "sup_define_opts")
     assert (
-        'debasher::define_fifo_opt "-outworker_trig${i}" "sup_worker_trig_${i}" optlist --control || return 1'
+        'debasher::define_fifo_opt "-outworker_initiator${i}" "sup_worker_initiator_${i}" optlist --control || return 1'
         in sup
     )
 
@@ -448,7 +448,7 @@ def test_the_supervisor_counts_the_tasks_of_a_node_that_reaches_no_counted_famil
     sup = _function(script, "sup_define_opts")
     assert 'n_worker_hb=$(debasher::get_process_num_tasks "worker") || return 1' in sup
     assert 'debasher::define_opt_from_proc_task_out "-worker_hb${i}" "worker" "${i}" "-outhb" optlist || return 1' in sup
-    assert 'n_outworker_trig=$(debasher::get_process_num_tasks "worker") || return 1' in sup
+    assert 'n_outworker_initiator=$(debasher::get_process_num_tasks "worker") || return 1' in sup
     # No command line option is added to the Supervisor to count them
     assert "read_opt_value_from_line" not in sup
     assert _function(script, "sup_identify_cmdline_opts") == 'debasher::opt_is_non_mandatory_cmdline "-no-hold-fifos"'

@@ -2724,8 +2724,8 @@ them are initiators, so adding or removing a node needs no change to the
 - a heartbeat channel from every node, one for each task of an `array` or
   `generator` process: an output of the node, read by an input of the
   `Supervisor`;
-- a trigger port to every initiator: an output of the `Supervisor` with the
-  fifo tag `control`, read by an input of the initiator;
+- an initiator port to every initiator: an output of the `Supervisor` with
+  the fifo tag `control`, read by the control port of the initiator;
 - the manual trigger port: an input of the `Supervisor` with the fifo tag
   `control`, written from outside the program.
 
@@ -2908,10 +2908,10 @@ the Supervisor wiring with fixed labels, which no option of the user may take:
 - on the `Supervisor`, `-<process>_hb`, the input that reads the heartbeat
   channel of a node, or the fanout family `-<process>_hb-ith` for an `array` or
   `generator` process;
-- on the `Supervisor`, `-out<process>_trig`, the trigger port to an
-  initiator, or the fanout family `-out<process>_trig-ith`;
-- on every initiator, `-trigger`, the input of its control port, connected to
-  the trigger port of the `Supervisor` or, without one, written from outside
+- on the `Supervisor`, `-out<process>_initiator`, the initiator port to an
+  initiator, or the fanout family `-out<process>_initiator-ith`;
+- on every initiator, `-control`, the input of its control port, connected to
+  the initiator port of the `Supervisor` or, without one, written from outside
   the program;
 - on the `Supervisor`, `-manual`, its manual trigger port, and the flag
   `-no-hold-fifos`, together with the count source options of those of its
@@ -2927,8 +2927,9 @@ program model holds:
 
 - a fifo without a tag that a node writes and the `Supervisor` reads is a
   heartbeat channel, and both of its options go;
-- a fifo tagged `--control` that the `Supervisor` writes and a node reads is a
-  trigger port: both of its options go, and the node becomes an initiator;
+- a fifo tagged `--control` that the `Supervisor` writes and a node reads is
+  an initiator port: both of its options go, and the node becomes an
+  initiator;
 - a fifo tagged `--control` that the `Supervisor` defines and reads, written
   from outside the program, is its manual trigger port, and goes;
 - without a `Supervisor`, an input of a node tagged `--control` and written
@@ -2953,8 +2954,8 @@ as its own `on_node_down`), since the web UI does not edit the `Supervisor`
 and has nowhere to keep it; a program whose `Supervisor` has an option that is
 none of the above; in a program with a `Supervisor`, an input of a node tagged
 `--control` and written from outside the program, which the engine accepts but
-the program model cannot hold, since the web UI gives every initiator a
-trigger port of the `Supervisor`; and a node whose option definition functions
+the program model cannot hold, since the web UI gives every initiator an
+initiator port of the `Supervisor`; and a node whose option definition functions
 are outside the grammar of import, which in a general program would become
 `manual` mode, a mode that a resident program does not offer. A program whose
 wiring is incomplete, a node without a heartbeat channel for example, never
@@ -2968,7 +2969,7 @@ The grammar of import reads either tag in that same place, as it reads
 is always part of the Supervisor wiring, which import removes: the engine
 refuses, when it loads the program, a fifo tagged `--control` that neither the
 `Supervisor` writes to a node nor a node reads from outside the program, and
-those two are the trigger ports and the control ports of the wiring.
+those two are the initiator ports and the control ports of the wiring.
 
 **The program type.** For a resident program, script generation writes the
 module's `<name>_program_type` function, with the body
@@ -3727,13 +3728,13 @@ resident program"). Drawing it needs that topology only, not the labels that
 script generation gives to its channels, which the frontend therefore does not
 repeat: each handle of the wiring on the `Supervisor` is named after its node,
 with a small tag after the name that says which channel it is, `heartbeat` or
-`trigger`, since both channels of an initiator carry its name. The canvas
-draws:
+`initiator`, since both channels of an initiator carry its name; the control
+port of an initiator is labeled `control`. The canvas draws:
 
 - a heartbeat channel from every node to the `Supervisor`, a single edge for an
   `array` or `generator` process, drawn as a fanout edge, since the
   `Supervisor` reads its heartbeat channels as a fanout family;
-- a trigger port from the `Supervisor` to every initiator, a fanout edge too
+- an initiator port from the `Supervisor` to every initiator, a fanout edge too
   for an initiator of that kind, whose handles, on the initiator and on the
   `Supervisor`, carry a mark of their own instead of the round handle;
 - the manual trigger port of the `Supervisor`, as a handle marked as written
@@ -3785,9 +3786,10 @@ live program"), and what each mark means: the node kind, an initiator, a node
 that observes the outside world, a notice and its level, the double border of a
 node in `array` or `generator` mode, each task a node of its own, an external
 input, a business output read outside the program, a hollow handle and its tag,
-a trigger port, and the edges: a FIFO from a business output to a business
-input, the route of an edge that goes back up and of a self-loop, a label edge,
-the edges of the Supervisor wiring and a fanout edge; and the label of a fanout
+a port of a channel of triggers (an initiator port or the control port of an
+initiator), and the edges: a FIFO from a business output to a business input,
+the route of an edge that goes back up and of a self-loop, a label edge, the
+edges of the Supervisor wiring and a fanout edge; and the label of a fanout
 family.
 
 ## Guarantees and non-goals of a resident program

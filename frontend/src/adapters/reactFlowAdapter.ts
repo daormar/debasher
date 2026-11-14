@@ -68,9 +68,10 @@ export const WIRING_EDGE_COLOR = "#7f93b5";
 
 /**
  * A handle of the Supervisor wiring: on a node, its heartbeat channel (an
- * output) or, on an initiator, its trigger port (an input); on the
- * Supervisor, the other end of each of them, named after its node, and its
- * manual trigger port, written from outside the program. None of them is
+ * output) or, on an initiator, its control port (an input); on the
+ * Supervisor, the other end of each of them, named after its node (for a
+ * control port, an initiator port), and its manual trigger port, written
+ * from outside the program. None of them is
  * an option of the program model, and none accepts a connection.
  */
 export interface WiringHandle {
@@ -78,10 +79,11 @@ export interface WiringHandle {
   row: "top" | "bottom";
   type: "source" | "target";
   label: string;
-  // On the Supervisor, where a heartbeat channel and a trigger port of the
+  // On the Supervisor, where a heartbeat channel and an initiator port of the
   // same node both carry its name, which channel the handle is, shown small
   // after the label.
-  tag?: "heartbeat" | "trigger";
+  tag?: "heartbeat" | "initiator" | "trigger";
+  // "trigger" for both ends of a channel that carries triggers, drawn alike
   kind: "heartbeat" | "trigger" | "manual";
 }
 
@@ -91,7 +93,7 @@ export interface WiringHandle {
  * derived by the same rule with which script generation derives it (see
  * api/resident_supervisor_wiring.py): from the Supervisor, the nodes and
  * which of them are initiators, and from whether a node runs as several
- * tasks, whose heartbeat channels or trigger ports the Supervisor reads or
+ * tasks, whose heartbeat channels or initiator ports the Supervisor reads or
  * writes as a fanout family. A program without a Supervisor has none.
  */
 export function supervisorWiring(
@@ -151,11 +153,11 @@ export function supervisorWiring(
     if (node.initiator) {
 
       nodeHandles.push(
-        { id: "wiring:trigger", row: "top", type: "target", label: "trigger", kind: "trigger" }
+        { id: "wiring:trigger", row: "top", type: "target", label: "control", kind: "trigger" }
       );
 
       supervisorOutputs.push(
-        { id: `wiring:trigger:${node.id}`, row: "bottom", type: "source", label: node.name, tag: "trigger", kind: "trigger" }
+        { id: `wiring:trigger:${node.id}`, row: "bottom", type: "source", label: node.name, tag: "initiator", kind: "trigger" }
       );
 
       edges.push(wiringEdge(`wiring:trigger:${node.id}`, supervisor, `wiring:trigger:${node.id}`, node, "wiring:trigger", "source"));

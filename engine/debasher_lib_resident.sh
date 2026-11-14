@@ -680,15 +680,15 @@ debasher::_sorted_comma_list()
 #
 # For the Supervisor, the heartbeat channel of each node, as <node>=<port>
 # with the node named as debasher::_resident_node_display_name names it,
-# the output ports to the initiators it triggers, the input port of a manual
-# trigger fed from outside, and the startup deadline of each node that gives
+# its initiator ports (the output ports to the initiators it triggers), the
+# input port of a manual trigger fed from outside, and the startup deadline of each node that gives
 # one in its computational specifications (startup_timeout_s), as
 # <node>=<seconds>, and the fifos of the business channels, those without a
 # tag between two nodes, which it holds open so that what they hold outlives
 # the crash of both nodes of a channel, as names relative to the fifo
 # directory of the program, <owner process>/<fifo>:
 #
-#   nodes=<node>=<port>,...;trigger=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...;hold=<fifos>
+#   nodes=<node>=<port>,...;initiators=<ports>;manual_trigger=<port>;startup=<node>=<seconds>,...;hold=<fifos>
 #
 # each list sorted and separated by commas, and possibly empty. A no-op when
 # the program is not resident. Needs the checks of
@@ -698,7 +698,8 @@ debasher::_sorted_comma_list()
 # heartbeat channel), or none while the program has a Supervisor (the node
 # would run unsupervised, with nothing to say so, as a task of an array
 # beyond those the Supervisor connects to would), if the Supervisor has more
-# than one manual trigger, or if it defines a fifo that is neither.
+# than one manual trigger, or one with no initiator port, or if it defines a
+# fifo that is neither.
 debasher::_register_resident_task_ports()
 {
     if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
@@ -803,12 +804,12 @@ debasher::_add_resident_fifo_ports()
     # The Supervisor's end. It reads the heartbeat channel of a node, the
     # one fifo without a tag that a node writes to it (the checks of
     # debasher::_validate_resident_channels refuse a tagged one), and
-    # defines only its triggers
+    # defines only its initiator ports and its manual trigger
     if [ "${reader_role}" = "supervisor" ]; then
         debasher::_add_resident_heartbeat_port "${ports_name}" "${owner}" "${reader}" "${reader_opt}"
     fi
     if [ "${owner_role}" = "supervisor" ]; then
-        debasher::_add_resident_supervisor_trigger_port "${ports_name}" "${augm_fifoname}" "${owner}" "${owner_opt}" "${reader}" "${kind}" || return 1
+        debasher::_add_resident_supervisor_control_port "${ports_name}" "${augm_fifoname}" "${owner}" "${owner_opt}" "${reader}" "${kind}" || return 1
     fi
 }
 
@@ -816,9 +817,9 @@ debasher::_add_resident_fifo_ports()
 # Adds to the associative array of the ports named $1 (see
 # debasher::_add_resident_task_port) the port of the node $2 at the owner's
 # end of a fifo, which it defines through the option $3 and whose other end
-# is $4, of role $5, with the tag $6: an output port, unless the fifo is tagged and fed from
-# outside the program, in which case the owner reads it; an output read by
-# the Supervisor is its heartbeat channel too.
+# is $4, of role $5, with the tag $6: an output port, unless the fifo is
+# tagged and fed from outside the program, in which case the owner reads it;
+# an output read by the Supervisor is its heartbeat channel too.
 debasher::_add_resident_owner_port()
 {
     local ports_name=$1
@@ -844,10 +845,10 @@ debasher::_add_resident_owner_port()
 # Adds to the associative array of the ports named $1 (see
 # debasher::_add_resident_task_port) the port of the Supervisor $3 for the
 # fifo $2 that it defines through the option $4, whose other end is $5, with
-# the tag $6: its
-# manual trigger, tagged --control and fed from outside, or a trigger to a
-# node, tagged --control. Fails, with an error, for any other fifo.
-debasher::_add_resident_supervisor_trigger_port()
+# the tag $6: its manual trigger, tagged --control and fed from outside, or
+# an initiator port, tagged --control and read by a node. Fails, with an
+# error, for any other fifo.
+debasher::_add_resident_supervisor_control_port()
 {
     local ports_name=$1
     local augm_fifoname=$2
@@ -859,9 +860,9 @@ debasher::_add_resident_supervisor_trigger_port()
     if [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ] && [ "${reader}" = "${DEBASHER_EXTERNAL_FIFO_END}" ]; then
         debasher::_add_resident_task_port "${ports_name}" "${owner}" manual_trigger "${owner_opt}"
     elif [ "${kind}" = "${DEBASHER_FIFO_KIND_CONTROL}" ]; then
-        debasher::_add_resident_task_port "${ports_name}" "${owner}" trigger "${owner_opt}"
+        debasher::_add_resident_task_port "${ports_name}" "${owner}" initiators "${owner_opt}"
     else
-        echo "Error: the Supervisor ${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its triggers to nodes and its manual trigger fed from outside the program, both tagged --control" >&2
+        echo "Error: the Supervisor ${owner%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*} defines fifo ${augm_fifoname}, but the only fifos a Supervisor defines are its initiator ports, read by nodes, and its manual trigger fed from outside the program, both tagged --control" >&2
         return 1
     fi
 }
@@ -936,20 +937,30 @@ debasher::_resident_node_ports_entry()
 ########
 # Prints the entry of DEBASHER_RESIDENT_TASK_PORTS of the Supervisor task
 # $2, from the associative array of the ports named $1 (see
-# debasher::_add_resident_task_port): nodes=...;trigger=...;
+# debasher::_add_resident_task_port): nodes=...;initiators=...;
 # manual_trigger=...;startup=...;hold=... (see
 # debasher::_register_resident_task_ports). Fails, with an error, for a
-# Supervisor with more than one manual trigger.
+# Supervisor with more than one manual trigger, or with one and no initiator
+# port.
 debasher::_resident_supervisor_ports_entry()
 {
     local -n supervisor_ports_ref=$1
     local node=$2
 
     local field list entry=""
-    for field in nodes trigger manual_trigger startup hold; do
+    local initiators=""
+    for field in nodes initiators manual_trigger startup hold; do
         list=$(debasher::_sorted_comma_list "${supervisor_ports_ref[${node}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${field}]:-}")
+        if [ "${field}" = "initiators" ]; then
+            initiators="${list}"
+        fi
         if [ "${field}" = "manual_trigger" ] && [[ "${list}" == *,* ]]; then
             echo "Error: the Supervisor ${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*} has more than one manual trigger fed from outside the program (${list})" >&2
+            return 1
+        fi
+        # A trigger that arrives there would have nowhere to go
+        if [ "${field}" = "manual_trigger" ] && [ -n "${list}" ] && [ -z "${initiators}" ]; then
+            echo "Error: the Supervisor ${node%%${DEBASHER_ASSOC_ARRAY_ELEM_SEP}*} has a manual trigger fed from outside the program (${list}) but no initiator port, so nothing it receives there can reach a node: make one of the nodes an initiator, or remove the manual trigger port" >&2
             return 1
         fi
         entry+=";${field}=${list}"

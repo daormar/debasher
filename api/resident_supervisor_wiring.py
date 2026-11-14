@@ -18,8 +18,8 @@ from .models import Program, ProgramEdge, ProgramOption, ProgramProcess
 # The labels of the Supervisor wiring on a node, which no option of the user
 # may take.
 HEARTBEAT_LABEL = "-outhb"
-TRIGGER_LABEL = "-trigger"
-RESERVED_NODE_LABELS = (HEARTBEAT_LABEL, TRIGGER_LABEL)
+CONTROL_LABEL = "-control"
+RESERVED_NODE_LABELS = (HEARTBEAT_LABEL, CONTROL_LABEL)
 
 # The labels of the Supervisor wiring on the Supervisor that do not depend
 # on a node.
@@ -34,9 +34,9 @@ def heartbeat_label(process_name: str) -> str:
     return f"-{process_name}_hb"
 
 
-def trigger_label(process_name: str) -> str:
-    """The output of the Supervisor that is the trigger port to an initiator."""
-    return f"-out{process_name}_trig"
+def initiator_label(process_name: str) -> str:
+    """The output of the Supervisor that is the initiator port to an initiator."""
+    return f"-out{process_name}_initiator"
 
 
 def _task_suffix(mode: str) -> str:
@@ -183,7 +183,7 @@ class SupervisorWiring:
         _connect(self.edges, node, heartbeat, self.supervisor, reader)
 
     def add_control_port(self, node: ProgramProcess) -> None:
-        """The control port of an initiator: connected to a trigger port of
+        """The control port of an initiator: connected to an initiator port of
         the Supervisor, a fanout family of it for an array or generator
         initiator, or, without a Supervisor, written from outside the
         program."""
@@ -191,38 +191,38 @@ class SupervisorWiring:
         if self.supervisor is None:
             node.options.append(
                 _option(
-                    TRIGGER_LABEL,
+                    CONTROL_LABEL,
                     "input",
                     "control port of this initiator, written from outside the program",
                     channel="fifo",
                     fifoTag="control",
-                    value=f"{node.name}_trigger{suffix}",
+                    value=f"{node.name}_control{suffix}",
                 )
             )
             return
-        control = _option(TRIGGER_LABEL, "input", "control port of this initiator")
+        control = _option(CONTROL_LABEL, "input", "control port of this initiator")
         node.options.append(control)
         if node.optionsHandler.mode in _TASK_INDEXED_MODES:
-            trigger = _option(
-                trigger_label(node.name) + "-ith",
+            initiator = _option(
+                initiator_label(node.name) + "-ith",
                 "output",
-                f"trigger port to the i'th task of {node.name}",
+                f"initiator port to the i'th task of {node.name}",
                 channel="fifo",
                 fifoTag="control",
-                value=f"{self.supervisor.name}_{node.name}_trig_${{i}}",
+                value=f"{self.supervisor.name}_{node.name}_initiator_${{i}}",
                 countSourceOptionId=self.count_option_id(node),
             )
         else:
-            trigger = _option(
-                trigger_label(node.name),
+            initiator = _option(
+                initiator_label(node.name),
                 "output",
-                f"trigger port to {node.name}",
+                f"initiator port to {node.name}",
                 channel="fifo",
                 fifoTag="control",
-                value=f"{self.supervisor.name}_{node.name}_trig",
+                value=f"{self.supervisor.name}_{node.name}_initiator",
             )
-        self.supervisor_options.append(trigger)
-        _connect(self.edges, self.supervisor, trigger, node, control)
+        self.supervisor_options.append(initiator)
+        _connect(self.edges, self.supervisor, initiator, node, control)
 
     def finish(self) -> None:
         """Gives the Supervisor its options, the ports of its own after
@@ -275,8 +275,8 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
 
     - a fifo without a tag that a node writes and the Supervisor reads is a
       heartbeat channel;
-    - a fifo tagged control that the Supervisor writes and a node reads is a
-      trigger port, and the node is an initiator;
+    - a fifo tagged control that the Supervisor writes and a node reads is
+      an initiator port, and the node is an initiator;
     - a fifo tagged control that the Supervisor defines and reads, written
       from outside the program, is its manual trigger port;
     - without a Supervisor, an input of a node tagged control and written
@@ -376,8 +376,8 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
                         process.name,
                         f'option "{option.label}" is a control port written from outside the '
                         "program, and in a program with a Supervisor the web UI gives every "
-                        "initiator a trigger port of the Supervisor instead: read the control "
-                        "port from a trigger port of the Supervisor",
+                        "initiator an initiator port of the Supervisor instead: read the "
+                        "control port from an initiator port of the Supervisor",
                     )
                 )
             else:

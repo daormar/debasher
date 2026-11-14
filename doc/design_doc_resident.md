@@ -162,12 +162,12 @@ to it.
   needs no state to survive a relaunch, and it lies above the epochs that
   initiators number themselves. A clock set back makes a numbered trigger look
   old, and it is ignored with a warning.
-- **trigger port**: an output port of the `Supervisor`, an entry of its
-  `TRIGGER_PORT` list, wired to an initiator; the `Supervisor` sends the
-  triggers through it.
+- **initiator port**: an output port of the `Supervisor`, an entry of its
+  `INITIATOR_PORTS` list, wired to the control port of an initiator; the
+  `Supervisor` sends the triggers through it.
 - **manual trigger port**: the input port of the `Supervisor`,
   `MANUAL_TRIGGER_PORT`, where an actor outside the program writes a trigger,
-  which the `Supervisor` relays to every trigger port.
+  which the `Supervisor` relays to every initiator port.
 - **control port**: an input port of a node, listed in `CONTROL_PORTS` (from a
   fifo tagged `--control`), that carries only `INTERACT` commands, such as the
   one on which an initiator receives its triggers. It never carries a marker, so
@@ -1033,16 +1033,15 @@ is (see "Fields of each type"). Channel by channel:
   (see "Checkpoint persistence") on the same channel; there is no real
   contention between the two (lightweight, infrequent messages), and separate
   ports would only double the supervisor's manual wiring for no benefit.
-- From the supervisor to each initiator, a trigger port: a channel of commands
-  that the supervisor owns and defines with the tag `--control`, so that the
-  initiator reads it as a control port. It carries only `INTERACT`
-  (`start_snapshot`, `shutdown`, see "Trigger ports"), never a marker, so
-  the round it opens never waits on it. A `CLOSE` on it does not close it, and
-  the supervisor sends none when it stops (see control port in the
-  Glossary).
+- From the supervisor to each initiator, an initiator port: a channel of
+  commands that the supervisor owns and defines with the tag `--control`, so
+  that the initiator reads it as a control port. It carries only `INTERACT`
+  (`start_snapshot`, `shutdown`, see "Initiator ports"), never a marker, so the
+  round it opens never waits on it. A `CLOSE` on it does not close it, and the
+  supervisor sends none when it stops (see control port in the Glossary).
 - From outside the program, the other channels of commands: the manual trigger
   port of the supervisor, also tagged `--control`, whose `INTERACT` the
-  supervisor relays to every trigger port (see "Manual trigger channel"), and
+  supervisor relays to every initiator port (see "Manual trigger channel"), and
   any control port of a node that an actor outside the program writes into
   directly (finding it through the node's control ports file). They carry only
   `INTERACT`.
@@ -1098,8 +1097,8 @@ way as `--mirror`, stored in a registry of its own:
   any, through an input port: a heartbeat channel when the `Supervisor` reads
   it (see "`Supervisor` class"), and otherwise a business channel;
 - `--control`: a channel of commands, whose reader's end is a control port. Its
-  writer is the `Supervisor`, which owns it (a trigger port), or someone outside
-  the program, and then the reader owns it;
+  writer is the `Supervisor`, which owns it (an initiator port), or someone
+  outside the program, and then the reader owns it;
 - `--external`: a channel fed from outside the program, owned by its reader,
   whose end is an external port.
 
@@ -1185,10 +1184,11 @@ For the `Supervisor`, the same fifos seen from its end:
   heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its
   key and the option through which the `Supervisor` reads it as its value.
 - A fifo that the `Supervisor` defines with the tag `--control` and a node
-  reads is a trigger port, an entry of `TRIGGER_PORT`.
-- A fifo that the `Supervisor` defines with the tag `--control` and that is
-  fed from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor`
-  with more than one is refused when the program is loaded.
+  reads is an initiator port, an entry of `INITIATOR_PORTS`.
+- A fifo that the `Supervisor` defines with the tag `--control` and that is fed
+  from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor` with
+  more than one, or with one and no initiator port, is refused when the program
+  is loaded (see "Initiator ports").
 - Any other fifo that the `Supervisor` defines is refused when the program is
   loaded: the `Supervisor` takes no part in the business channels.
 - A fifo without a tag whose two ends are nodes is a business channel, whose
@@ -1222,12 +1222,12 @@ would be named `<process>:<idx>`, as `debasher_stop_resident -x` names it (see
 "Port declaration and node identity"):
 
 ```
-nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
+nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;initiators=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
 ```
 
 `FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
 `EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
-`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`,
+`Supervisor` `NODE_PORTS`, `INITIATOR_PORTS`, `MANUAL_TRIGGER_PORT`,
 `NODE_STARTUP_TIMEOUT_SECS` and `HOLD_FIFOS`, before anything uses them
 (`_take_ports_from_engine`). The options of the module are then the only
 place that says what the ports of a process are: a class that declares any
@@ -1241,7 +1241,8 @@ is port by port.
 
 - The check says which nodes can be initiators, not whether a trigger really
   reaches them: that depends on who writes into their control channels, a
-  `Supervisor` whose `TRIGGER_PORT` lists them or someone outside the program.
+  `Supervisor` whose `INITIATOR_PORTS` lists them or someone outside the
+  program.
 - A node cut off at run time, by a node that fails for good, is a separate case,
   handled by "Escalation on a permanent node failure".
 
@@ -1816,8 +1817,8 @@ nodes that a round has to reach.
 
 A round opens at a node in one of two ways. At an initiator, a trigger opens it:
 an `INTERACT` `start_snapshot`, or `shutdown` for a halt, on one of its control
-ports, written by the `Supervisor` through a trigger port or from outside the
-program (see "Trigger ports" and "Manual trigger channel"). At any node, the
+ports, written by the `Supervisor` through an initiator port or from outside the
+program (see "Initiator ports" and "Manual trigger channel"). At any node, the
 first marker of the round that arrives on an input port opens it. Either way,
 the node captures its state at once (see "State capture and checkpoint schema")
 and forwards the marker on every output port but the one to the `Supervisor`,
@@ -2800,7 +2801,7 @@ The `Supervisor` derives, like `FBPProcess`, from `_PortWorker` (see
 "`FBPProcess` class"), which gives it the same thread-per-port plumbing: the
 parsing of `argv` and the ports from the engine, the logger, one reader thread
 per heartbeat channel and for the manual trigger port, one writer thread per
-trigger port, and the brain thread, which here dispatches the `INTERACT`
+initiator port, and the brain thread, which here dispatches the `INTERACT`
 commands that arrive. It inherits nothing of the barrier, the checkpoints or
 the input log, which are in `FBPProcess` alone: the `Supervisor` takes part in
 no round and keeps no state on disk, so a `Supervisor` relaunched by hand
@@ -2808,7 +2809,7 @@ starts afresh. Besides those threads it runs one of its own, the checker
 thread, which decides on a timer which nodes are down.
 
 The section first covers the ports of the `Supervisor` ("Port declaration and
-node identity", "Trigger ports", "Manual trigger channel") and the FIFOs it
+node identity", "Initiator ports", "Manual trigger channel") and the FIFOs it
 holds ("Holding the business channels"). It then follows a node through its
 failures: how it is found down or finished ("Failure detection",
 "Clean-completion detection"), relaunched ("Relaunching a downed node") and
@@ -2846,36 +2847,41 @@ engine names the files of a task of a process with several tasks
 depends on it. A key of `NODE_PORTS` that is neither a string nor such a tuple
 is refused when the `Supervisor` is built.
 
-## Trigger ports
+## Initiator ports
 
 An initiator opens a round when a trigger arrives on one of its control ports
 (see "Chandy-Lamport barrier propagation"), and the `Supervisor` can send those
-triggers itself, through its trigger ports. `TRIGGER_PORT` lists them: zero or
+triggers itself, through its initiator ports, named after where they lead (the
+commands they carry are the triggers). `INITIATOR_PORTS` lists them: zero or
 more output options, each wired to a different initiator through a fifo that
 the `Supervisor` defines with the tag `--control`, and which the engine lists
 (see "Ports from the engine"). It is a list, and not a single port, because a
 resident program may be made of several independent subgraphs, and a marker
 never leaves the subgraph of the initiator that opened its round: the module
 wires the `Supervisor` to one initiator in each subgraph that it has to reach.
-When it is triggered, by hand (see "Manual trigger channel") or by its
-escalation (see "Escalation on a permanent node failure"), the `Supervisor`
-sends `start_snapshot` or `shutdown` to every initiator it lists. The list is
-empty when there is no such fifo: a `Supervisor` that only watches and
-relaunches nodes, and triggers no round, is a valid configuration.
+Only the relay of the manual trigger writes into them (see "Manual trigger
+channel"): when a trigger arrives there, the `Supervisor` sends it to every
+initiator it lists. Its escalation does not use them: `debasher_stop_resident`
+writes its `shutdown` into the control port of every node from outside (see
+"Escalation on a permanent node failure"). The list is empty when there is no
+such fifo: a `Supervisor` that only watches and relaunches nodes, and triggers
+no round, is a valid configuration, as long as it has no manual trigger port
+either. The engine refuses a manual trigger port with no initiator port when
+the program is loaded, since nothing that arrived there could reach a node.
 
-The initiator reads a trigger port as a control port, in its `CONTROL_PORTS`,
+The initiator reads an initiator port as a control port, in its `CONTROL_PORTS`,
 because the `Supervisor` defines the fifo with the tag `--control`. Without the
 tag the channel would be a data port: the round would open, its marker would go
 downstream, and the initiator would wait for ever for a marker from the
-`Supervisor`, which sends none. The `Supervisor` sends no `CLOSE` on a trigger
-port when it stops, since another `Supervisor`, that of a resumed program,
-writes into the same ports; and a `CLOSE` that anyone else writes there changes
-nothing either (see control port in the Glossary).
+`Supervisor`, which sends none. The `Supervisor` sends no `CLOSE` on an
+initiator port when it stops, since another `Supervisor`, that of a resumed
+program, writes into the same ports; and a `CLOSE` that anyone else writes there
+changes nothing either (see control port in the Glossary).
 
-The trigger ports are a convenience, not the only way to open a round. Anyone
+The initiator ports are a convenience, not the only way to open a round. Anyone
 outside the program can write an `INTERACT` straight into a control port of an
 initiator, whether or not the program has a `Supervisor` and however it is
-configured: through Talk-to-FIFOs, or with `debasher_snapshot_resident`, which
+configured: through "Talk to FIFOs", or with `debasher_snapshot_resident`, which
 writes into the control ports of every node; and so could a snapshot timer of
 the initiator's own, which is not built (see "Periodic snapshots from a node's
 own timer" in Future work).
@@ -2888,7 +2894,7 @@ defines with the tag `--control` and that is written from outside the program.
 It is not one of `NODE_PORTS`, since it carries no node's identity: it is a
 channel of commands, not the heartbeat channel of a supervised node. The
 `Supervisor` relays every `INTERACT` that arrives there to every initiator of
-`TRIGGER_PORT`, adding an epoch to its `args` when they carry none (see
+`INITIATOR_PORTS`, adding an epoch to its `args` when they carry none (see
 numbered trigger in the Glossary), so that every initiator opens the same
 round; a command that starts no round never reads it.
 
@@ -2923,7 +2929,7 @@ The engine gives the FIFOs to hold, `HOLD_FIFOS`, with the other ports of the
 `Supervisor` (see "Ports from the engine"): every fifo without a tag whose two
 ends are nodes, the loop of a node that emits on its own and the channels of
 the tasks of an array included. It leaves out the heartbeat channels and the
-trigger ports, which the `Supervisor` already holds as one of their endpoints,
+initiator ports, which the `Supervisor` already holds as one of their endpoints,
 and every fifo with one end outside the program: delivery there is at most once
 in any case (see "External inputs" in the Contract's limits), and a holder
 would change what the process outside sees, whose `open()` would no longer wait
@@ -3386,13 +3392,13 @@ closes no epoch, prunes nothing and ends at the size cap of its input logs
 (see "Pruning and the size cap").
 
 - **One round.** It writes `start_snapshot` into the control ports of every
-  node, as `debasher_stop_resident` writes `shutdown`, numbered with the time
-  in milliseconds (see numbered trigger in the Glossary), so that every
-  initiator opens the same round. With a `Supervisor`, the control port of an
-  initiator is a trigger port, and the tool writes into it next to the
-  `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so the two
-  never interleave. Without one, it is a fifo fed from outside. Every node of
-  a program that loads is reached from an initiator (see "Validation when the
+  node, as `debasher_stop_resident` writes `shutdown`, numbered with the time in
+  milliseconds (see numbered trigger in the Glossary), so that every initiator
+  opens the same round. With a `Supervisor`, the control port of an initiator is
+  the other end of an initiator port, and the tool writes into it next to the
+  `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so the two never
+  interleave. Without one, it is a fifo fed from outside. Every node of a
+  program that loads is reached from an initiator (see "Validation when the
   program is loaded"), so the tool needs nothing else to reach every node.
 - **Waiting for the round to close.** It then waits, up to `--timeout`
   seconds (60 by default), until every node has a checkpoint of that epoch or
