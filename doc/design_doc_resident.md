@@ -57,16 +57,17 @@ precisely what is promised.
 The Glossary comes first, with the meaning of the words that the rest uses. The
 Contract follows: it says precisely what these goals do and do not promise. Then
 comes the design of the mechanism that provides them, from the wire up: the
-"Control envelope" that every line of a FIFO carries; the node ("`FBPProcess`
-class") and its "Input log", which together give a relaunched node back its
-state; "Reconnecting after a node failure", which gives it back its channels;
-the "`Supervisor` class", which watches the nodes, relaunches them and holds the
-FIFOs of their business channels; the "Tools for resident programs", which act
-on a live program from outside; the "Channel kinds declared with the fifo",
-which tell the engine what each FIFO is for; and "`ProgramLauncher`", a node
-that launches batch runs. The document ends with what is still open: "Loose ends
-to check before considering the design closed", "Extensions" and "Future work".
-Sections are cited in the text by name, as here.
+"Control envelope" that every line of a FIFO carries; the "Channel kinds
+declared with the fifo", which tell the engine what each FIFO is for and give
+each process its ports; the node ("`FBPProcess` class") and its "Input log",
+which together give a relaunched node back its state; "Reconnecting after a
+node failure", which gives it back its channels; the "`Supervisor` class",
+which watches the nodes, relaunches them and holds the FIFOs of their business
+channels; the "Tools for resident programs", which act on a live program from
+outside; and "`ProgramLauncher`", a node that launches batch runs. The
+document ends with what is still open: "Loose ends to check before considering
+the design closed", "Extensions" and "Future work". Sections are cited in the
+text by name, as here.
 
 # Glossary
 
@@ -1036,6 +1037,194 @@ is (see "Fields of each type"). Channel by channel:
   protocol (see "Chandy-Lamport barrier propagation"), it only speaks
   `INTERACT`. A `DATA` or `BARRIER` that reaches one of its channels anyway is
   dropped by the reader with a warning.
+
+# Channel kinds declared with the fifo
+
+The kind of every channel of a resident program, and its direction, are
+declared in the module's own options, where the engine can read them when it
+loads the program: a business channel, a channel of commands to a control port,
+or a channel fed from outside to an external port. Without this they are only
+in the Python class of each node (`INPUT_PORTS`, `OUTPUT_PORTS`,
+`CONTROL_PORTS`, `EXTERNAL_PORTS`), which the engine cannot see. Knowing them at
+load lets the engine check, before launching anything, that the channels of a
+program can carry a round to every node; lets each node take its port lists
+from the engine instead of declaring them a second time; and gives the frontend
+what it needs to show and edit the channels of a resident program.
+
+## Direction: the owner writes
+
+An output option is named `-out...` or `--out...`, in every program, and
+`define_opt_from_proc_out` and `define_opt_from_proc_task_out` only connect an
+input option to an output option of another process, or of the same one (a
+self-loop). In a resident program, every FIFO is created once, by the
+`define_fifo_opt` (or `define_fifo_opt_generator`) of one process, its fifo
+owner, through an output option: the owner writes it. The process at the other
+end reads it, through an input option connected to that output, or no process of
+the program does, and the other end is outside (`__EXTERNAL__` in the engine's
+fifo registry). The one exception is a fifo whose writer is outside the program:
+the process that reads it has to create it, through an input option, and the
+fifo carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
+`DEBASHER_FIFO_READERS`, written to `program.fifos`) give the owner and the
+other end of every fifo, task by task, and the other end may be another task of
+the owner's own array; the option through which the owner defines each fifo is
+recorded too (`DEBASHER_FIFO_OWNER_OPTS`). The direction of every channel
+follows from them and from the tags, with nothing read from Python.
+
+## Tags: `--control` and `--external`
+
+`define_fifo_opt` and `define_fifo_opt_generator` take an optional tag, the same
+way as `--mirror`, stored in a registry of its own:
+
+- no tag: written by its owner, and read by the process at the other end, if
+  any, through an input port: a heartbeat channel when the `Supervisor` reads
+  it (see "`Supervisor` class"), and otherwise a business channel;
+- `--control`: a channel of commands, whose reader's end is a control port. Its
+  writer is the `Supervisor`, which owns it (a trigger port), or someone outside
+  the program, and then the reader owns it;
+- `--external`: a channel fed from outside the program, owned by its reader,
+  whose end is an external port.
+
+From the reference programs:
+
+```bash
+# fanin (debasher_chaos_ref.sh)
+define_fifo_opt "-ext" "fanin_ext" optlist --external
+define_opt_from_proc_out "-trigger" "sup" "-outtrig_fanin" optlist
+define_fifo_opt "-outloop" "fanin_to_loop" optlist
+
+# sup
+define_fifo_opt "-outtrig_fanin" "sup_trig_fanin" optlist --control
+define_fifo_opt "-manual" "sup_manual" optlist --control
+
+# start (debasher_array_ref.sh)
+define_fifo_opt "-trigger" "start_trigger" optlist --control
+```
+
+The manual trigger port of the `Supervisor` is tagged `--control` as well: its
+writer is outside, so its owner reads it. The tags only mean something in a
+resident program, and a general program that uses them is refused when it is
+loaded, as a resident program that uses `--mirror` is.
+
+## Validation when the program is loaded
+
+With the direction and the kind of every fifo, the engine builds the graph of
+the business channels between the business nodes, task by task (the `Supervisor`
+takes no part in rounds, so its channels are left out), and checks it, with the
+flags of every fifo, before launching anything, in
+`debasher::_validate_program_fifo_flags`, which `debasher_exec` calls once the
+other end of every fifo is known:
+
+1. Every node can be reached from an initiator, a node that reads a control
+   channel, through business channels in the direction in which they carry a
+   marker.
+2. Every tagged fifo is used as its tag says. A fifo tagged `--external` has
+   its other end outside the program, so that its owner reads it. A fifo tagged
+   `--control` either has its other end outside, and its owner reads it, or is
+   owned by the `Supervisor` and read by a node.
+3. The owner of a fifo defines it through an output option, except a tagged
+   fifo fed from outside, which it defines through an input option. A fifo that
+   a node reads from outside and that lacks its tag is refused by this rule.
+4. No fifo is declared with `--mirror` (see "Why the log is not built on the
+   mirror tap").
+
+A fifo without a tag whose other end is outside is a business channel from its
+owner to someone outside the program, a node that writes its results out.
+
+A violation stops the load with an error that names the node or the fifo, and
+the rule. Each check walks the fifos once; the registries it reads are already
+built by then, for every task of every array and generator. In the fan-in of two
+nodes fed from outside (see "Initiators numbered their rounds independently" in
+"Loose ends"), where nodes `a` and `b`, whose only inputs come from outside,
+both write to a node `c`, a program in which only `a` has a control channel is
+refused by rule 1, since `b` cannot be reached.
+
+## Ports from the engine
+
+Once the program is loaded and its channels are checked, the engine gives
+each task of an `FBPProcess`, and the `Supervisor`, its ports, taken from the
+same registries and tags (`debasher::_register_resident_task_ports`). For a
+node:
+
+- The owner of a fifo has an output port on the option through which it
+  defines it, or, for a tagged fifo fed from outside, an input port, which is
+  also a control or an external port, as its tag says.
+- The process at the other end, when it is a node, has an input port on the
+  option through which it reads the fifo (`DEBASHER_FIFO_READER_OPTS`), which is
+  also a control port if the fifo is tagged `--control`.
+- The output port whose other end is the `Supervisor` is the node's
+  `SUPERVISOR_PORT`. A node with more than one is refused when the program is
+  loaded, since a node has a single heartbeat channel. In a program with a
+  `Supervisor`, a node with none is refused too: it would run unsupervised,
+  with nothing to say so. This is what a task of an array beyond those the
+  `Supervisor` connects to would do, when the option that sizes the
+  heartbeat channels of the `Supervisor` says fewer tasks than the array
+  builds.
+
+For the `Supervisor`, the same fifos seen from its end:
+
+- A fifo without a tag that a node defines and the `Supervisor` reads is the
+  heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its
+  key and the option through which the `Supervisor` reads it as its value.
+- A fifo that the `Supervisor` defines with the tag `--control` and a node
+  reads is a trigger port, an entry of `TRIGGER_PORT`.
+- A fifo that the `Supervisor` defines with the tag `--control` and that is
+  fed from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor`
+  with more than one is refused when the program is loaded.
+- Any other fifo that the `Supervisor` defines is refused when the program is
+  loaded: the `Supervisor` takes no part in the business channels.
+- A fifo without a tag whose two ends are nodes is a business channel, whose
+  FIFO the `Supervisor` holds (see "Holding the business channels"): an entry
+  of `HOLD_FIFOS`, named by its path under the fifo directory of the program,
+  `<owner process>/<fifo>`, since it is not an option of the `Supervisor`.
+
+With them goes the startup deadline of each node whose computational
+specifications give one, `startup_timeout_s` (see "Computational
+specifications of a resident process"), into `NODE_STARTUP_TIMEOUT_SECS`,
+which "Failure detection" uses.
+
+So the heartbeat channels need no tag of their own: the role of the process
+at each end, which the engine already knows, says which fifo is which. With
+the options of the module as the only place that says what the ports are, a
+program whose number of nodes comes from the command line (see "Fan-out and
+fan-in sized from the command line" in Extensions) has a `Supervisor` that
+watches as many nodes as there are, with no code that depends on it.
+
+The generated script of each process carries the ports of every task
+(`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and the
+wrapper of a task exports its own as `DEBASHER_PROCESS_PORTS`. For `fanin`, in
+the chaos reference program:
+
+```
+input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
+```
+
+and for its `Supervisor`, `sup`, where a task of a process with several tasks
+would be named `<process>:<idx>`, as `debasher_stop_resident -x` names it (see
+"Port declaration and node identity"):
+
+```
+nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
+```
+
+`FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
+`EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
+`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`,
+`NODE_STARTUP_TIMEOUT_SECS` and `HOLD_FIFOS`, before anything uses them
+(`_take_ports_from_engine`). The options of the module are then the only
+place that says what the ports of a process are: a class that declares any
+of them, even with the same value, stops the process with an error. A
+process built without the engine, as the unit tests build them, gets no such
+variable and takes its ports from the attributes of its class. The order of a
+list means nothing, in the variable or in the class: every use of a port list
+is port by port.
+
+## What the fifo tags leave out
+
+- The check says which nodes can be initiators, not whether a trigger really
+  reaches them: that depends on who writes into their control channels, a
+  `Supervisor` whose `TRIGGER_PORT` lists them or someone outside the program.
+- A node cut off at run time, by a node that fails for good, is a separate case,
+  handled by "Escalation on a permanent node failure".
 
 # `FBPProcess` class
 
@@ -3362,193 +3551,6 @@ error of usage or setup: a program that is not a resident one, a process or an
 index that it refuses (see above), an epoch that the node does not retain,
 `runs` on a node that is not a launcher node or has never written its node
 info file, `notices` with `-p` or `-t`, or another command without `-p`.
-
-# Channel kinds declared with the fifo
-
-The kind of every channel of a resident program, and its direction, are
-declared in the module's own options, where the engine can read them when it
-loads the program: a business channel, a channel of commands to a control port,
-or a channel fed from outside to an external port. Without this they are only
-in the Python class of each node (`INPUT_PORTS`, `OUTPUT_PORTS`,
-`CONTROL_PORTS`, `EXTERNAL_PORTS`), which the engine cannot see. Knowing them at
-load lets the engine check, before launching anything, that the channels of a
-program can carry a round to every node; lets each node take its port lists
-from the engine instead of declaring them a second time; and gives the frontend
-what it needs to show and edit the channels of a resident program.
-
-## Direction: the owner writes
-
-An output option is named `-out...` or `--out...`, in every program, and
-`define_opt_from_proc_out` and `define_opt_from_proc_task_out` only connect an
-input option to an output option of another process, or of the same one (a
-self-loop). In a resident program, every FIFO is created once, by the
-`define_fifo_opt` (or `define_fifo_opt_generator`) of one process, its fifo
-owner, through an output option: the owner writes it. The process at the other
-end reads it, through an input option connected to that output, or no process of
-the program does, and the other end is outside (`__EXTERNAL__` in the engine's
-fifo registry). The one exception is a fifo whose writer is outside the program:
-the process that reads it has to create it, through an input option, and the
-fifo carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
-`DEBASHER_FIFO_READERS`, written to `program.fifos`) give the owner and the
-other end of every fifo, task by task, and the other end may be another task of
-the owner's own array; the option through which the owner defines each fifo is
-recorded too (`DEBASHER_FIFO_OWNER_OPTS`). The direction of every channel
-follows from them and from the tags, with nothing read from Python.
-
-## Tags: `--control` and `--external`
-
-`define_fifo_opt` and `define_fifo_opt_generator` take an optional tag, the same
-way as `--mirror`, stored in a registry of its own:
-
-- no tag: written by its owner, and read by the process at the other end, if
-  any, through an input port: a heartbeat channel when the `Supervisor` reads
-  it, and otherwise a business channel;
-- `--control`: a channel of commands, whose reader's end is a control port. Its
-  writer is the `Supervisor`, which owns it (a trigger port), or someone outside
-  the program, and then the reader owns it;
-- `--external`: a channel fed from outside the program, owned by its reader,
-  whose end is an external port.
-
-From the reference programs:
-
-```bash
-# fanin (debasher_chaos_ref.sh)
-define_fifo_opt "-ext" "fanin_ext" optlist --external
-define_opt_from_proc_out "-trigger" "sup" "-outtrig_fanin" optlist
-define_fifo_opt "-outloop" "fanin_to_loop" optlist
-
-# sup
-define_fifo_opt "-outtrig_fanin" "sup_trig_fanin" optlist --control
-define_fifo_opt "-manual" "sup_manual" optlist --control
-
-# start (debasher_array_ref.sh)
-define_fifo_opt "-trigger" "start_trigger" optlist --control
-```
-
-The manual trigger port of the `Supervisor` is tagged `--control` as well: its
-writer is outside, so its owner reads it. The tags only mean something in a
-resident program, and a general program that uses them is refused when it is
-loaded, as a resident program that uses `--mirror` is.
-
-## Validation when the program is loaded
-
-With the direction and the kind of every fifo, the engine builds the graph of
-the business channels between the business nodes, task by task (the `Supervisor`
-takes no part in rounds, so its channels are left out), and checks it, with the
-flags of every fifo, before launching anything, in
-`debasher::_validate_program_fifo_flags`, which `debasher_exec` calls once the
-other end of every fifo is known:
-
-1. Every node can be reached from an initiator, a node that reads a control
-   channel, through business channels in the direction in which they carry a
-   marker.
-2. Every tagged fifo is used as its tag says. A fifo tagged `--external` has
-   its other end outside the program, so that its owner reads it. A fifo tagged
-   `--control` either has its other end outside, and its owner reads it, or is
-   owned by the `Supervisor` and read by a node.
-3. The owner of a fifo defines it through an output option, except a tagged
-   fifo fed from outside, which it defines through an input option. A fifo that
-   a node reads from outside and that lacks its tag is refused by this rule.
-4. No fifo is declared with `--mirror` (see "Why the log is not built on the
-   mirror tap").
-
-A fifo without a tag whose other end is outside is a business channel from its
-owner to someone outside the program, a node that writes its results out.
-
-A violation stops the load with an error that names the node or the fifo, and
-the rule. Each check walks the fifos once; the registries it reads are already
-built by then, for every task of every array and generator. In the fan-in of two
-nodes fed from outside (see "Initiators numbered their rounds independently" in
-"Loose ends"), where nodes `a` and `b`, whose only inputs come from outside,
-both write to a node `c`, a program in which only `a` has a control channel is
-refused by rule 1, since `b` cannot be reached.
-
-## Ports from the engine
-
-Once the program is loaded and its channels are checked, the engine gives
-each task of an `FBPProcess`, and the `Supervisor`, its ports, taken from the
-same registries and tags (`debasher::_register_resident_task_ports`). For a
-node:
-
-- The owner of a fifo has an output port on the option through which it
-  defines it, or, for a tagged fifo fed from outside, an input port, which is
-  also a control or an external port, as its tag says.
-- The process at the other end, when it is a node, has an input port on the
-  option through which it reads the fifo (`DEBASHER_FIFO_READER_OPTS`), which is
-  also a control port if the fifo is tagged `--control`.
-- The output port whose other end is the `Supervisor` is the node's
-  `SUPERVISOR_PORT`. A node with more than one is refused when the program is
-  loaded, since a node has a single heartbeat channel. In a program with a
-  `Supervisor`, a node with none is refused too: it would run unsupervised,
-  with nothing to say so. This is what a task of an array beyond those the
-  `Supervisor` connects to would do, when the option that sizes the
-  heartbeat channels of the `Supervisor` says fewer tasks than the array
-  builds.
-
-For the `Supervisor`, the same fifos seen from its end:
-
-- A fifo without a tag that a node defines and the `Supervisor` reads is the
-  heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its
-  key and the option through which the `Supervisor` reads it as its value.
-- A fifo that the `Supervisor` defines with the tag `--control` and a node
-  reads is a trigger port, an entry of `TRIGGER_PORT`.
-- A fifo that the `Supervisor` defines with the tag `--control` and that is
-  fed from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor`
-  with more than one is refused when the program is loaded.
-- Any other fifo that the `Supervisor` defines is refused when the program is
-  loaded: the `Supervisor` takes no part in the business channels.
-- A fifo without a tag whose two ends are nodes is a business channel, whose
-  FIFO the `Supervisor` holds (see "Holding the business channels"): an entry
-  of `HOLD_FIFOS`, named by its path under the fifo directory of the program,
-  `<owner process>/<fifo>`, since it is not an option of the `Supervisor`.
-
-With them goes the startup deadline of each node whose computational
-specifications give one, `startup_timeout_s`, into
-`NODE_STARTUP_TIMEOUT_SECS` (see "Failure detection").
-
-So the heartbeat channels need no tag of their own: the role of the process
-at each end, which the engine already knows, says which fifo is which. With
-the options of the module as the only place that says what the ports are, a
-program whose number of nodes comes from the command line (see "Fan-out and
-fan-in sized from the command line" in Extensions) has a `Supervisor` that
-watches as many nodes as there are, with no code that depends on it.
-
-The generated script of each process carries the ports of every task
-(`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and the
-wrapper of a task exports its own as `DEBASHER_PROCESS_PORTS`. For `fanin`, in
-the chaos reference program:
-
-```
-input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
-```
-
-and for its `Supervisor`, `sup`, where a task of a process with several tasks
-would be named `<process>:<idx>`, as `debasher_stop_resident -x` names it (see
-"Port declaration and node identity"):
-
-```
-nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;trigger=outtrig_fanin;manual_trigger=manual;startup=;hold=fanin/fanin_to_loop,fanin/fanin_to_sink,loop/loop_to_fanin
-```
-
-`FBPProcess` sets `INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`,
-`EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
-`Supervisor` `NODE_PORTS`, `TRIGGER_PORT`, `MANUAL_TRIGGER_PORT`,
-`NODE_STARTUP_TIMEOUT_SECS` and `HOLD_FIFOS`, before anything uses them
-(`_take_ports_from_engine`). The options of the module are then the only
-place that says what the ports of a process are: a class that declares any
-of them, even with the same value, stops the process with an error. A
-process built without the engine, as the unit tests build them, gets no such
-variable and takes its ports from the attributes of its class. The order of a
-list means nothing, in the variable or in the class: every use of a port list
-is port by port.
-
-## What the fifo tags leave out
-
-- The check says which nodes can be initiators, not whether a trigger really
-  reaches them: that depends on who writes into their control channels, a
-  `Supervisor` whose `TRIGGER_PORT` lists them or someone outside the program.
-- A node cut off at run time, by a node that fails for good, is a separate case,
-  handled by "Escalation on a permanent node failure".
 
 # `ProgramLauncher`: batch runs from a node
 
