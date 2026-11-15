@@ -19,25 +19,24 @@
 # The graceful counterpart to debasher_stop, for a resident program (see
 # "`debasher_stop_resident`" in doc/design_doc_resident.md). Where
 # debasher_stop ends a program at once (SIGKILL, no coordination), this one
-# asks every node to close a round first (a halt), waits until each one has
-# (its own halted marker, see the design doc's Glossary), and only then stops
-# it (SIGTERM to its whole process group, same as debasher_stop reaches with
-# SIGKILL); if a node never gets there within --timeout, it falls back to
-# debasher_stop on the whole program. If the program has a Supervisor, that is
-# stopped first, the same graceful way, so it cannot relaunch a node out from
-# under the rest of this.
+# records the halted marker baseline of every node, kills the nodes of
+# --kill, stops the Supervisor if the program has one, so that it cannot
+# relaunch a node under the rest of this, asks every node to close a round
+# (a halt), waits until the halted marker of each goes past its baseline,
+# and only then stops it (SIGTERM to its whole process group). If that does
+# not end within --timeout, it falls back to debasher_stop on the whole
+# program.
 #
 # Exit codes: 0 is a clean, fully graceful stop; 1 is a usage or setup error
-# (bad arguments, a directory that is not a resident program's, and the
-# like); 2 (DEBASHER_STOP_RESIDENT_FORCED_EXIT) means the graceful attempt
-# did not finish within --timeout and this fell back to debasher_stop's hard
-# kill, which itself is not treated as an error here (it is, by design, a
-# "just end it" backstop that always succeeds if anything is left running):
-# the program did end, but not gracefully, and a caller that cares about
-# that distinction (the web UI, in particular) tells the two apart by this
-# exit code. The warning written before the fallback says the same on
-# stderr; it is the only trace of it that the escalation of a Supervisor
-# leaves, since the fallback kills that Supervisor too.
+# (bad arguments, a directory that is not a resident program's, a name of
+# -x or --kill that is no node, and the like); 2
+# (DEBASHER_STOP_RESIDENT_FORCED_EXIT) means the graceful attempt did not
+# finish and this fell back to debasher_stop's hard kill: the program did
+# end, but not gracefully, and a caller that cares (the web UI, in
+# particular) tells the two apart by this exit code. The warning written
+# before the fallback says the same on stderr; it is the only trace of it
+# that the escalation of a Supervisor leaves, since the fallback kills that
+# Supervisor too.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
@@ -145,11 +144,9 @@ check_pars()
 }
 
 ########
-# The content of a node's halted marker, or -1 if it does not exist yet
-# (never a real epoch, see engine/debasher_runtime_fbp.py's
-# _write_halted_marker): the baseline this tool compares a fresh one
-# against, so a marker left over from an earlier, already-resumed halt of
-# this same node is never mistaken for this run's own.
+# Prints the halted marker baseline of the halted marker at $1: its
+# content, or -1 if it does not exist yet (never a real epoch, see
+# _write_halted_marker in engine/debasher_runtime_fbp.py).
 read_halted_marker_or_baseline()
 {
     local path=$1
@@ -161,8 +158,8 @@ read_halted_marker_or_baseline()
 }
 
 ########
-# Waits until the halted marker at $1 holds an integer strictly greater
-# than the baseline $2, or the deadline $3 passes.
+# Waits until the halted marker at $1 holds an epoch past its baseline $2,
+# or the deadline $3 passes.
 wait_for_fresh_halted_marker()
 {
     local path=$1
@@ -218,31 +215,22 @@ stop_node_gracefully()
 }
 
 ########
-# If the program has a Supervisor, stops it (graceful signal to its own
-# process group) and waits for its .finished to appear, so it is
-# confirmed gone, not just signalled, before anything else here touches a
-# node it could otherwise still relaunch. A no-op, returning success at
-# once, if the program has none, or if --keep-supervisor was given: that
-# flag is for a Supervisor calling this tool on itself (its own escalation
-# after a permanent node failure, see the design doc's "Escalation on a
-# permanent node failure"), where stopping it here would be self-defeating
-# twice over. First, that Supervisor is blocked, on a thread of its own, on
-# this very tool call returning: a graceful stop waits for its .finished,
-# which cannot appear until that thread unblocks, which cannot happen until
-# this tool returns, a deadlock this tool's own --timeout only escapes by
-# giving up on grace entirely, into debasher_stop's hard kill, every single
-# time; running the tool in a session of its own does not change it, since
-# the Supervisor is found by the PID in its .id. Second, even without that
-# deadlock, killing the Supervisor here is premature on its own terms: it
-# already resolves itself, on its own, once every node it still watches is
-# either done or given up on (see "Clean-completion detection"), which is
-# exactly what stopping the other, reachable nodes below is for.
+# Stops the Supervisor $2 of the program in the output directory $1, if
+# there is one, with a graceful signal to its process group, and waits for
+# its .finished until the deadline $4. Does nothing with no Supervisor, with
+# $3 (keep_supervisor) set to 1, or with a .finished already there; warns
+# and goes on if it does not run. Returns 1, with an error, if its
+# .finished does not come in time.
 stop_supervisor_if_any()
 {
     local absdirname=$1
     local supervisor=$2
-    local deadline=$3
+    local keep_supervisor=$3
+    local deadline=$4
 
+    # --keep-supervisor is for the escalation of a Supervisor, which runs
+    # this tool on a thread of its own and ends by itself once the nodes are
+    # done (see "Escalation on a permanent node failure" in the design doc)
     if [ -z "${supervisor}" ] || [ "${keep_supervisor}" -eq 1 ]; then
         return 0
     fi
@@ -359,13 +347,26 @@ kill_nodes()
 }
 
 ########
+# Stops the resident program whose output directory is $1, leaving out the
+# nodes of the comma-separated list $2 (-x) and killing first those of $3
+# (--kill), within $4 seconds (--timeout), and leaving its Supervisor
+# running if $5 (--keep-supervisor) is 1. Prints that every node stopped
+# cleanly and returns 0, or falls back to debasher_stop and returns
+# DEBASHER_STOP_RESIDENT_FORCED_EXIT. Returns 1, with an error, on a program
+# it cannot load or that is not a resident one, on a name that is no node,
+# or on nodes that it cannot find.
 stop_resident_program()
 {
     local dirname=$1
+    local excluded_csv=$2
+    local killed_csv=$3
+    local timeout_secs=$4
+    local keep_supervisor=$5
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
 
     debasher::_resident_tool_load_program "${absdirname}" debasher_stop_resident || return 1
 
+    # One deadline for every step
     local deadline=$(( $(debasher::_resident_tool_now_secs) + timeout_secs ))
 
     # Every name checked before anything is touched
@@ -376,6 +377,7 @@ stop_resident_program()
     local supervisor
     local -a nodes=()
     debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" supervisor nodes || return 1
+    # The baselines first, before anything that could make a node halt
     local -A baselines=()
     capture_halted_marker_baselines "${absdirname}" nodes baselines
 
@@ -386,7 +388,8 @@ stop_resident_program()
     # and it stays above the epochs that initiators number themselves.
     # Every initiator opens its round with that one number, so a node that
     # the rounds of several initiators reach waits for markers of one epoch.
-    if stop_supervisor_if_any "${absdirname}" "${supervisor}" "${deadline}" \
+    # A step that fails ends the chain in the fallback below
+    if stop_supervisor_if_any "${absdirname}" "${supervisor}" "${keep_supervisor}" "${deadline}" \
         && debasher::_resident_tool_trigger_every_node "${absdirname}" nodes shutdown "$(debasher::_now_ms)" "${deadline}" \
         && wait_for_every_halted_marker "${absdirname}" nodes baselines "${deadline}" \
         && stop_every_node_and_wait_for_finished "${absdirname}" nodes "${deadline}"
@@ -415,6 +418,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-stop_resident_program "${pdir}"
+stop_resident_program "${pdir}" "${excluded_csv}" "${killed_csv}" "${timeout_secs}" "${keep_supervisor}"
 
 exit $?
