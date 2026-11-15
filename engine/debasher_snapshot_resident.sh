@@ -211,14 +211,16 @@ snapshot_once()
 }
 
 ########
-# Starts a round every every_secs seconds at the nodes of the array named
-# $3, until none of them is running. A round that has not closed when the
-# next one starts is only warned about: the next one replaces it.
+# Starts a round every $4 seconds at the nodes of the array named $3, in the
+# output directory $2 of the program $1, until none of them is running. A
+# round that has not closed when the next one starts is only warned about:
+# the next one replaces it. Returns 0.
 snapshot_periodically()
 {
     local dirname=$1
     local absdirname=$2
     local nodes_name=$3
+    local every_secs=$4
 
     # Checked before every round, not only while waiting: with a short
     # period the deadline of a round can pass before any check, and a
@@ -246,13 +248,24 @@ snapshot_periodically()
 }
 
 ########
+# Starts one round in the resident program whose output directory is $1 and
+# waits for it up to $2 seconds (--timeout), or, with $3 (--every) not
+# empty, starts one every $3 seconds until the program stops. Prints the
+# rounds that close. Returns 0 if the round closed (with --every, once the
+# program stopped), DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT with a
+# warning if it did not, and 1, with an error, on a program it cannot load,
+# that is not a resident one, or none of whose nodes runs.
 snapshot_resident_program()
 {
     local dirname=$1
+    local timeout_secs=$2
+    local every_secs=$3
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
 
     debasher::_resident_tool_load_program "${absdirname}" debasher_snapshot_resident || return 1
 
+    # The deadline of finding the nodes and, without --every, of the round;
+    # with --every each round gets its own
     local wait_secs=${every_secs:-${timeout_secs}}
     local deadline=$(( $(debasher::_resident_tool_now_secs) + wait_secs ))
 
@@ -260,13 +273,14 @@ snapshot_resident_program()
     local -a nodes=()
     debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "" "${deadline}" supervisor nodes || return 1
 
+    # A program that does not run would close no round
     if ! debasher::_resident_tool_some_node_is_running "${absdirname}" nodes; then
         echo "Error: no node of ${dirname} is running" >&2
         return 1
     fi
 
     if [ -n "${every_secs}" ]; then
-        snapshot_periodically "${dirname}" "${absdirname}" nodes
+        snapshot_periodically "${dirname}" "${absdirname}" nodes "${every_secs}"
         return $?
     fi
 
@@ -279,6 +293,7 @@ snapshot_resident_program()
     epoch=$(debasher::_now_ms)
     snapshot_once "${absdirname}" nodes "${epoch}" "${deadline}"
     status=$?
+    # Every way a round does not close ends in the same exit code
     case ${status} in
         0) echo "Round ${epoch} closed at every node of ${dirname}."
            return 0
@@ -302,6 +317,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-snapshot_resident_program "${pdir}"
+snapshot_resident_program "${pdir}" "${timeout_secs}" "${every_secs}"
 
 exit $?
