@@ -27,6 +27,7 @@ from chaos_ref import (
     ExtFeeder,
     HEARTBEAT_CHECK_INTERVAL_SECS,
     HEARTBEAT_TIMEOUT_SECS,
+    KILLABLE_NODES,
     SinkTailer,
     SnapshotPacer,
     assert_node_state_restored,
@@ -311,6 +312,15 @@ def test_a_running_neighbor_sees_each_message_of_a_relaunched_node_once(outdir):
     assert_trace_matches(tailer.records, 30)
 
 
+def _read_halted_epochs(outdir):
+    """The epoch in the halted marker of each node of the chaos program."""
+    epochs = {}
+    for name in KILLABLE_NODES:
+        with open(os.path.join(outdir, "__exec__", name, "halted")) as f:
+            epochs[name] = int(f.read())
+    return epochs
+
+
 def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
     """
     Orderly halt: after a halt every node resumes in the state it had
@@ -365,6 +375,7 @@ def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
     assert result.returncode == 0, f"debasher_stop_resident failed:\n{result.stdout}\n{result.stderr}"
     with open(sup_out) as f:
         assert "node 'loop' is down" not in f.read(), "the Supervisor relaunched the frozen loop"
+    first_halt = _read_halted_epochs(outdir)
 
     launch_chaos(outdir)
     feed(find_fifo(outdir, "fanin_ext"), k_before + 1, k, interval)
@@ -373,6 +384,12 @@ def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
     # the same reason.
     time.sleep(1.0)
     halt_and_wait_for_finished(outdir, timeout=60)
+    # The halted markers of the first halt outlive the resume: a tool that
+    # waited for a marker to exist, not past its baseline, would have
+    # signalled every node before this halt and left them unchanged
+    second_halt = _read_halted_epochs(outdir)
+    for name in KILLABLE_NODES:
+        assert second_halt[name] > first_halt[name], (name, first_halt, second_halt)
 
     tailer.stop_and_join()
     if tailer.error is not None:

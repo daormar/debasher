@@ -176,26 +176,36 @@ wait_for_fresh_halted_marker()
 }
 
 ########
-# Reads a node's own .id file and sends its whole process group a
-# graceful stop signal (see debasher::_stop_pid_gracefully). A missing or
-# empty .id file (never launched), or one whose task has ended (see
-# debasher::_builtin_sched_get_running_task_pid), is not an error: there is nothing to
+# Prints the PID of the process of node $2, in the output directory $1, as
+# its .id names it, if that process still runs. Returns 1 with no .id, an
+# empty one, or one whose task has ended.
+read_running_pid_of_node()
+{
+    local absdirname=$1
+    local node=$2
+
+    local id_file id_info
+    id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
+    [ -f "${id_file}" ] || return 1
+    id_info=$("${CAT}" "${id_file}" 2>/dev/null)
+    [ -n "${id_info}" ] || return 1
+    # The start time in the id keeps a process that got the PID of an ended
+    # task from being taken for it
+    debasher::_builtin_sched_get_running_task_pid "${id_info}"
+}
+
+########
+# Sends the whole process group of node $2, in the output directory $1, a
+# graceful stop signal (see debasher::_stop_pid_gracefully), if its process
+# still runs (see read_running_pid_of_node); otherwise there is nothing to
 # stop.
 stop_node_gracefully()
 {
     local absdirname=$1
     local node=$2
-    local id_file
-    id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
-    if [ ! -f "${id_file}" ]; then
-        return 0
-    fi
-    local id_info pid
-    id_info=$("${CAT}" "${id_file}" 2>/dev/null)
-    if [ -z "${id_info}" ]; then
-        return 0
-    fi
-    pid=$(debasher::_builtin_sched_get_running_task_pid "${id_info}") || return 0
+
+    local pid
+    pid=$(read_running_pid_of_node "${absdirname}" "${node}") || return 0
     debasher::_stop_pid_gracefully "${pid}"
 }
 
@@ -229,10 +239,19 @@ stop_supervisor_if_any()
         return 0
     fi
 
-    stop_node_gracefully "${absdirname}" "${supervisor}"
-
     local finished_file
     finished_file=$(debasher::_get_process_finished_filename "${absdirname}" "${supervisor}")
+    [ ! -f "${finished_file}" ] || return 0
+
+    # A Supervisor that is gone relaunches nothing, and its .finished would
+    # never come
+    local pid
+    if ! pid=$(read_running_pid_of_node "${absdirname}" "${supervisor}"); then
+        echo "Warning: ${supervisor} (the Supervisor) is not running" >&2
+        return 0
+    fi
+    debasher::_stop_pid_gracefully "${pid}"
+
     if ! debasher::_resident_tool_wait_for_file "${finished_file}" "${deadline}"; then
         echo "Error: ${supervisor} (the Supervisor) never exited cleanly after a stop signal" >&2
         return 1
@@ -324,15 +343,9 @@ kill_nodes()
     local absdirname=$1
     local -n killed_nodes_ref=$2
 
-    local node id_file id_info pid
+    local node pid
     for node in "${killed_nodes_ref[@]}"; do
-        id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
-        [ -f "${id_file}" ] || continue
-        id_info=$("${CAT}" "${id_file}" 2>/dev/null)
-        [ -n "${id_info}" ] || continue
-        # The start time in the id keeps a process that got the PID of an
-        # ended task from being killed
-        pid=$(debasher::_builtin_sched_get_running_task_pid "${id_info}") || continue
+        pid=$(read_running_pid_of_node "${absdirname}" "${node}") || continue
         debasher::_stop_pid "${pid}"
     done
 }

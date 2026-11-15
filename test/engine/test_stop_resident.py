@@ -149,6 +149,44 @@ def test_debasher_stop_resident_stops_the_whole_program_cleanly(outdir):
         assert os.path.exists(finished), f"{name} never wrote .finished"
 
 
+def test_a_supervisor_that_is_gone_is_not_waited_for(outdir):
+    """
+    A Supervisor whose process has ended without a .finished, as one that
+    crashed, relaunches nothing: debasher_stop_resident warns of it and
+    stops the nodes in order, instead of waiting for a .finished that never
+    comes until the deadline and the hard fallback.
+    """
+    launch_chaos(outdir)
+    time.sleep(1.0)  # let every node send at least one heartbeat first
+    sup_pid = int(read_pid(id_file(outdir, "sup")))
+    os.killpg(sup_pid, signal.SIGKILL)
+
+    def sup_gone():
+        try:
+            os.kill(sup_pid, 0)
+        except ProcessLookupError:
+            return True
+        return False
+
+    assert wait_until(sup_gone, timeout=10.0)
+
+    start = time.monotonic()
+    result = subprocess.run(
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"],
+        capture_output=True,
+        text=True,
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    assert "sup (the Supervisor) is not running" in result.stderr, result.stderr
+    assert elapsed < 10.0, f"took {elapsed:.1f}s, the Supervisor must not have been waited for"
+    assert not os.path.exists(os.path.join(outdir, "__exec__", "sup", "sup.finished"))
+    for name in KILLABLE_NODES:
+        finished = os.path.join(outdir, "__exec__", name, f"{name}.finished")
+        assert os.path.exists(finished), f"{name} never wrote .finished"
+
+
 def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
     """
     The -x flag: a node named there is not waited for and not signalled,

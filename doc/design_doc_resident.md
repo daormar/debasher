@@ -3437,6 +3437,11 @@ The stop goes in seven steps:
    below). Then it waits for the `Supervisor`'s `.finished`. The `Supervisor`
    stops on a stop signal for this reason (see "Clean-completion detection").
    Stopping it keeps it from relaunching a node that the tool is about to stop.
+   A `Supervisor` that has already ended (its `.finished` is there) is not
+   waited for. Neither is one that does not run (no `.id`, an empty one, or
+   one whose process has ended): it relaunches nothing, and the `.finished`
+   of one that crashed would never come. The tool warns about it and goes
+   on.
 4. It writes `shutdown` into every node's own control ports, listed in its
    control ports file (see the Glossary). Most nodes have none, and the round
    reaches them from elsewhere in the graph. The trigger is numbered with the
