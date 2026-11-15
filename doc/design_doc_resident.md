@@ -3356,38 +3356,44 @@ detection"). The section goes through the options of the tool, how it finds the
 nodes of the program, the six steps of the stop, and the stop signal that it
 sends.
 
-The tool is called as `debasher_stop_resident -d <outdir>`, with the options
-`[-x <name>[,<name>...]]`, `[--kill <name>[,<name>...]]`, `[--timeout <secs>]`
-and `[--keep-supervisor]`. `-d` is the program's own output directory, the same
-as for every other engine tool that operates on one. The options are there for
-two callers: a user, who usually wants the whole program stopped, and the
-escalation of the `Supervisor` (`on_node_permanently_failed`, see "Escalation
-on a permanent node failure"), which has already given up on one node and must
-not wait forever on it.
+```
+debasher_stop_resident -d <outdir> [-x <node>[,<node>...]]
+                       [--kill <node>[,<node>...]] [--timeout <secs>]
+                       [--keep-supervisor]
+```
 
-`-x` names nodes to leave alone entirely: they are neither waited for nor
-signalled. Each is a process name, which names every task if the process is an
-array, or `<process_name>:<idx>`, one task of an array (`<process_name>_<idx>`
-would be ambiguous with a process whose name ends that way). It lets
-`on_node_permanently_failed` leave out the node it gave up on, which could never
-halt. `--kill` names nodes to kill before the graceful stop, with `SIGKILL` to
-the process group of each that still runs (`debasher::_stop_pid`, after
-`debasher::_builtin_sched_get_running_task_pid`, so that a process that got the
-PID of an ended task is never killed): `<process>` for a process of one task,
-`<process>:<idx>` for a task. The escalation gives the node it gave up on to
-both `-x` and `--kill`, since that node may still hang in its startup; `-x`
-alone leaves a node running, which is what a user who excludes one by hand
-wants.
+`-d` is the program's own output directory, the same as for every other engine
+tool that operates on one. The options are there for two callers. One is a
+user, who usually wants the whole program stopped. The other is the escalation
+of the `Supervisor` (`on_node_permanently_failed`, see "Escalation on a
+permanent node failure"), which has already given up on one node and must not
+wait forever on it.
 
-`--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the whole
-graceful attempt. Past it, the tool falls back to `debasher_stop -d <outdir>`, a
-hard kill of the entire program, so it always ends the program one way or
-another and never hangs indefinitely by itself (see "Failing loudly instead of
-retrying" for how it reports the fallback). `--keep-supervisor` skips stopping
-the program's `Supervisor`, the first step of the stop below. It is also for the
-escalation, which calls this tool from a thread of the very `Supervisor` process
-that the tool would otherwise target; "Escalation on a permanent node failure"
-says why that specifically must not happen, not just should not.
+- `-x` names nodes to leave alone entirely: they are neither waited for nor
+  signalled. Each is `<process>`, which names every task if the process is an
+  array, or `<process>:<idx>`, one task of an array (`<process>_<idx>` would be
+  ambiguous with a process whose name ends that way). It lets
+  `on_node_permanently_failed` leave out the node it gave up on, which could
+  never halt.
+- `--kill` names nodes to kill before the graceful stop: `<process>` for a
+  process of one task, `<process>:<idx>` for a task. Each one that still runs
+  gets `SIGKILL` to its process group (`debasher::_stop_pid`). Its PID comes
+  from `debasher::_builtin_sched_get_running_task_pid`, so that a process that
+  got the PID of an ended task is never killed. The escalation gives the node
+  it gave up on to both `-x` and `--kill`, since that node may still hang in
+  its startup. `-x` alone leaves a node running, which is what a user who
+  excludes one by hand wants.
+- `--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the
+  whole graceful attempt. Past it, the tool falls back to
+  `debasher_stop -d <outdir>`, a hard kill of the entire program. So the tool
+  always ends the program one way or another, and never hangs indefinitely by
+  itself (see "Failing loudly instead of retrying" for how it reports the
+  fallback).
+- `--keep-supervisor` skips stopping the program's `Supervisor`, the first step
+  of the stop below. It is also for the escalation, which calls this tool from
+  a thread of the very `Supervisor` process that the tool would otherwise
+  target. "Escalation on a permanent node failure" says why that specifically
+  must not happen, not just should not.
 
 The tool finds the program's nodes and its `Supervisor`, if it has one, the same
 way `debasher::_validate_resident_program_processes` does: it loads the module,
@@ -3456,16 +3462,19 @@ cap"). The section describes how the tool starts one round, how it waits for
 the round to close and what keeps a round from closing, the periodic mode, and
 the programs that the tool acts on.
 
-The tool is called as `debasher_snapshot_resident -d <outdir> [--timeout <secs>
-| --every <secs>]` (`engine/debasher_snapshot_resident.sh`, installed in
-`bin`). To start a round, it writes `start_snapshot` into the control ports of
+```
+debasher_snapshot_resident -d <outdir> [--timeout <secs> | --every <secs>]
+```
+
+The tool is built from `engine/debasher_snapshot_resident.sh` and installed in
+`bin`. To start a round, it writes `start_snapshot` into the control ports of
 every node, as `debasher_stop_resident` writes `shutdown`, numbered with the
 time in milliseconds (see numbered trigger in the Glossary), so that every
 initiator opens the same round. With a `Supervisor`, the control port of an
 initiator is the other end of an initiator port, and the tool writes into it
-next to the `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so
-the two never interleave. Without one, it is a fifo fed from outside. Every node
-of a program that loads is reached from an initiator (see "Validation when the
+next to the `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so the
+two never interleave. Without one, it is a fifo fed from outside. Every node of
+a program that loads is reached from an initiator (see "Validation when the
 program is loaded"), so the tool needs nothing else to reach every node.
 
 It then waits, up to `--timeout` seconds (60 by default), until every node has
@@ -3503,17 +3512,21 @@ This section is about the tool that takes a stopped resident program back to
 its first run. It says what the tool takes away, why it always resets the whole
 program, where what it takes away goes, and when it refuses.
 
-The tool is called as `debasher_reset_resident -d <outdir> [--delete]`
-(`engine/debasher_reset_resident.sh`, installed in `bin`). It resets a stopped
-resident program, so that the next `debasher_exec` on the same output directory
-starts every node as on its first run. A node keeps its state across runs in
-files that the engine does not reset (see "Ordered shutdown"): its checkpoints,
-its input log and its halted marker, in its execdir (Glossary), and the output
-directory of its process. The tool takes all of them away, and the notice of the
-node with them (see "Notices"), for every task of every process, the
-`Supervisor` included, and leaves the output directory of each process empty, as
-the engine leaves it before a first run. What it does not reach is the files
-that a module writes outside the output directory of its process.
+```
+debasher_reset_resident -d <outdir> [--delete]
+```
+
+The tool is built from `engine/debasher_reset_resident.sh` and installed in
+`bin`. It resets a stopped resident program, so that the next `debasher_exec` on
+the same output directory starts every node as on its first run. A node keeps
+its state across runs in files that the engine does not reset (see "Ordered
+shutdown"): its checkpoints, its input log and its halted marker, in its execdir
+(Glossary), and the output directory of its process. The tool takes all of them
+away, and the notice of the node with them (see "Notices"), for every task of
+every process, the `Supervisor` included, and leaves the output directory of
+each process empty, as the engine leaves it before a first run. What it does not
+reach is the files that a module writes outside the output directory of its
+process.
 
 It resets the whole program, never one node. A node that starts afresh numbers
 its channels from the start again (G5), and a reader that kept its own
@@ -3545,11 +3558,12 @@ debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>
 debasher_inspect_resident -d <outdir> notices
 ```
 
-The tool (`engine/debasher_inspect_resident.sh`, installed in `bin`) prints, as
-one JSON object on its standard output, what one node of a resident program
-keeps in its execdir: its checkpoints, its input log, its halted marker, its
-node info file and its notice, and, for a launcher node, the state of its batch
-runs. The second form prints the notices of every node of the program at once.
+The tool is built from `engine/debasher_inspect_resident.sh` and installed in
+`bin`. It prints, as one JSON object on its standard output, what one node of a
+resident program keeps in its execdir: its checkpoints, its input log, its
+halted marker, its node info file and its notice, and, for a launcher node, the
+state of its batch runs. The second form prints the notices of every node of the
+program at once.
 
 In the first form, `-d`, `-p` and `-t` are those of `debasher_get_stdout`. The
 tool loads the program from its output directory, as the other tools do, and
