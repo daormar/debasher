@@ -161,14 +161,15 @@ ensure_program_is_stopped()
 }
 
 ########
-# Sets aside, or deletes if --delete was given, what $2 names: a path in the
-# program's output directory $1. Set aside, it keeps its path relative to $1
-# under $3.
+# Sets aside, or deletes if $4 (delete_state) is 1, what $2 names: a path in
+# the program's output directory $1. Set aside, it keeps its path relative to
+# $1 under $3. Returns 1 if it cannot.
 reset_path()
 {
     local absdirname=$1
     local path=$2
     local reset_dir=$3
+    local delete_state=$4
 
     if [ ${delete_state} -eq 1 ]; then
         "${RM}" -rf "${path}"
@@ -181,9 +182,16 @@ reset_path()
 }
 
 ########
+# Resets the resident program whose output directory is $1: sets aside the
+# state of every node under __reset__, or deletes it if $2 (--delete) is 1.
+# Prints what it did, or that there was nothing to reset. Returns 1, with an
+# error, while a debasher_exec holds the lock for a run or a process is in
+# progress, on a program it cannot load or that is not a resident one, and
+# on a path that it cannot reset.
 reset_resident_program()
 {
     local dirname=$1
+    local delete_state=$2
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
 
     # A debasher_exec that holds the lock prepares the run and launches the
@@ -197,6 +205,7 @@ reset_resident_program()
 
     debasher::_resident_tool_load_program "${absdirname}" debasher_reset_resident || return 1
 
+    # After the loading, which gives the processes to look at
     ensure_program_is_stopped "${absdirname}" || return 1
 
     local stamp
@@ -214,13 +223,15 @@ reset_resident_program()
         where=""
     fi
 
+    # Every process, the Supervisor included: the whole program, never one
+    # node
     local processname path num_paths=0
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         while IFS= read -r path; do
             [ -n "${path}" ] || continue
             # Nothing is undone: running the tool again moves what is left
             # and does not find what it already moved
-            reset_path "${absdirname}" "${path}" "${reset_dir}" || {
+            reset_path "${absdirname}" "${path}" "${reset_dir}" "${delete_state}" || {
                 echo "Error: could not reset ${path}; what came before it is already reset${where}: run debasher_reset_resident again once the cause is fixed" >&2
                 return 1
             }
@@ -255,6 +266,6 @@ read_pars "$@" || exit 1
 
 check_pars || exit 1
 
-reset_resident_program "${pdir}"
+reset_resident_program "${pdir}" "${delete_state}"
 
 exit $?
