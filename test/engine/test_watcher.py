@@ -180,6 +180,6 @@ def test_a_watcher_without_its_requests_port_says_so(watch_dir):
     class Unwired(_Watch):
         OUTPUT_PORTS = []
 
-    assert _node(watch_dir)._wiring_problem() is None
-    problem = Unwired(opts={"watchdir": str(watch_dir)})._wiring_problem()
+    assert _node(watch_dir)._find_wiring_problem() is None
+    problem = Unwired(opts={"watchdir": str(watch_dir)})._find_wiring_problem()
     assert problem.startswith("no output port outrequests")

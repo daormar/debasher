@@ -780,7 +780,7 @@ class _PortWorker:
             line = out_queue.get()
             if line is _STOP:
                 if self._close_on_stop:
-                    _write_all(wfd, encode_close(self._close_payload(tag)) + "\n")
+                    _write_all(wfd, encode_close(self._get_close_payload(tag)) + "\n")
                 break
             _write_all(wfd, line + "\n")
             self._on_written(tag, line)
@@ -795,7 +795,7 @@ class _PortWorker:
         still only in memory (see _unwritten, the outbound backlog).
         """
 
-    def _close_payload(self, tag):
+    def _get_close_payload(self, tag):
         """
         The `last_seq` that this port's own CLOSE carries (see encode_close),
         or None for an empty payload. The base class has no counter of its

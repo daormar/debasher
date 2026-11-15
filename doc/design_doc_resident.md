@@ -1686,15 +1686,14 @@ program" in `doc/design_doc_webui.md`). The `Supervisor` has no notice. The
 classes of the runtime library set one of their own only when the node lacks a
 port that the class needs to do its work, since such a node runs but does
 nothing useful, and would otherwise not say so: at every start, once the notice
-file is removed,
-`run()` asks `_wiring_problem()`, which a class of the library redefines, and
-sets what it answers as a `warning` notice, with the same line in the log. A
-`DirectoryWatcher` without the output port `REQUESTS_PORT` says that the files
-it sees are sent nowhere, and a `ProgramLauncher` without an input port that
-carries data says that it never receives a request. A notice that the code of
-the node sets later replaces it. Apart from that, a `DirectoryWatcher` that
-waits for files says nothing, and a module that wants it to derives from it and
-sets one.
+file is removed, `run()` asks `_find_wiring_problem()`, which a class of the
+library redefines, and sets what it answers as a `warning` notice, with the same
+line in the log. A `DirectoryWatcher` without the output port `REQUESTS_PORT`
+says that the files it sees are sent nowhere, and a `ProgramLauncher` without an
+input port that carries data says that it never receives a request. A notice
+that the code of the node sets later replaces it. Apart from that, a
+`DirectoryWatcher` that waits for files says nothing, and a module that wants it
+to derives from it and sets one.
 
 ## State capture and checkpoint schema
 
@@ -1781,7 +1780,7 @@ failure").
    neighbor that was the only holder of a FIFO crashed during that time, what
    it had sent would be destroyed with it.
 4. Removes the notice of the previous incarnation, and sets the one of
-   `_wiring_problem()`, if any (see "Notices").
+   `_find_wiring_problem()`, if any (see "Notices").
 5. Looks for the most recent checkpoint. If there is one, it calls
    `restore_node_state()`, restores the closed ports and the counters of
    sequence numbers, and queues the outbound backlog of the checkpoint; if
@@ -2021,7 +2020,7 @@ checkpoints carry: one on the size of a checkpoint, the other on the memory
 of the node.
 
 A node keeps its checkpoints in a directory of its own,
-`__exec__/<process_name>/checkpoints/` (`_checkpoints_dir()`), not among the
+`__exec__/<process_name>/checkpoints/` (`_get_checkpoints_dir()`), not among the
 files that the engine already writes there
 (`<process_name>.{finished,id,opts,sched_out,stdout}`); a task of an array
 keeps its own, `checkpoints_<idx>/`, next to those of the other tasks (see

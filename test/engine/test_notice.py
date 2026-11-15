@@ -181,7 +181,7 @@ def test_a_notice_file_that_cannot_be_removed_does_not_stop_the_start(execdir, m
     node = _Node(opts={"inf": str(execdir / "inf")})
     os.mkfifo(execdir / "inf")
     node.log.addHandler(caplog.handler)
-    monkeypatch.setattr(fbp.FBPProcess, "_notice_path", lambda self: str(execdir / "notice"))
+    monkeypatch.setattr(fbp.FBPProcess, "_get_notice_path", lambda self: str(execdir / "notice"))
     _fail_on_notice_file(monkeypatch, "remove")
 
     thread = _run_until_started(node)
@@ -319,7 +319,7 @@ def test_what_the_startup_sets_is_there_once_the_node_runs(execdir):
 
 
 class _Miswired(_Portless):
-    def _wiring_problem(self):
+    def _find_wiring_problem(self):
         return "no output port outrequests"
 
 

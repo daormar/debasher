@@ -201,7 +201,7 @@ def test_a_pfile_option_that_is_not_found_stops_the_node(outdir):
 def test_the_process_option_takes_the_place_of_process(outdir):
     node = _node(_Launcher, {"requests": "/dev/null", "process": "align"})
     assert node.PROCESS == "align"
-    assert node._node_info_extra()["launcher"]["process"] == "align"
+    assert node._get_node_info_extra()["launcher"]["process"] == "align"
     assert _node(_ProcessLauncher, {"requests": "/dev/null", "process": "sort"}).PROCESS == "sort"
     assert _node(_ProcessLauncher).PROCESS == "align"
     assert _node().PROCESS is None
@@ -629,10 +629,10 @@ def test_the_node_info_of_a_launcher_node_names_its_batch_runs(outdir):
         RUNS_ROOT = "runs"
 
     node = _node(Rooted)
-    assert node._node_info_extra() == {
+    assert node._get_node_info_extra() == {
         "launcher": {"runs_root": os.path.abspath("runs"), "process": "align"}
     }
-    assert _node()._node_info_extra() == {"launcher": {"runs_root": str(outdir), "process": None}}
+    assert _node()._get_node_info_extra() == {"launcher": {"runs_root": str(outdir), "process": None}}
     assert node._RUNTIME_CLASS == "ProgramLauncher"
 
 
@@ -647,7 +647,7 @@ def test_the_runsdir_option_gives_the_runs_root(outdir, tmp_path):
     assert (runs / "a" / "launch.json").exists()
     assert not (outdir / "a").exists()
     assert not (tmp_path / "class_runs" / "a").exists()
-    assert node._node_info_extra()["launcher"]["runs_root"] == str(runs)
+    assert node._get_node_info_extra()["launcher"]["runs_root"] == str(runs)
 
 
 def test_without_the_runsdir_option_the_runs_root_is_runs_root_or_the_output_directory(outdir, tmp_path):
@@ -827,5 +827,5 @@ def test_a_launcher_without_an_input_port_says_so(outdir):
     class Unwired(_Launcher):
         INPUT_PORTS = []
 
-    assert _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})._wiring_problem() is None
-    assert Unwired(opts={})._wiring_problem().startswith("no input port")
+    assert _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})._find_wiring_problem() is None
+    assert Unwired(opts={})._find_wiring_problem().startswith("no input port")

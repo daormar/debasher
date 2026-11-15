@@ -64,7 +64,7 @@ def test_load_latest_checkpoint_returns_none_when_no_checkpoints_dir_exists(exec
 
 def test_load_latest_checkpoint_returns_none_when_the_dir_is_empty(execdir):
     proc = _Node(opts={})
-    os.makedirs(proc._checkpoints_dir())
+    os.makedirs(proc._get_checkpoints_dir())
     assert proc._load_latest_checkpoint() is None
 
 
@@ -86,7 +86,7 @@ def _save_valid_then_edit_newer(proc, edit):
     """
     proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={"marker": "old"}))
     proc._save_checkpoint(lib._Checkpoint(epoch=1, node_state={"marker": "new"}))
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "1.json")
+    checkpoint_path = os.path.join(proc._get_checkpoints_dir(), "1.json")
     with open(checkpoint_path) as f:
         data = json.load(f)
     edit(data)
@@ -405,7 +405,7 @@ def test_write_control_ports_file_lists_each_ones_fifo_path(execdir):
 
     proc._write_control_ports_file()
 
-    with open(proc._control_ports_path()) as f:
+    with open(proc._get_control_ports_path()) as f:
         assert f.read() == "/some/fifo/path\n"
 
 
@@ -414,7 +414,7 @@ def test_write_control_ports_file_is_empty_when_there_are_none(execdir):
 
     proc._write_control_ports_file()
 
-    with open(proc._control_ports_path()) as f:
+    with open(proc._get_control_ports_path()) as f:
         assert f.read() == ""
 
 
@@ -422,7 +422,7 @@ def test_start_threads_writes_the_control_ports_file(execdir):
     proc = _Node(opts={})
     try:
         proc.start_threads()
-        assert os.path.exists(proc._control_ports_path())
+        assert os.path.exists(proc._get_control_ports_path())
     finally:
         proc.stop_threads(close=False)
 

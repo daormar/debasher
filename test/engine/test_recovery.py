@@ -473,7 +473,7 @@ _A_ROUND_OPENING_BETWEEN_TWO_CLOSES = [
 
 
 def _read_checkpoint(node, epoch):
-    with open(os.path.join(node._checkpoints_dir(), f"{epoch}.json")) as f:
+    with open(os.path.join(node._get_checkpoints_dir(), f"{epoch}.json")) as f:
         return json.load(f)
 
 
@@ -550,7 +550,7 @@ def test_a_checkpoint_holds_the_state_of_its_capture_when_the_hook_returns_the_o
     _process(live, [_data("a", 1), _marker("a"), _data("b", 5), _marker("b")])
     _crash(live)
 
-    with open(os.path.join(live._checkpoints_dir(), "0.json")) as f:
+    with open(os.path.join(live._get_checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["capture_pos"] == 2
     assert checkpoint["node_state"] == {
@@ -698,7 +698,7 @@ def test_the_trigger_of_a_supervisor_relaunched_after_a_recovery_still_reaches_t
         with open(opts["commands"], "w") as w:
             w.write("\n" + lib.encode_hello() + "\n" + lib.encode_interact("start_snapshot") + "\n")
         # The round opens and, with nothing else to wait for, closes: its checkpoint is written.
-        assert _wait_until(lambda: os.path.exists(os.path.join(node._checkpoints_dir(), "0.json")))
+        assert _wait_until(lambda: os.path.exists(os.path.join(node._get_checkpoints_dir(), "0.json")))
     finally:
         node._stop_requested.set()
         runner.join(5)
@@ -717,7 +717,7 @@ def test_a_node_that_has_halted_starts_no_more_rounds(tmp_path):
 
     assert live._halted.is_set()
     assert live._round is None
-    assert not os.path.exists(os.path.join(live._checkpoints_dir(), "1.json"))
+    assert not os.path.exists(os.path.join(live._get_checkpoints_dir(), "1.json"))
 
 
 # --- a relaunched node holds its fifos while it recovers ---------------------

@@ -23,7 +23,7 @@ def execdir(tmp_path, monkeypatch):
     return tmp_path
 
 
-# --- _checkpoints_dir ------------------------------------------------
+# --- _get_checkpoints_dir ------------------------------------------------
 
 
 def test_checkpoints_dir_requires_the_env_var(monkeypatch):
@@ -31,12 +31,12 @@ def test_checkpoints_dir_requires_the_env_var(monkeypatch):
     proc = _Node(opts={"x": "/dev/null"})
 
     with pytest.raises(RuntimeError):
-        proc._checkpoints_dir()
+        proc._get_checkpoints_dir()
 
 
 def test_checkpoints_dir_is_a_checkpoints_subdir_of_the_execdir(execdir):
     proc = _Node(opts={"x": "/dev/null"})
-    assert proc._checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
+    assert proc._get_checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
 
 
 def test_a_process_that_is_not_an_array_names_its_files_without_an_index(execdir, monkeypatch):
@@ -45,9 +45,9 @@ def test_a_process_that_is_not_an_array_names_its_files_without_an_index(execdir
     proc = _Node(opts={"x": "/dev/null"})
 
     assert proc._get_task_idx() is None
-    assert proc._checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
-    assert proc._halted_marker_path() == os.path.join(str(execdir), "halted")
-    assert proc._control_ports_path() == os.path.join(str(execdir), "control_ports")
+    assert proc._get_checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
+    assert proc._get_halted_marker_path() == os.path.join(str(execdir), "halted")
+    assert proc._get_control_ports_path() == os.path.join(str(execdir), "control_ports")
 
 
 def test_a_task_of_an_array_adds_its_index_to_every_file_it_keeps(execdir, monkeypatch):
@@ -102,7 +102,7 @@ def test_save_checkpoint_leaves_no_temp_file_behind(execdir):
     proc = _Node(opts={"x": "/dev/null"})
     proc._save_checkpoint(lib._Checkpoint(epoch=0, node_state={}))
 
-    names = os.listdir(proc._checkpoints_dir())
+    names = os.listdir(proc._get_checkpoints_dir())
     assert names == ["0.json"]
 
 
@@ -119,7 +119,7 @@ def test_save_checkpoint_prunes_older_epochs_beyond_retention(execdir):
     for epoch in range(5):
         proc._save_checkpoint(lib._Checkpoint(epoch=epoch, node_state={}))
 
-    names = sorted(os.listdir(proc._checkpoints_dir()))
+    names = sorted(os.listdir(proc._get_checkpoints_dir()))
     assert names == ["3.json", "4.json"]
 
 
@@ -130,7 +130,7 @@ def test_on_epoch_closed_writes_a_checkpoint(execdir):
     proc = _Node(opts={"x": "/dev/null"})
     proc._on_interact({"command": "start_snapshot", "args": {}})
 
-    checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+    checkpoint_path = os.path.join(proc._get_checkpoints_dir(), "0.json")
     assert os.path.exists(checkpoint_path)
     with open(checkpoint_path) as f:
         data = json.load(f)
@@ -174,11 +174,11 @@ def test_on_epoch_closed_sets_halted_event_only_when_halt_is_true(execdir):
 def test_on_epoch_closed_writes_the_halted_marker_only_when_halt_is_true(execdir):
     proc = _Node(opts={"x": "/dev/null"})
     proc._on_interact({"command": "start_snapshot", "args": {}})
-    assert not os.path.exists(proc._halted_marker_path())
+    assert not os.path.exists(proc._get_halted_marker_path())
 
     proc2 = _Node(opts={"x": "/dev/null"})
     proc2._on_interact({"command": "shutdown", "args": {}})
-    with open(proc2._halted_marker_path()) as f:
+    with open(proc2._get_halted_marker_path()) as f:
         assert f.read() == "0"
 
 
@@ -187,7 +187,7 @@ def test_the_halted_marker_names_the_epoch_of_the_round_that_wrote_it(execdir):
     proc._last_epoch = 4
     proc._on_interact({"command": "shutdown", "args": {}})
 
-    with open(proc._halted_marker_path()) as f:
+    with open(proc._get_halted_marker_path()) as f:
         assert f.read() == "5"
 
 

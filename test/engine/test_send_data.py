@@ -230,7 +230,7 @@ def test_a_capture_takes_the_sender_counters_at_that_instant_and_the_checkpoint_
     assert proc._round.capture.out_seq == {"outf": 3}
 
     proc._close_round()
-    with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
+    with open(os.path.join(proc._get_checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["out_seq"] == {"outf": 3}
 
@@ -255,7 +255,7 @@ def test_the_checkpoint_reflects_the_counters_at_capture_not_what_is_sent_while_
     assert proc._round.capture.out_seq == {"outf": 2}
 
     proc._close_round()
-    with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
+    with open(os.path.join(proc._get_checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["out_seq"] == {"outf": 2}
 

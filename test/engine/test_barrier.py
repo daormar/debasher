@@ -772,8 +772,8 @@ def test_a_node_that_has_halted_ignores_a_trigger_but_still_closes_the_round_of_
         proc._on_barrier("b", {"epoch": epoch, "halt": halt})
         assert proc._round is None
 
-    assert sorted(os.listdir(proc._checkpoints_dir())) == ["0.json", "1.json", "2.json"]
-    with open(proc._halted_marker_path()) as f:
+    assert sorted(os.listdir(proc._get_checkpoints_dir())) == ["0.json", "1.json", "2.json"]
+    with open(proc._get_halted_marker_path()) as f:
         assert f.read() == "2"
 
 

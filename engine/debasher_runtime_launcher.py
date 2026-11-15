@@ -442,7 +442,7 @@ class ProgramLauncher(FBPProcess):
     def _bookkeeping_path(self, *names):
         return os.path.join(self._outdir(), _BOOKKEEPING_DIR, *names)
 
-    def _node_info_extra(self):
+    def _get_node_info_extra(self):
         """What debasher_inspect_resident needs to find the batch runs of
         the node and tell their states."""
         return {
@@ -458,7 +458,7 @@ class ProgramLauncher(FBPProcess):
     def _run_dir(self, run):
         return os.path.join(self._runs_root(), run)
 
-    def _wiring_problem(self):
+    def _find_wiring_problem(self):
         if not [port for port in self.INPUT_PORTS if port not in self.CONTROL_PORTS]:
             return (
                 "no input port: the node never receives a request, so it never launches "

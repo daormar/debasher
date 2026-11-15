@@ -122,7 +122,7 @@ class _Round:
         return self.capture.epoch
 
 
-def _checkpoint_epochs(checkpoints_dir):
+def _list_checkpoint_epochs(checkpoints_dir):
     """The epochs of the checkpoint files `<epoch>.json` in `checkpoints_dir`."""
     epochs = []
     for name in os.listdir(checkpoints_dir):
@@ -146,7 +146,7 @@ def _checkpoint_epochs(checkpoints_dir):
 # checkpoint/recovery startup sequence (run()).
 
 
-def _missing_numbers(first, last):
+def _format_missing_numbers(first, last):
     """The sequence numbers from `first` to `last`, as an error names them:
     "4", or "4 to 7"."""
     return f"{first}" if first == last else f"{first} to {last}"
@@ -545,7 +545,7 @@ class FBPProcess(_PortWorker):
 
         # A node that lacks a port its class relies on runs, but does nothing
         # useful: it says so to whoever watches the program
-        problem = self._wiring_problem()
+        problem = self._find_wiring_problem()
         if problem is not None:
             self.log.warning("%s", problem)
             self.set_notice(problem, level="warning")
@@ -613,10 +613,10 @@ class FBPProcess(_PortWorker):
         that it reads is missing: a real incompatibility, never papered over by falling
         back to an older checkpoint or a default value.
         """
-        checkpoints_dir = self._checkpoints_dir()
+        checkpoints_dir = self._get_checkpoints_dir()
         if not os.path.isdir(checkpoints_dir):
             return None
-        epochs = _checkpoint_epochs(checkpoints_dir)
+        epochs = _list_checkpoint_epochs(checkpoints_dir)
         if not epochs:
             return None
 
@@ -656,7 +656,7 @@ class FBPProcess(_PortWorker):
             self._observe_thread = threading.Thread(target=self._observe_loop, name="observer")
             self._observe_thread.start()
 
-    def _control_ports_path(self):
+    def _get_control_ports_path(self):
         return self._get_execdir_entry("control_ports")
 
     def _write_control_ports_file(self):
@@ -672,17 +672,17 @@ class FBPProcess(_PortWorker):
         incarnation.
         """
         os.makedirs(self._get_execdir(), exist_ok=True)
-        path = self._control_ports_path()
+        path = self._get_control_ports_path()
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w") as f:
             for port in self.CONTROL_PORTS:
                 f.write(self.opts[port] + "\n")
         os.replace(tmp_path, path)
 
-    def _node_info_path(self):
+    def _get_node_info_path(self):
         return self._get_execdir_entry("node_info")
 
-    def _node_info_extra(self):
+    def _get_node_info_extra(self):
         """What a subclass of the runtime library adds to the node info file,
         under names of its own: nothing here."""
         return {}
@@ -712,13 +712,13 @@ class FBPProcess(_PortWorker):
                 "out_backlog_fail_bytes": self.OUT_BACKLOG_FAIL_BYTES,
                 "gil_switch_interval_secs": self.GIL_SWITCH_INTERVAL_SECS,
             },
-            **self._node_info_extra(),
+            **self._get_node_info_extra(),
             "updated_at": time.time(),
             "healthy": healthy,
             "out_backlog_bytes": out_backlog_bytes,
             "checkpoints_skipped_since": self._checkpoints_skipped_since,
         }
-        path = self._node_info_path()
+        path = self._get_node_info_path()
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w") as f:
             json.dump(info, f)
@@ -888,7 +888,7 @@ class FBPProcess(_PortWorker):
                     gap = ValueError(
                         f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
                         f"expected {last + 1}, got {envelope.seq}, "
-                        f"missing {_missing_numbers(last + 1, envelope.seq - 1)}"
+                        f"missing {_format_missing_numbers(last + 1, envelope.seq - 1)}"
                     )
                     return accepted_envelopes, close_checks, gap
                 self._accepted_seq[tag] = envelope.seq
@@ -943,7 +943,7 @@ class FBPProcess(_PortWorker):
                 raise ValueError(
                     f"{type(self).__name__}: {tag!r} closed for good after sending up "
                     f"to {claimed}, but only {accepted} was ever accepted here, "
-                    f"missing {_missing_numbers(accepted + 1, claimed)}"
+                    f"missing {_format_missing_numbers(accepted + 1, claimed)}"
                 )
 
     def _brain_loop(self):
@@ -1057,7 +1057,7 @@ class FBPProcess(_PortWorker):
             if notice is not _NO_NOTICE_REQUEST:
                 self._write_notice(notice)
 
-    def _notice_path(self):
+    def _get_notice_path(self):
         return self._get_execdir_entry("notice")
 
     def _write_notice(self, notice):
@@ -1071,7 +1071,7 @@ class FBPProcess(_PortWorker):
         """
         if notice == self._notice:
             return
-        path = self._notice_path()
+        path = self._get_notice_path()
         try:
             if notice is None:
                 self._remove_if_present(path)
@@ -1093,7 +1093,7 @@ class FBPProcess(_PortWorker):
         except FileNotFoundError:
             pass
 
-    def _wiring_problem(self):
+    def _find_wiring_problem(self):
         """
         What the ports of the node lack for its class to do its work, or
         None. A class of the runtime library that relies on a port by the
@@ -1105,7 +1105,7 @@ class FBPProcess(_PortWorker):
     def _remove_notice_file(self):
         with self._notice_lock:
             try:
-                self._remove_if_present(self._notice_path())
+                self._remove_if_present(self._get_notice_path())
             except OSError as exc:
                 self.log.warning("cannot remove the notice file: %r", exc)
             self._notice = None
@@ -1223,7 +1223,7 @@ class FBPProcess(_PortWorker):
         self._unwritten_bytes += len(line)
         self._unwritten_port_bytes[tag] = self._unwritten_port_bytes.get(tag, 0) + len(line)
 
-    def _close_payload(self, tag):
+    def _get_close_payload(self, tag):
         """
         `_out_seq[tag]`, 0 if this port never sent anything: by the time a
         writer thread is about to send CLOSE, the brain thread has already
@@ -1289,7 +1289,7 @@ class FBPProcess(_PortWorker):
     def _on_barrier(self, port_name, payload):
         """
         A marker settles its port in the round it belongs to. A marker of
-        another round opens it, if _round_may_open allows it, replacing the
+        another round opens it, if _may_round_open allows it, replacing the
         round that is open; otherwise it is ignored.
         """
         epoch = payload["epoch"]
@@ -1297,7 +1297,9 @@ class FBPProcess(_PortWorker):
 
         if self._round is not None and epoch == self._round.epoch:
             self._round.pending.discard(port_name)
-        elif self._round_may_open(epoch, halt, f"the marker of round {epoch} on port {port_name!r}"):
+        elif self._may_round_open(
+            epoch, halt, f"the marker of round {epoch} on port {port_name!r}"
+        ):
             self._switch_to_round(epoch, halt, arrived_port=port_name)
         else:
             return
@@ -1305,7 +1307,7 @@ class FBPProcess(_PortWorker):
         if not self._round.pending:
             self._close_round()
 
-    def _round_may_open(self, epoch, halt, what):
+    def _may_round_open(self, epoch, halt, what):
         """
         Whether a round that reaches this node, other than the open one, may
         open, replacing the open round if there is one. Rounds do not overlap
@@ -1372,7 +1374,7 @@ class FBPProcess(_PortWorker):
         """
         What an initiator does with a trigger, a shutdown when `halt`: opens
         the round of `epoch`, or of a number of its own when the trigger
-        carries none (see _own_round_epoch), replacing the open round when
+        carries none (see _get_own_round_epoch), replacing the open round when
         the rules of rounds allow it, and closes it at once when no port is
         pending. Ignores the trigger once the node has halted.
         """
@@ -1381,7 +1383,7 @@ class FBPProcess(_PortWorker):
             return
 
         if epoch is None:
-            epoch = self._own_round_epoch(halt)
+            epoch = self._get_own_round_epoch(halt)
             if epoch is None:
                 return
         elif self._round is not None and epoch == self._round.epoch:
@@ -1393,14 +1395,14 @@ class FBPProcess(_PortWorker):
         # initiator it reaches, so it follows the rule of a marker: ignoring a
         # newer one would leave this initiator alone on an older round while
         # the others open the new one.
-        elif not self._round_may_open(epoch, halt, f"the trigger of round {epoch}"):
+        elif not self._may_round_open(epoch, halt, f"the trigger of round {epoch}"):
             return
 
         self._switch_to_round(epoch, halt, arrived_port=None)
         if not self._round.pending:
             self._close_round()
 
-    def _own_round_epoch(self, halt):
+    def _get_own_round_epoch(self, halt):
         """
         The epoch of the round that a trigger without an epoch starts, the
         one after the last this node closed, abandoned or has open, or None
@@ -1518,10 +1520,10 @@ class FBPProcess(_PortWorker):
                 epoch,
             )
 
-    def _checkpoints_dir(self):
+    def _get_checkpoints_dir(self):
         return self._get_execdir_entry("checkpoints")
 
-    def _halted_marker_path(self):
+    def _get_halted_marker_path(self):
         return self._get_execdir_entry("halted")
 
     def _write_halted_marker(self, epoch):
@@ -1537,7 +1539,7 @@ class FBPProcess(_PortWorker):
         is ever meaningful.
         """
         os.makedirs(self._get_execdir(), exist_ok=True)
-        path = self._halted_marker_path()
+        path = self._get_halted_marker_path()
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w") as f:
             f.write(str(epoch))
@@ -1569,7 +1571,7 @@ class FBPProcess(_PortWorker):
             )
             return None
 
-        checkpoints_dir = self._checkpoints_dir()
+        checkpoints_dir = self._get_checkpoints_dir()
         os.makedirs(checkpoints_dir, exist_ok=True)
 
         final_path = os.path.join(checkpoints_dir, f"{epoch}.json")
@@ -1583,7 +1585,7 @@ class FBPProcess(_PortWorker):
         return final_path
 
     def _prune_old_checkpoints(self, checkpoints_dir):
-        epochs = sorted(_checkpoint_epochs(checkpoints_dir), reverse=True)
+        epochs = sorted(_list_checkpoint_epochs(checkpoints_dir), reverse=True)
         for old_epoch in epochs[self.CHECKPOINT_RETENTION :]:
             os.remove(os.path.join(checkpoints_dir, f"{old_epoch}.json"))
 

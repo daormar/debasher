@@ -124,7 +124,7 @@ def test_the_checkpoint_carries_only_what_is_still_unwritten_at_the_capture(fifo
         proc._round.pending = set()  # "inf" is /dev/null, no marker will ever arrive
         proc._close_round()
 
-        checkpoint_path = os.path.join(proc._checkpoints_dir(), "0.json")
+        checkpoint_path = os.path.join(proc._get_checkpoints_dir(), "0.json")
         with open(checkpoint_path) as f:
             checkpoint = json.load(f)
         assert checkpoint["out_backlog"] == captured
@@ -175,7 +175,7 @@ def test_over_the_cap_the_checkpoint_is_not_written(caplog):
     finally:
         proc.log.removeHandler(caplog.handler)
 
-    assert not os.path.exists(os.path.join(proc._checkpoints_dir(), "0.json"))
+    assert not os.path.exists(os.path.join(proc._get_checkpoints_dir(), "0.json"))
     assert "OUT_BACKLOG_MAX_BYTES" in caplog.text
 
 
@@ -192,9 +192,9 @@ def test_a_halt_over_the_cap_still_marks_the_node_halted():
     proc._on_interact({"command": "shutdown", "args": {}})
     proc._close_round()
 
-    assert not os.path.exists(os.path.join(proc._checkpoints_dir(), "0.json"))
+    assert not os.path.exists(os.path.join(proc._get_checkpoints_dir(), "0.json"))
     assert proc._halted.is_set()
-    with open(proc._halted_marker_path()) as f:
+    with open(proc._get_halted_marker_path()) as f:
         assert f.read() == "0"
 
 
@@ -298,7 +298,7 @@ def test_a_skipped_checkpoint_is_remembered_until_one_is_written():
     proc._on_written("outf", lib.encode_data("a longer payload than the cap allows", seq=1))
     proc._on_interact({"command": "start_snapshot", "args": {}})
     proc._close_round()
-    assert os.path.exists(os.path.join(proc._checkpoints_dir(), "2.json"))
+    assert os.path.exists(os.path.join(proc._get_checkpoints_dir(), "2.json"))
     assert proc._checkpoints_skipped_since is None
 
 

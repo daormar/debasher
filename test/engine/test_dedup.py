@@ -213,7 +213,7 @@ def test_a_capture_reflects_what_the_brain_has_processed_not_what_the_reader_has
     assert proc._round.capture.last_seq == {"a": 1}
 
     proc._close_round()
-    with open(os.path.join(proc._checkpoints_dir(), "0.json")) as f:
+    with open(os.path.join(proc._get_checkpoints_dir(), "0.json")) as f:
         checkpoint = json.load(f)
     assert checkpoint["last_seq"] == {"a": 1}
 
