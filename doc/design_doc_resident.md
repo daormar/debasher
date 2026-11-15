@@ -300,7 +300,14 @@ to it.
   only for an external actor with no other view of the node's state, such as
   the tool a stop signal comes from, to notice that this incarnation has closed
   the round of the halt, so that stopping it now loses nothing that a resume
-  does not bring back.
+  does not bring back. The file outlives the incarnation that wrote it.
+  Nothing removes it when the program is resumed. The next halt overwrites
+  it.
+- **halted marker baseline**: the content of a node's halted marker when
+  `debasher_stop_resident` starts, before it triggers the halt, or `-1` if the
+  node has none. A halted marker belongs to this halt only once it holds an
+  epoch past its baseline. A marker left by an earlier halt, already resumed,
+  says nothing about this one.
 - **stop signal**: `SIGTERM`, sent to a node's whole process group (the same
   group `debasher_stop` already reaches with `SIGKILL`, see
   `debasher::_stop_pid`), which is what actually ends a node's `run()`
@@ -308,15 +315,17 @@ to it.
   `_on_stop_signal`, has noted the signal). Unlike a halt closing its round,
   receiving one is not conditional on anything: a node that never halted stops
   on one just the same. Nothing in `FBPProcess` decides when to send it: that is
-  external, by design, typically once every node's halted marker exists.
+  external, by design, typically once every node's halted marker has gone past
+  its baseline.
   `Supervisor` stops on one too (see the "Clean-completion detection"
   subsection).
 - **`debasher_stop_resident`**: the tool that actually sends the stop signal
   in a real program, the graceful counterpart to `debasher_stop` (see
   "`debasher_stop_resident`: the graceful stop tool" for the full sequence).
-  Waits for every node's halted marker, then signals each; stops a
-  `Supervisor`, if the program has one, before touching any node it watches;
-  falls back to `debasher_stop`'s hard kill past its own `--timeout`.
+  Stops a `Supervisor`, if the program has one, before the tool triggers the
+  halt. Then waits for every node's halted marker to go past its baseline, and
+  signals each node. Falls back to `debasher_stop`'s hard kill past its own
+  `--timeout`.
 - **`debasher_snapshot_resident`**: the tool that starts a snapshot in a
   running program from outside it, with or without a `Supervisor`, once or
   every given number of seconds (see "`debasher_snapshot_resident`: rounds
@@ -858,10 +867,11 @@ authors" (a deterministic `process_data`, idempotent effects outside the graph).
   every later trigger, so a node that is not an initiator and crashes while
   its halt is open never halts, while every other node does.
   `debasher_stop_resident`'s `--timeout` bounds the wait for the halted
-  markers whatever the reason one never appears, then falls back to the hard
-  kill of `debasher_stop` and reports it with its own exit code (see "Failing
-  loudly instead of retrying"). Making the case recoverable needs a round's
-  partial progress to be durable, which is not designed.
+  markers whatever the reason one never goes past its baseline, then falls
+  back to the hard kill of `debasher_stop` and reports it with its own exit
+  code (see "Failing loudly instead of retrying"). Making the case
+  recoverable needs a round's partial progress to be durable, which is not
+  designed.
 - **A node that crashes again right after every relaunch** is not retried
   forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
   the escalation applies.
@@ -1946,8 +1956,9 @@ event itself (`_wait_for_stop`), which wakes whatever else waits on it, such as
 `sleep()`: a stop is seen at most that much later. When to send that signal is
 decided outside `FBPProcess`, by design: `debasher_stop_resident` sends it (see
 "`debasher_stop_resident`: the graceful stop tool"), typically once the halted
-marker of every node exists, but nothing in the node requires that, or requires
-a halt to have happened at all.
+marker of every node has gone past its baseline (see halted marker baseline in
+the Glossary), but nothing in the node requires that, or requires a halt to
+have happened at all.
 
 A halt sends no `CLOSE`, and neither does any other stop signal: `run()` always
 calls `stop_threads(close=False)` once its wait on `_stop_requested` returns.
@@ -2975,18 +2986,19 @@ finishes for good" in Future work).
 Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
 (see the Contract's failure model), in a program without a `Supervisor`, and
 during a graceful stop, since `debasher_stop_resident` stops the `Supervisor`
-first (a crash during a halt is already outside the guarantees, see "A crash
-while a round is open" in the Contract's limits); nor when the `Supervisor` is
-given the flag `-no-hold-fifos`, with which it holds nothing and logs a warning
-that says what is at stake. Its module offers the flag as an option of the
-command line of the program, a flag like any other (`explain_flag`,
-`opt_is_non_mandatory_cmdline`, `define_cmdline_flag_if_given`), so that a run
-can choose; the chaos test uses it to reach the limit it would otherwise never
-reach. The flag reaches the `Supervisor` only through an option of its module;
-a module that does not define it gives no way to turn the holding off, and its
-`Supervisor` holds the FIFOs in every run. Each held FIFO takes one descriptor,
-which the `Supervisor` counts in the limit it raises before it opens anything
-(see "Computational specifications of a resident process").
+before it triggers the halt (a crash during a halt is already outside the
+guarantees, see "A crash while a round is open" in the Contract's limits); nor
+when the `Supervisor` is given the flag `-no-hold-fifos`, with which it holds
+nothing and logs a warning that says what is at stake. Its module offers the
+flag as an option of the command line of the program, a flag like any other
+(`explain_flag`, `opt_is_non_mandatory_cmdline`,
+`define_cmdline_flag_if_given`), so that a run can choose; the chaos test uses
+it to reach the limit it would otherwise never reach. The flag reaches the
+`Supervisor` only through an option of its module; a module that does not define
+it gives no way to turn the holding off, and its `Supervisor` holds the FIFOs in
+every run. Each held FIFO takes one descriptor, which the `Supervisor` counts in
+the limit it raises before it opens anything (see "Computational specifications
+of a resident process").
 
 `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
 node opens them, with a single `SIGKILL`, at random moments and with lines
@@ -3124,8 +3136,8 @@ event, `_all_resolved`, which is set in three cases: by the checker thread once
 every node is resolved, by `run()` itself once the handler has noted a stop
 signal, and by `_run_guarded` when a thread of the `Supervisor` dies; `run()`
 tells the last apart by `_thread_error`. The signal lets a tool that stops the
-program gracefully end the `Supervisor` first, before it touches any node, so
-that the `Supervisor` cannot relaunch one of them under it (see
+program gracefully end the `Supervisor` before it triggers the halt, so that
+the `Supervisor` cannot relaunch a node under it (see
 "`debasher_stop_resident`").
 
 ## Relaunching a downed node
@@ -3353,7 +3365,7 @@ halts a resident program in an ordered way (see "Ordered shutdown"), so that
 every node can resume where it stopped, and only then stops its processes. It
 relies on the `Supervisor` stopping on a stop signal (see "Clean-completion
 detection"). The section goes through the options of the tool, how it finds the
-nodes of the program, the six steps of the stop, and the stop signal that it
+nodes of the program, the seven steps of the stop, and the stop signal that it
 sends.
 
 ```
@@ -3385,11 +3397,11 @@ wait forever on it.
   excludes one by hand wants.
 - `--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the
   whole graceful attempt. Past it, the tool falls back to
-  `debasher_stop -d <outdir>`, a hard kill of the entire program. So the tool
-  always ends the program one way or another, and never hangs indefinitely by
-  itself (see "Failing loudly instead of retrying" for how it reports the
-  fallback).
-- `--keep-supervisor` skips stopping the program's `Supervisor`, the first step
+  `debasher_stop -d <outdir>`, a hard kill of the entire program. So the tool,
+  once it has found the nodes, always ends the program one way or another. It
+  never hangs indefinitely by itself (see "Failing loudly instead of retrying"
+  for how it reports the fallback).
+- `--keep-supervisor` skips stopping the program's `Supervisor`, the third step
   of the stop below. It is also for the escalation, which calls this tool from
   a thread of the very `Supervisor` process that the tool would otherwise
   target. "Escalation on a permanent node failure" says why that specifically
@@ -3408,27 +3420,36 @@ Every step of the stop reads a task's own files: its `.id` and `.finished`
 ports file (see execdir in the Glossary). Since the escalation names the one
 task it gave up on, the other tasks of the same array are still stopped.
 
-The stop goes in six steps:
+The stop goes in seven steps:
 
-1. If the program has a `Supervisor` and `--keep-supervisor` was not given,
-   the tool stops it first, with a stop signal to its whole process group (see
-   below), and waits for its own `.finished`, before touching any node that it
-   watches. This is why the `Supervisor` stops on a stop signal of its own (see
-   "Clean-completion detection"), and it is what keeps the tool from racing a
-   relaunch that it did not ask for.
-2. It records each node's halted marker as it stands right now, its content or
-   `-1` if it is absent: the baseline that a fresh one has to beat.
-3. It writes `shutdown` into every node's own control ports, listed in its
+1. It records the halted marker baseline of each node (see the Glossary). It
+   does so first, before it triggers the halt. A node whose round closed before
+   the record would show its fresh marker as the baseline. The wait of step 5
+   would then last until the deadline and end in the hard kill.
+2. If `--kill` was given, it kills the nodes that it names.
+3. If the program has a `Supervisor` and `--keep-supervisor` was not given,
+   the tool stops it, with a stop signal to its whole process group (see
+   below). Then it waits for the `Supervisor`'s `.finished`. The `Supervisor`
+   stops on a stop signal for this reason (see "Clean-completion detection").
+   Stopping it keeps it from relaunching a node that the tool is about to stop.
+4. It writes `shutdown` into every node's own control ports, listed in its
    control ports file (see the Glossary). Most nodes have none, and the round
    reaches them from elsewhere in the graph. The trigger is numbered with the
    time in milliseconds (see numbered trigger in the Glossary), so that every
    initiator halts in the same round.
-4. It waits for every node's halted marker to go past its own baseline, never
-   for the marker to exist: a node halted in a previous, already resumed cycle
-   would already show one, which says nothing about this run.
-5. It reads every node's `.id` again, not reusing what step 1 or the discovery
-   of the nodes saw, and sends a stop signal to each node that still runs.
-6. It waits for every node's own `.finished`.
+5. It waits for every node's halted marker to go past its baseline. It never
+   waits for the marker to exist: a node that halted in an earlier halt,
+   already resumed, would already show one.
+6. It reads every node's `.id` again, not reusing any read earlier. It sends
+   a stop signal to each node that still runs.
+7. It waits for every node's own `.finished`.
+
+The same deadline, from `--timeout`, bounds the finding of the nodes and every
+step. A step from the third on that fails sends the tool to the fallback at
+once, without waiting for the deadline. One such failure is a trigger that
+cannot be written within 5 seconds, as when a control port fed from outside has
+no reader. A failure while finding the nodes, such as a process whose script
+never comes, ends the tool with 1 and an error, with no fallback.
 
 A stop signal is `SIGTERM` to the whole process group (`kill -TERM -- "-$pid"`,
 `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of

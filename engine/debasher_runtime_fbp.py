@@ -439,8 +439,8 @@ class FBPProcess(_PortWorker):
         # Set by run() once the handler of SIGTERM has noted a stop (see
         # _wait_for_stop): the actual "stop now" signal that run() waits
         # on, decided entirely outside this node, typically by an external
-        # tool once every node's halted marker exists (see "Ordered
-        # shutdown" and "`debasher_stop_resident`" in
+        # tool once every node's halted marker has gone past its baseline
+        # (see "Ordered shutdown" and "`debasher_stop_resident`" in
         # doc/design_doc_resident.md).
         self._stop_requested = threading.Event()
         # Whether the node is replaying its input log (see
