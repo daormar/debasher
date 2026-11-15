@@ -3339,139 +3339,170 @@ what they need to find the nodes of a program, and the first two what they
 need to write a trigger into their control ports
 (`engine/debasher_lib_resident_tools.sh`).
 
+The sections that follow take the tools in that order. Each one says what its
+tool is for and how it is called, and then goes through what the tool does,
+step by step where the order matters, and, for the tools that refuse some
+programs, when they refuse.
+
 ## `debasher_stop_resident`: the graceful stop tool
 
-The graceful counterpart to `debasher_stop`, for a resident program
-specifically: it halts the program in an ordered way (see "Ordered shutdown")
-and then stops its processes. It relies on the `Supervisor` stopping on a stop
-signal (see "Clean-completion detection").
+This section is about the graceful counterpart to `debasher_stop`. The tool
+halts a resident program in an ordered way (see "Ordered shutdown"), so that
+every node can resume where it stopped, and only then stops its processes. It
+relies on the `Supervisor` stopping on a stop signal (see "Clean-completion
+detection"). The section goes through the options of the tool, how it finds the
+nodes of the program, the six steps of the stop, and the stop signal that it
+sends.
 
-- **Usage: `debasher_stop_resident -d <outdir>`, with the options
-  `[-x <name>[,<name>...]]`, `[--kill <name>[,<name>...]]`, `[--timeout <secs>]`
-  and `[--keep-supervisor]`.** `-d` is the program's own output directory, same
-  as every other engine tool that operates on one. `-x` names nodes to leave
-  alone entirely (not waited for, not signalled), each a process name (every
-  task, if it is an array) or `<process_name>:<idx>` (one task of an array;
-  `<process_name>_<idx>` would be ambiguous with a process whose name ends that
-  way): for `on_node_permanently_failed`'s own use (see "Escalation on a
-  permanent node failure"), which must not wait forever on a node it has already
-  given up on. `--kill` names nodes to kill, with `SIGKILL` to the process group
-  of each that still runs (`debasher::_stop_pid`, after
-  `debasher::_builtin_sched_get_running_task_pid`, so that a process that got
-  the PID of an ended task is never killed), before the graceful stop:
-  `<process>` for a process of one task, `<process>:<idx>` for a task. The
-  escalation gives the node it gave up on to both `-x` and `--kill`, since that
-  node may still hang in its startup; `-x` alone leaves a node running, which is
-  what a user who excludes one by hand wants. `--timeout` (default 60, the same
-  as `FORCE_STOP_TIMEOUT_SECS`) bounds the whole graceful attempt; past it,
-  falls back to `debasher_stop -d <outdir>` (a hard kill of the entire program),
-  so this always ends the program one way or another, never hangs indefinitely
-  by itself. `--keep-supervisor` skips stopping the program's `Supervisor` (step
-  1 of the sequence below), also for `on_node_permanently_failed`'s own use: it
-  calls this tool from a thread of the very `Supervisor` process it would
-  otherwise target (see "Escalation on a permanent node failure" for why that
-  specifically must not happen, not just should not).
-- **Finds the program's nodes and its `Supervisor` (if any) the same way
-  `debasher::_validate_resident_program_processes` does**: loads the module,
-  iterates `DEBASHER_PROGRAM_PROCESSES`, and classifies each with
-  `debasher::_classify_resident_process_role`. An array process is one node
-  per task, as a `Supervisor`'s `NODE_PORTS` names it, and as many as the
-  `DEBASHER_NUM_TASKS` line of the script that the scheduler wrote for the
-  process before launching any task, so that a task not started yet is
-  counted too. Every step below reads a task's
-  own files: its `.id` and `.finished` (`debasher::_get_array_taskid_filename`,
-  `debasher::_get_task_finished_filename`), its halted marker and its control
-  ports file (see execdir in the Glossary). The `Supervisor`'s escalation names
-  the one task it gave up on, so that the other tasks of the same array are
-  still stopped.
-- **Sequence:**
-  1. If the program has a `Supervisor` and `--keep-supervisor` was not given,
-     stop it first (a stop signal to its whole process group, as described
-     below) and wait for its own `.finished`, before touching any node it
-     watches: this is why the `Supervisor` stops on a stop signal of its own
-     (see "Clean-completion detection"), and it is what keeps this tool from
-     racing a relaunch it did not ask for.
-  2. Record each node's halted marker as it stands right now (its content,
-     or `-1` if absent): the baseline a fresh one has to beat.
-  3. Write `shutdown` into every node's own control ports (listed in its
-     control ports file, see the Glossary; most nodes have none, and the round
-     reaches them from elsewhere in the graph), numbered with the time in
-     milliseconds (see numbered trigger in the Glossary), so that every
-     initiator halts in the same round.
-  4. Wait for every node's halted marker to go past its own baseline (never
-     "exists": a node halted from a previous, already-resumed cycle would
-     already show one that means nothing about this run).
-  5. Re-read every node's `.id` (not reusing what step 1 or discovery already
-     saw) and send each one that still runs a stop signal.
-  6. Wait for every node's own `.finished`.
-- **A stop signal is `SIGTERM` to the whole process group
-  (`kill -TERM -- "-$pid"`, `debasher::_stop_pid_gracefully`, the `SIGTERM`
-  sibling of `debasher::_stop_pid`'s `SIGKILL`), never a lone pid.**
-  `debasher_builtin_sched::_launch` backgrounds a generated script as its own
-  process group leader (the pid in `.id`), but the process function that this
-  script runs (`debasher::_execute_task`) starts the Python interpreter as a
-  child process, so a resident process's own Python interpreter sits below that
-  pid, not at it. A single-pid `SIGTERM` would only reach the wrapper script,
-  which has no handler of its own and would die at once, orphaning the
-  interpreter, which would never receive anything and would run forever. So the
-  signal always targets the whole group, and the wrapper script itself ignores
-  `SIGTERM` at its own top level (`debasher_builtin_sched::_print_script_trap`,
-  `trap '' TERM`, the first thing `_create_script` writes into the generated
-  file) so it survives that same broadcast long enough to still write
-  `.finished` once its own child (the Python interpreter, or a stopped
-  `Supervisor`) actually exits. `SIGKILL`, used by `debasher_stop`'s hard kill,
-  cannot be trapped and is unaffected by any of this.
+The tool is called as `debasher_stop_resident -d <outdir>`, with the options
+`[-x <name>[,<name>...]]`, `[--kill <name>[,<name>...]]`, `[--timeout <secs>]`
+and `[--keep-supervisor]`. `-d` is the program's own output directory, the same
+as for every other engine tool that operates on one. The options are there for
+two callers: a user, who usually wants the whole program stopped, and the
+escalation of the `Supervisor` (`on_node_permanently_failed`, see "Escalation
+on a permanent node failure"), which has already given up on one node and must
+not wait forever on it.
+
+`-x` names nodes to leave alone entirely: they are neither waited for nor
+signalled. Each is a process name, which names every task if the process is an
+array, or `<process_name>:<idx>`, one task of an array (`<process_name>_<idx>`
+would be ambiguous with a process whose name ends that way). It lets
+`on_node_permanently_failed` leave out the node it gave up on, which could never
+halt. `--kill` names nodes to kill before the graceful stop, with `SIGKILL` to
+the process group of each that still runs (`debasher::_stop_pid`, after
+`debasher::_builtin_sched_get_running_task_pid`, so that a process that got the
+PID of an ended task is never killed): `<process>` for a process of one task,
+`<process>:<idx>` for a task. The escalation gives the node it gave up on to
+both `-x` and `--kill`, since that node may still hang in its startup; `-x`
+alone leaves a node running, which is what a user who excludes one by hand
+wants.
+
+`--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the whole
+graceful attempt. Past it, the tool falls back to `debasher_stop -d <outdir>`, a
+hard kill of the entire program, so it always ends the program one way or
+another and never hangs indefinitely by itself (see "Failing loudly instead of
+retrying" for how it reports the fallback). `--keep-supervisor` skips stopping
+the program's `Supervisor`, the first step of the stop below. It is also for the
+escalation, which calls this tool from a thread of the very `Supervisor` process
+that the tool would otherwise target; "Escalation on a permanent node failure"
+says why that specifically must not happen, not just should not.
+
+The tool finds the program's nodes and its `Supervisor`, if it has one, the same
+way `debasher::_validate_resident_program_processes` does: it loads the module,
+iterates `DEBASHER_PROGRAM_PROCESSES`, and classifies each process with
+`debasher::_classify_resident_process_role`. An array process is one node per
+task, as a `Supervisor`'s `NODE_PORTS` names it, and it has as many tasks as the
+`DEBASHER_NUM_TASKS` line of the script that the scheduler wrote for the process
+before launching any task says, so that a task not started yet is counted too.
+Every step of the stop reads a task's own files: its `.id` and `.finished`
+(`debasher::_get_array_taskid_filename`,
+`debasher::_get_task_finished_filename`), its halted marker and its control
+ports file (see execdir in the Glossary). Since the escalation names the one
+task it gave up on, the other tasks of the same array are still stopped.
+
+The stop goes in six steps:
+
+1. If the program has a `Supervisor` and `--keep-supervisor` was not given,
+   the tool stops it first, with a stop signal to its whole process group (see
+   below), and waits for its own `.finished`, before touching any node that it
+   watches. This is why the `Supervisor` stops on a stop signal of its own (see
+   "Clean-completion detection"), and it is what keeps the tool from racing a
+   relaunch that it did not ask for.
+2. It records each node's halted marker as it stands right now, its content or
+   `-1` if it is absent: the baseline that a fresh one has to beat.
+3. It writes `shutdown` into every node's own control ports, listed in its
+   control ports file (see the Glossary). Most nodes have none, and the round
+   reaches them from elsewhere in the graph. The trigger is numbered with the
+   time in milliseconds (see numbered trigger in the Glossary), so that every
+   initiator halts in the same round.
+4. It waits for every node's halted marker to go past its own baseline, never
+   for the marker to exist: a node halted in a previous, already resumed cycle
+   would already show one, which says nothing about this run.
+5. It reads every node's `.id` again, not reusing what step 1 or the discovery
+   of the nodes saw, and sends a stop signal to each node that still runs.
+6. It waits for every node's own `.finished`.
+
+A stop signal is `SIGTERM` to the whole process group (`kill -TERM -- "-$pid"`,
+`debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of
+`debasher::_stop_pid`'s `SIGKILL`), never to a lone PID. The reason is the shape
+of the processes of a task. `debasher_builtin_sched::_launch` backgrounds a
+generated script as the leader of its own process group (the PID in `.id`), but
+the process function that this script runs (`debasher::_execute_task`) starts
+the Python interpreter as a child process, so the interpreter of a resident
+process sits below that PID, not at it. A `SIGTERM` to that PID alone would
+only reach the wrapper script, which has no handler of its own and would die at
+once, orphaning the interpreter, which would never receive anything and would
+run forever.
+
+So the signal always targets the whole group, and the wrapper script itself
+ignores `SIGTERM` at its own top level
+(`debasher_builtin_sched::_print_script_trap`, `trap '' TERM`, the first thing
+`_create_script` writes into the generated file), so that it survives that same
+broadcast long enough to write `.finished` once its own child (the Python
+interpreter, or a stopped `Supervisor`) actually exits. `SIGKILL`, which the
+hard kill of `debasher_stop` uses, cannot be trapped and is unaffected by any
+of this.
 
 ## `debasher_snapshot_resident`: rounds from outside the program
 
-`debasher_snapshot_resident -d <outdir> [--timeout <secs> | --every <secs>]`
-(`engine/debasher_snapshot_resident.sh`, installed in `bin`) starts a snapshot
-in a running resident program. A node never starts a round on its own, and the
-`Supervisor` starts a snapshot only when a trigger reaches its manual trigger
-channel, so without this tool, or someone else writing triggers, a program
-closes no epoch, prunes nothing and ends at the size cap of its input logs
-(see "Pruning and the size cap").
+This section is about the tool that starts snapshots in a running resident
+program. A node never starts a round on its own, and the `Supervisor` starts a
+snapshot only when a trigger reaches its manual trigger channel, so without
+this tool, or someone else writing triggers, a program closes no epoch, prunes
+nothing and ends at the size cap of its input logs (see "Pruning and the size
+cap"). The section describes how the tool starts one round, how it waits for
+the round to close and what keeps a round from closing, the periodic mode, and
+the programs that the tool acts on.
 
-- **One round.** It writes `start_snapshot` into the control ports of every
-  node, as `debasher_stop_resident` writes `shutdown`, numbered with the time in
-  milliseconds (see numbered trigger in the Glossary), so that every initiator
-  opens the same round. With a `Supervisor`, the control port of an initiator is
-  the other end of an initiator port, and the tool writes into it next to the
-  `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so the two never
-  interleave. Without one, it is a fifo fed from outside. Every node of a
-  program that loads is reached from an initiator (see "Validation when the
-  program is loaded"), so the tool needs nothing else to reach every node.
-- **Waiting for the round to close.** It then waits, up to `--timeout`
-  seconds (60 by default), until every node has a checkpoint of that epoch or
-  of a newer one: a newer round replaces an open one, and its cut is as recent
-  a point to recover from. It prints the epoch and returns 0 once every node
-  has one. Otherwise it names the nodes that have none and returns 2
-  (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`), not 1, which is kept for
-  usage and setup errors. A round does not close at a node that is down or
-  stopped, nor at one that has a halt open, which ignores a snapshot, nor at
-  an initiator that has halted, which ignores the trigger, or at the nodes
-  that the round reaches only through one. It does not start when a trigger
-  cannot be written within 5 seconds (a control port fed from outside whose
-  node is down has no reader).
-  And a node closes it without a checkpoint when its outbound backlog is over
-  its cap (see "Checkpoint persistence").
-- **Periodically.** With `--every <secs>`, it starts a round every that many
-  seconds, and each round has until the next one to close: one that has not
-  closed by then is reported with a warning, and the next trigger replaces
-  it. The period has to be longer than a round, or rounds keep replacing each
-  other (see "A round that a newer one replaces" in the Contract's limits).
-  `--timeout` does not apply, and giving both is an error.
-- **Only a running program, and it ends with it.** It refuses a program none
-  of whose nodes is running. With `--every`, it checks every second whether
-  some node still is, and returns 0 once none is, after
-  `debasher_stop_resident`, a `Supervisor`'s escalation or `debasher_stop`.
-  It is a process outside the program: nothing relaunches it, and a program
-  that is resumed needs it started again.
+The tool is called as `debasher_snapshot_resident -d <outdir> [--timeout <secs>
+| --every <secs>]` (`engine/debasher_snapshot_resident.sh`, installed in
+`bin`). To start a round, it writes `start_snapshot` into the control ports of
+every node, as `debasher_stop_resident` writes `shutdown`, numbered with the
+time in milliseconds (see numbered trigger in the Glossary), so that every
+initiator opens the same round. With a `Supervisor`, the control port of an
+initiator is the other end of an initiator port, and the tool writes into it
+next to the `Supervisor`: a line of a trigger is shorter than `PIPE_BUF`, so
+the two never interleave. Without one, it is a fifo fed from outside. Every node
+of a program that loads is reached from an initiator (see "Validation when the
+program is loaded"), so the tool needs nothing else to reach every node.
+
+It then waits, up to `--timeout` seconds (60 by default), until every node has
+a checkpoint of that epoch or of a newer one: a newer round replaces an open
+one, and its cut is as recent a point to recover from. Once every node has one,
+the tool prints the epoch and returns 0. Otherwise it names the nodes that have
+none and returns 2 (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`), not 1, which
+is kept for usage and setup errors.
+
+Several things keep a round from closing. A round does not close at a node that
+is down or stopped, nor at one that has a halt open, which ignores a snapshot,
+nor at an initiator that has halted, which ignores the trigger, or at the nodes
+that the round reaches only through one. It does not start when a trigger cannot
+be written within 5 seconds (a control port fed from outside whose node is down
+has no reader). And a node closes it without a checkpoint when its outbound
+backlog is over its cap (see "Checkpoint persistence").
+
+With `--every <secs>`, the tool starts a round every that many seconds, and
+each round has until the next one to close: one that has not closed by then is
+reported with a warning, and the next trigger replaces it. The period has to be
+longer than a round, or rounds keep replacing each other (see "A round that a
+newer one replaces" in the Contract's limits). `--timeout` does not apply, and
+giving both is an error.
+
+The tool acts only on a running program, and it ends with it. It refuses a
+program none of whose nodes is running. With `--every`, it checks every second
+whether some node still is, and returns 0 once none is, after
+`debasher_stop_resident`, a `Supervisor`'s escalation or `debasher_stop`. It is
+a process outside the program: nothing relaunches it, and a program that is
+resumed needs it started again.
 
 ## `debasher_reset_resident`: a clean start
 
-`debasher_reset_resident -d <outdir> [--delete]`
-(`engine/debasher_reset_resident.sh`, installed in `bin`) resets a stopped
+This section is about the tool that takes a stopped resident program back to
+its first run. It says what the tool takes away, why it always resets the whole
+program, where what it takes away goes, and when it refuses.
+
+The tool is called as `debasher_reset_resident -d <outdir> [--delete]`
+(`engine/debasher_reset_resident.sh`, installed in `bin`). It resets a stopped
 resident program, so that the next `debasher_exec` on the same output directory
 starts every node as on its first run. A node keeps its state across runs in
 files that the engine does not reset (see "Ordered shutdown"): its checkpoints,
@@ -3479,24 +3510,33 @@ its input log and its halted marker, in its execdir (Glossary), and the output
 directory of its process. The tool takes all of them away, and the notice of the
 node with them (see "Notices"), for every task of every process, the
 `Supervisor` included, and leaves the output directory of each process empty, as
-the engine leaves it before a first run.
+the engine leaves it before a first run. What it does not reach is the files
+that a module writes outside the output directory of its process.
 
-- **The whole program, never one node.** A node that starts afresh numbers
-  its channels from the start again (G5), and a reader that kept its own
-  checkpoint would drop everything it sends as duplicates, having accepted
-  higher numbers before. Resetting a node would mean resetting its readers,
-  and theirs in turn.
-- **Set aside by default.** What it takes away is moved under
-  `__reset__/<timestamp>/` in the program's output directory, each path kept
-  relative to it (`__reset__/<timestamp>/__exec__/<process>/checkpoints`,
-  `__reset__/<timestamp>/<process>/...`), since a checkpoint that is lost
-  cannot be made again. `--delete` deletes it instead.
-- **Only a stopped program.** It refuses while any process of the program is
-  running, as `debasher_exec` does.
-- **What it does not reach**: the files that a module writes outside the
-  output directory of its process.
+It resets the whole program, never one node. A node that starts afresh numbers
+its channels from the start again (G5), and a reader that kept its own
+checkpoint would drop everything it sends as duplicates, having accepted
+higher numbers before. Resetting a node would mean resetting its readers, and
+theirs in turn.
+
+By default, what it takes away is set aside, not deleted, since a checkpoint
+that is lost cannot be made again. It is moved under `__reset__/<timestamp>/`
+in the program's output directory, each path kept relative to it
+(`__reset__/<timestamp>/__exec__/<process>/checkpoints`,
+`__reset__/<timestamp>/<process>/...`). `--delete` deletes it instead.
+
+The tool acts only on a stopped program: it refuses while any process of the
+program is running, as `debasher_exec` does.
 
 ## `debasher_inspect_resident`: what a node keeps
+
+This section is about the tool that shows what a node of a resident program
+keeps, to a person at the command line as well as to the web UI, which shows
+what it prints (see "Observing and talking to a live program" in
+`doc/design_doc_webui.md`). It describes the two forms of the tool and what the
+first one refuses, how the tool reads the files of a node without disturbing it,
+the node info file, which a node writes for this tool, and then each of its
+commands and its exit codes.
 
 ```
 debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>
@@ -3508,145 +3548,151 @@ one JSON object on its standard output, what one node of a resident program
 keeps in its execdir: its checkpoints, its input log, its halted marker, its
 node info file and its notice, and, for a launcher node, the state of its batch
 runs. The second form prints the notices of every node of the program at once.
-It serves a person at the command line as well as the web UI, which shows what
-it prints (see "Observing and talking to a live program" in
-`doc/design_doc_webui.md`).
 
-- **One node.** `-d`, `-p` and `-t` are those of `debasher_get_stdout`. The
-  tool loads the program from its output directory, as the other tools do,
-  and finds the number of tasks of the process in its script (see
-  "`debasher_stop_resident`: the graceful stop tool"). `-t` is required for an
-  array process, whose tasks are nodes of their own, and refused for any
-  other. The tool refuses a process that the program does not have, one that
-  was never launched on this output directory (it has no script), an index
-  that is not below the number of tasks, and the `Supervisor`, which keeps no
-  node state: what it knows is in its log, its scheduler output.
-- **It only reads.** It writes nothing, takes no lock and sends nothing to the
-  node, so it works the same on a live program as on a stopped one, and no
-  node ever waits for it. It reads each file by the rules with which the node
-  reads it when it recovers, with the code of the runtime library
-  (`debasher_runtime_inputlog.py`, `debasher_runtime_launcher.py`) rather than
-  a copy of those rules:
-  - a record of the input log counts only if its line ends in a newline, so
-    the torn tail that a crash left, or that a node writing at that moment
-    leaves, is not shown;
-  - a segment that is gone when the tool opens it, pruned by the node after
-    the tool listed the segments, is skipped;
-  - a checkpoint of another schema version is reported as such, with its
-    version, and nothing else of it is read.
-- **Each file whole, not a cut.** A node writes its checkpoints, its halted
-  marker, its node info file and its notice file into a temporary file renamed
-  into place, and appends whole lines to its input log, so the tool reads each
-  file as the node left it at some moment. It does not read them all at the same
-  moment, though: in a live node a round may close, or a segment be pruned,
-  between two of them. What it prints is the state of each file, not a
-  consistent state of the node.
-- **The node info file.** Part of what the tool shows lives only in the memory
-  of the node: the limits in force, which the class of the node and the
-  computational specifications of its process decide (see "Computational
-  specifications of a resident process"), and which only the code of the node
-  could tell from outside; and the size of the outbound backlog, whose copy in
-  a checkpoint is missing precisely when it grows too large (see "Checkpoint
-  persistence"). The node writes them into its node info file (see the
-  Glossary), a JSON object:
+In the first form, `-d`, `-p` and `-t` are those of `debasher_get_stdout`. The
+tool loads the program from its output directory, as the other tools do, and
+finds the number of tasks of the process in its script (see
+"`debasher_stop_resident`: the graceful stop tool"). `-t` is required for an
+array process, whose tasks are nodes of their own, and refused for any other.
+The tool refuses a process that the program does not have, one that was never
+launched on this output directory (it has no script), an index that is not
+below the number of tasks, and the `Supervisor`, which keeps no node state:
+what it knows is in its log, its scheduler output.
 
-  ```
-  {"runtime_class": "ProgramLauncher", "started_at": 1790000000.5,
-   "heartbeat_interval_secs": 5,
-   "limits": {"input_log_max_bytes": 104857600,
-              "out_backlog_max_bytes": 8388608,
-              "out_backlog_fail_bytes": 67108864,
-              "gil_switch_interval_secs": 0.0005},
-   "launcher": {"runs_root": "/data/out/launch", "process": null},
-   "updated_at": 1790000123.4, "healthy": true,
-   "out_backlog_bytes": {"outdone": 0},
-   "checkpoints_skipped_since": null}
-  ```
+The tool only reads. It writes nothing, takes no lock and sends nothing to the
+node, so it works the same on a live program as on a stopped one, and no node
+ever waits for it. It reads each file by the rules with which the node reads it
+when it recovers, with the code of the runtime library
+(`debasher_runtime_inputlog.py`, `debasher_runtime_launcher.py`) rather than a
+copy of those rules. A record of the input log counts only if its line ends in
+a newline, so the torn tail that a crash left, or that a node writing at that
+moment leaves, is not shown. A segment that is gone when the tool opens it,
+pruned by the node after the tool listed the segments, is skipped. A checkpoint
+of another schema version is reported as such, with its version, and nothing
+else of it is read.
 
-  - `runtime_class` is the class of the runtime library that the class of the
-    node derives from (`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`),
-    `started_at` the time at which this incarnation ended its startup, and
-    `launcher`, only for a launcher node, its runs root and its `PROCESS`,
-    which `runs` needs. The node writes these when its threads start, next to
-    its control ports file.
-  - The heartbeat thread writes the file again at every tick, whether the
-    program has a `Supervisor` or not, with the figures that change:
-    `updated_at`; `healthy`, whether every thread was alive at that tick,
-    which `debasher_status` cannot tell, since a node whose brain thread has
-    died still has a live process; `out_backlog_bytes`, the size of the
-    outbound backlog of each output port, which `send_data` and the writer
-    threads keep up to date together with the backlog, as they keep its
-    total, so that a tick does not go through the backlog; and
-    `checkpoints_skipped_since`, the epoch since which no checkpoint has been
-    written because of the size of the outbound backlog.
-  - Writing it costs a small file renamed into place every heartbeat
-    interval. It is not part of the state of the node: nothing in the node
-    reads it back, `debasher_reset_resident` leaves it, and every incarnation
-    writes it again. A node that is still replaying its input log has not
-    written it yet, and the file is that of its previous incarnation.
+What it prints is each file whole, not a cut of the node. A node writes its
+checkpoints, its halted marker, its node info file and its notice file into a
+temporary file renamed into place, and appends whole lines to its input log, so
+the tool reads each file as the node left it at some moment. It does not read
+them all at the same moment, though: in a live node a round may close, or a
+segment be pruned, between two of them. What it prints is the state of each
+file, not a consistent state of the node.
 
-The commands:
+### The node info file
 
-- **`summary`**: what the web UI shows first of a node, and what warns of a
-  coming failure.
-  - `task_state`: `finished` when the task has a `.finished`, whose `.id` is
-    then not asked about, otherwise `alive` when the process that the `.id` of
-    the task names (its PID with its start time) still runs, `down` when it has
-    an `.id`, and `not_launched` when it has no `.id` yet. These are the files
-    that `debasher_status` reads for a whole process, and in the same way.
-  - `checkpoints`: the epochs of the checkpoints that the node retains, oldest
-    first, each with the time at which it was written, and `capture_pos`, that
-    of the latest one.
-  - `halted_epoch`: the content of the halted marker, or `null` without one.
-  - `input_log`: its size on disk against `INPUT_LOG_MAX_BYTES`, its number of
-    segments, the positions of its first and its last complete records, and
-    `to_replay`, how many records lie above the `capture_pos` of the latest
-    checkpoint: what the node would replay if it were relaunched now. The last
-    position is read from the newest segment with a complete record, as the
-    node reads it when it recovers, never from the whole log.
-  - `node_info`: the node info file as the node last wrote it, with its age in
-    seconds, or `null` if the node has never written one. `stale` is true when
-    the file is older than two heartbeat intervals, as it is in a node that is
-    down, still replaying, or whose heartbeat thread has died.
-  - `notice`: the notice of the node (see "Notices"), its level, its text and
-    when it was set, or `null` without one.
-- **`checkpoint <epoch>`**: one checkpoint that the node retains: its path, the
-  time at which it was written, its schema version and `readable`, whether
-  that is the version of the runtime library. A readable one also gives
-  `capture_pos`, `closed_ports`, `out_seq`, `last_seq` and `node_state` whole,
-  and `channel_state` and `out_backlog` counted by port, with the number of
-  messages and their size in bytes, since they can be large: the path leads to
-  them whole. An epoch that the node does not retain, never written or pruned
-  since, is an error that names the epochs that it retains.
-- **`log [--port <port>] [--last <n>]`**: the latest `n` records of the input
-  log, 100 by default, or of one port with `--port`, in the order of their
-  positions, each with its position, its port, and the type, the sequence
-  number and the payload of its envelope, together with the `capture_pos` of
-  the latest checkpoint, which tells apart the records that a relaunch would
-  replay. The tool reads the segments from the newest, and stops once it has
-  `n` records. A line that ends in a newline but does not parse, which would
-  stop the recovery of the node, is not an error of the tool: it is shown in
-  its place, with its segment, its line number and why it does not parse,
-  since the tool shows the log and does not recover from it.
-- **`runs`**: for a launcher node only, its runs root and, in the order of
-  their positions, every batch run that it has registered: its position, its
-  name, its run directory, its state (`registered`, `running`, `finished`,
-  `failed` or `stopped`) and, once it has ended, its exit code. The
-  registrations come from `.launcher/registrations/` in the output directory
-  of the process, the runs root and `PROCESS` from the node info file, and the
-  state of each batch run from the rule that the node follows (see "Launching
-  from the queue on disk"), with the function that implements it. Only the
-  node acts on that state: the tool writes no exit code and launches nothing,
-  so a batch run that the rule finds ended is shown as ended before the node
-  has written its exit code. The rule asks `debasher_status` about some run
-  directories, which the tool does once for each, where the node spaces its
-  questions out, so `runs` takes longer with many batch runs in progress.
-- **`notices`**: with `-d` alone, since it covers the whole program, the notice
-  of every node that has one, sorted by the name of its process and by its task
-  index: its process, its task index (`null` except for a task of an array) and
-  its notice. The `Supervisor` is skipped, and so is a node without a notice or
-  not launched yet. It loads the program once and reads one small file for each
-  node, so the web UI can run it every time it reads the process statuses.
+Part of what the tool shows lives only in the memory of the node: the limits in
+force, which the class of the node and the computational specifications of its
+process decide (see "Computational specifications of a resident process"), and
+which only the code of the node could tell from outside; and the size of the
+outbound backlog, whose copy in a checkpoint is missing precisely when it grows
+too large (see "Checkpoint persistence"). The node writes them into its node
+info file (see the Glossary), a JSON object:
+
+```
+{"runtime_class": "ProgramLauncher", "started_at": 1790000000.5,
+ "heartbeat_interval_secs": 5,
+ "limits": {"input_log_max_bytes": 104857600,
+            "out_backlog_max_bytes": 8388608,
+            "out_backlog_fail_bytes": 67108864,
+            "gil_switch_interval_secs": 0.0005},
+ "launcher": {"runs_root": "/data/out/launch", "process": null},
+ "updated_at": 1790000123.4, "healthy": true,
+ "out_backlog_bytes": {"outdone": 0},
+ "checkpoints_skipped_since": null}
+```
+
+Some of its fields do not change during an incarnation. `runtime_class` is the
+class of the runtime library that the class of the node derives from
+(`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`), `started_at` the time
+at which this incarnation ended its startup, `heartbeat_interval_secs` and
+`limits` what their names say, and `launcher`, only for a launcher node, its
+runs root and its `PROCESS`, which `runs` needs. The node first writes the file
+when its threads start, next to its control ports file.
+
+The heartbeat thread writes it again, whole, at every tick, whether the program
+has a `Supervisor` or not, with the figures that change. `updated_at` is the
+time of the tick. `healthy` says whether every thread was alive at that tick,
+which `debasher_status` cannot tell, since a node whose brain thread has died
+still has a live process. `out_backlog_bytes` is the size of the outbound
+backlog of each output port, which `send_data` and the writer threads keep up to
+date together with the backlog, as they keep its total, so that a tick does not
+go through the backlog. `checkpoints_skipped_since` is the epoch since which no
+checkpoint has been written because of the size of the outbound backlog.
+
+Writing the file costs a small file renamed into place every heartbeat
+interval. It is not part of the state of the node: nothing in the node reads it
+back, `debasher_reset_resident` leaves it, and every incarnation writes it
+again. A node that is still replaying its input log has not written it yet, and
+the file is that of its previous incarnation.
+
+### Commands and exit codes of `debasher_inspect_resident`
+
+There are five commands: four on one node, `summary`, `checkpoint`, `log` and
+`runs`, and one on the whole program, `notices`.
+
+`summary` is what the web UI shows first of a node, and what warns of a coming
+failure. Its `task_state` is `finished` when the task has a `.finished`, whose
+`.id` is then not asked about, otherwise `alive` when the process that the
+`.id` of the task names (its PID with its start time) still runs, `down` when
+it has an `.id`, and `not_launched` when it has no `.id` yet. These are the
+files that `debasher_status` reads for a whole process, and in the same way.
+`checkpoints` gives the epochs of the checkpoints that the node retains, oldest
+first, each with the time at which it was written, and `capture_pos` that of the
+latest one. `halted_epoch` is the content of the halted marker, or `null`
+without one. `input_log` gives its size on disk against `INPUT_LOG_MAX_BYTES`,
+its number of segments, the positions of its first and its last complete
+records, and `to_replay`, how many records lie above the `capture_pos` of the
+latest checkpoint: what the node would replay if it were relaunched now. The
+last position is read from the newest segment with a complete record, as the
+node reads it when it recovers, never from the whole log. `node_info` is the
+node info file as the node last wrote it, with its age in seconds, or `null` if
+the node has never written one; `stale` is true when the file is older than two
+heartbeat intervals, as it is in a node that is down, still replaying, or whose
+heartbeat thread has died. `notice` is the notice of the node (see "Notices"),
+its level, its text and when it was set, or `null` without one.
+
+`checkpoint <epoch>` gives one checkpoint that the node retains: its path, the
+time at which it was written, its schema version and `readable`, whether that
+is the version of the runtime library. A readable one also gives `capture_pos`,
+`closed_ports`, `out_seq`, `last_seq` and `node_state` whole, and
+`channel_state` and `out_backlog` counted by port, with the number of messages
+and their size in bytes, since they can be large: the path leads to them whole.
+An epoch that the node does not retain, never written or pruned since, is an
+error that names the epochs that it retains.
+
+`log [--port <port>] [--last <n>]` gives the latest `n` records of the input
+log, 100 by default, or of one port with `--port`, in the order of their
+positions, each with its position, its port, and the type, the sequence number
+and the payload of its envelope, together with the `capture_pos` of the latest
+checkpoint, which tells apart the records that a relaunch would replay. The
+tool reads the segments from the newest, and stops once it has `n` records. A
+line that ends in a newline but does not parse, which would stop the recovery
+of the node, is not an error of the tool: it is shown in its place, with its
+segment, its line number and why it does not parse, since the tool shows the
+log and does not recover from it.
+
+`runs`, for a launcher node only, gives its runs root and, in the order of
+their positions, every batch run that it has registered: its position, its
+name, its run directory, its state (`registered`, `running`, `finished`,
+`failed` or `stopped`) and, once it has ended, its exit code. The registrations
+come from `.launcher/registrations/` in the output directory of the process,
+the runs root and `PROCESS` from the node info file, and the state of each
+batch run from the rule that the node follows (see "Launching from the queue on
+disk"), with the function that implements it. Only the node acts on that state:
+the tool writes no exit code and launches nothing, so a batch run that the rule
+finds ended is shown as ended before the node has written its exit code. The
+rule asks `debasher_status` about some run directories, which the tool does
+once for each, where the node spaces its questions out, so `runs` takes longer
+with many batch runs in progress.
+
+`notices` is given with `-d` alone, since it covers the whole program. It gives
+the notice of every node that has one, sorted by the name of its process and by
+its task index: its process, its task index (`null` except for a task of an
+array) and its notice. The `Supervisor` is skipped, and so is a node without a
+notice or not launched yet. It loads the program once and reads one small file
+for each node, so the web UI can run it every time it reads the process
+statuses.
 
 The tool ends with 0 once it has printed, and with 1, and a message, on an
 error of usage or setup: a program that is not a resident one, a process or an
