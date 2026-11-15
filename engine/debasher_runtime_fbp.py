@@ -436,8 +436,8 @@ class FBPProcess(_PortWorker):
         # opening another round in this incarnation (see _on_trigger); the
         # marker of a peer still opens one. Never itself stops a thread.
         self._halted = threading.Event()
-        # Set only by the SIGTERM handler run() installs (see
-        # _on_stop_signal): the actual "stop now" signal that run() waits
+        # Set by run() once the handler of SIGTERM has noted a stop (see
+        # _wait_for_stop): the actual "stop now" signal that run() waits
         # on, decided entirely outside this node, typically by an external
         # tool once every node's halted marker exists (see "Ordered
         # shutdown" and "`debasher_stop_resident`" in
@@ -573,7 +573,7 @@ class FBPProcess(_PortWorker):
         except BaseException:
             self.stop_threads(close=False)
             raise
-        self._stop_requested.wait()
+        self._wait_for_stop(self._stop_requested)
         # A halt is an orderly stop that the whole program is resumed from
         # later, not the end of this node. CLOSE is what a writer says when
         # it has finished for good, and a peer that read one at a halt would
@@ -583,17 +583,6 @@ class FBPProcess(_PortWorker):
         # external stop signal, which carries the same "come back later"
         # meaning regardless.
         self.stop_threads(close=False)
-
-    def _on_stop_signal(self, signum, frame):
-        """
-        The SIGTERM handler run() installs. Deliberately minimal (a signal
-        handler runs on the main thread, interrupting whatever bytecode was
-        executing there, so it must not touch a lock some other code might
-        already hold): only sets the event run() is waiting on. Actually
-        stopping every thread happens on run()'s own thread, after its wait
-        returns, same as it always has.
-        """
-        self._stop_requested.set()
 
     def _restore_checkpoint(self, checkpoint):
         """
@@ -1194,7 +1183,9 @@ class FBPProcess(_PortWorker):
         OUT_BACKLOG_FAIL_BYTES, fits under it, or once the node is told to
         stop.
         """
-        while not self._stop_requested.is_set():
+        # The replay runs on the main thread before run() waits for a stop,
+        # so a stop signal is looked at here too
+        while not (self._stop_requested.is_set() or self._stop_signaled):
             with self._out_backlog_lock:
                 if self._unwritten_bytes + size <= self.OUT_BACKLOG_FAIL_BYTES:
                     return

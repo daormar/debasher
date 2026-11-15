@@ -123,6 +123,9 @@ _READ_BLOCK_BYTES = 65536
 # How long a reader thread waits for data before it looks again whether its
 # node is stopping: the longest a stop waits for a reader of a quiet fifo.
 _READER_POLL_MS = 200
+# How long run() waits on its event before it looks whether a stop signal
+# arrived (see _PortWorker._wait_for_stop)
+_STOP_POLL_SECS = 0.2
 
 
 def _open_fifo_writer(path):
@@ -229,6 +232,9 @@ class _PortWorker:
         self._reader_threads = {}
         self._writer_threads = {}
         self._brain_thread = None
+        # Set by the handler of SIGTERM, a plain attribute and not an event,
+        # whose set() would take a lock (see _on_stop_signal)
+        self._stop_signaled = False
 
         # The fifo file descriptors of every port, opened by start_threads()
         # and closed by stop_threads() once the thread using them is gone:
@@ -416,6 +422,28 @@ class _PortWorker:
         for tag, option_name in self._output_ports().items():
             if tag not in self._writer_fds:
                 self._writer_fds[tag] = _open_fifo_writer(self.opts[option_name])
+
+    def _on_stop_signal(self, signum, frame):
+        """
+        The handler of SIGTERM that run() installs: notes that a stop was
+        asked for, and nothing else.
+        """
+        # A handler runs on the main thread between any two instructions,
+        # also while that thread holds the lock of an Event in wait() or
+        # set(): calling set() here would then wait for ever on that lock. So
+        # it takes no lock, and run() acts on the stop on its own thread (see
+        # _wait_for_stop).
+        self._stop_signaled = True
+
+    def _wait_for_stop(self, event):
+        """
+        Waits until `event` is set, or until a stop signal arrives, in which
+        case it sets `event` itself, so that whatever else waits on it wakes.
+        """
+        # A stop signal is seen at most one _STOP_POLL_SECS after it arrives
+        while not event.wait(_STOP_POLL_SECS):
+            if self._stop_signaled:
+                event.set()
 
     def start_threads(self):
         """

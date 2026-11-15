@@ -123,7 +123,10 @@ Once the processes have code, `validate_program` checks the whole program
 without running it. Running it (`run_program`) writes into its output
 directory and may take long: offer it, and run it only when the user agrees.
 Follow a run with `get_status`, and read what a process left with
-`get_process_output` when something fails.
+`get_process_output` when something fails. When a resident program with a
+Supervisor stopped by itself, read the scheduler output of the Supervisor
+(`kind: scheduler`): it names the node it gave up on, and whether the stop was
+forced.
 
 A run on an output directory that holds an earlier run resumes it, and does
 not run again a process that finished, even when its code changed since:

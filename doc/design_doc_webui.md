@@ -3153,10 +3153,10 @@ another program.
 runs `debasher_stop_resident -d <output directory>` with its default timeout:
 the tool halts every node in one round, then stops the nodes, the `Supervisor`
 first (see "`debasher_stop_resident`: the graceful stop tool" in
-`doc/design_doc_resident.md`). It runs within the request, which lasts until
-the program has stopped, up to about the timeout of the tool, and the frontend
-shows the program as stopping and offers no other action on it meanwhile. A
-tab closed during the stop does not interrupt it. The options `-x` and
+`doc/design_doc_resident.md`). It runs within the request, which lasts until the
+program has stopped, up to about the timeout of the tool, and the frontend shows
+the program as stopping and offers no other action on it meanwhile. A tab closed
+during the stop does not interrupt it. The options `-x`, `--kill` and
 `--keep-supervisor` are not offered, since they exist for the escalation of the
 `Supervisor`. The frontend tells the user what the exit code of the tool means:
 

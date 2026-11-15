@@ -381,14 +381,25 @@ it. ``debasher_stop`` would kill every process at once instead.
 
 ::
 
-    $ debasher_stop_resident -d <string> [-x <string>] [--timeout <int>]
+    $ debasher_stop_resident -d <string> [-x <string>] [--kill <string>]
+                             [--timeout <int>] [--keep-supervisor]
 
 * ``-x <string>``: comma-separated nodes to leave running: a process
   name (every task, if it is an array) or ``<process>:<idx>`` (one
   task of an array).
+* ``--kill <string>``: comma-separated nodes to kill, with ``SIGKILL``
+  to the process group of each, before the stop, if they still run:
+  ``<process>`` for a process of one task, ``<process>:<idx>`` for a
+  task of an array (the name of an array alone kills nothing). A node
+  given to ``-x`` as well is killed instead of left running.
 * ``--timeout <int>``: seconds to wait for the stop to complete (60 by
-  default), after which the tool falls back to ``debasher_stop`` and
-  fails.
+  default), after which the tool falls back to ``debasher_stop``,
+  which kills every process of the program (those given to ``-x`` and
+  a kept ``Supervisor`` too), and fails.
+* ``--keep-supervisor``: leave the ``Supervisor`` of the program
+  running. The ``Supervisor`` runs the tool this way when it gives up
+  on a node, since it waits for the tool itself; it ends by itself
+  once every node it watches is done or given up on.
 
 debasher_snapshot_resident
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -209,12 +209,24 @@ def test_run_stops_every_thread_once_a_stop_is_requested_even_without_a_halt(exe
     assert not proc._heartbeat_thread.is_alive()
 
 
-def test_on_stop_signal_sets_stop_requested(execdir):
+def test_a_stop_signal_takes_no_lock_and_run_stops_on_its_own_thread(execdir):
+    # A handler runs on the main thread between any two instructions, also
+    # while wait() holds the lock of the event: it must take no lock, or the
+    # process would hang. Here another thread holds that lock while the
+    # handler runs, which is how a lock that the handler took would show.
     proc = _Node(opts={})
+    with proc._stop_requested._cond:
+        handler = threading.Thread(target=proc._on_stop_signal, args=(signal.SIGTERM, None))
+        handler.start()
+        handler.join(timeout=2)
+        assert not handler.is_alive()
     assert not proc._stop_requested.is_set()
 
-    proc._on_stop_signal(signal.SIGTERM, None)
+    run_thread = threading.Thread(target=proc.run, daemon=True)
+    run_thread.start()
+    run_thread.join(timeout=5)
 
+    assert not run_thread.is_alive()
     assert proc._stop_requested.is_set()
 
 

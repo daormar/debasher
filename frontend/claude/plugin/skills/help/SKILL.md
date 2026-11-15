@@ -60,7 +60,10 @@ the web UI shows them.
   code. Look there before answering that something does not exist, or
   pointing to something else.
 - When the question is about a run, `get_status` gives its phase, the status
-  of each process and, for a resident program, the notices of its nodes.
+  of each process and, for a resident program, the notices of its nodes. A
+  resident program with a Supervisor that stopped by itself: read the scheduler
+  output of the Supervisor (`get_process_output`, `kind: scheduler`), which
+  names the node it gave up on and whether the stop was forced.
 - Use the words of DeBasher with the meaning that the reference gives them.
   When the reference does not settle a detail, say so and point to the
   documentation, https://debasher.readthedocs.io/en/latest/, rather than

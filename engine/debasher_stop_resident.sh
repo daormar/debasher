@@ -34,10 +34,10 @@
 # kill, which itself is not treated as an error here (it is, by design, a
 # "just end it" backstop that always succeeds if anything is left running):
 # the program did end, but not gracefully, and a caller that cares about
-# that distinction (Supervisor's own escalation, in particular, since a
-# graceful stop and a forced one both end the program the same way from the
-# outside) must tell the two apart by this exit code, not by the warning
-# below, which a caller redirecting stderr would never see.
+# that distinction (the web UI, in particular) tells the two apart by this
+# exit code. The warning written before the fallback says the same on
+# stderr; it is the only trace of it that the escalation of a Supervisor
+# leaves, since the fallback kills that Supervisor too.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
@@ -55,13 +55,18 @@ print_desc()
 ########
 usage()
 {
-    echo "debasher_stop_resident    -d <string> [-x <string>]"
+    echo "debasher_stop_resident    -d <string> [-x <string>] [--kill <string>]"
     echo "                          [--timeout <int>] [--keep-supervisor] [--help]"
     echo ""
     echo "-d <string>               Output directory for program processes"
     echo "-x <string>               Comma-separated nodes to leave alone: a process"
     echo "                          name (every task, if it is an array) or"
     echo "                          <process>:<idx> (one task of an array)"
+    echo "--kill <string>           Comma-separated nodes to kill (SIGKILL to the"
+    echo "                          process group of each, if it still runs)"
+    echo "                          before the graceful stop: <process> for a"
+    echo "                          process of one task, <process>:<idx> for a"
+    echo "                          task; usually also given to -x"
     echo "--timeout <int>           Seconds to wait for a clean stop before"
     echo "                          falling back to debasher_stop (default: 60)"
     echo "--keep-supervisor         Do not stop the program's Supervisor, if it"
@@ -77,6 +82,7 @@ read_pars()
 {
     d_given=0
     excluded_csv=""
+    killed_csv=""
     timeout_secs=60
     keep_supervisor=0
     while [ $# -ne 0 ]; do
@@ -93,6 +99,11 @@ read_pars()
             "-x") shift
                   if [ $# -ne 0 ]; then
                       excluded_csv=$1
+                  fi
+                  ;;
+            "--kill") shift
+                  if [ $# -ne 0 ]; then
+                      killed_csv=$1
                   fi
                   ;;
             "--timeout") shift
@@ -198,13 +209,13 @@ stop_node_gracefully()
 # flag is for a Supervisor calling this tool on itself (its own escalation
 # after a permanent node failure, see the design doc's "Escalation on a
 # permanent node failure"), where stopping it here would be self-defeating
-# twice over. First, the signal targets the same process group the calling
-# Python interpreter already runs in, and that interpreter is blocked, on
-# a thread of its own, on this very tool call returning: a graceful stop
-# waits for its .finished, which cannot appear until that thread
-# unblocks, which cannot happen until this tool returns, a deadlock this
-# tool's own --timeout only escapes by giving up on grace entirely, into
-# debasher_stop's hard kill, every single time. Second, even without that
+# twice over. First, that Supervisor is blocked, on a thread of its own, on
+# this very tool call returning: a graceful stop waits for its .finished,
+# which cannot appear until that thread unblocks, which cannot happen until
+# this tool returns, a deadlock this tool's own --timeout only escapes by
+# giving up on grace entirely, into debasher_stop's hard kill, every single
+# time; running the tool in a session of its own does not change it, since
+# the Supervisor is found by the PID in its .id. Second, even without that
 # deadlock, killing the Supervisor here is premature on its own terms: it
 # already resolves itself, on its own, once every node it still watches is
 # either done or given up on (see "Clean-completion detection"), which is
@@ -235,9 +246,8 @@ stop_supervisor_if_any()
 # round closes fast enough could already show its fresh marker by the
 # time this runs, making it look like the baseline itself, and
 # wait_for_every_halted_marker would then wait forever for a second halt
-# that is never coming (found with a real debasher_exec run, 2026-09-22:
-# a single, otherwise idle node closed its round in well under the time
-# this function used to take to get around to reading it).
+# that is never coming (a single, otherwise idle node closes its round in
+# well under the time it takes to get around to reading it).
 capture_halted_marker_baselines()
 {
     local absdirname=$1
@@ -297,6 +307,33 @@ stop_every_node_and_wait_for_finished()
 }
 
 ########
+# Kills, with SIGKILL to its whole process group (debasher::_stop_pid), the
+# process of each node of the comma-separated list $2 that still runs; a
+# node with no .id, or whose task has ended, is left as it is. For a node
+# that cannot halt and may still hang, such as one that the Supervisor gave
+# up on in its startup: a graceful stop leaves it alone (-x), and nothing
+# else would end it.
+kill_nodes()
+{
+    local absdirname=$1
+    local killed_csv=$2
+
+    local -a nodes=()
+    IFS=',' read -ra nodes <<< "${killed_csv}"
+    local node id_file id_info pid
+    for node in "${nodes[@]}"; do
+        id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
+        [ -f "${id_file}" ] || continue
+        id_info=$("${CAT}" "${id_file}" 2>/dev/null)
+        [ -n "${id_info}" ] || continue
+        # The start time in the id keeps a process that got the PID of an
+        # ended task from being killed
+        pid=$(debasher::_builtin_sched_get_running_task_pid "${id_info}") || continue
+        debasher::_stop_pid "${pid}"
+    done
+}
+
+########
 stop_resident_program()
 {
     local dirname=$1
@@ -308,6 +345,10 @@ stop_resident_program()
 
     debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" || return 1
     capture_halted_marker_baselines "${absdirname}"
+
+    if [ -n "${killed_csv}" ]; then
+        kill_nodes "${absdirname}" "${killed_csv}"
+    fi
 
     if stop_supervisor_if_any "${absdirname}" "${deadline}" \
         && debasher::_resident_tool_trigger_every_node "${absdirname}" shutdown "$(debasher::_now_ms)" "${deadline}" \

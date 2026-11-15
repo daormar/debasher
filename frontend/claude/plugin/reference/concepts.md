@@ -484,7 +484,15 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   drops any other type with a warning in the scheduler output, and the node
   ignores a `CLOSE` written there. A Supervisor that fails (a thread of its own
   died) leaves its traceback in its scheduler output; the nodes go on running
-  unsupervised: stop the program and launch it again.
+  unsupervised: stop the program and launch it again. A node still down after
+  `MAX_RELAUNCH_ATTEMPTS` (3) relaunches is given up on: the Supervisor kills it
+  if it still runs and stops the rest of the program in order. Its scheduler
+  output (`get_process_output`, `kind: scheduler`, on the Supervisor) then says
+  "node '<node>' exceeded 3 relaunch attempts, giving up", with the command that
+  shows the cause in the scheduler output of that node; if that stop did not
+  end within 60 s, every process was killed and it ends with "forcing
+  debasher_stop", and what the FIFOs held may be lost. Fix the node given up on,
+  then launch the program again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the
   launch and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on

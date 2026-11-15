@@ -304,13 +304,13 @@ to it.
 - **stop signal**: `SIGTERM`, sent to a node's whole process group (the same
   group `debasher_stop` already reaches with `SIGKILL`, see
   `debasher::_stop_pid`), which is what actually ends a node's `run()`
-  (`_stop_requested`, set by the handler `run()` installs, `_on_stop_signal`).
-  Unlike a halt closing its round, receiving one is not conditional on
-  anything: a node that never halted stops on one just the same. Nothing in
-  `FBPProcess` decides when to send it: that is external, by design, typically
-  once every node's halted marker exists.
-  `Supervisor` stops on one too (see the "Clean-completion
-  detection" subsection).
+  (`_stop_requested`, which `run()` sets once the handler that it installs,
+  `_on_stop_signal`, has noted the signal). Unlike a halt closing its round,
+  receiving one is not conditional on anything: a node that never halted stops
+  on one just the same. Nothing in `FBPProcess` decides when to send it: that is
+  external, by design, typically once every node's halted marker exists.
+  `Supervisor` stops on one too (see the "Clean-completion detection"
+  subsection).
 - **`debasher_stop_resident`**: the tool that actually sends the stop signal
   in a real program, the graceful counterpart to `debasher_stop` (see
   "`debasher_stop_resident`: the graceful stop tool" for the full sequence).
@@ -475,8 +475,9 @@ to it.
   declared down and relaunched. Done: its `.finished` file appeared (it exited
   cleanly with code 0), so it is never checked again. Given up: it exhausted
   `MAX_RELAUNCH_ATTEMPTS`, which triggers the escalation.
-- **escalation**: what the `Supervisor` does when a node is given up: an ordered
-  shutdown through the initiators and, if some node has not finished after
+- **escalation**: what the `Supervisor` does when a node is given up: it kills
+  that node if it still runs, then an ordered shutdown of the other nodes
+  through the initiators and, if some node has not finished after
   `FORCE_STOP_TIMEOUT_SECS`, `debasher_stop` on the whole program.
 
 ## Batch runs
@@ -1497,16 +1498,16 @@ has received in its node state and decides in `process_data` when it has
 enough, because the framework delivers each message as it arrives, with no
 join across ports.
 
-A module cannot tell a replay from the first execution: `process_data` gets
-the same calls, in the same order, and nothing says which of the two is
-running, so that neither the node state nor what it sends can depend on it.
-Two things have to differ, both in the framework: what `send_data` does at the
-limit of the outbound backlog (see "Checkpoint persistence"), and the pace of a
-node that emits on its own: `sleep(seconds)` waits `seconds` when called from
-`process_data`, does not wait while the node replays its log, where the pace
-of the first execution has no use and would only delay the recovery, and
-returns early once the node is told to stop, so that a stop is not delayed
-either. Only when the next step comes changes.
+A module cannot tell a replay from the first execution: `process_data` gets the
+same calls, in the same order, and nothing says which of the two is running, so
+that neither the node state nor what it sends can depend on it. Two things have
+to differ, both in the framework: what `send_data` does at the limit of the
+outbound backlog (see "Checkpoint persistence"), and the pace of a node that
+emits on its own: `sleep(seconds)` waits `seconds` when called from
+`process_data`, does not wait while the node replays its log, where the pace of
+the first execution has no use and would only delay the recovery, and returns
+early once the node is told to stop, so that a stop is not delayed further (see
+"Ordered shutdown"). Only when the next step comes changes.
 
 How a node finishes for good is not defined yet: `run()` returns only on a stop
 signal, and a stop sends no `CLOSE` (see "A node that finishes for good" in
@@ -1800,7 +1801,8 @@ failure").
 11. Waits until told to stop, and stops every thread.
 
 A SIGTERM during the startup is honored when the startup ends, since the replay
-does not look at it; only a `send_data` that waits for room stops waiting.
+does not look at it; only a `send_data` that waits for room stops waiting, since
+it looks at `_stop_signaled` too.
 
 A clean start is an external operation: it is enough to remove what a node
 finds at startup, with no flag or special logic in the process or the
@@ -1934,13 +1936,19 @@ has halted, no new round starts at all.
 What ends `run()` is the stop signal, not a round closing. `run()` installs a
 handler of `SIGTERM` (`_on_stop_signal`) on the main thread only, since
 `signal.signal()` raises a `ValueError` off it (the tests that drive `run()`
-from another thread set `_stop_requested` themselves, as other tests simulate
-an `INTERACT` arriving), and then waits on `_stop_requested` before it stops
-its threads. When to send that signal is decided outside `FBPProcess`, by
-design: `debasher_stop_resident` sends it (see "`debasher_stop_resident`: the
-graceful stop tool"), typically once the halted marker of every node exists,
-but nothing in the node requires that, or requires a halt to have happened at
-all.
+from another thread set `_stop_requested` themselves, as other tests simulate an
+`INTERACT` arriving), and then waits on `_stop_requested` before it stops its
+threads. The handler only sets a plain attribute, `_stop_signaled`: it runs on
+the main thread between any two instructions, also while `run()` holds for a
+moment the lock inside the event, in `wait()`, and setting the event there would
+wait for ever on that lock. So `run()` waits on the event in steps of
+`_STOP_POLL_SECS` (0.2 s), looks at the attribute between them, and sets the
+event itself (`_wait_for_stop`), which wakes whatever else waits on it, such as
+`sleep()`: a stop is seen at most that much later. When to send that signal is
+decided outside `FBPProcess`, by design: `debasher_stop_resident` sends it (see
+"`debasher_stop_resident`: the graceful stop tool"), typically once the halted
+marker of every node exists, but nothing in the node requires that, or requires
+a halt to have happened at all.
 
 A halt sends no `CLOSE`, and neither does any other stop signal: `run()` always
 calls `stop_threads(close=False)` once its wait on `_stop_requested` returns.
@@ -3108,17 +3116,18 @@ stops on purpose stops sending heartbeats and leaves its `.finished` behind,
 and the two together tell it from a node that failed.
 
 The same state tells the `Supervisor` when to stop: once every node of
-`NODE_PORTS` is resolved, done or given up on (see "Relaunching a downed
-node"), and no escalation is still running, it stops its own threads and
-exits, with no signal from outside. It also stops on a stop signal, like
-`FBPProcess` (see "Ordered shutdown"): `run()` installs a handler of `SIGTERM`
-when it runs on the main thread (not when a test drives it on another thread),
-and the handler only sets `_all_resolved`, the event that `run()` waits on.
-Unlike `FBPProcess`, the `Supervisor` has no need to tell an end that came by
-itself from one it was told to make, so one event covers both. The signal lets
-a tool that stops the program gracefully end the `Supervisor` first, before it
-touches any node, so that the `Supervisor` cannot relaunch one of them under it
-(see "`debasher_stop_resident`").
+`NODE_PORTS` is resolved, done or given up on (see "Relaunching a downed node"),
+and no escalation is still running, it stops its own threads and exits, with no
+signal from outside. It also stops on a stop signal, like `FBPProcess` and with
+the same handler (see "Ordered shutdown"), installed when `run()` runs on the
+main thread (not when a test drives it on another thread). `run()` waits on one
+event, `_all_resolved`, which is set in three cases: by the checker thread once
+every node is resolved, by `run()` itself once the handler has noted a stop
+signal, and by `_run_guarded` when a thread of the `Supervisor` dies; `run()`
+tells the last apart by `_thread_error`. The signal lets a tool that stops the
+program gracefully end the `Supervisor` first, before it touches any node, so
+that the `Supervisor` cannot relaunch one of them under it (see
+"`debasher_stop_resident`").
 
 ## Relaunching a downed node
 
@@ -3207,106 +3216,107 @@ relaunch follows to truncate it.
 
 ## Escalation on a permanent node failure
 
-A node given up on for good can, in the worst case, have been the only path (in
-the business-data graph) to some other node(s); if so, no ordered shutdown can
-ever reach them through the graph itself, since the barrier marker only ever
-propagates along the same edges as `DATA` (see "Channel topology"). Rather than
-build a second, parallel broadcast mechanism (a direct connection from
-`Supervisor` to every node, bypassing the graph, with a barrier-skipping
-command), which would mean N extra FIFOs to wire per program, and would put
-every ordinary shutdown at risk of losing the barrier's consistency guarantees,
-not just the pathological case, `on_node_permanently_failed`'s default
-implementation calls **`debasher_stop_resident`** (see
-"`debasher_stop_resident`") as a subprocess, `-x <node_name>` excluding the
-node just given up on and `--keep-supervisor` set: the tool gracefully halts
-and stops whatever part of the graph remains reachable, and falls back on its
-own, past its own `--timeout` (`FORCE_STOP_TIMEOUT_SECS`), to
-`debasher_stop -d <dirname>`, the engine's general stop tool
-(`engine/debasher_stop.sh`), which walks every process of the program and
-sends `kill -9 -- "-$pid"` (a process-group `SIGKILL`) to any still
-`IN-PROGRESS`, regardless of the graph's connectivity. So
-`on_node_permanently_failed` itself does not reimplement any of that sequence
-by hand.
+This section is about what the `Supervisor` does once it gives up on a node. The
+node given up on may have been the only path in the graph to other nodes, and a
+marker travels only along the channels that carry `DATA` (see "Channel
+topology"): no halt can reach those nodes any more, and a graceful stop of the
+program cannot end by itself. The section goes through the mechanism, step by
+step; its fallback, and the asymmetry that it accepts; and why the `Supervisor`
+keeps itself out of the stop, and the alternatives that were ruled out, the last
+of them a channel that skips the barrier.
 
-`dirname` (the program's own base output directory, not a process's own exec
-dir) is `dirname(dirname(DEBASHER_PROCESS_EXECDIR))`
-(`debasher::get_prg_exec_dir_given_basedir`,
-`<dirname>/__exec__/<processname>`), so no export of the engine has to carry
-it. The tool's own absolute path comes from `DEBASHER_BINDIR`, which
-`debasher_builtin_sched::_launch` (`engine/debasher_builtin_sched_lib.sh`)
-exports next to `DEBASHER_LIBEXECDIR`, the one that
-`_get_launch_process_command` uses to find `debasher_launch_process`.
+The default `on_node_permanently_failed(node_name)` escalates on a thread of its
+own, so that the checker thread goes on seeing the other nodes end. While the
+escalation runs, `_escalating` is set: no node is declared down, since the stop
+that the escalation asks for makes every node fall silent, and the `Supervisor`
+does not resolve, since the escalation still has to end. The thread logs a
+warning and runs `debasher_stop_resident` (see "`debasher_stop_resident`") on
+the program, with four arguments: `-x <node>` leaves the node given up on out of
+the halt, which it could never make; `--kill <node>` kills it first, with
+`SIGKILL` to its process group, if it still runs, since a node given up on in
+its startup may hang there, alive and holding its FIFOs, and no relaunch is
+coming to kill it; `--keep-supervisor` leaves the `Supervisor` running; and
+`--timeout FORCE_STOP_TIMEOUT_SECS` bounds the graceful stop. The tool halts and
+stops every other node in order. Once each of them has written its `.finished`,
+every node of the `Supervisor` is resolved, done or given up on, and the
+`Supervisor` ends by itself, as it always does (see "Clean-completion
+detection"). The `Supervisor` finds the output directory of the program from its
+own execdir, and the tool through `DEBASHER_BINDIR`, which
+`debasher_builtin_sched::_launch` exports, since the `PATH` need not hold the
+bin directory of the engine.
 
-This deliberately accepts an asymmetry: the graceful phase preserves every
-checkpoint/input-log consistency guarantee already built; the hard-kill fallback
-is explicitly a "just end it" backstop, expected to only ever fire in the
-pathological case of a graph broken by a permanent node failure, and is allowed
-to lose in-flight state for whatever it kills.
+If the graceful stop does not end within its timeout, as when the node given
+up on was the only path to another one, the tool falls back to `debasher_stop`
+on the program (`engine/debasher_stop.sh`), which sends `SIGKILL` to the
+process group of every process still running, whatever the shape of the graph.
+That includes the `Supervisor`. So the `Supervisor` runs the tool in a session
+of its own: in the process group of the `Supervisor`, the tool and the
+`debasher_stop` that it runs would be killed together with it, and the nodes
+after it in the walk of `debasher_stop` would go on running. The asymmetry is
+accepted on purpose: the graceful stop keeps every guarantee of the
+checkpoints and the input logs, and the fallback is a backstop that only ends
+the program, expected only when a failure for good has cut the graph, and may
+lose whatever was in flight in what it kills.
 
-**`--keep-supervisor` is not optional for this caller.** This call runs on a
-thread of the same `Supervisor` process it is about to ask the tool to act on
-`Supervisor`'s own program. Without it, the tool's own first step
-(`stop_supervisor_if_any`) would target this same process's group, and this
-call would never actually get anywhere (`engine/debasher_stop_resident.sh`).
-Two other ways to avoid this were ruled out: running the tool in a detached
-process group (`setsid`) does not help, since the tool's own step still
-targets `Supervisor`'s *original* process group by pid, which the
-`Supervisor` process itself never leaves, so it would still stop itself
-prematurely, before the reachable nodes it is meant to supervise while this
-runs are actually done; and stopping it last instead of first (after the
-reachable nodes, still inside the same tool call) does not help either, since
-the call is blocked on a thread of the `Supervisor` process itself, so a last
-step that signals `Supervisor` and waits for its `.finished` waits on
-something that cannot happen until that same blocked thread returns, which
-cannot happen until this wait does. Leaving `Supervisor` alone entirely,
-letting it resolve itself once the reachable nodes are done (already true
-regardless, see "Clean-completion detection"), avoids both. Left alone by
-`--keep-supervisor`, `Supervisor` still ends, on its own, the same way it
-always does once every node it watches is done or given up on: nothing here
-has to signal it, or even knows when that will be.
+The `Supervisor` cannot let the tool stop it, as the tool does by default
+before it touches any node. The escalation waits for the tool on a thread of
+the `Supervisor`: the tool would send the `Supervisor` its stop signal and
+wait for its `.finished`, which the `Supervisor` writes only once it ends,
+after that thread returns, so the graceful stop would always run out its
+timeout and fall back to the hard kill. Stopping the `Supervisor` last instead
+of first fails the same way. A session of its own for the tool does not help
+there either: the tool names the `Supervisor` by the PID in its `.id`, not by
+the process group of the caller. With `--keep-supervisor`, the tool leaves the
+`Supervisor` alone, and the `Supervisor` ends by itself once the nodes are
+done, which nothing else has to tell it.
+
+The alternative to the tool, a channel from the `Supervisor` to every node
+that skips the barrier, would take a FIFO more for each node of every program,
+and would put at risk the guarantees of the barrier in every ordinary stop,
+not only in a graph cut by a failure.
 
 ## Failing loudly instead of retrying
 
-The Contract's limits include a gap that stays open (see "A crash while a round
-is open" there): a node that is not an initiator and crashes while its halt
-round is open comes back with no durable memory of that round, the markers it
-had received for it are not replayed, and nothing resends the one-time
-`shutdown` trigger, so it never halts. `debasher_stop_resident`'s own
-`--timeout` already keeps this from hanging the program forever, structurally,
-but falling back to `debasher_stop`'s hard kill silently would let that forced
-ending pass for a graceful one, so it does so loudly instead, without attempting
-to fix the underlying gap.
+This section is about a halt that cannot end, and how its forced ending is
+made visible instead of passing for a graceful one. It describes the case,
+then the mechanism, an exit code and who reads it, and then the alternative
+that was weighed.
 
-The alternative, making the gap itself durably recoverable (a checkpoint
-field recording a pending, unclosed halt, restored and acted on at recovery),
-has two holes: first, checkpoints are only ever taken when a round *opens*,
-never when it *closes* (the moment of `capture_pos`, see "capture position" in
-the Glossary), so nothing would ever clear that field once the round
-legitimately closed, and a later, unrelated crash would then re-open a halt
-round that had already finished cleanly; second, the same forgetting affects
-every node on the barrier's propagation path, not just an initiator, so
-closing it for real means making a round's *partial* progress (which peers
-already closed their own part) durable and reconstructible, not just "a halt
-was requested", a materially larger change to the Chandy-Lamport mechanism.
-Failing loudly instead accepts the asymmetry already accepted in "Escalation
-on a permanent node failure" (the hard-kill fallback's own "just end it"
-backstop): it does not make this case end gracefully, but it makes sure nobody
-mistakes the forced ending for one, at the cost of no change at all to the
-barrier or checkpoint mechanism.
+A node that is not an initiator and crashes while the round of its halt is
+open comes back with no memory of that round: the markers it had received are
+not replayed, and nothing sends the `shutdown` trigger again, so it never
+halts (see "A crash while a round is open" in the Contract's limits). The
+`--timeout` of `debasher_stop_resident` keeps this from hanging the stop for
+ever, and the fallback to `debasher_stop` ends the program; what must not
+happen is that the forced ending passes for a graceful one.
 
-**Mechanism**: `debasher_stop_resident` returns a distinct exit code,
-`DEBASHER_STOP_RESIDENT_FORCED_EXIT` (2), whenever it falls back to
-`debasher_stop`, instead of propagating `debasher_stop`'s own exit code
-(typically 0, since it does not treat "something was still running to kill"
-as a failure): the one signal that survives a caller that redirects the
-tool's own stderr, such as `Supervisor`'s own escalation
-(`_escalate_shutdown`, `engine/debasher_runtime_supervisor.py`), which
-recognizes this specific code and logs its own, more specific error (G8,
-detected, never silent), durably captured in `sup.sched_out` the same way
-every other `Supervisor` log line already is, rather than only the tool's
-own stderr line, which that redirect would otherwise have thrown away
-entirely (the same reasoning as `on_node_down`'s own `DEVNULL` redirect, see
-"Relaunching a downed node").
+So `debasher_stop_resident` exits with `DEBASHER_STOP_RESIDENT_FORCED_EXIT` (2)
+whenever it falls back to `debasher_stop`, never with the code of
+`debasher_stop`, which is usually 0, since it does not take "something was still
+running to kill" for a failure; and it writes a warning on its stderr, "could
+not stop ... gracefully within ...s, forcing debasher_stop", before the
+fallback. A user who runs the tool sees both. The web UI reads the code and says
+that the program was killed (`orderlyStopOutcome`,
+`frontend/src/models/residentRun.ts`). The escalation of the `Supervisor` cannot
+read it, since the fallback kills the `Supervisor` before the tool ends; the
+tool inherits the stderr of the `Supervisor`, its scheduler output
+(`.sched_out`), so the warning stays there, after the warning with which the
+escalation began, as the record that the program was killed (G8: detected, never
+silent). The tool runs for a short time, so inheriting that stream keeps the
+file open only briefly, unlike the node that a relaunch starts, which may run
+for days (see "Relaunching a downed node").
+
+The alternative, making the case recoverable, would record in the checkpoint
+a halt that is open and act on it at recovery. It has two holes. A checkpoint
+is taken when a round opens, at its `capture_pos`, never when it closes, so
+nothing would clear that record once the round closed, and a later crash would
+open again a halt that had ended cleanly. And the same forgetting affects
+every node on the path of the markers, not only an initiator, so recovering
+for real means making durable which peers had already closed their part of
+the round, a much larger change to the barrier. Failing loudly accepts the
+asymmetry of "Escalation on a permanent node failure": it does not make the
+case end gracefully, but nobody takes its forced ending for a graceful one,
+with no change to the barrier or the checkpoints.
 
 # Tools for resident programs
 
@@ -3337,23 +3347,30 @@ specifically: it halts the program in an ordered way (see "Ordered shutdown")
 and then stops its processes. It relies on the `Supervisor` stopping on a stop
 signal (see "Clean-completion detection").
 
-- **Usage: `debasher_stop_resident -d <outdir> [-x <name>[,<name>...]]
-  [--timeout <secs>] [--keep-supervisor]`.** `-d` is the program's own output
-  directory, same as every other engine tool that operates on one. `-x` names
-  nodes to leave alone entirely (not waited for, not signalled), each a process
-  name (every task, if it is an array) or `<process_name>:<idx>` (one task of an
-  array; `<process_name>_<idx>` would be ambiguous with a process whose name
-  ends that way): for `on_node_permanently_failed`'s own use (see "Escalation
-  on a permanent node failure"), which must not wait forever on a node it has
-  already given up on.
-  `--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the
-  whole graceful attempt; past it, falls back to `debasher_stop -d <outdir>`
-  (a hard kill of the entire program), so this always ends the program one
-  way or another, never hangs indefinitely by itself.
-  `--keep-supervisor` skips stopping the program's `Supervisor` (step 1 of the
-  sequence below), also for `on_node_permanently_failed`'s own use: it calls
-  this tool from a thread of the very `Supervisor` process it would otherwise
-  target (see "Escalation on a permanent node failure" for why that
+- **Usage: `debasher_stop_resident -d <outdir>`, with the options
+  `[-x <name>[,<name>...]]`, `[--kill <name>[,<name>...]]`, `[--timeout <secs>]`
+  and `[--keep-supervisor]`.** `-d` is the program's own output directory, same
+  as every other engine tool that operates on one. `-x` names nodes to leave
+  alone entirely (not waited for, not signalled), each a process name (every
+  task, if it is an array) or `<process_name>:<idx>` (one task of an array;
+  `<process_name>_<idx>` would be ambiguous with a process whose name ends that
+  way): for `on_node_permanently_failed`'s own use (see "Escalation on a
+  permanent node failure"), which must not wait forever on a node it has already
+  given up on. `--kill` names nodes to kill, with `SIGKILL` to the process group
+  of each that still runs (`debasher::_stop_pid`, after
+  `debasher::_builtin_sched_get_running_task_pid`, so that a process that got
+  the PID of an ended task is never killed), before the graceful stop:
+  `<process>` for a process of one task, `<process>:<idx>` for a task. The
+  escalation gives the node it gave up on to both `-x` and `--kill`, since that
+  node may still hang in its startup; `-x` alone leaves a node running, which is
+  what a user who excludes one by hand wants. `--timeout` (default 60, the same
+  as `FORCE_STOP_TIMEOUT_SECS`) bounds the whole graceful attempt; past it,
+  falls back to `debasher_stop -d <outdir>` (a hard kill of the entire program),
+  so this always ends the program one way or another, never hangs indefinitely
+  by itself. `--keep-supervisor` skips stopping the program's `Supervisor` (step
+  1 of the sequence below), also for `on_node_permanently_failed`'s own use: it
+  calls this tool from a thread of the very `Supervisor` process it would
+  otherwise target (see "Escalation on a permanent node failure" for why that
   specifically must not happen, not just should not).
 - **Finds the program's nodes and its `Supervisor` (if any) the same way
   `debasher::_validate_resident_program_processes` does**: loads the module,

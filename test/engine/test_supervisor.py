@@ -803,18 +803,20 @@ def test_escalation_calls_debasher_stop_resident_excluding_the_given_up_node(
         str(execdir),
         "-x",
         "a",
+        "--kill",
+        "a",
         "--keep-supervisor",
         "--timeout",
         "5",
     ]
-    # Matches the DEVNULL redirection Supervisor already applies to its
-    # own relaunch Popen calls (see on_node_down): left inherited, the
-    # generated wrapper script's own stdout/stderr tee pipe would stay
-    # open for as long as this subprocess runs, the same leak pieza 2
-    # found and fixed for a relaunch.
+    # Its own session, so that a fallback to debasher_stop, which kills the
+    # group of this Supervisor, does not kill the tool before it reaches the
+    # other nodes; its stderr inherited, the log of the Supervisor, where its
+    # warning of the fallback stays
+    assert kwargs["start_new_session"] is True
     assert kwargs["stdin"] == subprocess.DEVNULL
     assert kwargs["stdout"] == subprocess.DEVNULL
-    assert kwargs["stderr"] == subprocess.DEVNULL
+    assert "stderr" not in kwargs
     assert proc._all_resolved.is_set()
 
 
@@ -839,6 +841,7 @@ def test_escalation_excludes_only_the_failed_task_of_an_array(execdir, monkeypat
 
     assert _wait_until(lambda: not proc._escalating.is_set())
     assert calls[0][calls[0].index("-x") + 1] == "w:1"
+    assert calls[0][calls[0].index("--kill") + 1] == "w:1"
 
 
 def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
@@ -859,52 +862,6 @@ def test_escalation_logs_but_still_resolves_bookkeeping_when_the_tool_fails(
     # debasher_stop_resident itself already falls back to debasher_stop
     # internally on its own timeout: a nonzero exit here is logged, not
     # retried or escalated further from this side.
-    assert proc._all_resolved.is_set()
-
-
-def test_forced_exit_constant_matches_the_tool_script():
-    # Ties the two sides of a cross-language contract together: a mismatch
-    # here (either constant edited without the other) would otherwise pass
-    # every other test silently, since they mock subprocess.run and read
-    # this same Python constant back for the "forced" case rather than a
-    # literal value.
-    sh_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(lib.__file__))),
-        "engine",
-        "debasher_stop_resident.sh",
-    )
-    with open(sh_path) as f:
-        text = f.read()
-    match = re.search(r"^DEBASHER_STOP_RESIDENT_FORCED_EXIT=(\d+)$", text, re.MULTILINE)
-    assert match, "debasher_stop_resident.sh no longer defines DEBASHER_STOP_RESIDENT_FORCED_EXIT"
-    assert lib.Supervisor._DEBASHER_STOP_RESIDENT_FORCED_EXIT == int(match.group(1))
-
-
-def test_escalation_logs_a_specific_message_when_the_tool_reports_a_forced_stop(
-    execdir, monkeypatch, caplog
-):
-    monkeypatch.setenv("DEBASHER_BINDIR", "/opt/bin")
-    proc = _Sup(opts=_FAKE_OPTS)
-    proc._given_up.add("a")
-    proc._done.add("b")
-
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda args, **kwargs: subprocess.CompletedProcess(
-            args, proc._DEBASHER_STOP_RESIDENT_FORCED_EXIT
-        ),
-    )
-
-    proc.log.addHandler(caplog.handler)
-    try:
-        with caplog.at_level("ERROR", logger=proc.log.name):
-            proc.on_node_permanently_failed("a")
-            assert _wait_until(lambda: "forced a hard kill" in caplog.text)
-    finally:
-        proc.log.removeHandler(caplog.handler)
-
-    assert "'a'" in caplog.text
     assert proc._all_resolved.is_set()
 
 
@@ -1068,12 +1025,22 @@ def test_run_returns_once_every_node_is_resolved_even_with_a_manual_trigger_port
 # --- stopping by signal, same mechanism as FBPProcess -----------------
 
 
-def test_on_stop_signal_sets_all_resolved():
-    proc = _Sup(opts=_FAKE_OPTS)
+def test_a_stop_signal_takes_no_lock_and_the_supervisor_stops_on_its_own_thread(_real_opts):
+    # As for FBPProcess: another thread holds the lock of the event while the
+    # handler runs, which is how a lock that the handler took would show
+    proc = _Sup(opts=_real_opts)
+    with proc._all_resolved._cond:
+        handler = threading.Thread(target=proc._on_stop_signal, args=(signal.SIGTERM, None))
+        handler.start()
+        handler.join(timeout=2)
+        assert not handler.is_alive()
     assert not proc._all_resolved.is_set()
 
-    proc._on_stop_signal(signal.SIGTERM, None)
+    runner = threading.Thread(target=proc.run, daemon=True)
+    runner.start()
+    runner.join(timeout=5)
 
+    assert not runner.is_alive()
     assert proc._all_resolved.is_set()
 
 

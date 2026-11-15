@@ -364,9 +364,15 @@ The ``Supervisor`` declares a node down when its heartbeats stop for
 ``HEARTBEAT_TIMEOUT_SECS`` (30 seconds by default), or at once when its
 process is gone, and relaunches it. A node that goes down again after
 ``MAX_RELAUNCH_ATTEMPTS`` relaunches (three by default) with no
-heartbeat in between is given up on, and the ``Supervisor`` stops the
-rest of the program in order. A node that cannot recover, such as one
-whose input log was lost, fails the same way at every relaunch, so the
+heartbeat in between is given up on: the ``Supervisor`` kills it, if it
+still runs, and stops the rest of the program in order with
+``debasher_stop_resident``. If that stop does not end within
+``FORCE_STOP_TIMEOUT_SECS`` (60 seconds by default), every process of
+the program, the ``Supervisor`` included, is killed, as with
+``debasher_stop``, and what the FIFOs held may be lost; the log of the
+``Supervisor`` then ends with the warning of the tool, which says
+``forcing debasher_stop``. A node that cannot recover, such as one whose
+input log was lost, fails the same way at every relaunch, so the
 ``Supervisor`` gives up on it (see `Stopping, Resuming and Resetting`_
 below). The error that the ``Supervisor`` logs when it gives up on a
 node ends with the command that shows the scheduler output of its last

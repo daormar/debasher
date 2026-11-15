@@ -305,3 +305,66 @@ def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failu
         "debasher_stop_resident fell back to a hard kill instead of stopping gracefully "
         "(e.g. -x not actually excluding sink, or --keep-supervisor not applied)"
     )
+
+
+def _relaunch_sink_until_its_last_attempt(outdir):
+    """
+    Kills sink and each of its relaunches, SIGSTOP first so that none sends
+    a heartbeat in between (see the test above), until its last relaunch
+    allowed by MAX_RELAUNCH_ATTEMPTS (3), which it leaves frozen and alive
+    and returns: the next declaration of down gives up on sink.
+    """
+    pid = kill_node(outdir, "sink")
+    for attempt in range(1, 4):
+        new_pid = wait_for_relaunch(outdir, "sink", pid, timeout=15.0, interval=0.01)
+        assert new_pid is not None, f"sink was not relaunched a {attempt}th time"
+        os.killpg(int(new_pid), signal.SIGSTOP)
+        if attempt == 3:
+            return new_pid
+        os.killpg(int(new_pid), signal.SIGKILL)
+        pid = new_pid
+
+
+def test_the_escalation_kills_a_node_given_up_on_that_still_hangs(outdir):
+    """
+    A node given up on while it hangs in its startup, alive, holding its
+    FIFOs: the graceful stop leaves it alone (-x), and the escalation kills
+    it (--kill), so that nothing of the program is left running once the
+    Supervisor ends. Here the last relaunch of sink is frozen, never
+    killed, and is declared down by its silence.
+    """
+    launch_chaos(outdir)
+    sup_out = sched_out_file(outdir, "sup")
+
+    frozen = _relaunch_sink_until_its_last_attempt(outdir)
+
+    assert wait_for_text(sup_out, "node 'sink' exceeded", timeout=30), "sink never given up on"
+    assert wait_until(lambda: not _group_exists(int(frozen)), timeout=10.0), "sink still runs"
+    assert wait_for_text(sup_out, "node 'fanin' finished cleanly", timeout=30)
+    assert wait_for_text(sup_out, "node 'loop' finished cleanly", timeout=30)
+    assert wait_for(os.path.join(outdir, "__exec__", "sup", "sup.finished"), timeout=30)
+
+
+def test_the_hard_kill_of_an_escalation_ends_every_process_and_says_so(outdir):
+    """
+    An escalation whose graceful stop cannot end: loop is frozen before sink
+    is given up on, so it never halts, and after FORCE_STOP_TIMEOUT_SECS
+    (60 s) debasher_stop_resident falls back to debasher_stop. That kills the
+    Supervisor too; the tool runs in a session of its own, so it still
+    reaches every other node, and its warning stays in the log of the
+    Supervisor.
+    """
+    launch_chaos(outdir)
+    sup_out = sched_out_file(outdir, "sup")
+
+    frozen = _relaunch_sink_until_its_last_attempt(outdir)
+    os.killpg(int(read_pid(id_file(outdir, "loop"))), signal.SIGSTOP)
+    os.killpg(int(frozen), signal.SIGKILL)
+
+    assert wait_for_text(sup_out, "node 'sink' exceeded", timeout=30), "sink never given up on"
+    assert wait_for_text(sup_out, "forcing debasher_stop", timeout=90), "no warning of the hard kill"
+    for name in ("fanin", "loop", "sink", "sup"):
+        pid = read_pid(id_file(outdir, name))
+        assert pid is not None, f"{name} has no pid to check"
+        assert wait_until(lambda: not _group_exists(int(pid)), timeout=10.0), f"{name} is still running"
+

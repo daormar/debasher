@@ -201,13 +201,12 @@ class Supervisor(_PortWorker):
 
         self._checker_thread = None
         self._checker_stop = threading.Event()
-        # Set once every node is resolved (done, or given up on) and no
-        # shutdown escalation is still in flight. Watched by run(),
-        # not acted on by the checker thread itself (which would deadlock
-        # joining its own thread from inside stop_threads()). Also set
-        # directly by a SIGTERM handler (see run() and _on_stop_signal):
-        # unlike FBPProcess, nothing else here needs to tell "resolved
-        # naturally" apart from "told to stop", so one event covers both.
+        # What run() waits on: set once every node is resolved (done, or
+        # given up on) and no escalation runs, by run() itself on a stop
+        # signal (see _wait_for_stop), and by _run_guarded when a thread of
+        # its own dies, which run() tells apart by _thread_error. Not acted
+        # on by the checker thread itself, which would deadlock joining its
+        # own thread from inside stop_threads().
         self._all_resolved = threading.Event()
         # The exception that ended the brain thread or the checker thread,
         # if one did (see _run_guarded): run() raises it.
@@ -288,11 +287,13 @@ class Supervisor(_PortWorker):
         stops it first, before touching any node it watches, precisely
         so it cannot relaunch one out from under it.
         """
+        # Only the main thread may install a handler, and a run() driven on
+        # another thread, as by the tests, has no SIGTERM to catch
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._on_stop_signal)
 
         self.start_threads()
-        self._all_resolved.wait()
+        self._wait_for_stop(self._all_resolved)
         # No CLOSE on the initiator ports: the stop of a Supervisor is no end
         # for good, since another one, of a resumed program, writes into the
         # same ports.
@@ -302,14 +303,6 @@ class Supervisor(_PortWorker):
                 f"{type(self).__name__}: a thread of its own died, so it stopped "
                 f"supervising: {self._thread_error!r}"
             ) from self._thread_error
-
-    def _on_stop_signal(self, signum, frame):
-        """
-        The SIGTERM handler run() installs (see FBPProcess's own, same
-        reasoning: minimal, no lock touched here, actually stopping
-        happens on run()'s own thread once its wait returns).
-        """
-        self._all_resolved.set()
 
     def start_threads(self):
         super().start_threads()
@@ -839,46 +832,23 @@ class Supervisor(_PortWorker):
     def on_node_permanently_failed(self, node_name):
         """
         Called when the Supervisor gives up on the node `node_name`, after
-        MAX_RELAUNCH_ATTEMPTS relaunches. By default it stops the rest of
-        the program in order with debasher_stop_resident, and kills it if
-        that takes longer than FORCE_STOP_TIMEOUT_SECS.
+        MAX_RELAUNCH_ATTEMPTS relaunches. By default it kills that node, if
+        it still runs, and stops the rest of the program in order with
+        debasher_stop_resident, which kills the whole program, this
+        Supervisor included, if that takes longer than
+        FORCE_STOP_TIMEOUT_SECS.
         """
-        # Default: escalate in a background thread (so the checker thread
-        # that triggered this keeps running and noticing other nodes
-        # reaching "done" meanwhile), by calling `debasher_stop_resident`
-        # (`-x node_name`, `--keep-supervisor`) as a subprocess: it gracefully
-        # stops whatever part of the graph remains reachable (an ordinary
-        # halt, then a real stop signal, per node), excluding node_name
-        # itself, and falls back to `debasher_stop` on its own if that does
-        # not finish within FORCE_STOP_TIMEOUT_SECS (the signature of a graph
-        # left disconnected by this node's death). `--keep-supervisor` is not
-        # optional here: this call runs on a thread of this same Supervisor
-        # process, so the tool must not try to stop it too (see
-        # `debasher_stop_resident`'s own `stop_supervisor_if_any` for why
-        # that would deadlock into always forcing debasher_stop). Left alone,
-        # this Supervisor resolves on its own, the same way it always does,
-        # once every node it watches is done or given up on (see
-        # "Clean-completion detection").
+        # On a thread of its own, so that the checker thread goes on seeing
+        # the other nodes end meanwhile (see _escalate_shutdown)
         self._escalating.set()
         thread = threading.Thread(
             target=self._escalate_shutdown, args=(node_name,), name=f"escalate:{node_name}"
         )
         thread.start()
 
-    # debasher_stop_resident's own DEBASHER_STOP_RESIDENT_FORCED_EXIT
-    # (engine/debasher_stop_resident.sh): a graceful stop and a forced one
-    # both end the program the same way from here, so this is the only
-    # signal that tells them apart (the tool's own stderr warning is
-    # redirected to DEVNULL below, same reasoning as on_node_down's own
-    # relaunch Popen call, see its comment).
-    _DEBASHER_STOP_RESIDENT_FORCED_EXIT = 2
-
     def _get_stop_resident_command(self):
-        # Same reasoning as _get_launch_process_command's own DEBASHER_LIBEXECDIR
-        # lookup: PATH is not guaranteed to include bin/, so this bin_SCRIPTS
-        # tool needs its own absolute path, found missing by a real
-        # debasher_exec run, 2026-09-22 (see debasher_builtin_sched::_launch's
-        # own DEBASHER_BINDIR export).
+        # PATH need not hold the bin directory of the engine: the scheduler
+        # exports it (see debasher_builtin_sched::_launch)
         bindir = os.environ.get("DEBASHER_BINDIR")
         if not bindir:
             raise RuntimeError(
@@ -889,37 +859,53 @@ class Supervisor(_PortWorker):
         return os.path.join(bindir, "debasher_stop_resident")
 
     def _escalate_shutdown(self, node_name):
+        """
+        Runs debasher_stop_resident on the program, leaving `node_name` out
+        of the graceful stop and killing it, and this Supervisor running;
+        logs an error if the tool fails. Ends the escalation either way.
+        """
+        node = self._format_node_for_stop_resident(node_name)
+        self.log.warning(
+            "stopping the rest of the program after %r's permanent failure "
+            "(debasher_stop_resident -x %s --kill %s)",
+            node_name,
+            node,
+            node,
+        )
         try:
+            # -x leaves the node out of the halt, which it could never
+            # make, and --kill kills it, since a node given up on in its
+            # startup may still hang there holding its FIFOs.
+            # --keep-supervisor: this Supervisor waits for the tool, so the
+            # tool must not wait for it to stop; it ends by itself once every
+            # node it watches is resolved.
+            #
+            # A session of its own: if the graceful stop does not end within
+            # its timeout, the tool falls back to debasher_stop, which kills
+            # the process group of this Supervisor; in this group, the tool
+            # and debasher_stop would die with it, before reaching the other
+            # nodes. Its stderr is the log of this Supervisor, so that its
+            # warning, written before the fallback, stays there although
+            # this Supervisor is killed; the tool ends soon, unlike the node
+            # of a relaunch, so it does not keep the log open for long.
             result = subprocess.run(
                 [
                     self._get_stop_resident_command(),
                     "-d",
                     self._get_program_outdir(),
                     "-x",
-                    self._format_node_for_stop_resident(node_name),
+                    node,
+                    "--kill",
+                    node,
                     "--keep-supervisor",
                     "--timeout",
                     str(self.FORCE_STOP_TIMEOUT_SECS),
                 ],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
-            if result.returncode == self._DEBASHER_STOP_RESIDENT_FORCED_EXIT:
-                # Detected, never silent: the reachable part of the
-                # graph was not stopped gracefully within
-                # FORCE_STOP_TIMEOUT_SECS, so debasher_stop_resident itself
-                # already fell back to a hard kill (the program did end,
-                # just not cleanly). Logged here, not just left to the
-                # tool's own stderr (discarded above), so it survives in
-                # this process's own sched_out.
-                self.log.error(
-                    "debasher_stop_resident could not stop the reachable part of "
-                    "the graph gracefully after %r's permanent failure and forced "
-                    "a hard kill (debasher_stop) instead",
-                    node_name,
-                )
-            elif result.returncode != 0:
+            if result.returncode != 0:
                 self.log.error(
                     "debasher_stop_resident exited with code %s while escalating "
                     "the shutdown after %r's permanent failure",
