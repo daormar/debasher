@@ -840,28 +840,29 @@ clean_up_on_exit()
 }
 
 ########
-# Takes the lock of the output directory, held until debasher_exec exits,
-# so that no two debasher_exec prepare or launch a run on the same output
-# directory at once. It is taken before anything is written there and
-# before checking for processes in progress, so that the check and what
-# follows it are one step for any other debasher_exec.
+# Takes the lock of the output directory $1, held until debasher_exec
+# exits, and writes into the lock file the process id of debasher_exec,
+# followed by a mark if $2 is 1 (a validation, which launches nothing).
+# Returns 1, with an error, if the lock is still held after
+# DEBASHER_EXEC_LOCK_WAIT_SECS.
 ensure_exclusive_execution()
 {
     local outd=$1
+    local validate=$2
     local lockfile="${outd}/${DEBASHER_LOCK_BASENAME}"
 
     prepare_lock LOCKFD "$lockfile" || return 1
+    # Only another debasher_exec holds the lock for longer than an instant:
+    # the tools that look at it take it and release it at once
     if ! "$FLOCK" -x -w "${DEBASHER_EXEC_LOCK_WAIT_SECS}" "$LOCKFD"; then
         echo "Error: another debasher_exec is preparing or running a program in ${outd}" >&2
         return 1
     fi
 
-    # The process id goes into the lock file, so that debasher_stop can
-    # stop this debasher_exec, the built-in scheduler of the run, before
-    # it stops the processes (see debasher::_stop_run_scheduler), followed
-    # by a mark when this debasher_exec only validates the program, so
-    # that debasher_status does not take the validation for a run (see
-    # debasher::_outdir_is_locked_for_a_run)
+    # debasher_stop reads the process id, to stop this debasher_exec before
+    # the processes that it launched (debasher::_stop_run_scheduler);
+    # debasher_status reads the mark, so as not to take a validation for a
+    # run (debasher::_outdir_is_locked_for_a_run)
     if [ "${validate}" -eq 1 ]; then
         printf '%s\n%s\n' "$$" "${DEBASHER_LOCK_VALIDATION_MARK}" > "$lockfile" || return 1
     else
@@ -1386,9 +1387,12 @@ command_line=$(debasher::_set_opt_value_in_serialized_cmdline "${command_line}" 
 set_debasher_output_dir || exit 1
 
 # Everything but showing or checking the options may write into the
-# output directory, and takes its lock first
+# output directory, and takes its lock first, so that no two debasher_exec
+# prepare or launch a run there at once: before anything is written there,
+# and before looking for processes in progress, so that the look and what
+# follows it are one step for any other debasher_exec
 if [ ${show_cmdline_opts_given} -eq 0 ] && [ ${check_proc_opts_given} -eq 0 ]; then
-    ensure_exclusive_execution "${outd}" || exit 1
+    ensure_exclusive_execution "${outd}" "${validate}" || exit 1
     debasher::_check_outdir_not_moved "${outd}" || exit 1
 fi
 
