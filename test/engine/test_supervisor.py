@@ -212,6 +212,74 @@ def test_a_malformed_manual_trigger_is_dropped_and_heartbeats_are_still_heard(ex
         proc.stop_threads(timeout=2)
 
 
+def test_a_node_that_ends_cleanly_between_the_two_looks_is_not_relaunched(execdir):
+    # Its script writes the .finished and exits between the first look at
+    # the .finished and the look at its PID
+    node_dir = _node_dir(execdir, "a")
+    proc = _Sup(opts=_FAKE_OPTS)
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+
+    def pid_gone_after_finishing(node_name):
+        node_dir.joinpath("a.finished").write_text("ok")
+        return False
+
+    proc._is_node_pid_alive = pid_gone_after_finishing
+
+    proc._check_node("a")
+    assert calls == [] and "a" in proc._done
+
+
+def test_a_relaunched_node_that_ends_cleanly_between_the_two_looks_is_not_relaunched(execdir):
+    # The same, for a node already declared down whose new incarnation ends
+    node_dir = _node_dir(execdir, "a")
+    id_file = node_dir.joinpath("a.id")
+    id_file.write_text(f"{_dead_pid()}@1")
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.STARTUP_TIMEOUT_SECS = 999999
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+    proc._check_node("a")
+    assert calls == ["a"]
+
+    id_file.write_text(f"{_dead_pid()}@2")
+
+    def pid_gone_after_finishing(node_name):
+        node_dir.joinpath("a.finished").write_text("ok")
+        return False
+
+    proc._is_node_pid_alive = pid_gone_after_finishing
+    proc._check_node("a")
+
+    assert calls == ["a"] and "a" in proc._done and "a" not in proc._down
+
+
+def test_a_supervisor_whose_checker_thread_dies_stops_with_an_error(execdir):
+    # A Supervisor with no port: only its checker thread runs
+    class Sup(lib.Supervisor):
+        HEARTBEAT_CHECK_INTERVAL_SECS = 0.01
+
+        def _check_once(self):
+            raise KeyError("a bug")
+
+    proc = Sup(opts={})
+    errors = []
+
+    def run():
+        try:
+            proc.run()
+        except RuntimeError as exc:
+            errors.append(exc)
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    runner.join(timeout=5)
+
+    assert not runner.is_alive()
+    assert len(errors) == 1 and "a thread of its own died" in str(errors[0])
+    assert isinstance(errors[0].__cause__, KeyError)
+
+
 def test_a_supervisor_whose_brain_thread_dies_stops_with_an_error(execdir, tmp_path):
     # Nothing supervises the Supervisor: rather than live on, deaf to the
     # heartbeats, it ends, and the run fails.
@@ -671,8 +739,11 @@ def test_on_node_down_default_runs_the_launcher_tool(execdir, monkeypatch):
     proc = _Sup(opts=_FAKE_OPTS)
     calls = []
 
+    streams = []
+
     def fake_popen(command, **kwargs):
         calls.append(command)
+        streams.append({name: kwargs.get(name) for name in ("stdin", "stdout", "stderr")})
         return _FakeLauncher()
 
     monkeypatch.setattr(subprocess, "Popen", fake_popen)
@@ -680,6 +751,9 @@ def test_on_node_down_default_runs_the_launcher_tool(execdir, monkeypatch):
     proc.on_node_down("a")
 
     assert calls == [proc._get_launch_process_command("a")]
+    # Neither the tool nor the node it starts may hold the .stdout and the
+    # log of the Supervisor open after it exits
+    assert streams == [dict.fromkeys(("stdin", "stdout", "stderr"), subprocess.DEVNULL)]
 
 
 def test_on_node_down_default_logs_a_failing_launcher(execdir, monkeypatch, caplog):

@@ -714,6 +714,36 @@ def test_heartbeat_thread_sends_nothing_without_a_supervisor_port(fifo_path):
         proc.stop_threads(timeout=2)
 
 
+def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
+    # A heartbeat resets the relaunch budget of the node, so a node whose
+    # reader fails on the first live message after every relaunch must not
+    # send one at once. Only the heartbeat loop runs, with no real fifo.
+    class Slow(lib.FBPProcess):
+        OUTPUT_PORTS = ["out"]
+        SUPERVISOR_PORT = "out"
+        HEARTBEAT_INTERVAL_SECONDS = 0.5
+
+    proc = Slow(opts={"out": "/dev/null"})
+    proc._all_threads_alive = lambda: True
+    sent = []
+    proc._send_interact = lambda port, command, args=None: sent.append(time.monotonic())
+
+    started = time.monotonic()
+    thread = threading.Thread(target=proc._heartbeat_loop, name="heartbeat")
+    thread.start()
+    try:
+        time.sleep(0.3)
+        assert sent == []
+        deadline = time.monotonic() + 5
+        while not sent and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        proc._heartbeat_stop.set()
+        thread.join(timeout=2)
+
+    assert sent and sent[0] - started >= Slow.HEARTBEAT_INTERVAL_SECONDS
+
+
 def test_heartbeat_thread_stops_sending_once_a_thread_has_died():
     # Pure Python-level check of the health gate itself, with no real
     # FIFOs involved (real FIFO/writer-thread timing is exercised

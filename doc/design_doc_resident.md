@@ -3086,15 +3086,20 @@ while it is still alive and knows why.
 ## Clean-completion detection (and the `Supervisor`'s own shutdown)
 
 At every tick, the checker thread also looks for the `.finished` file of every
-node not yet resolved. It costs one `os.path.exists()` per node, as cheap as
-the comparison of the heartbeat, and it is done at every tick rather than only
+node not yet resolved. It costs one `os.path.exists()` per node, as cheap as the
+comparison of the heartbeat, and it is done at every tick rather than only
 before a node is declared down, so that the clean end of a node is noticed
 within one `HEARTBEAT_CHECK_INTERVAL_SECS`, not up to a whole
 `HEARTBEAT_TIMEOUT_SECS` later. The file is written by
 `debasher::_signal_process_completion` (`engine/debasher_lib_sched_procs.sh`),
 which `debasher::_execute_task` reaches only when the task succeeds or its
 `_skip` method skips it: a non-zero exit code returns before it. So `.finished`
-means that the node exited cleanly, with code 0, or was skipped.
+means that the node exited cleanly, with code 0, or was skipped. The script of
+the task writes it and then exits, and both can happen after the look for the
+`.finished` at the start of a tick: so the `.finished` of a node is looked for
+once more right before it is declared down, whether by its PID or by its
+silence, and the node is marked done if it is there, never taken for a crashed
+one and relaunched.
 
 Once its `.finished` is seen, the node is done: it is never checked again,
 neither its heartbeat nor its PID, and `on_node_down` is never called for it.

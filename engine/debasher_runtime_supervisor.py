@@ -520,11 +520,7 @@ class Supervisor(_PortWorker):
         # HEARTBEAT_CHECK_INTERVAL_SECS rather than waiting for a full
         # HEARTBEAT_TIMEOUT_SECS, and what keeps an intentional ordered
         # shutdown from ever looking like a crash.
-        if os.path.exists(self._get_node_filename(node_name, "finished")):
-            with self._lock:
-                self._done.add(node_name)
-                self._down.discard(node_name)
-            self.log.info("node %r finished cleanly", node_name)
+        if self._resolve_if_finished(node_name):
             return
 
         with self._lock:
@@ -555,20 +551,45 @@ class Supervisor(_PortWorker):
             relaunched = self._read_node_id(node_name) not in (None, id_when_down)
             new_incarnation_died = relaunched and not self._is_node_pid_alive(node_name)
             if new_incarnation_died or time.monotonic() - last_seen > silence_limit:
-                with self._lock:
-                    self._down.discard(node_name)
-                self._declare_down(node_name)
+                self._declare_down_unless_finished(node_name)
             return
 
         # A node whose process is gone, as one that crashes in its replay,
         # is declared down at once; only a live, silent node waits for its
         # silence limit
         if not self._is_node_pid_alive(node_name):
-            self._declare_down(node_name)
+            self._declare_down_unless_finished(node_name)
             return
 
         if time.monotonic() - last_seen > silence_limit:
-            self._declare_down(node_name)
+            self._declare_down_unless_finished(node_name)
+
+    def _resolve_if_finished(self, node_name):
+        """
+        Marks `node_name` done if its .finished exists, and returns whether it
+        did.
+        """
+        if not os.path.exists(self._get_node_filename(node_name, "finished")):
+            return False
+        with self._lock:
+            self._done.add(node_name)
+            self._down.discard(node_name)
+        self.log.info("node %r finished cleanly", node_name)
+        return True
+
+    def _declare_down_unless_finished(self, node_name):
+        """
+        Declares `node_name` down (again, if it already is), unless its
+        .finished exists, in which case it marks it done.
+        """
+        # The script of the task writes the .finished and then exits: both
+        # may have happened since the look at the start of the tick, and a
+        # node that ended cleanly is never relaunched
+        if self._resolve_if_finished(node_name):
+            return
+        with self._lock:
+            self._down.discard(node_name)
+        self._declare_down(node_name)
 
     def _get_silence_limit(self, node_name):
         """
