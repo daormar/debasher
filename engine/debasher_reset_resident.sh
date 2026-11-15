@@ -33,6 +33,7 @@
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
+. "${debasher_pkglibdir}"/debasher_lib_resident_tools || exit 1
 
 # The directory of the program's output directory under which the state of
 # each reset is set aside, one subdirectory per reset
@@ -99,28 +100,6 @@ check_pars()
 }
 
 ########
-# The number of tasks of process $2, from the script the scheduler wrote for
-# it (its DEBASHER_NUM_TASKS line), or nothing if it was never launched and
-# so has no state to reset.
-num_tasks_of_process()
-{
-    local absdirname=$1
-    local processname=$2
-    local script_file
-    script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
-    [ -f "${script_file}" ] || return 0
-    local line
-    while IFS= read -r line; do
-        case "${line}" in
-            DEBASHER_NUM_TASKS=*)
-                echo "${line#DEBASHER_NUM_TASKS=}"
-                return 0
-                ;;
-        esac
-    done < "${script_file}"
-}
-
-########
 # Prints, one per line, the paths that hold the state of the nodes of process
 # $2: in the process's __exec__ directory, the checkpoints, the input log, the
 # halted marker and the notice of each task, named as the node's runtime names
@@ -131,22 +110,23 @@ state_paths_of_process()
     local absdirname=$1
     local processname=$2
 
-    local num_tasks
-    num_tasks=$(num_tasks_of_process "${absdirname}" "${processname}")
-    if [ -n "${num_tasks}" ]; then
-        local execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
-        local name idx suffix
-        for (( idx = 0; idx < num_tasks; idx++ )); do
-            suffix=""
-            if [ "${num_tasks}" -gt 1 ]; then
-                suffix="_${idx}"
-            fi
+    # A process never launched has no script and no state in its execdir,
+    # but it may still have its output directory
+    local script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
+    if [ -f "${script_file}" ]; then
+        local process_nodes node name path
+        # No wait: the script is there
+        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" 0) || return 1
+        while IFS= read -r node; do
+            # node_info and control_ports are left: nothing reads them back,
+            # and every incarnation writes them again
             for name in checkpoints log halted notice; do
-                if [ -e "${execdir}/${name}${suffix}" ]; then
-                    echo "${execdir}/${name}${suffix}"
+                path=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" "${name}")
+                if [ -e "${path}" ]; then
+                    echo "${path}"
                 fi
             done
-        done
+        done <<< "${process_nodes}"
     fi
 
     local outdir=$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")
@@ -199,7 +179,6 @@ reset_resident_program()
 {
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
-    local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
 
     # A debasher_exec that holds the lock prepares the run and launches the
     # nodes before any of them is in progress. The lock is taken only for an
@@ -210,19 +189,7 @@ reset_resident_program()
         return 1
     fi
 
-    local pfile
-    pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1
-
-    debasher::load_debasher_module "$pfile" || return 1
-    debasher::_set_scheduler_of_run "${absdirname}" || return 1
-    debasher::_resolve_program_type "${pfile}" || return 1
-
-    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
-        echo "Error: ${pfile} is not a resident program (debasher_reset_resident is only for those)" >&2
-        return 1
-    fi
-
-    debasher::_exec_program_func_for_module "${pfile}"
+    debasher::_resident_tool_load_program "${absdirname}" debasher_reset_resident || return 1
 
     ensure_program_is_stopped "${absdirname}" || return 1
 

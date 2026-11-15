@@ -3346,12 +3346,11 @@ sets aside, or deletes, the state that its nodes keep, so that the next
 `debasher_exec` starts every node afresh. `debasher_inspect_resident` shows
 what one node keeps, and changes nothing. The `Supervisor` also uses the first
 one (`debasher_stop_resident`), to stop what remains of a program once it gives
-up on a node (see "Escalation on a permanent node failure"). Three of them
-(`debasher_stop_resident`, `debasher_snapshot_resident` and
-`debasher_inspect_resident`) share what they need to find the nodes of a
-program, and two of them (`debasher_stop_resident` and
-`debasher_snapshot_resident`) what they need to write a trigger into their
-control ports (`engine/debasher_lib_resident_tools.sh`).
+up on a node (see "Escalation on a permanent node failure"). The four share
+the code that loads the program and finds its nodes
+(`engine/debasher_lib_resident_tools.sh`). Two of them,
+`debasher_stop_resident` and `debasher_snapshot_resident`, also share the code
+that writes a trigger into the control ports of the nodes.
 
 The sections that follow take the tools in that order. Each one says what its
 tool is for and how it is called, and then goes through what the tool does,

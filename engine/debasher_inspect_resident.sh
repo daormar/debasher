@@ -270,7 +270,7 @@ inspect_resident_notices()
     debasher::_resident_tool_load_program "${absdirname}" debasher_inspect_resident || return 1
 
     local -a node_args=()
-    local processname role script_file num_tasks execdir idx
+    local processname role script_file process_nodes node idx execdir
     while IFS= read -r processname; do
         role=$(debasher::_classify_resident_process_role "${processname}") || return 1
         if [ "${role}" = "supervisor" ]; then
@@ -280,15 +280,12 @@ inspect_resident_notices()
         if [ ! -f "${script_file}" ]; then
             continue
         fi
-        num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
+        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
         execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
-        if [ "${num_tasks}" -eq 1 ]; then
-            node_args+=(--node "${processname}" "-" "${execdir}")
-        else
-            for (( idx = 0; idx < num_tasks; idx++ )); do
-                node_args+=(--node "${processname}" "${idx}" "${execdir}")
-            done
-        fi
+        while IFS= read -r node; do
+            idx=$(debasher::_resident_tool_node_task_idx "${node}")
+            node_args+=(--node "${processname}" "${idx:--}" "${execdir}")
+        done <<< "${process_nodes}"
     done < <(printf '%s\n' "${!DEBASHER_PROGRAM_PROCESSES[@]}" | "${SORT}")
 
     "${debasher_libexecdir}"/debasher_inspect_node notices "${node_args[@]}"

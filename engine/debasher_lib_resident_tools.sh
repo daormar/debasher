@@ -20,10 +20,11 @@
 #
 # What the tools that act on a resident program from outside it share
 # (debasher_stop_resident, debasher_snapshot_resident,
-# debasher_inspect_resident): loading the program from its output
-# directory, finding its nodes and its Supervisor, the files of a node, and
-# writing a trigger into the control ports of every node. Sourced by those
-# tools after debasher_lib, never by debasher_lib itself.
+# debasher_reset_resident, debasher_inspect_resident): loading the program
+# from its output directory, finding its nodes and its Supervisor, the
+# files of a node, and writing a trigger into the control ports of every
+# node. Sourced by those tools after debasher_lib, never by debasher_lib
+# itself.
 
 ########
 debasher::_resident_tool_now_secs()
@@ -171,6 +172,32 @@ debasher::_resident_tool_num_tasks_of_process()
 }
 
 ########
+# Prints the nodes of process $2, in the output directory $1, one per line:
+# the process itself if it has one task, <process>:<idx> for each task of
+# one of several. Waits for its script until the deadline $3. Returns 1,
+# with an error, if the script does not come or does not give the number
+# of tasks.
+debasher::_resident_tool_list_nodes_of_process()
+{
+    local absdirname=$1
+    local processname=$2
+    local deadline=$3
+
+    local num_tasks
+    # From the script, so that a task not started yet counts
+    num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+    # A process of one task is a node named by its process alone
+    if [ "${num_tasks}" -eq 1 ]; then
+        echo "${processname}"
+        return 0
+    fi
+    local idx
+    for (( idx = 0; idx < num_tasks; idx++ )); do
+        echo "${processname}:${idx}"
+    done
+}
+
+########
 # Finds the Supervisor and the nodes of the program whose output directory
 # is $1, among the processes of DEBASHER_PROGRAM_PROCESSES. Sets the
 # variable named $4 to the process name of the Supervisor (empty if the
@@ -205,7 +232,7 @@ debasher::_resident_tool_find_supervisor_and_nodes()
     found_supervisor_ref=""
     found_nodes_ref=()
 
-    local processname role num_tasks idx
+    local processname role process_nodes node
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # The classifier of debasher::_validate_resident_program_processes
         role=$(debasher::_classify_resident_process_role "${processname}") || {
@@ -225,18 +252,13 @@ debasher::_resident_tool_find_supervisor_and_nodes()
                 if [ -n "${excluded[${processname}]+x}" ]; then
                     continue
                 fi
-                # From the script, so that a task not started yet counts
-                num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
-                # A process of one task is a node named by its process alone
-                if [ "${num_tasks}" -eq 1 ]; then
-                    found_nodes_ref+=("${processname}")
-                else
-                    for (( idx = 0; idx < num_tasks; idx++ )); do
-                        if [ -z "${excluded[${processname}:${idx}]+x}" ]; then
-                            found_nodes_ref+=("${processname}:${idx}")
-                        fi
-                    done
-                fi
+                process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+                while IFS= read -r node; do
+                    # -x <process>:<idx> leaves out one task
+                    if [ -z "${excluded[${node}]+x}" ]; then
+                        found_nodes_ref+=("${node}")
+                    fi
+                done <<< "${process_nodes}"
                 ;;
             *)
                 echo "Error: process ${processname} does not derive from FBPProcess or Supervisor" >&2
