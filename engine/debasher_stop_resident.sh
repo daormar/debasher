@@ -223,57 +223,62 @@ stop_node_gracefully()
 stop_supervisor_if_any()
 {
     local absdirname=$1
-    local deadline=$2
+    local supervisor=$2
+    local deadline=$3
 
-    if [ -z "${DEBASHER_RESIDENT_TOOL_SUPERVISOR}" ] || [ "${keep_supervisor}" -eq 1 ]; then
+    if [ -z "${supervisor}" ] || [ "${keep_supervisor}" -eq 1 ]; then
         return 0
     fi
 
-    stop_node_gracefully "${absdirname}" "${DEBASHER_RESIDENT_TOOL_SUPERVISOR}"
+    stop_node_gracefully "${absdirname}" "${supervisor}"
 
     local finished_file
-    finished_file=$(debasher::_get_process_finished_filename "${absdirname}" "${DEBASHER_RESIDENT_TOOL_SUPERVISOR}")
+    finished_file=$(debasher::_get_process_finished_filename "${absdirname}" "${supervisor}")
     if ! debasher::_resident_tool_wait_for_file "${finished_file}" "${deadline}"; then
-        echo "Error: ${DEBASHER_RESIDENT_TOOL_SUPERVISOR} (the Supervisor) never exited cleanly after a stop signal" >&2
+        echo "Error: ${supervisor} (the Supervisor) never exited cleanly after a stop signal" >&2
         return 1
     fi
 }
 
 ########
-# Records, for every node, its halted marker's content right now (-1 if
-# it does not exist yet), into the global HALTED_MARKER_BASELINE, before
-# anything triggers a round: read after triggering instead, a node whose
-# round closes fast enough could already show its fresh marker by the
-# time this runs, making it look like the baseline itself, and
-# wait_for_every_halted_marker would then wait forever for a second halt
-# that is never coming (a single, otherwise idle node closes its round in
-# well under the time it takes to get around to reading it).
+# Records the halted marker baseline of each node of the array named $2,
+# in the output directory $1, into the associative array named $3, keyed
+# by node: the content of its halted marker, or -1 without one. The marker
+# outlives the incarnation that wrote it, so only a marker past its
+# baseline belongs to this halt. Called before anything triggers a round:
+# read after it, a node whose round closed fast enough (a single idle node
+# closes its round in well under that time) would show its fresh marker as
+# the baseline, and the wait for it would last until the deadline.
 capture_halted_marker_baselines()
 {
     local absdirname=$1
+    local -n captured_nodes_ref=$2
+    local -n captured_baselines_ref=$3
 
-    declare -gA HALTED_MARKER_BASELINE=()
+    captured_baselines_ref=()
     local node
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
-        HALTED_MARKER_BASELINE["${node}"]=$(read_halted_marker_or_baseline "$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" halted)")
+    for node in "${captured_nodes_ref[@]}"; do
+        captured_baselines_ref["${node}"]=$(read_halted_marker_or_baseline "$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" halted)")
     done
 }
 
 ########
-# Waits for every node's halted marker to go beyond the baseline
-# capture_halted_marker_baselines recorded before the trigger was sent
-# (see wait_for_fresh_halted_marker): every node, not only initiators,
-# since a halt round closes at every node the marker reaches, not just
-# where it started.
+# Waits until the halted marker of each node of the array named $2, in the
+# output directory $1, goes past its baseline in the associative array
+# named $3 (see wait_for_fresh_halted_marker), or the deadline $4 passes.
+# Every node, not only initiators, since a halt round closes at every node
+# the marker reaches, not just where it started.
 wait_for_every_halted_marker()
 {
     local absdirname=$1
-    local deadline=$2
+    local -n waited_nodes_ref=$2
+    local -n waited_baselines_ref=$3
+    local deadline=$4
 
     local node marker_file
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
+    for node in "${waited_nodes_ref[@]}"; do
         marker_file=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" halted)
-        if ! wait_for_fresh_halted_marker "${marker_file}" "${HALTED_MARKER_BASELINE[${node}]}" "${deadline}"; then
+        if ! wait_for_fresh_halted_marker "${marker_file}" "${waited_baselines_ref[${node}]}" "${deadline}"; then
             echo "Error: ${node} never marked itself halted" >&2
             return 1
         fi
@@ -281,7 +286,8 @@ wait_for_every_halted_marker()
 }
 
 ########
-# Signals every node, then waits for every one's own .finished. Reads
+# Signals every node of the array named $2, in the output directory $1,
+# then waits for every one's own .finished until the deadline $3. Reads
 # each .id file again here, not reusing anything read earlier: with the
 # Supervisor already stopped (see stop_supervisor_if_any), nothing
 # should relaunch a node between the wait above and this, but reading it
@@ -289,15 +295,16 @@ wait_for_every_halted_marker()
 stop_every_node_and_wait_for_finished()
 {
     local absdirname=$1
-    local deadline=$2
+    local -n stopped_nodes_ref=$2
+    local deadline=$3
 
     local node
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
+    for node in "${stopped_nodes_ref[@]}"; do
         stop_node_gracefully "${absdirname}" "${node}"
     done
 
     local finished_file
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
+    for node in "${stopped_nodes_ref[@]}"; do
         finished_file=$(debasher::_resident_tool_node_finished_filename "${absdirname}" "${node}")
         if ! debasher::_resident_tool_wait_for_file "${finished_file}" "${deadline}"; then
             echo "Error: ${node} never exited cleanly after a stop signal" >&2
@@ -343,17 +350,25 @@ stop_resident_program()
 
     local deadline=$(( $(debasher::_resident_tool_now_secs) + timeout_secs ))
 
-    debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" || return 1
-    capture_halted_marker_baselines "${absdirname}"
+    local supervisor
+    local -a nodes=()
+    debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" supervisor nodes || return 1
+    local -A baselines=()
+    capture_halted_marker_baselines "${absdirname}" nodes baselines
 
     if [ -n "${killed_csv}" ]; then
         kill_nodes "${absdirname}" "${killed_csv}"
     fi
 
-    if stop_supervisor_if_any "${absdirname}" "${deadline}" \
-        && debasher::_resident_tool_trigger_every_node "${absdirname}" shutdown "$(debasher::_now_ms)" "${deadline}" \
-        && wait_for_every_halted_marker "${absdirname}" "${deadline}" \
-        && stop_every_node_and_wait_for_finished "${absdirname}" "${deadline}"
+    # The trigger is numbered with the time in milliseconds, as the
+    # Supervisor numbers those it relays: no state is kept between calls,
+    # and it stays above the epochs that initiators number themselves.
+    # Every initiator opens its round with that one number, so a node that
+    # the rounds of several initiators reach waits for markers of one epoch.
+    if stop_supervisor_if_any "${absdirname}" "${supervisor}" "${deadline}" \
+        && debasher::_resident_tool_trigger_every_node "${absdirname}" nodes shutdown "$(debasher::_now_ms)" "${deadline}" \
+        && wait_for_every_halted_marker "${absdirname}" nodes baselines "${deadline}" \
+        && stop_every_node_and_wait_for_finished "${absdirname}" nodes "${deadline}"
     then
         echo "Every node of ${dirname} stopped cleanly."
         return 0

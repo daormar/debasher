@@ -138,17 +138,20 @@ check_pars()
 }
 
 ########
-# Waits until every node has a checkpoint of the round numbered $2 or of a
-# newer one, or the deadline $3 passes. Returns 0 if the round closed at
-# every node, 1 if the deadline passed first (naming the nodes it did not
-# close at), and 2 if the program stopped meanwhile.
+# Waits until every node of the array named $2, in the output directory
+# $1, has a checkpoint of the round numbered $3 or of a newer one, or the
+# deadline $4 passes. Returns 0 if the round closed at every node, 1 if the
+# deadline passed first (naming the nodes it did not close at), and 2 if
+# the program stopped meanwhile.
 wait_for_round_to_close()
 {
     local absdirname=$1
-    local epoch=$2
-    local deadline=$3
+    local nodes_name=$2
+    local -n round_nodes_ref=$2
+    local epoch=$3
+    local deadline=$4
 
-    local -a pending=("${DEBASHER_RESIDENT_TOOL_NODES[@]}")
+    local -a pending=("${round_nodes_ref[@]}")
     local -a still_pending
     local node
     local polls=0
@@ -169,7 +172,7 @@ wait_for_round_to_close()
         fi
         # Whether the program is still running, about once a second
         polls=$(( polls + 1 ))
-        if [ $(( polls % 5 )) -eq 0 ] && ! debasher::_resident_tool_some_node_is_running "${absdirname}"; then
+        if [ $(( polls % 5 )) -eq 0 ] && ! debasher::_resident_tool_some_node_is_running "${absdirname}" "${nodes_name}"; then
             return 2
         fi
         "${SLEEP}" 0.2
@@ -177,15 +180,16 @@ wait_for_round_to_close()
 }
 
 ########
-# Waits until the deadline $2 passes. Returns 1 as soon as no node of the
-# program is running any more.
+# Waits until the deadline $3 passes. Returns 1 as soon as no node of the
+# array named $2, in the output directory $1, is running any more.
 sleep_while_running()
 {
     local absdirname=$1
-    local deadline=$2
+    local nodes_name=$2
+    local deadline=$3
 
     while [ "$(debasher::_resident_tool_now_secs)" -lt "${deadline}" ]; do
-        if ! debasher::_resident_tool_some_node_is_running "${absdirname}"; then
+        if ! debasher::_resident_tool_some_node_is_running "${absdirname}" "${nodes_name}"; then
             return 1
         fi
         "${SLEEP}" 1
@@ -194,36 +198,40 @@ sleep_while_running()
 }
 
 ########
-# Starts one round and waits for it until the deadline $3. Returns what
+# Starts the round numbered $3 at the nodes of the array named $2, in the
+# output directory $1, and waits for it until the deadline $4. Returns what
 # wait_for_round_to_close does, and 1 as well if the trigger could not be
 # written.
 snapshot_once()
 {
     local absdirname=$1
-    local epoch=$2
-    local deadline=$3
+    local nodes_name=$2
+    local epoch=$3
+    local deadline=$4
 
-    debasher::_resident_tool_trigger_every_node "${absdirname}" start_snapshot "${epoch}" "${deadline}" || return 1
-    wait_for_round_to_close "${absdirname}" "${epoch}" "${deadline}"
+    debasher::_resident_tool_trigger_every_node "${absdirname}" "${nodes_name}" start_snapshot "${epoch}" "${deadline}" || return 1
+    wait_for_round_to_close "${absdirname}" "${nodes_name}" "${epoch}" "${deadline}"
 }
 
 ########
-# Starts a round every every_secs seconds, until no node of the program is
-# running. A round that has not closed when the next one starts is only
-# warned about: the next one replaces it.
+# Starts a round every every_secs seconds at the nodes of the array named
+# $3, until none of them is running. A round that has not closed when the
+# next one starts is only warned about: the next one replaces it.
 snapshot_periodically()
 {
     local dirname=$1
     local absdirname=$2
+    local nodes_name=$3
 
     # Checked before every round, not only while waiting: with a short
     # period the deadline of a round can pass before any check, and a
     # trigger for a node that is gone blocks for its whole timeout.
     local next epoch status
-    while debasher::_resident_tool_some_node_is_running "${absdirname}"; do
+    while debasher::_resident_tool_some_node_is_running "${absdirname}" "${nodes_name}"; do
         next=$(( $(debasher::_resident_tool_now_secs) + every_secs ))
+        # Numbered as in snapshot_resident_program
         epoch=$(debasher::_now_ms)
-        snapshot_once "${absdirname}" "${epoch}" "${next}"
+        snapshot_once "${absdirname}" "${nodes_name}" "${epoch}" "${next}"
         status=$?
         case ${status} in
             0) echo "Round ${epoch} closed at every node of ${dirname}."
@@ -233,7 +241,7 @@ snapshot_periodically()
             *) break
                ;;
         esac
-        sleep_while_running "${absdirname}" "${next}" || break
+        sleep_while_running "${absdirname}" "${nodes_name}" "${next}" || break
     done
 
     echo "No node of ${dirname} is running any more, no more rounds."
@@ -251,21 +259,28 @@ snapshot_resident_program()
     local wait_secs=${every_secs:-${timeout_secs}}
     local deadline=$(( $(debasher::_resident_tool_now_secs) + wait_secs ))
 
-    debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "" "${deadline}" || return 1
+    local supervisor
+    local -a nodes=()
+    debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "" "${deadline}" supervisor nodes || return 1
 
-    if ! debasher::_resident_tool_some_node_is_running "${absdirname}"; then
+    if ! debasher::_resident_tool_some_node_is_running "${absdirname}" nodes; then
         echo "Error: no node of ${dirname} is running" >&2
         return 1
     fi
 
     if [ -n "${every_secs}" ]; then
-        snapshot_periodically "${dirname}" "${absdirname}"
+        snapshot_periodically "${dirname}" "${absdirname}" nodes
         return $?
     fi
 
+    # The round is numbered with the time in milliseconds, as the
+    # Supervisor numbers those it relays: no state is kept between calls,
+    # and it stays above the epochs that initiators number themselves.
+    # Every initiator opens its round with that one number, so a node that
+    # the rounds of several initiators reach waits for markers of one epoch.
     local epoch status
     epoch=$(debasher::_now_ms)
-    snapshot_once "${absdirname}" "${epoch}" "${deadline}"
+    snapshot_once "${absdirname}" nodes "${epoch}" "${deadline}"
     status=$?
     case ${status} in
         0) echo "Round ${epoch} closed at every node of ${dirname}."

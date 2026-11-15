@@ -18,12 +18,12 @@
 # TOOLS FOR RESIDENT PROGRAMS      #
 ####################################
 #
-# What the tools that act on a running resident program as a whole, from
-# outside it, share (debasher_stop_resident, debasher_snapshot_resident):
-# loading the program from its output directory, finding its nodes and its
-# Supervisor, the files of a node, and writing a trigger into the control
-# ports of every node. Sourced by those tools after debasher_lib, never by
-# debasher_lib itself.
+# What the tools that act on a resident program from outside it share
+# (debasher_stop_resident, debasher_snapshot_resident,
+# debasher_inspect_resident): loading the program from its output
+# directory, finding its nodes and its Supervisor, the files of a node, and
+# writing a trigger into the control ports of every node. Sourced by those
+# tools after debasher_lib, never by debasher_lib itself.
 
 ########
 debasher::_resident_tool_now_secs()
@@ -171,19 +171,21 @@ debasher::_resident_tool_num_tasks_of_process()
 }
 
 ########
-# Populates DEBASHER_RESIDENT_TOOL_SUPERVISOR (the process name of the
-# program's Supervisor, empty if it has none) and DEBASHER_RESIDENT_TOOL_NODES
-# (every other process, or every task of it if it is an array, minus the
-# nodes named in $2's comma-separated list) from DEBASHER_PROGRAM_PROCESSES,
-# already populated by the caller. Reuses
-# debasher::_classify_resident_process_role, the same classifier
-# debasher::_validate_resident_program_processes already uses, rather
-# than reinventing it here.
+# Finds the Supervisor and the nodes of the program whose output directory
+# is $1, among the processes of DEBASHER_PROGRAM_PROCESSES. Sets the
+# variable named $4 to the process name of the Supervisor (empty if the
+# program has none) and fills the array named $5 with the nodes, minus
+# those in the comma-separated list $2. Waits for the script of each
+# process until the deadline $3. Returns 1, with an error, on a process it
+# cannot classify, on a second Supervisor, or on a script that does not
+# come in time.
 debasher::_resident_tool_find_supervisor_and_nodes()
 {
     local absdirname=$1
     local excluded_csv=$2
     local deadline=$3
+    local -n found_supervisor_ref=$4
+    local -n found_nodes_ref=$5
 
     local -A excluded=()
     if [ -n "${excluded_csv}" ]; then
@@ -200,34 +202,38 @@ debasher::_resident_tool_find_supervisor_and_nodes()
         done
     fi
 
-    DEBASHER_RESIDENT_TOOL_SUPERVISOR=""
-    DEBASHER_RESIDENT_TOOL_NODES=()
+    found_supervisor_ref=""
+    found_nodes_ref=()
 
     local processname role num_tasks idx
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        # The classifier of debasher::_validate_resident_program_processes
         role=$(debasher::_classify_resident_process_role "${processname}") || {
             echo "Error: cannot classify process ${processname} (not a resident program?)" >&2
             return 1
         }
         case "${role}" in
             supervisor)
-                if [ -n "${DEBASHER_RESIDENT_TOOL_SUPERVISOR}" ]; then
-                    echo "Error: a resident program can have at most one Supervisor process, but both ${DEBASHER_RESIDENT_TOOL_SUPERVISOR} and ${processname} are" >&2
+                if [ -n "${found_supervisor_ref}" ]; then
+                    echo "Error: a resident program can have at most one Supervisor process, but both ${found_supervisor_ref} and ${processname} are" >&2
                     return 1
                 fi
-                DEBASHER_RESIDENT_TOOL_SUPERVISOR="${processname}"
+                found_supervisor_ref="${processname}"
                 ;;
             fbpprocess)
+                # -x <process> leaves out every task of the process
                 if [ -n "${excluded[${processname}]+x}" ]; then
                     continue
                 fi
+                # From the script, so that a task not started yet counts
                 num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+                # A process of one task is a node named by its process alone
                 if [ "${num_tasks}" -eq 1 ]; then
-                    DEBASHER_RESIDENT_TOOL_NODES+=("${processname}")
+                    found_nodes_ref+=("${processname}")
                 else
                     for (( idx = 0; idx < num_tasks; idx++ )); do
                         if [ -z "${excluded[${processname}:${idx}]+x}" ]; then
-                            DEBASHER_RESIDENT_TOOL_NODES+=("${processname}:${idx}")
+                            found_nodes_ref+=("${processname}:${idx}")
                         fi
                     done
                 fi
@@ -241,14 +247,15 @@ debasher::_resident_tool_find_supervisor_and_nodes()
 }
 
 ########
-# Returns 0 if some process of the nodes in DEBASHER_RESIDENT_TOOL_NODES is
-# running.
+# Returns 0 if the process of some node of the array named $2, in the
+# output directory $1, is running.
 debasher::_resident_tool_some_node_is_running()
 {
     local absdirname=$1
+    local -n running_nodes_ref=$2
 
     local node
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
+    for node in "${running_nodes_ref[@]}"; do
         if debasher::_process_is_in_progress "${absdirname}" "$(debasher::_resident_tool_node_processname "${node}")"; then
             return 0
         fi
@@ -257,10 +264,8 @@ debasher::_resident_tool_some_node_is_running()
 }
 
 ########
-# The trigger $1 (start_snapshot or shutdown), numbered with the epoch $2:
-# every initiator that gets it opens its round with that same number, so a
-# node that the rounds of several initiators reach waits for markers of one
-# epoch, not of several.
+# The line of the trigger $1 (start_snapshot or shutdown), numbered with the
+# epoch $2.
 debasher::_resident_tool_trigger_json()
 {
     local command=$1
@@ -269,37 +274,36 @@ debasher::_resident_tool_trigger_json()
 }
 
 ########
-# Writes the trigger $2, numbered with the epoch $3, into the control ports
-# of every node in DEBASHER_RESIDENT_TOOL_NODES (an initiator's own; most
-# nodes have none, and the round reaches them from elsewhere in the graph,
-# see the design doc's Glossary entry for "control ports file"). The epoch is
-# the time in milliseconds (debasher::_now_ms), the numbering a Supervisor
-# uses for the triggers it relays: it needs no state kept between calls and
-# stays above the epochs that initiators number themselves. Waits (briefly,
-# against the deadline $4) for a node that has not written its control_ports
-# file yet, rather than giving up on it at once: a program can still be
-# starting up when this runs. A write that cannot be done within 5 seconds
-# (a control port fed from outside whose node is down has no reader) is an
-# error.
+# Writes the trigger $3, numbered with the epoch $4, into every port listed
+# in the control ports file of each node of the array named $2, in the
+# output directory $1 (most nodes list none, see the Glossary entry
+# "control ports file" of the design doc). Returns 1, with an error, on a
+# node whose control ports file does not come before the deadline $5, or on
+# a write that cannot be done within 5 seconds; the first error ends it,
+# and the ports after it get nothing.
 debasher::_resident_tool_trigger_every_node()
 {
     local absdirname=$1
-    local command=$2
-    local epoch=$3
-    local deadline=$4
+    local -n triggered_nodes_ref=$2
+    local command=$3
+    local epoch=$4
+    local deadline=$5
 
     local trigger_json
     trigger_json=$(debasher::_resident_tool_trigger_json "${command}" "${epoch}")
 
     local node cp_file fifo
-    for node in "${DEBASHER_RESIDENT_TOOL_NODES[@]}"; do
+    for node in "${triggered_nodes_ref[@]}"; do
         cp_file=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" control_ports)
+        # A program can still be starting up when this runs
         if ! debasher::_resident_tool_wait_for_file "${cp_file}" "${deadline}"; then
             echo "Error: ${node} never wrote its control_ports file" >&2
             return 1
         fi
         while IFS= read -r fifo; do
             [ -n "${fifo}" ] || continue
+            # A control port fed from outside whose node is down has no
+            # reader, and the open would block for ever
             if ! "${TIMEOUT}" 5 "${BASH}" -c 'echo "$1" > "$2"' _ "${trigger_json}" "${fifo}"; then
                 echo "Error: could not write the ${command} trigger to ${fifo}" >&2
                 return 1
