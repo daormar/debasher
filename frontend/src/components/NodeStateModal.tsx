@@ -137,7 +137,7 @@ function LogView({ log }: { log: InputLogView }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
       <div style={{ fontSize: 13, color: "#666" }}>
         The latest {log.records.length.toLocaleString()} records. Those above the latest checkpoint
-        (capture_pos {log.capture_pos ?? "none"}), highlighted, are what a relaunch now would replay.
+        (capture_pos {log.capture_pos ?? "none"}), highlighted, are those that a relaunch now would go through.
       </div>
       <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
         <thead>

@@ -108,8 +108,11 @@ describe("summaryRows", () => {
     expect(rows.find(row => row.label === "Node info")?.value).toMatch(/never written/);
   });
 
-  it("counts the records that a relaunch would replay", () => {
+  it("counts the records that a relaunch would go through, none on a checkpoint of another schema", () => {
     expect(summaryRows(summary()).find(row => row.label === "To replay")?.value).toMatch(/^2 records /);
+    const log = summary().input_log;
+    const rows = summaryRows(summary({ input_log: { ...log, to_replay: null } }));
+    expect(rows.find(row => row.label === "To replay")?.value).toMatch(/^none: .*another schema version/);
   });
 });
 

@@ -61,12 +61,15 @@ def _mtime(path):
 
 
 def _read_json(path):
-    """The JSON value in `path`, or None if the file is not there."""
+    """The JSON value in `path`, or None if the file is not there. Raises
+    InspectError if it does not parse."""
     try:
         with open(path) as f:
             return json.load(f)
     except FileNotFoundError:
         return None
+    except ValueError as exc:
+        raise InspectError(f"{path} is not valid JSON: {exc}") from exc
 
 
 # --- the files of a node ------------------------------------------------------
@@ -144,6 +147,7 @@ class Node:
 
 
 def summary(node, process, task_state):
+    checkpoints = node.checkpoints()
     capture_pos = node.latest_capture_pos()
     info = node.node_info()
 
@@ -162,7 +166,12 @@ def summary(node, process, task_state):
         input_log["last_pos"] = log.read_last_pos()
     except ValueError as exc:
         input_log["error"] = str(exc)
-    if input_log["last_pos"] is not None:
+    if checkpoints and capture_pos is None:
+        # The latest checkpoint is of another schema version, on which the
+        # node refuses to start, so it would replay nothing (or none of the
+        # checkpoints could be read, pruned while they were)
+        input_log["to_replay"] = None
+    elif input_log["last_pos"] is not None:
         input_log["to_replay"] = max(0, input_log["last_pos"] - (capture_pos or 0))
 
     return {
@@ -170,7 +179,7 @@ def summary(node, process, task_state):
         "task": node.task_idx,
         "task_state": task_state,
         "checkpoints": [
-            {"epoch": epoch, "written_at": _mtime(path)} for epoch, path in node.checkpoints()
+            {"epoch": epoch, "written_at": _mtime(path)} for epoch, path in checkpoints
         ],
         "capture_pos": capture_pos,
         "halted_epoch": node.halted_epoch(),
@@ -193,7 +202,7 @@ def checkpoint(node, epoch):
     path = dict(retained).get(epoch)
     content = _read_json(path) if path is not None else None
     if content is None:
-        epochs = ", ".join(str(e) for e, _ in node.checkpoints()) or "none"
+        epochs = ", ".join(str(e) for e, _ in retained) or "none"
         raise InspectError(f"the node retains no checkpoint of epoch {epoch} (it retains: {epochs})")
 
     schema_version = content.get("schema_version")

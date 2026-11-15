@@ -481,7 +481,11 @@ task, for an array process. The commands are:
 
 * ``summary``: the state of the node (alive, down, finished or not
   launched), its checkpoints, the size of its input log against its
-  limit, its health and its notice.
+  limit, its health and its notice. Its ``input_log.to_replay`` is the
+  number of records above the capture of the latest checkpoint, which a
+  relaunch goes through (only the data records are processed again, so
+  it bounds the work redone), or ``null`` when the latest checkpoint is
+  of another schema version, on which the node does not start.
 * ``checkpoint <int>``: a checkpoint that the node keeps, given by its
   epoch, as ``summary`` lists them.
 * ``log [--port <string>] [--last <int>]``: the latest records of the
@@ -489,6 +493,11 @@ task, for an array process. The commands are:
 * ``runs``: the batch runs of a launcher node, with their states.
 * ``notices``: the notices of every node of the program (with ``-d``
   alone).
+
+Its exit status is 0 once it has printed. It is 1, with a message, on a
+usage error, on a process or task index that it refuses, on an epoch
+that the node does not keep, and on a checkpoint, node info file or
+notice of the node that is not valid JSON, which the message names.
 
 Retrieving Process Output
 ---------------------------

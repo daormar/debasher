@@ -51,7 +51,8 @@ export interface NodeSummary {
     segments: number;
     first_pos: number | null;
     last_pos: number | null;
-    to_replay: number;
+    // null when the latest checkpoint is of another schema version
+    to_replay: number | null;
     error?: string;
   };
   node_info: NodeInfo | null;
@@ -234,8 +235,10 @@ export function summaryRows(summary: NodeSummary): SummaryRow[] {
     },
     {
       label: "To replay",
-      value: `${summary.input_log.to_replay} record${summary.input_log.to_replay === 1 ? "" : "s"} ` +
-        "above the latest checkpoint, which a relaunch now would replay",
+      value: summary.input_log.to_replay === null
+        ? "none: the latest checkpoint is of another schema version, on which the node does not start"
+        : `${summary.input_log.to_replay} record${summary.input_log.to_replay === 1 ? "" : "s"} ` +
+          "above the latest checkpoint, which a relaunch now would go through",
     },
   ];
 }

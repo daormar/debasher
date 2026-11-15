@@ -3709,24 +3709,30 @@ There are five commands: four on one node, `summary`, `checkpoint`, `log` and
 
 `summary` is what the web UI shows first of a node, and what warns of a coming
 failure. Its `task_state` is `finished` when the task has a `.finished`, whose
-`.id` is then not asked about, otherwise `alive` when the process that the
-`.id` of the task names (its PID with its start time) still runs, `down` when
-it has an `.id`, and `not_launched` when it has no `.id` yet. These are the
-files that `debasher_status` reads for a whole process, and in the same way.
-`checkpoints` gives the epochs of the checkpoints that the node retains, oldest
-first, each with the time at which it was written, and `capture_pos` that of the
-latest one. `halted_epoch` is the content of the halted marker, or `null`
-without one. `input_log` gives its size on disk against `INPUT_LOG_MAX_BYTES`,
-its number of segments, the positions of its first and its last complete
-records, and `to_replay`, how many records lie above the `capture_pos` of the
-latest checkpoint: what the node would replay if it were relaunched now. The
-last position is read from the newest segment with a complete record, as the
-node reads it when it recovers, never from the whole log. `node_info` is the
-node info file as the node last wrote it, with its age in seconds, or `null` if
-the node has never written one; `stale` is true when the file is older than two
-heartbeat intervals, as it is in a node that is down, still replaying, or whose
-heartbeat thread has died. `notice` is the notice of the node (see "Notices"),
-its level, its text and when it was set, or `null` without one.
+`.id` is then not asked about, otherwise `alive` when the process that the `.id`
+of the task names (its PID with its start time) still runs, `down` when it has
+an `.id`, and `not_launched` when it has no `.id` yet. These are the files that
+`debasher_status` reads for a whole process, and in the same way. `checkpoints`
+gives the epochs of the checkpoints that the node retains, oldest first, each
+with the time at which it was written, and `capture_pos` that of the latest one.
+`halted_epoch` is the content of the halted marker, or `null` without one.
+`input_log` gives its size on disk against `INPUT_LOG_MAX_BYTES`, its number of
+segments, the positions of its first and its last complete records, and
+`to_replay`, how many records lie above the `capture_pos` of the latest
+checkpoint. Those are the records that a relaunch now would go through. The
+replay runs `process_data()` again on `DATA` only, acts on `CLOSE` and skips
+`BARRIER` and `INTERACT`. So `to_replay` is an upper bound on the work that a
+relaunch redoes. When the latest checkpoint is of another schema version,
+`to_replay` is `null`, since the node refuses to start on it. The last position
+is read from the newest segment with a complete record, as the node reads it
+when it recovers, never from the whole log. When the first or the last complete
+record does not parse, `input_log` also gives `error`, which says where, and the
+position that could not be read stays `null`. `node_info` is the node info file
+as the node last wrote it, with its age in seconds, or `null` if the node has
+never written one; `stale` is true when the file is older than two heartbeat
+intervals, as it is in a node that is down, still replaying, or whose heartbeat
+thread has died. `notice` is the notice of the node (see "Notices"), its level,
+its text and when it was set, or `null` without one.
 
 `checkpoint <epoch>` gives one checkpoint that the node retains: its path, the
 time at which it was written, its schema version and `readable`, whether that
@@ -3741,26 +3747,30 @@ error that names the epochs that it retains.
 log, 100 by default, or of one port with `--port`, in the order of their
 positions, each with its position, its port, and the type, the sequence number
 and the payload of its envelope, together with the `capture_pos` of the latest
-checkpoint, which tells apart the records that a relaunch would replay. The
+checkpoint, which tells apart the records that a relaunch would go through. The
 tool reads the segments from the newest, and stops once it has `n` records. A
 line that ends in a newline but does not parse, which would stop the recovery
 of the node, is not an error of the tool: it is shown in its place, with its
 segment, its line number and why it does not parse, since the tool shows the
 log and does not recover from it.
 
-`runs`, for a launcher node only, gives its runs root and, in the order of
-their positions, every batch run that it has registered: its position, its
-name, its run directory, its state (`registered`, `running`, `finished`,
-`failed` or `stopped`) and, once it has ended, its exit code. The registrations
-come from `.launcher/registrations/` in the output directory of the process,
-the runs root and `PROCESS` from the node info file, and the state of each
-batch run from the rule that the node follows (see "Launching from the queue on
-disk"), with the function that implements it. Only the node acts on that state:
-the tool writes no exit code and launches nothing, so a batch run that the rule
-finds ended is shown as ended before the node has written its exit code. The
-rule asks `debasher_status` about some run directories, which the tool does
-once for each, where the node spaces its questions out, so `runs` takes longer
-with many batch runs in progress.
+`runs`, for a launcher node only, gives its runs root and, in the order of their
+positions, every batch run that it has registered: its position, its name, its
+run directory, its state (`registered`, `running`, `finished`, `failed` or
+`stopped`) and, once it has ended, its exit code. The registrations come from
+`.launcher/registrations/` in the output directory of the process, and the runs
+root and `PROCESS` from the node info file. The state of each batch run comes
+from `_batch_run_state` (`engine/debasher_runtime_launcher.py`), the function
+with which the node itself reads it (see "Launching from the queue on disk").
+Only the node acts on that state: the tool writes no exit code and launches
+nothing. So a batch run that has ended can be shown as ended before the node has
+written its exit code. For some batch runs of a whole program the function asks
+`debasher_status`: those whose shell wrote `submitted`, and those whose shell is
+gone without writing `submitted` or `exit_code`. Each question runs
+`debasher_status` on the run directory. The node asks it at most once every
+`STATUS_CHECK_INTERVAL_SECS` for each batch run. The tool asks it every time,
+once for each such batch run. So `runs` takes longer when many batch runs are in
+that state.
 
 `notices` is given with `-d` alone, since it covers the whole program. It gives
 the notice of every node that has one, sorted by the name of its process and by
@@ -3774,7 +3784,9 @@ The tool ends with 0 once it has printed, and with 1, and a message, on an
 error of usage or setup: a program that is not a resident one, a process or an
 index that it refuses (see above), an epoch that the node does not retain,
 `runs` on a node that is not a launcher node or has never written its node
-info file, `notices` with `-p` or `-t`, or another command without `-p`.
+info file, a checkpoint, the node info file or a notice that is not valid JSON
+(the message names it), `notices` with `-p` or `-t`, or another command without
+`-p`.
 
 # `ProgramLauncher`: batch runs from a node
 

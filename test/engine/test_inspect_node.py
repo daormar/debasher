@@ -175,7 +175,44 @@ def test_a_task_reads_the_files_with_its_index(execdir):
 
 def test_a_latest_checkpoint_of_another_schema_version_gives_no_capture_pos(execdir):
     (execdir / "checkpoints" / "5.json").write_text(json.dumps(_checkpoint(5, 4, schema_version=1)))
-    assert _run(execdir, "summary")["capture_pos"] is None
+    result = _run(execdir, "summary")
+    assert result["capture_pos"] is None
+    # The node refuses to start on that checkpoint, and so replays nothing
+    assert result["input_log"]["to_replay"] is None
+
+
+def test_a_checkpoint_pruned_while_the_summary_reads_it_is_skipped(execdir, monkeypatch):
+    real_read_json = inspect._read_json
+
+    def read_json_after_pruning(path):
+        if str(path).endswith("5.json"):
+            return None
+        return real_read_json(path)
+
+    monkeypatch.setattr(inspect, "_read_json", read_json_after_pruning)
+    assert _run(execdir, "summary")["capture_pos"] == 2
+
+
+def test_a_file_of_the_node_that_does_not_parse_is_an_error_naming_it(execdir, capsys):
+    (execdir / "checkpoints" / "5.json").write_text('{"schema_version": ')
+    argv = [
+        "--process", "relay", "--task-state", "alive", "--execdir", str(execdir),
+        "--process-outdir", "/x", "--debasher-status", "/bin/false", "summary",
+    ]
+    assert inspect.main(argv) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("Error: ") and "5.json is not valid JSON" in err, err
+
+
+def _list_tree(directory):
+    return sorted((str(p), p.stat().st_mtime_ns) for p in directory.rglob("*"))
+
+
+@pytest.mark.parametrize("command", [["summary"], ["checkpoint", "5"], ["log"]])
+def test_a_command_writes_nothing(execdir, command):
+    before = _list_tree(execdir)
+    _run(execdir, *command)
+    assert _list_tree(execdir) == before
 
 
 def test_a_log_with_nothing_above_the_capture_replays_nothing(execdir):
