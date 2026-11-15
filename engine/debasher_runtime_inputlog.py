@@ -23,7 +23,7 @@ import os
 import json
 from collections import namedtuple
 
-from debasher_runtime_envelope import _envelope_from_obj
+from debasher_runtime_envelope import _make_envelope
 from debasher_runtime_transport import _write_all
 
 
@@ -62,7 +62,7 @@ def _list_segment_files(directory):
     return found
 
 
-def _last_complete_line(data):
+def _find_last_complete_line(data):
     """The last line of the contents of a segment that ends in a newline,
     without it, or None if there is none: whatever follows it is a torn
     tail."""
@@ -146,7 +146,7 @@ class _InputLog:
             os.close(self._fd)
             self._fd = None
 
-    def _segment_path(self, first_pos):
+    def _get_segment_path(self, first_pos):
         return os.path.join(self._dir, f"{first_pos}.log")
 
     def _list_segments(self):
@@ -168,7 +168,7 @@ class _InputLog:
             or "env" not in obj
         ):
             raise ValueError(f"input log record at {where} lacks pos, port or env: {raw[:80]!r}")
-        return pos, obj["port"], _envelope_from_obj(obj["env"], where)
+        return pos, obj["port"], _make_envelope(obj["env"], where)
 
     def recover(self, must_reach=0):
         """
@@ -191,7 +191,7 @@ class _InputLog:
             first_pos, path = segments[-1]
             with open(path, "rb") as f:
                 data = f.read()
-            line = _last_complete_line(data)
+            line = _find_last_complete_line(data)
             if line is None:
                 os.remove(path)
                 segments.pop()
@@ -292,7 +292,7 @@ class _InputLog:
                 os.makedirs(self._dir, exist_ok=True)
                 # O_EXCL: a new segment must never land on an existing file.
                 self._fd = os.open(
-                    self._segment_path(first_pos),
+                    self._get_segment_path(first_pos),
                     os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_EXCL,
                     0o644,
                 )
@@ -390,7 +390,7 @@ class _InputLog:
             first_pos, size = self._segments.pop(0)
             self._total_bytes -= size
             try:
-                os.remove(self._segment_path(first_pos))
+                os.remove(self._get_segment_path(first_pos))
             except FileNotFoundError:
                 pass
 
@@ -429,7 +429,7 @@ class _InputLogReader:
     def __init__(self, directory):
         self._dir = directory
 
-    def segments(self):
+    def list_segments(self):
         """[(first position, size in bytes)] of the segments on disk, oldest
         first; one that is gone when its size is read is left out."""
         found = []
@@ -440,7 +440,7 @@ class _InputLogReader:
                 continue
         return found
 
-    def first_pos(self):
+    def read_first_pos(self):
         """The position of the first complete record, or None if there is
         none. Raises ValueError if that line is not a record."""
         for first_pos, path in _list_segment_files(self._dir):
@@ -453,7 +453,7 @@ class _InputLogReader:
             return _InputLog._parse_record(data[:end], f"{path}, line 1")[0]
         return None
 
-    def last_pos(self):
+    def read_last_pos(self):
         """The position of the last complete record, read from the newest
         segment that has one, as recovery reads it, or None if there is none.
         Raises ValueError if that line is not a record."""
@@ -461,13 +461,13 @@ class _InputLogReader:
             data = _read_segment(path)
             if data is None:
                 continue
-            line = _last_complete_line(data)
+            line = _find_last_complete_line(data)
             if line is None:
                 continue
             return _InputLog._parse_record(line, f"{path}, last record")[0]
         return None
 
-    def records_backwards(self):
+    def read_records_backwards(self):
         """
         Yields every complete record, from the newest to the oldest, as a
         LogRecord(pos, port, envelope), or, for a line that ends in a newline

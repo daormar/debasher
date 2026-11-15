@@ -57,7 +57,7 @@ from debasher_runtime_envelope import (
     encode_data,
     encode_hello,
     encode_interact,
-    _envelope_from_obj,
+    _make_envelope,
 )
 from debasher_runtime_transport import _STOP, _PortWorker, _parse_opts
 from debasher_runtime_inputlog import LogRecord, _InputLog

@@ -134,10 +134,10 @@ def decode_envelope(line):
     is missing, "type" is not one of the valid envelope types, or a field
     has the wrong type for its envelope (see _check_fields).
     """
-    return _envelope_from_obj(json.loads(line), line)
+    return _make_envelope(json.loads(line), line)
 
 
-def _envelope_from_obj(obj, what):
+def _make_envelope(obj, what):
     """
     Validates an envelope that is already a decoded JSON value and returns
     it as an Envelope(type, payload, seq). `what` says where it came from

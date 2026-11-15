@@ -148,7 +148,7 @@ def summary(node, process, task_state):
     info = node.node_info()
 
     log = node.input_log()
-    segments = log.segments()
+    segments = log.list_segments()
     input_log = {
         "bytes": sum(size for _, size in segments),
         "max_bytes": info["limits"]["input_log_max_bytes"] if info else None,
@@ -158,8 +158,8 @@ def summary(node, process, task_state):
         "to_replay": 0,
     }
     try:
-        input_log["first_pos"] = log.first_pos()
-        input_log["last_pos"] = log.last_pos()
+        input_log["first_pos"] = log.read_first_pos()
+        input_log["last_pos"] = log.read_last_pos()
     except ValueError as exc:
         input_log["error"] = str(exc)
     if input_log["last_pos"] is not None:
@@ -221,7 +221,7 @@ def checkpoint(node, epoch):
 
 def log(node, port, last):
     records = []
-    for item in node.input_log().records_backwards():
+    for item in node.input_log().read_records_backwards():
         if len(records) >= last:
             break
         if isinstance(item, BadLine):
