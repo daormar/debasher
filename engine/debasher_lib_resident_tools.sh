@@ -198,6 +198,53 @@ debasher::_resident_tool_list_nodes_of_process()
 }
 
 ########
+# Resolves the comma-separated names $2, each <process> (every task of it)
+# or <process>:<idx> (one task of a process of several), against the nodes
+# of the program whose output directory is $1, into the array named $4.
+# Waits for the script of each process until the deadline $3. Returns 1,
+# with an error, on a name that is no node: a process that is not an
+# FBPProcess of the program, the Supervisor among them, a task index of a
+# process of one task, or one not below its number of tasks.
+debasher::_resident_tool_resolve_node_names()
+{
+    local absdirname=$1
+    local names_csv=$2
+    local deadline=$3
+    local -n resolved_nodes_ref=$4
+
+    resolved_nodes_ref=()
+    [ -n "${names_csv}" ] || return 0
+
+    local -a names=()
+    IFS=',' read -ra names <<< "${names_csv}"
+    local name processname role process_nodes node num_found
+    for name in "${names[@]}"; do
+        processname=$(debasher::_resident_tool_node_processname "${name}")
+        role=""
+        if [ -n "${DEBASHER_PROGRAM_PROCESSES[${processname}]+x}" ]; then
+            role=$(debasher::_classify_resident_process_role "${processname}") || role=""
+        fi
+        if [ "${role}" != "fbpprocess" ]; then
+            echo "Error: ${name} is not a node of the program: ${processname} is not one of its processes that derive from FBPProcess" >&2
+            return 1
+        fi
+        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+        # The process alone names each of its nodes
+        num_found=0
+        while IFS= read -r node; do
+            if [ "${name}" = "${processname}" ] || [ "${name}" = "${node}" ]; then
+                resolved_nodes_ref+=("${node}")
+                num_found=$((num_found + 1))
+            fi
+        done <<< "${process_nodes}"
+        if [ ${num_found} -eq 0 ]; then
+            echo "Error: ${name} is not a node of the program (those of ${processname}: ${process_nodes//$'\n'/ })" >&2
+            return 1
+        fi
+    done
+}
+
+########
 # Finds the Supervisor and the nodes of the program whose output directory
 # is $1, among the processes of DEBASHER_PROGRAM_PROCESSES. Sets the
 # variable named $4 to the process name of the Supervisor (empty if the

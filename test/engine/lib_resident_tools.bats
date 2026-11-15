@@ -242,3 +242,27 @@ _set_up_program() {
     run debasher::_resident_tool_some_node_is_running "${outdir}" idle
     [ "${status}" -eq 1 ]
 }
+
+# --- debasher::_resident_tool_resolve_node_names -------------------------
+
+@test "a name resolves to the nodes it names: a process to each of its tasks, a task to itself" {
+    _set_up_program
+    local -a resolved=()
+    debasher::_resident_tool_resolve_node_names "${outdir}" "solo,arr:1" "$(date +%s)" resolved
+    [ "${resolved[*]}" = "solo arr:1" ]
+    debasher::_resident_tool_resolve_node_names "${outdir}" "arr" "$(date +%s)" resolved
+    [ "${resolved[*]}" = "arr:0 arr:1 arr:2" ]
+    debasher::_resident_tool_resolve_node_names "${outdir}" "" "$(date +%s)" resolved
+    [ ${#resolved[@]} -eq 0 ]
+}
+
+@test "a name that is no node is an error" {
+    _set_up_program
+    local -a resolved=()
+    local name
+    for name in solo:0 arr:3 nope sup; do
+        run debasher::_resident_tool_resolve_node_names "${outdir}" "${name}" "$(date +%s)" resolved
+        [ "${status}" -eq 1 ]
+        [[ "${output}" == *"${name} is not a node of the program"* ]]
+    done
+}

@@ -64,9 +64,8 @@ usage()
     echo "                          <process>:<idx> (one task of an array)"
     echo "--kill <string>           Comma-separated nodes to kill (SIGKILL to the"
     echo "                          process group of each, if it still runs)"
-    echo "                          before the graceful stop: <process> for a"
-    echo "                          process of one task, <process>:<idx> for a"
-    echo "                          task; usually also given to -x"
+    echo "                          before the graceful stop, named as for -x;"
+    echo "                          usually also given to -x"
     echo "--timeout <int>           Seconds to wait for a clean stop before"
     echo "                          falling back to debasher_stop (default: 60)"
     echo "--keep-supervisor         Do not stop the program's Supervisor, if it"
@@ -315,20 +314,18 @@ stop_every_node_and_wait_for_finished()
 
 ########
 # Kills, with SIGKILL to its whole process group (debasher::_stop_pid), the
-# process of each node of the comma-separated list $2 that still runs; a
-# node with no .id, or whose task has ended, is left as it is. For a node
-# that cannot halt and may still hang, such as one that the Supervisor gave
-# up on in its startup: a graceful stop leaves it alone (-x), and nothing
-# else would end it.
+# process of each node of the array named $2, in the output directory $1,
+# that still runs; a node with no .id, or whose task has ended, is left as
+# it is. For a node that cannot halt and may still hang, such as one that
+# the Supervisor gave up on in its startup: a graceful stop leaves it alone
+# (-x), and nothing else would end it.
 kill_nodes()
 {
     local absdirname=$1
-    local killed_csv=$2
+    local -n killed_nodes_ref=$2
 
-    local -a nodes=()
-    IFS=',' read -ra nodes <<< "${killed_csv}"
     local node id_file id_info pid
-    for node in "${nodes[@]}"; do
+    for node in "${killed_nodes_ref[@]}"; do
         id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
         [ -f "${id_file}" ] || continue
         id_info=$("${CAT}" "${id_file}" 2>/dev/null)
@@ -350,15 +347,18 @@ stop_resident_program()
 
     local deadline=$(( $(debasher::_resident_tool_now_secs) + timeout_secs ))
 
+    # Every name checked before anything is touched
+    local -a excluded_nodes=() killed_nodes=()
+    debasher::_resident_tool_resolve_node_names "${absdirname}" "${excluded_csv}" "${deadline}" excluded_nodes || return 1
+    debasher::_resident_tool_resolve_node_names "${absdirname}" "${killed_csv}" "${deadline}" killed_nodes || return 1
+
     local supervisor
     local -a nodes=()
     debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" supervisor nodes || return 1
     local -A baselines=()
     capture_halted_marker_baselines "${absdirname}" nodes baselines
 
-    if [ -n "${killed_csv}" ]; then
-        kill_nodes "${absdirname}" "${killed_csv}"
-    fi
+    kill_nodes "${absdirname}" killed_nodes
 
     # The trigger is numbered with the time in milliseconds, as the
     # Supervisor numbers those it relays: no state is kept between calls,

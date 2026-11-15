@@ -3386,14 +3386,14 @@ wait forever on it.
   ambiguous with a process whose name ends that way). It lets
   `on_node_permanently_failed` leave out the node it gave up on, which could
   never halt.
-- `--kill` names nodes to kill before the graceful stop: `<process>` for a
-  process of one task, `<process>:<idx>` for a task. Each one that still runs
-  gets `SIGKILL` to its process group (`debasher::_stop_pid`). Its PID comes
-  from `debasher::_builtin_sched_get_running_task_pid`, so that a process that
-  got the PID of an ended task is never killed. The escalation gives the node
-  it gave up on to both `-x` and `--kill`, since that node may still hang in
-  its startup. `-x` alone leaves a node running, which is what a user who
-  excludes one by hand wants.
+- `--kill` names nodes to kill before the graceful stop, in the same forms as
+  `-x`: `<process>` kills every task of a process of several tasks. Each one
+  that still runs gets `SIGKILL` to its process group (`debasher::_stop_pid`).
+  Its PID comes from `debasher::_builtin_sched_get_running_task_pid`, so that a
+  process that got the PID of an ended task is never killed. The escalation
+  gives the node it gave up on to both `-x` and `--kill`, since that node may
+  still hang in its startup. `-x` alone leaves a node running, which is what a
+  user who excludes one by hand wants.
 - `--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the
   whole graceful attempt. Past it, the tool falls back to
   `debasher_stop -d <outdir>`, a hard kill of the entire program. So the tool,
@@ -3405,6 +3405,12 @@ wait forever on it.
   a thread of the very `Supervisor` process that the tool would otherwise
   target. "Escalation on a permanent node failure" says why that specifically
   must not happen, not just should not.
+
+The tool checks every name of `-x` and `--kill` before it touches anything. A
+name that is no node of the program is an error, and the tool ends with 1.
+Such names are those of no process, or of a process that is not a node (the
+`Supervisor` among them), a task index for a process of one task, and an index
+that is not a task of the process.
 
 The tool finds the program's nodes and its `Supervisor`, if it has one, the same
 way `debasher::_validate_resident_program_processes` does: it loads the module,
@@ -3443,12 +3449,13 @@ The stop goes in seven steps:
    a stop signal to each node that still runs.
 7. It waits for every node's own `.finished`.
 
-The same deadline, from `--timeout`, bounds the finding of the nodes and every
-step. A step from the third on that fails sends the tool to the fallback at
-once, without waiting for the deadline. One such failure is a trigger that
-cannot be written within 5 seconds, as when a control port fed from outside has
-no reader. A failure while finding the nodes, such as a process whose script
-never comes, ends the tool with 1 and an error, with no fallback.
+The same deadline, from `--timeout`, bounds the check of the names, the finding
+of the nodes and every step. A step from the third on that fails sends the tool
+to the fallback at once, without waiting for the deadline. One such failure is a
+trigger that cannot be written within 5 seconds, as when a control port fed from
+outside has no reader. A failure while checking the names or finding the nodes,
+such as a process whose script never comes, ends the tool with 1 and an error,
+with no fallback.
 
 A stop signal is `SIGTERM` to the whole process group (`kill -TERM -- "-$pid"`,
 `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of
