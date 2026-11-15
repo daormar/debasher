@@ -185,8 +185,7 @@ export function snapshotOutcome(
 
   if (exitCode === 2) {
     const where = pendingNodes.length > 0 ? ` at ${pendingNodes.join(", ")}` : " at some node";
-    return `${round} did not close${where}, since the node is down, has ` +
-      "halted or has a halt open.";
+    return `${round} did not close${where}. What the tool printed says why.`;
   }
 
   if (exitCode === 1) {
