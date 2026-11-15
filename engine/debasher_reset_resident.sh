@@ -104,7 +104,8 @@ check_pars()
 # $2: in the process's __exec__ directory, the checkpoints, the input log, the
 # halted marker and the notice of each task, named as the node's runtime names
 # them (see _get_execdir_entry in engine/debasher_runtime_transport.py), and the
-# output directory of the process. Only the paths that exist.
+# output directory of the process unless it is empty. Only the paths that
+# exist.
 state_paths_of_process()
 {
     local absdirname=$1
@@ -129,8 +130,10 @@ state_paths_of_process()
         done <<< "${process_nodes}"
     fi
 
+    # An empty output directory is left, as the reset itself leaves it, so
+    # that a program with nothing left to reset says so
     local outdir=$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")
-    if [ -d "${outdir}" ]; then
+    if [ -d "${outdir}" ] && [ -n "$("${FIND}" "${outdir}" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
         echo "${outdir}"
     fi
 }
@@ -196,13 +199,26 @@ reset_resident_program()
     local stamp
     printf -v stamp '%(%Y%m%d_%H%M%S)T' -1
     local reset_dir="${absdirname}/${DEBASHER_RESET_RESIDENT_DIRNAME}/${stamp}"
+    # A second reset within the same second gets a directory of its own
+    local num_same_stamp=0
+    while [ -e "${reset_dir}" ]; do
+        num_same_stamp=$((num_same_stamp + 1))
+        reset_dir="${absdirname}/${DEBASHER_RESET_RESIDENT_DIRNAME}/${stamp}_${num_same_stamp}"
+    done
+
+    local where=" (in ${reset_dir})"
+    if [ ${delete_state} -eq 1 ]; then
+        where=""
+    fi
 
     local processname path num_paths=0
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         while IFS= read -r path; do
             [ -n "${path}" ] || continue
+            # Nothing is undone: running the tool again moves what is left
+            # and does not find what it already moved
             reset_path "${absdirname}" "${path}" "${reset_dir}" || {
-                echo "Error: could not reset ${path}" >&2
+                echo "Error: could not reset ${path}; what came before it is already reset${where}: run debasher_reset_resident again once the cause is fixed" >&2
                 return 1
             }
             num_paths=$((num_paths + 1))

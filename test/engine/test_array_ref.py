@@ -2,8 +2,9 @@
 Real debasher_exec runs of debasher_array_ref.sh, a resident program with an
 array process: start fans out to the three tasks of worker, and collect fans
 in from them. Checks that every task keeps its own files next to the others'
-in the process's directory, and that debasher_stop_resident treats each task
-as a node of its own. Every test also runs on debasher_array_gen_ref.sh, the
+in the process's directory, that debasher_stop_resident treats each task
+as a node of its own, and that debasher_reset_resident takes away the files
+of every task. Every test also runs on debasher_array_gen_ref.sh, the
 same program with worker's tasks produced by an option generator.
 """
 
@@ -16,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from resident_run import (
+    DEBASHER_RESET_RESIDENT,
     DEBASHER_STOP_RESIDENT,
     launch,
     outdir,
@@ -180,3 +182,46 @@ def test_debasher_stop_resident_leaves_alone_only_the_task_named_with_dash_x(pfi
 
     os.killpg(pid, signal.SIGTERM)
     assert wait_until(lambda: os.path.exists(os.path.join(_get_execdir(outdir, "worker"), "worker_1.finished")))
+
+
+def _reset(outdir):
+    return subprocess.run([str(DEBASHER_RESET_RESIDENT), "-d", outdir], capture_output=True, text=True)
+
+
+def test_a_reset_takes_away_the_files_of_every_task_and_never_overwrites_an_earlier_reset(outdir):
+    """
+    debasher_reset_resident sets aside the files that carry the index of each
+    task of worker. A second reset whose directory is taken, as by one made
+    in the same second, gets a directory of its own, and a third one finds
+    nothing to reset.
+    """
+    launch(_PFILES["loop"], outdir)
+    _wait_until_every_node_started(outdir)
+    stop = subprocess.run(
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"], capture_output=True, text=True
+    )
+    assert stop.returncode == 0, f"{stop.stdout}\n{stop.stderr}"
+
+    first = _reset(outdir)
+    assert first.returncode == 0, f"{first.stdout}\n{first.stderr}"
+    (first_dir,) = Path(outdir, "__reset__").iterdir()
+    for idx in range(_NUM_WORKERS):
+        assert (first_dir / "__exec__" / "worker" / f"halted_{idx}").is_file()
+        assert (first_dir / "__exec__" / "worker" / f"log_{idx}").is_dir()
+        assert not os.path.exists(_worker_file(outdir, "halted", idx))
+
+    # The directories of the next seconds are taken, so the next reset has
+    # to find one of its own
+    now = time.time()
+    for secs in range(10):
+        Path(outdir, "__reset__", time.strftime("%Y%m%d_%H%M%S", time.localtime(now + secs))).mkdir(exist_ok=True)
+    Path(_worker_file(outdir, "halted", 0)).write_text("1\n")
+    second = _reset(outdir)
+    assert second.returncode == 0, f"{second.stdout}\n{second.stderr}"
+    (second_dir,) = [d for d in Path(outdir, "__reset__").iterdir() if d.name.endswith("_1")]
+    assert (second_dir / "__exec__" / "worker" / "halted_0").read_text() == "1\n"
+    assert (first_dir / "__exec__" / "worker" / "halted_0").read_text() != "1\n"
+
+    third = _reset(outdir)
+    assert third.returncode == 0, f"{third.stdout}\n{third.stderr}"
+    assert "Nothing to reset" in third.stdout

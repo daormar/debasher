@@ -431,13 +431,17 @@ debasher_reset_resident
 ``debasher_reset_resident`` takes a stopped resident program back to
 its first run: it moves the checkpoints, input logs, notices and
 process outputs of every node under ``__reset__/<timestamp>/`` in the
-output directory, so that the next ``debasher_exec`` starts every node
-afresh. It refuses, with status 1, while a ``debasher_exec`` is
-preparing or running the program in that output directory, or while
-any process of the program is in progress: stop the program first
-(``debasher_stop_resident`` or ``debasher_stop``). It is also the way
-out for a node that refuses to start because its input log was lost or
-cut (see the :ref:`resident` Section).
+output directory (``<timestamp>_1/``, and so on, for a second reset
+within the same second), so that the next ``debasher_exec`` starts
+every node afresh. It refuses, with status 1, while a
+``debasher_exec`` is preparing or running the program in that output
+directory, or while any process of the program is in progress: stop
+the program first (``debasher_stop_resident`` or ``debasher_stop``). A
+reset that fails part way stops with status 1 and names the path it
+could not move; what came before it is already reset. Run the tool
+again once the cause is fixed: it resets what is left. It is also the
+way out for a node that refuses to start because its input log was
+lost or cut (see the :ref:`resident` Section).
 
 ::
 

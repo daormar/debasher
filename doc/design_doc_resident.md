@@ -3568,7 +3568,18 @@ By default, what it takes away is set aside, not deleted, since a checkpoint
 that is lost cannot be made again. It is moved under `__reset__/<timestamp>/`
 in the program's output directory, each path kept relative to it
 (`__reset__/<timestamp>/__exec__/<process>/checkpoints`,
-`__reset__/<timestamp>/<process>/...`). `--delete` deletes it instead.
+`__reset__/<timestamp>/<process>/...`). A second reset within the same second
+gets `__reset__/<timestamp>_1/`, and so on. `--delete` deletes it instead. An
+output directory that is already empty is left where it is, so a reset of a
+program with nothing left to reset takes nothing away, and says so.
+
+A reset that fails part way does not undo what it took away before the
+failure. The error says so. Running the tool again completes the reset: it sets
+aside, or deletes, what is left, and does not find what the failed reset already
+took away. What the failed reset set aside stays in its own `__reset__`
+directory, apart from what the second one sets aside. Until then some nodes are
+reset and others are not, the state that resetting one node would leave. So the
+program must not be started in between, and nothing stops it.
 
 The tool acts only on a stopped program. It refuses while a `debasher_exec`
 holds the lock of the output directory to prepare or run the program, as
