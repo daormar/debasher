@@ -264,13 +264,13 @@ class Supervisor(_PortWorker):
                     "task_idx"
                 )
 
-    def _input_ports(self):
+    def _get_input_ports(self):
         ports = dict(self.NODE_PORTS)
         if self.MANUAL_TRIGGER_PORT is not None:
             ports[_MANUAL_TRIGGER_TAG] = self.MANUAL_TRIGGER_PORT
         return ports
 
-    def _output_ports(self):
+    def _get_output_ports(self):
         return {port: port for port in self.INITIATOR_PORTS}
 
     # -- startup sequence --
@@ -383,7 +383,7 @@ class Supervisor(_PortWorker):
     def _brain_loop(self):
         self._run_guarded(self._dispatch_loop)
 
-    def _types_of_port(self, tag):
+    def _get_port_types(self, tag):
         # Every channel of a Supervisor, a node's heartbeat or the manual
         # trigger, carries only commands.
         return (TYPE_INTERACT,)
@@ -648,7 +648,7 @@ class Supervisor(_PortWorker):
         # DEBASHER_PROCESS_EXECDIR is this Supervisor's own
         # __exec__/<name>/ directory; every sibling node's own directory
         # hangs off the same __exec__ parent, one level up.
-        return os.path.dirname(self._execdir())
+        return os.path.dirname(self._get_execdir())
 
     def _get_program_outdir(self):
         # The output directory of the program, which debasher_stop -d and

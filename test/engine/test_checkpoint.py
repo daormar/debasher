@@ -44,7 +44,7 @@ def test_a_process_that_is_not_an_array_names_its_files_without_an_index(execdir
     monkeypatch.setenv("DEBASHER_PROCESS_TASK_IDX", "")
     proc = _Node(opts={"x": "/dev/null"})
 
-    assert proc._task_idx() is None
+    assert proc._get_task_idx() is None
     assert proc._checkpoints_dir() == os.path.join(str(execdir), "checkpoints")
     assert proc._halted_marker_path() == os.path.join(str(execdir), "halted")
     assert proc._control_ports_path() == os.path.join(str(execdir), "control_ports")
@@ -61,7 +61,7 @@ def test_a_task_of_an_array_adds_its_index_to_every_file_it_keeps(execdir, monke
     proc._write_halted_marker(0)
     proc._write_control_ports_file()
 
-    assert proc._task_idx() == 2
+    assert proc._get_task_idx() == 2
     assert sorted(os.listdir(execdir)) == ["checkpoints_2", "control_ports_2", "halted_2", "log_2"]
 
 

@@ -74,7 +74,7 @@ def test_a_node_without_observe_has_no_observation_thread(ports):
     node.start_threads()
     try:
         assert node._observe_thread is None
-        assert node._all_threads_alive()
+        assert node._are_all_threads_alive()
     finally:
         node.stop_threads(timeout=2)
 
@@ -114,7 +114,7 @@ def test_a_dead_observation_thread_makes_the_node_unhealthy(ports):
     node.start_threads()
     try:
         assert _wait_until(lambda: not node._observe_thread.is_alive())
-        assert not node._all_threads_alive()
+        assert not node._are_all_threads_alive()
     finally:
         node.stop_threads(timeout=2)
 

@@ -361,7 +361,7 @@ class ProgramLauncher(FBPProcess):
         self._pfile = self._find_pfile()
         if self.PROCESS is not None and (not isinstance(self.PROCESS, str) or not self.PROCESS):
             raise ValueError(f"{type(self).__name__}: PROCESS is not the name of a process")
-        if self._task_idx() is not None:
+        if self._get_task_idx() is not None:
             raise ValueError(f"{type(self).__name__}: a launcher node cannot be a task of an array process")
         runs_root_opt = self.opts.get(self.RUNS_ROOT_OPTION)
         if runs_root_opt and not os.path.isabs(runs_root_opt):

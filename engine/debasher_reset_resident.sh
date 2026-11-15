@@ -123,7 +123,7 @@ num_tasks_of_process()
 # Prints, one per line, the paths that hold the state of the nodes of process
 # $2: in the process's __exec__ directory, the checkpoints, the input log, the
 # halted marker and the notice of each task, named as the node's runtime names
-# them (see _execdir_entry in engine/debasher_runtime_transport.py), and the
+# them (see _get_execdir_entry in engine/debasher_runtime_transport.py), and the
 # output directory of the process. Only the paths that exist.
 state_paths_of_process()
 {

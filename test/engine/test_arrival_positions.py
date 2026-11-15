@@ -99,10 +99,10 @@ def test_positions_start_at_one_and_run_across_ports_and_item_types():
 
 def test_a_worker_without_positions_keeps_the_plain_three_part_item():
     class _Plain(lib._PortWorker):
-        def _input_ports(self):
+        def _get_input_ports(self):
             return {}
 
-        def _output_ports(self):
+        def _get_output_ports(self):
             return {}
 
     proc = _Plain(opts={})

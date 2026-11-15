@@ -376,7 +376,7 @@ def test_a_log_that_reaches_its_cap_ends_the_reader_thread_and_keeps_what_it_hol
         _send(opts["a"], *[lib.encode_data(n) for n in range(30)])
         assert _wait_until(lambda: not node._reader_threads["a"].is_alive())
         # The heartbeat would not report this node as healthy any more.
-        assert not node._all_threads_alive()
+        assert not node._are_all_threads_alive()
         held = [r.envelope.payload for r in node._input_log.replay(0)]
         assert held == list(range(len(held))) and 0 < len(held) < 30
         # Everything that was logged reached the brain thread, in order.

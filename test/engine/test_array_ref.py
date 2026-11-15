@@ -40,12 +40,12 @@ def pfile(request):
     return _PFILES[request.param]
 
 
-def _execdir(outdir, processname):
+def _get_execdir(outdir, processname):
     return os.path.join(outdir, "__exec__", processname)
 
 
 def _worker_file(outdir, name, idx):
-    return os.path.join(_execdir(outdir, "worker"), f"{name}_{idx}")
+    return os.path.join(_get_execdir(outdir, "worker"), f"{name}_{idx}")
 
 
 def _pid_alive(pid):
@@ -58,14 +58,14 @@ def _pid_alive(pid):
 
 def _wait_until_every_node_started(outdir):
     control_ports = [
-        os.path.join(_execdir(outdir, "start"), "control_ports"),
-        os.path.join(_execdir(outdir, "collect"), "control_ports"),
+        os.path.join(_get_execdir(outdir, "start"), "control_ports"),
+        os.path.join(_get_execdir(outdir, "collect"), "control_ports"),
     ] + [_worker_file(outdir, "control_ports", idx) for idx in range(_NUM_WORKERS)]
     assert wait_until(lambda: all(os.path.exists(p) for p in control_ports)), control_ports
 
 
 def _start_trigger_fifo(outdir):
-    with open(os.path.join(_execdir(outdir, "start"), "control_ports")) as f:
+    with open(os.path.join(_get_execdir(outdir, "start"), "control_ports")) as f:
         return f.read().split()[0]
 
 
@@ -82,12 +82,12 @@ def test_every_task_of_an_array_keeps_its_own_files_and_takes_part_in_a_round(pf
     write_line(_start_trigger_fifo(outdir), {"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {"epoch": 7}}})
 
     checkpoints = [
-        os.path.join(_execdir(outdir, "start"), "checkpoints", "7.json"),
-        os.path.join(_execdir(outdir, "collect"), "checkpoints", "7.json"),
+        os.path.join(_get_execdir(outdir, "start"), "checkpoints", "7.json"),
+        os.path.join(_get_execdir(outdir, "collect"), "checkpoints", "7.json"),
     ] + [os.path.join(_worker_file(outdir, "checkpoints", idx), "7.json") for idx in range(_NUM_WORKERS)]
     assert wait_until(lambda: all(os.path.exists(p) for p in checkpoints)), checkpoints
 
-    worker_entries = set(os.listdir(_execdir(outdir, "worker")))
+    worker_entries = set(os.listdir(_get_execdir(outdir, "worker")))
     for name in ("checkpoints", "control_ports", "halted", "log"):
         assert name not in worker_entries, sorted(worker_entries)
 
@@ -112,7 +112,7 @@ def test_debasher_stop_resident_stops_every_task_of_an_array(pfile, outdir):
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
     assert elapsed < 10.0, f"took {elapsed:.1f}s, the hard fallback must not have been needed"
 
-    halted = [os.path.join(_execdir(outdir, "start"), "halted"), os.path.join(_execdir(outdir, "collect"), "halted")]
+    halted = [os.path.join(_get_execdir(outdir, "start"), "halted"), os.path.join(_get_execdir(outdir, "collect"), "halted")]
     halted += [_worker_file(outdir, "halted", idx) for idx in range(_NUM_WORKERS)]
     epochs = set()
     for path in halted:
@@ -121,9 +121,9 @@ def test_debasher_stop_resident_stops_every_task_of_an_array(pfile, outdir):
     assert len(epochs) == 1, epochs
 
     finished = [
-        os.path.join(_execdir(outdir, "start"), "start.finished"),
-        os.path.join(_execdir(outdir, "collect"), "collect.finished"),
-    ] + [os.path.join(_execdir(outdir, "worker"), f"worker_{idx}.finished") for idx in range(_NUM_WORKERS)]
+        os.path.join(_get_execdir(outdir, "start"), "start.finished"),
+        os.path.join(_get_execdir(outdir, "collect"), "collect.finished"),
+    ] + [os.path.join(_get_execdir(outdir, "worker"), f"worker_{idx}.finished") for idx in range(_NUM_WORKERS)]
     for path in finished:
         assert os.path.exists(path), f"{path} was never written"
 
@@ -173,10 +173,10 @@ def test_debasher_stop_resident_leaves_alone_only_the_task_named_with_dash_x(pfi
     assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
 
     for idx in (0, 2):
-        assert os.path.exists(os.path.join(_execdir(outdir, "worker"), f"worker_{idx}.finished"))
-    assert not os.path.exists(os.path.join(_execdir(outdir, "worker"), "worker_1.finished"))
-    pid = int(read_pid(os.path.join(_execdir(outdir, "worker"), "worker_1.id")))
+        assert os.path.exists(os.path.join(_get_execdir(outdir, "worker"), f"worker_{idx}.finished"))
+    assert not os.path.exists(os.path.join(_get_execdir(outdir, "worker"), "worker_1.finished"))
+    pid = int(read_pid(os.path.join(_get_execdir(outdir, "worker"), "worker_1.id")))
     assert _pid_alive(pid)
 
     os.killpg(pid, signal.SIGTERM)
-    assert wait_until(lambda: os.path.exists(os.path.join(_execdir(outdir, "worker"), "worker_1.finished")))
+    assert wait_until(lambda: os.path.exists(os.path.join(_get_execdir(outdir, "worker"), "worker_1.finished")))

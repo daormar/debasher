@@ -200,7 +200,7 @@ to it.
   exported as `DEBASHER_PROCESS_TASK_IDX` (empty for a process that is not an
   array), and adds `_<idx>` to the name of everything it keeps there:
   `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`, `control_ports_<idx>`,
-  `node_info_<idx>` and `notice_<idx>` (`_execdir_entry`).
+  `node_info_<idx>` and `notice_<idx>` (`_get_execdir_entry`).
 - **limits of a node**: `INPUT_LOG_MAX_BYTES`, `OUT_BACKLOG_MAX_BYTES`,
   `OUT_BACKLOG_FAIL_BYTES` and `GIL_SWITCH_INTERVAL_SECS`, class attributes of
   `FBPProcess` that a module can redefine and that the computational

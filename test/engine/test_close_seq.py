@@ -32,10 +32,10 @@ def fifo_path(tmp_path):
 
 
 class _WriterOnly(transport._PortWorker):
-    def _input_ports(self):
+    def _get_input_ports(self):
         return {}
 
-    def _output_ports(self):
+    def _get_output_ports(self):
         return {"outf": "outf"}
 
     def _brain_loop(self):
@@ -204,7 +204,7 @@ def test_a_real_lost_message_before_close_is_caught_end_to_end(fifo_path):
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert not proc._all_threads_alive()
+        assert not proc._are_all_threads_alive()
         assert proc.received == ["a", "b"]
         assert [r.envelope.type for r in _log_records(proc)] == ["DATA", "DATA", "CLOSE"]
     finally:

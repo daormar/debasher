@@ -172,7 +172,7 @@ class _ReaderState:
 
 class _PortWorker:
     """
-    A subclass supplies _input_ports()/_output_ports(), each returning a
+    A subclass supplies _get_input_ports()/_get_output_ports(), each returning a
     dict {tag: option_name}. The tag is whatever identity the subclass's
     own dispatch logic actually cares about: a port name for FBPProcess
     (its barrier logic treats every input port interchangeably), a node
@@ -227,7 +227,7 @@ class _PortWorker:
         # only block that port's own writer thread, never the others or
         # the brain.
         self._inbound_queue = queue.Queue()
-        self._outbound_queues = {tag: queue.Queue() for tag in self._output_ports()}
+        self._outbound_queues = {tag: queue.Queue() for tag in self._get_output_ports()}
 
         self._reader_threads = {}
         self._writer_threads = {}
@@ -330,14 +330,17 @@ class _PortWorker:
         """
         raise NotImplementedError
 
-    def _input_ports(self):
+    def _get_input_ports(self):
         raise NotImplementedError
 
-    def _output_ports(self):
+    def _get_output_ports(self):
         raise NotImplementedError
 
     def _check_declared_ports(self):
-        option_names = list(self._input_ports().values()) + list(self._output_ports().values())
+        option_names = [
+            *self._get_input_ports().values(),
+            *self._get_output_ports().values(),
+        ]
         for option_name in option_names:
             if option_name not in self.opts:
                 raise ValueError(
@@ -378,7 +381,7 @@ class _PortWorker:
         the fifo of every port (see _open_fifo_reader and _open_fifo_writer),
         and FD_MARGIN.
         """
-        return 2 * (len(self._input_ports()) + len(self._output_ports())) + self.FD_MARGIN
+        return 2 * (len(self._get_input_ports()) + len(self._get_output_ports())) + self.FD_MARGIN
 
     def _raise_fd_limit(self):
         """
@@ -416,10 +419,10 @@ class _PortWorker:
         descriptors first, if the ports need it (see _raise_fd_limit).
         """
         self._raise_fd_limit()
-        for tag, option_name in self._input_ports().items():
+        for tag, option_name in self._get_input_ports().items():
             if tag not in self._reader_fds:
                 self._reader_fds[tag] = _open_fifo_reader(self.opts[option_name])
-        for tag, option_name in self._output_ports().items():
+        for tag, option_name in self._get_output_ports().items():
             if tag not in self._writer_fds:
                 self._writer_fds[tag] = _open_fifo_writer(self.opts[option_name])
 
@@ -462,7 +465,7 @@ class _PortWorker:
         """
         self._open_fifos()
 
-        for tag, option_name in self._input_ports().items():
+        for tag, option_name in self._get_input_ports().items():
             thread = threading.Thread(
                 target=self._reader_loop, args=(tag, option_name), name=f"reader:{tag}"
             )
@@ -476,7 +479,7 @@ class _PortWorker:
 
     def _start_writer_threads(self):
         """Starts the writer thread of every output port that has none yet."""
-        for tag, option_name in self._output_ports().items():
+        for tag, option_name in self._get_output_ports().items():
             if tag in self._writer_threads:
                 continue
             thread = threading.Thread(
@@ -553,7 +556,7 @@ class _PortWorker:
         # or be a fault of its own, and must not reach the node.
         return True
 
-    def _types_of_port(self, tag):
+    def _get_port_types(self, tag):
         """
         The envelope types that the input port `tag` carries, besides HELLO,
         which every writer of the engine sends on any channel, and CLOSE,
@@ -563,7 +566,7 @@ class _PortWorker:
         """
         return None
 
-    def _closed_at_start(self, tag):
+    def _is_closed_at_start(self, tag):
         """
         Whether the reader of `tag` starts already past a CLOSE, that is,
         in the mode in which it drops what its writer sends (see
@@ -606,10 +609,10 @@ class _PortWorker:
         # the process dies before, so every envelope of a block is logged
         # together, without waiting for the others one by one (see the
         # Contract's limits). For the same reason a stop does not cut a block:
-        # the reader stops only between blocks (see _blocks_of_lines). The
+        # the reader stops only between blocks (see _read_lines_by_block). The
         # descriptor belongs to start_threads()/stop_threads().
-        state = _ReaderState(self._closed_at_start(tag) and self._drops_after_close(tag))
-        for raw_lines in self._blocks_of_lines(rfd):
+        state = _ReaderState(self._is_closed_at_start(tag) and self._drops_after_close(tag))
+        for raw_lines in self._read_lines_by_block(rfd):
             envelopes = []
             try:
                 for raw_line in raw_lines:
@@ -625,7 +628,7 @@ class _PortWorker:
                     if decoded is None:
                         continue
                     envelope, line = decoded
-                    if not self._port_carries(tag, envelope.type):
+                    if not self._does_port_carry(tag, envelope.type):
                         continue
                     if envelope.type == TYPE_CLOSE and self._drops_after_close(tag):
                         state.closed = True
@@ -638,7 +641,7 @@ class _PortWorker:
 
         self.log.debug("reader for %r stopped", tag)
 
-    def _blocks_of_lines(self, rfd):
+    def _read_lines_by_block(self, rfd):
         """
         Reads the fifo a block at a time, and yields the complete lines of
         each block, without their newline. A line cut at the end of a block
@@ -747,10 +750,10 @@ class _PortWorker:
                 f"by HELLO: {state.fragment[:60]!r}"
             )
 
-    def _port_carries(self, tag, envelope_type):
+    def _does_port_carry(self, tag, envelope_type):
         """Whether the port `tag` carries envelopes of `envelope_type`;
         warns when it does not. CLOSE is carried by every port."""
-        types = self._types_of_port(tag)
+        types = self._get_port_types(tag)
         if envelope_type == TYPE_CLOSE or types is None or envelope_type in types:
             return True
         self.log.warning(
@@ -803,7 +806,7 @@ class _PortWorker:
     def _brain_loop(self):
         raise NotImplementedError
 
-    def _all_threads_alive(self):
+    def _are_all_threads_alive(self):
         """
         True only if every reader, writer and the brain thread are
         still alive. A Python thread killed by an uncaught exception
@@ -816,7 +819,7 @@ class _PortWorker:
             threads.append(self._brain_thread)
         return all(thread.is_alive() for thread in threads)
 
-    def _execdir(self):
+    def _get_execdir(self):
         execdir = os.environ.get("DEBASHER_PROCESS_EXECDIR")
         if not execdir:
             raise RuntimeError(
@@ -826,7 +829,7 @@ class _PortWorker:
             )
         return execdir
 
-    def _task_idx(self):
+    def _get_task_idx(self):
         """
         The index of this task, if the process is an array of tasks (the
         engine exports DEBASHER_PROCESS_TASK_IDX only then), or None.
@@ -834,7 +837,7 @@ class _PortWorker:
         task_idx = os.environ.get("DEBASHER_PROCESS_TASK_IDX")
         return int(task_idx) if task_idx else None
 
-    def _execdir_entry(self, name):
+    def _get_execdir_entry(self, name):
         """
         The path of `name` inside this process's own directory. The tasks
         of an array process share that directory, the same way the engine's
@@ -842,9 +845,9 @@ class _PortWorker:
         <process>_<idx>.id: "checkpoints_2" for task 2, "checkpoints" for
         a process that is not an array.
         """
-        task_idx = self._task_idx()
+        task_idx = self._get_task_idx()
         entry = name if task_idx is None else f"{name}_{task_idx}"
-        return os.path.join(self._execdir(), entry)
+        return os.path.join(self._get_execdir(), entry)
 
     def send_data(self, tag, payload, seq=None):
         """

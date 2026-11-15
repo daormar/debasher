@@ -60,10 +60,10 @@ class _WriterOnly(transport._PortWorker):
     transport's own send_data instead.
     """
 
-    def _input_ports(self):
+    def _get_input_ports(self):
         return {}
 
-    def _output_ports(self):
+    def _get_output_ports(self):
         return {"outf": "outf"}
 
     def _brain_loop(self):
@@ -229,10 +229,10 @@ def test_a_consumer_whose_producer_finished_keeps_saying_it_is_healthy(fifo_path
         # The CLOSE is in the log already, and the brain still has most of the messages to go.
         assert _wait_until(lambda: proc._input_log.next_pos == 12)
         assert len(proc.received) < 10
-        assert proc._all_threads_alive()
+        assert proc._are_all_threads_alive()
 
         assert _wait_until(lambda: len(proc.received) == 10, timeout=5)
-        assert proc._all_threads_alive()
+        assert proc._are_all_threads_alive()
     finally:
         proc.stop_threads(timeout=2)
 
@@ -468,7 +468,7 @@ def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_pa
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert proc._all_threads_alive() is False
+        assert proc._are_all_threads_alive() is False
     finally:
         proc.stop_threads(timeout=2)
 
@@ -625,7 +625,7 @@ def test_stop_threads_abandons_a_writer_stuck_on_a_full_pipe(fifo_path):
 
 
 class _TwoOutputs(_WriterOnly):
-    def _output_ports(self):
+    def _get_output_ports(self):
         return {"slow": "slow", "fast": "fast"}
 
 
@@ -670,7 +670,7 @@ def test_a_stalled_reader_on_one_output_port_blocks_only_its_writer(tmp_path):
 
 def test_all_threads_alive_is_true_with_no_declared_ports():
     proc = lib.FBPProcess(opts={})
-    assert proc._all_threads_alive() is True
+    assert proc._are_all_threads_alive() is True
 
 
 # --- heartbeat thread sends to SUPERVISOR_PORT, if set -------------------
@@ -724,7 +724,7 @@ def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
         HEARTBEAT_INTERVAL_SECONDS = 0.5
 
     proc = Slow(opts={"out": "/dev/null"})
-    proc._all_threads_alive = lambda: True
+    proc._are_all_threads_alive = lambda: True
     sent = []
     proc._send_interact = lambda port, command, args=None: sent.append(time.monotonic())
 
@@ -748,10 +748,10 @@ def test_heartbeat_thread_stops_sending_once_a_thread_has_died():
     # Pure Python-level check of the health gate itself, with no real
     # FIFOs involved (real FIFO/writer-thread timing is exercised
     # separately, by the two tests above): run only the heartbeat loop
-    # directly, with _all_threads_alive() forced False, and confirm
+    # directly, with _are_all_threads_alive() forced False, and confirm
     # nothing gets enqueued for the writer thread to ever send.
     proc = _Supervised(opts={"out": "/dev/null"})
-    proc._all_threads_alive = lambda: False
+    proc._are_all_threads_alive = lambda: False
 
     thread = threading.Thread(target=proc._heartbeat_loop, name="heartbeat")
     thread.start()

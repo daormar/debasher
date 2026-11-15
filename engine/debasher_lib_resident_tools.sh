@@ -124,7 +124,7 @@ debasher::_resident_tool_node_finished_filename()
 }
 
 # The path of $3 in the process's own directory, as the node's runtime
-# names it (see _execdir_entry in engine/debasher_runtime_transport.py):
+# names it (see _get_execdir_entry in engine/debasher_runtime_transport.py):
 # "<name>_<idx>" for a task, "<name>" otherwise.
 debasher::_resident_tool_node_execdir_entry()
 {

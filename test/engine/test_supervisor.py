@@ -60,7 +60,7 @@ _FAKE_OPTS = {"hb_a": "/tmp/hb_a", "hb_b": "/tmp/hb_b"}
 
 def test_input_ports_covers_every_node_port():
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._input_ports() == {"a": "hb_a", "b": "hb_b"}
+    assert proc._get_input_ports() == {"a": "hb_a", "b": "hb_b"}
 
 
 def test_input_ports_adds_the_manual_trigger_tag_when_configured():
@@ -69,7 +69,7 @@ def test_input_ports_adds_the_manual_trigger_tag_when_configured():
         MANUAL_TRIGGER_PORT = "manual"
 
     proc = Sup(opts={"hb_a": "/tmp/hb_a", "manual": "/tmp/manual"})
-    assert proc._input_ports() == {"a": "hb_a", lib._MANUAL_TRIGGER_TAG: "manual"}
+    assert proc._get_input_ports() == {"a": "hb_a", lib._MANUAL_TRIGGER_TAG: "manual"}
 
 
 def test_output_ports_covers_every_trigger_port():
@@ -78,12 +78,12 @@ def test_output_ports_covers_every_trigger_port():
         INITIATOR_PORTS = ["init_a", "init_b"]
 
     proc = Sup(opts={"init_a": "/tmp/a", "init_b": "/tmp/b"})
-    assert proc._output_ports() == {"init_a": "init_a", "init_b": "init_b"}
+    assert proc._get_output_ports() == {"init_a": "init_a", "init_b": "init_b"}
 
 
 def test_trigger_port_is_empty_by_default():
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._output_ports() == {}
+    assert proc._get_output_ports() == {}
 
 
 def test_rejects_a_missing_declared_port():
@@ -178,8 +178,8 @@ def test_unrecognized_node_command_is_logged_and_ignored(caplog):
 
 def test_every_channel_of_a_supervisor_carries_only_commands():
     proc = _Sup(opts=_FAKE_OPTS)
-    assert proc._types_of_port("a") == (lib.TYPE_INTERACT,)
-    assert proc._types_of_port("manual") == (lib.TYPE_INTERACT,)
+    assert proc._get_port_types("a") == (lib.TYPE_INTERACT,)
+    assert proc._get_port_types("manual") == (lib.TYPE_INTERACT,)
 
 
 def test_a_malformed_manual_trigger_is_dropped_and_heartbeats_are_still_heard(execdir, tmp_path, caplog):

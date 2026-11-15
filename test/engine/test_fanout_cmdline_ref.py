@@ -43,7 +43,7 @@ def pfile(request):
     return _REFS_DIR / request.param
 
 
-def _execdir(outdir, processname):
+def _get_execdir(outdir, processname):
     return os.path.join(outdir, "__exec__", processname)
 
 
@@ -52,8 +52,8 @@ def _checkpoint(outdir, node, epoch):
     for a task of worker."""
     if isinstance(node, tuple):
         processname, idx = node
-        return os.path.join(_execdir(outdir, processname), f"checkpoints_{idx}", f"{epoch}.json")
-    return os.path.join(_execdir(outdir, node), "checkpoints", f"{epoch}.json")
+        return os.path.join(_get_execdir(outdir, processname), f"checkpoints_{idx}", f"{epoch}.json")
+    return os.path.join(_get_execdir(outdir, node), "checkpoints", f"{epoch}.json")
 
 
 def _nodes(w):
@@ -62,9 +62,9 @@ def _nodes(w):
 
 def _wait_until_every_node_started(outdir, w):
     control_ports = [
-        os.path.join(_execdir(outdir, "start"), "control_ports"),
-        os.path.join(_execdir(outdir, "collect"), "control_ports"),
-    ] + [os.path.join(_execdir(outdir, "worker"), f"control_ports_{idx}") for idx in range(w)]
+        os.path.join(_get_execdir(outdir, "start"), "control_ports"),
+        os.path.join(_get_execdir(outdir, "collect"), "control_ports"),
+    ] + [os.path.join(_get_execdir(outdir, "worker"), f"control_ports_{idx}") for idx in range(w)]
     assert wait_until(lambda: all(os.path.exists(p) for p in control_ports)), control_ports
 
 
@@ -126,7 +126,7 @@ def test_the_supervisor_relaunches_one_task_of_the_array(pfile, outdir):
     launch(pfile, outdir, "-w", str(w))
     _wait_until_every_node_started(outdir, w)
 
-    id_path = os.path.join(_execdir(outdir, "worker"), "worker_1.id")
+    id_path = os.path.join(_get_execdir(outdir, "worker"), "worker_1.id")
     old_pid = read_pid(id_path)
     os.killpg(int(old_pid), signal.SIGKILL)
     assert wait_until(lambda: read_pid(id_path) not in (None, old_pid), timeout=15.0)
@@ -149,7 +149,7 @@ def test_the_supervisor_relaunches_the_node_that_fans_in_with_all_its_ports(pfil
     launch(pfile, outdir, "-w", str(w))
     _wait_until_every_node_started(outdir, w)
 
-    id_path = os.path.join(_execdir(outdir, "collect"), "collect.id")
+    id_path = os.path.join(_get_execdir(outdir, "collect"), "collect.id")
     old_pid = read_pid(id_path)
     os.killpg(int(old_pid), signal.SIGKILL)
     assert wait_until(lambda: read_pid(id_path) not in (None, old_pid), timeout=15.0)

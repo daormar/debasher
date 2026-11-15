@@ -160,7 +160,7 @@ def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_p
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert not proc._all_threads_alive()
+        assert not proc._are_all_threads_alive()
     finally:
         proc.stop_threads(timeout=2)
 

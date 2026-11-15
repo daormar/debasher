@@ -47,9 +47,9 @@ class InspectError(Exception):
     """An error of usage or setup, reported with exit code 1."""
 
 
-def _execdir_entry(execdir, name, task_idx):
+def _get_execdir_entry(execdir, name, task_idx):
     """The path of `name` in the execdir, as the runtime names it for a task
-    of an array (see _execdir_entry in debasher_runtime_transport.py)."""
+    of an array (see _get_execdir_entry in debasher_runtime_transport.py)."""
     return os.path.join(execdir, name if task_idx is None else f"{name}_{task_idx}")
 
 
@@ -80,7 +80,7 @@ class Node:
         self.task_idx = task_idx
 
     def entry(self, name):
-        return _execdir_entry(self.execdir, name, self.task_idx)
+        return _get_execdir_entry(self.execdir, name, self.task_idx)
 
     def checkpoints(self):
         """[(epoch, path)] of the checkpoints that the node retains, oldest

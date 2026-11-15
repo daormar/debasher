@@ -361,7 +361,7 @@ class FBPProcess(_PortWorker):
         # and the input log before they start.
         self._closed_ports = set()
         # What it held when the threads started, which the readers of those
-        # ports start out knowing (see _closed_at_start).
+        # ports start out knowing (see _is_closed_at_start).
         self._closed_at_start_ports = frozenset()
 
         # The sender's own counter of each output port: the number of the
@@ -467,7 +467,7 @@ class FBPProcess(_PortWorker):
             return items[0] if items else None
         return items
 
-    def _input_ports(self):
+    def _get_input_ports(self):
         return {port: port for port in self.INPUT_PORTS}
 
     def _check_declared_ports(self):
@@ -490,7 +490,7 @@ class FBPProcess(_PortWorker):
                 f"not in OUTPUT_PORTS (got: {list(self.OUTPUT_PORTS)})"
             )
 
-    def _output_ports(self):
+    def _get_output_ports(self):
         return {port: port for port in self.OUTPUT_PORTS}
 
     # -- startup sequence --
@@ -649,7 +649,7 @@ class FBPProcess(_PortWorker):
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
         self._started_at = time.time()
-        self._report_node_info(self._all_threads_alive())
+        self._report_node_info(self._are_all_threads_alive())
         self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
         self._heartbeat_thread.start()
         if self._observes():
@@ -657,7 +657,7 @@ class FBPProcess(_PortWorker):
             self._observe_thread.start()
 
     def _control_ports_path(self):
-        return self._execdir_entry("control_ports")
+        return self._get_execdir_entry("control_ports")
 
     def _write_control_ports_file(self):
         """
@@ -671,7 +671,7 @@ class FBPProcess(_PortWorker):
         though nothing here changes after this first write of an
         incarnation.
         """
-        os.makedirs(self._execdir(), exist_ok=True)
+        os.makedirs(self._get_execdir(), exist_ok=True)
         path = self._control_ports_path()
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w") as f:
@@ -680,7 +680,7 @@ class FBPProcess(_PortWorker):
         os.replace(tmp_path, path)
 
     def _node_info_path(self):
-        return self._execdir_entry("node_info")
+        return self._get_execdir_entry("node_info")
 
     def _node_info_extra(self):
         """What a subclass of the runtime library adds to the node info file,
@@ -750,8 +750,8 @@ class FBPProcess(_PortWorker):
         if self._input_log is not None:
             self._input_log.close()
 
-    def _all_threads_alive(self):
-        alive = super()._all_threads_alive()
+    def _are_all_threads_alive(self):
+        alive = super()._are_all_threads_alive()
         if self._observe_thread is not None:
             alive = alive and self._observe_thread.is_alive()
         return alive
@@ -810,7 +810,7 @@ class FBPProcess(_PortWorker):
         line = encode_data(payload)
         self._on_arrivals(port, [(decode_envelope(line), line)])
 
-    def _closed_at_start(self, tag):
+    def _is_closed_at_start(self, tag):
         return tag in self._closed_at_start_ports
 
     def _drops_after_close(self, tag):
@@ -818,7 +818,7 @@ class FBPProcess(_PortWorker):
         # another said CLOSE must be heard.
         return tag not in self.CONTROL_PORTS
 
-    def _types_of_port(self, tag):
+    def _get_port_types(self, tag):
         # A control port carries only commands; a business port, and an
         # external one (whose source may write the marker of a round),
         # messages and markers.
@@ -1058,7 +1058,7 @@ class FBPProcess(_PortWorker):
                 self._write_notice(notice)
 
     def _notice_path(self):
-        return self._execdir_entry("notice")
+        return self._get_execdir_entry("notice")
 
     def _write_notice(self, notice):
         """
@@ -1076,7 +1076,7 @@ class FBPProcess(_PortWorker):
             if notice is None:
                 self._remove_if_present(path)
             else:
-                os.makedirs(self._execdir(), exist_ok=True)
+                os.makedirs(self._get_execdir(), exist_ok=True)
                 tmp_path = f"{path}.tmp"
                 with open(tmp_path, "w") as f:
                     json.dump({**notice, "set_at": time.time()}, f)
@@ -1274,10 +1274,10 @@ class FBPProcess(_PortWorker):
         # the first live message after every relaunch (a gap in the sequence
         # numbers that no relaunch can fill) must use up its budget.
         while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
-            healthy = self._all_threads_alive()
+            healthy = self._are_all_threads_alive()
             self.log.debug("heartbeat tick, healthy=%s", healthy)
             # Only ever reports "alive" if every thread still is (passive
-            # health reporting, see _all_threads_alive). A supervisor
+            # health reporting, see _are_all_threads_alive). A supervisor
             # is optional (SUPERVISOR_PORT is None if there is none), and
             # an unhealthy process simply stops sending, rather than
             # actively announcing its own bad health.
@@ -1519,10 +1519,10 @@ class FBPProcess(_PortWorker):
             )
 
     def _checkpoints_dir(self):
-        return self._execdir_entry("checkpoints")
+        return self._get_execdir_entry("checkpoints")
 
     def _halted_marker_path(self):
-        return self._execdir_entry("halted")
+        return self._get_execdir_entry("halted")
 
     def _write_halted_marker(self, epoch):
         """
@@ -1536,7 +1536,7 @@ class FBPProcess(_PortWorker):
         is not schema-versioned or pruned, since only its latest content
         is ever meaningful.
         """
-        os.makedirs(self._execdir(), exist_ok=True)
+        os.makedirs(self._get_execdir(), exist_ok=True)
         path = self._halted_marker_path()
         tmp_path = f"{path}.tmp"
         with open(tmp_path, "w") as f:
@@ -1614,7 +1614,7 @@ class FBPProcess(_PortWorker):
         # hold several of them: a segment larger than the cap would never
         # close, and nothing would ever be pruned however many rounds close.
         log = _InputLog(
-            self._execdir_entry("log"),
+            self._get_execdir_entry("log"),
             self.INPUT_LOG_MAX_BYTES,
             min(self.INPUT_LOG_SEGMENT_BYTES, self.INPUT_LOG_MAX_BYTES // 4),
         )

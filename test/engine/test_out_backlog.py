@@ -547,7 +547,7 @@ def test_a_first_node_info_file_that_cannot_be_written_leaves_the_node_running(r
     node.log.addHandler(caplog.handler)
     thread, outcome = _start_run(node)
     try:
-        assert _wait_until(lambda: node._brain_thread is not None and node._all_threads_alive())
+        assert _wait_until(lambda: node._brain_thread is not None and node._are_all_threads_alive())
     finally:
         node._stop_requested.set()
         thread.join(timeout=5)

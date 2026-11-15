@@ -358,7 +358,7 @@ def test_initiator_in_a_cycle_waits_for_its_own_marker_to_return(fifo_pair, tmp_
         def capture_node_state(self):
             return {"name": self.opts.get("name")}
 
-        def _execdir(self):
+        def _get_execdir(self):
             # Two nodes in one test process would otherwise share a directory,
             # and so a log, which real nodes never do.
             return self.opts["execdir"]
