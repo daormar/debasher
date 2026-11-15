@@ -3028,7 +3028,12 @@ deadline of every node that gives none; neither is ever shorter than
 long deadline delays only the detection of a node that is alive and silent at
 startup: a node that crashes during its startup, for example on the same record
 at every replay, is declared down at once, by its PID, and uses up its relaunch
-attempts as any other.
+attempts as any other. That holds after a relaunch too: once the relaunch has
+written the `.id` of the new incarnation, which takes the place of the one the
+node had when it was declared down, a dead PID there declares the node down
+again at the next tick; until then the `.id` still names the incarnation already
+declared down, whose PID says nothing about the new one, and only the startup
+deadline declares the node down again.
 
 The PID is the fast path to "down". The built-in scheduler gives every process
 it launches, resident or not, a `.id` file, `__exec__/<node>/<node>.id`
@@ -3189,7 +3194,11 @@ a long run and recovers each time, whose counter goes back to 0 and never runs
 out from incidents far apart. Past the limit, the `Supervisor` calls
 `on_node_permanently_failed(node_name)` instead of relaunching the node again,
 and the node is given up on: a state of its own, distinct from done, which is
-never retried.
+never retried. The error that says so gives the command that shows the scheduler
+output of the node (its `.sched_out`), which holds the cause:
+`debasher_get_sched_out` with `-d <outdir>`, `-p <process>` and, for a task of a
+process with several, `-t <idx>`. It is the output of its last attempt, which no
+relaunch follows to truncate it.
 
 ## Escalation on a permanent node failure
 

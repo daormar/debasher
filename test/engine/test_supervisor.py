@@ -1239,6 +1239,61 @@ def test_a_node_that_dies_during_its_startup_is_declared_down_at_once(execdir):
     assert calls == ["a"]
 
 
+def test_a_relaunched_node_that_dies_during_its_startup_is_declared_down_at_the_next_tick(execdir):
+    # Not only the first time: each new incarnation that dies is seen by its
+    # PID, so a node that crashes in every startup runs out of relaunch
+    # attempts within a few ticks, not after several startup deadlines.
+    id_file = _node_dir(execdir, "a").joinpath("a.id")
+    id_file.write_text(f"{_dead_pid()}@1")
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.STARTUP_TIMEOUT_SECS = 999999
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+    proc._check_node("a")
+    assert calls == ["a"]
+
+    # The relaunch has not written its .id yet: the old one names the
+    # incarnation already declared down, so nothing is declared again
+    proc._check_node("a")
+    assert calls == ["a"]
+
+    # The new incarnation wrote its .id and died
+    id_file.write_text(f"{_dead_pid()}@2")
+    proc._check_node("a")
+    assert calls == ["a", "a"]
+    assert proc._relaunch_attempts["a"] == 2
+
+
+def test_a_relaunched_node_whose_new_incarnation_lives_waits_for_its_startup_deadline(execdir):
+    id_file = _node_dir(execdir, "a").joinpath("a.id")
+    id_file.write_text(f"{_dead_pid()}@1")
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.STARTUP_TIMEOUT_SECS = 999999
+    calls = []
+    proc.on_node_down = lambda node: calls.append(node)
+    proc._check_node("a")
+
+    id_file.write_text(f"{os.getpid()}@2")
+    proc._check_node("a")
+
+    assert calls == ["a"]
+
+
+def test_giving_up_on_a_node_names_the_command_that_shows_its_log(execdir, caplog):
+    proc = _Sup(opts=_FAKE_OPTS)
+    proc.MAX_RELAUNCH_ATTEMPTS = 0
+    proc.on_node_permanently_failed = lambda node: None
+
+    proc._declare_down("a")
+
+    assert f"debasher_get_sched_out -d {execdir} -p a" in caplog.text
+
+
+def test_the_log_command_of_a_task_names_its_index(execdir):
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc._format_node_log_command(("w", 3)) == f"debasher_get_sched_out -d {execdir} -p w -t 3"
+
+
 def test_the_startup_deadline_of_a_node_overrides_the_supervisors(execdir):
     class Sup(_Sup):
         STARTUP_TIMEOUT_SECS = 60

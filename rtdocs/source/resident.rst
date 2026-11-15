@@ -361,17 +361,22 @@ waits for the relaunched reader instead of being lost. The flag
 its ``Supervisor``, turns it off.
 
 The ``Supervisor`` declares a node down when its heartbeats stop for
-``HEARTBEAT_TIMEOUT_SECS`` (30 seconds by default), or at once when
-its process is gone, and relaunches it. A node that goes down again
-after ``MAX_RELAUNCH_ATTEMPTS`` relaunches (three by default) with no
+``HEARTBEAT_TIMEOUT_SECS`` (30 seconds by default), or at once when its
+process is gone, and relaunches it. A node that goes down again after
+``MAX_RELAUNCH_ATTEMPTS`` relaunches (three by default) with no
 heartbeat in between is given up on, and the ``Supervisor`` stops the
 rest of the program in order. A node that cannot recover, such as one
 whose input log was lost, fails the same way at every relaunch, so the
 ``Supervisor`` gives up on it (see `Stopping, Resuming and Resetting`_
-below). A node whose recovery takes long, such as one with a large
-input log to replay, is given more time before its first heartbeat
-through the computational specification ``startup_timeout_s``, in
-seconds:
+below). The error that the ``Supervisor`` logs when it gives up on a
+node ends with the command that shows the scheduler output of its last
+attempt, which holds the cause:
+``debasher_get_sched_out -d <outdir> -p <process>``, with ``-t <idx>``
+for a task. A node whose recovery takes long, such as one with a large
+input log to replay, is given more time before its first heartbeat,
+while it is alive, through the computational specification
+``startup_timeout_s``, in seconds; a node whose process ends during its
+startup is declared down at once whatever its ``startup_timeout_s``:
 
 .. code-block:: bash
 
@@ -421,8 +426,10 @@ outside it; they are described in the :ref:`tools` Section.
   start rather than silently lose what it processed after that
   checkpoint: its error, which ``debasher_get_sched_out`` shows, names
   the log and both positions. With a ``Supervisor``, every relaunch
-  fails the same way until the ``Supervisor`` gives up on the node and
-  stops the program; without one, the task fails. The way out is
+  fails the same way, at once, until the ``Supervisor`` gives up on the
+  node and stops the program, with an error that names the
+  ``debasher_get_sched_out`` command that shows this log; without one,
+  the task fails. The way out is
   ``debasher_reset_resident``, which starts the whole program afresh.
   The input logs are never cleaned by hand: snapshots prune them.
 * ``debasher_reset_resident -d <outdir>`` takes a stopped program back

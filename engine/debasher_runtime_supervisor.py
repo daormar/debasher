@@ -189,6 +189,10 @@ class Supervisor(_PortWorker):
         # suspends failure detection and keeps run() from ending. At most
         # one runs, since no node is declared down meanwhile.
         self._escalating = threading.Event()
+        # What the .id of each node held when it was last declared down: until
+        # the relaunch replaces it, the .id names the dead incarnation (see
+        # _check_node)
+        self._id_when_down = {}
         # The epoch put on the last trigger relayed (see _stamp_epoch).
         self._last_stamped_epoch = -1
         # The read end of every fifo of HOLD_FIFOS, by path (see
@@ -540,21 +544,25 @@ class Supervisor(_PortWorker):
             already_down = node_name in self._down
             last_seen = self._last_heartbeat[node_name]
             silence_limit = self._get_silence_limit(node_name)
+            id_when_down = self._id_when_down.get(node_name)
         if already_down:
             # Already declared down and (by default) already being
-            # relaunched: don't call on_node_down again for the same
-            # outage every tick, only once its startup deadline has
-            # passed with still no real heartbeat (_on_heartbeat resets
-            # last_seen the same way a genuine one would). Without this,
-            # a relaunch that itself dies before its first heartbeat
-            # would stay "down" forever, never re-declared and never
-            # counted against MAX_RELAUNCH_ATTEMPTS.
-            if time.monotonic() - last_seen > silence_limit:
+            # relaunched: declared again, and counted against
+            # MAX_RELAUNCH_ATTEMPTS, once its startup deadline passes with no
+            # heartbeat, or at once when its new incarnation has died. Its
+            # PID counts only once the relaunch has written another .id:
+            # until then the .id names the incarnation already declared down
+            relaunched = self._read_node_id(node_name) not in (None, id_when_down)
+            new_incarnation_died = relaunched and not self._is_node_pid_alive(node_name)
+            if new_incarnation_died or time.monotonic() - last_seen > silence_limit:
                 with self._lock:
                     self._down.discard(node_name)
                 self._declare_down(node_name)
             return
 
+        # A node whose process is gone, as one that crashes in its replay,
+        # is declared down at once; only a live, silent node waits for its
+        # silence limit
         if not self._is_node_pid_alive(node_name):
             self._declare_down(node_name)
             return
@@ -564,13 +572,10 @@ class Supervisor(_PortWorker):
 
     def _get_silence_limit(self, node_name):
         """
-        How long `node_name` may go without a heartbeat before it is declared
-        down: HEARTBEAT_TIMEOUT_SECS, or its startup deadline while it has
-        not sent one since it was launched (see STARTUP_TIMEOUT_SECS). Only a
-        live, silent node waits that long: one whose process is gone, which
-        is how a node that crashes during its replay ends, is declared down
-        at once (see _is_node_pid_alive), and uses up its relaunch attempts as
-        before. Called with the lock held.
+        Returns how long `node_name` may go without a heartbeat before it is
+        declared down: HEARTBEAT_TIMEOUT_SECS, or its startup deadline while
+        it has not sent one since it was launched (see STARTUP_TIMEOUT_SECS).
+        Called with the lock held.
         """
         if node_name not in self._starting:
             return self.HEARTBEAT_TIMEOUT_SECS
@@ -582,6 +587,7 @@ class Supervisor(_PortWorker):
             if node_name in self._down:
                 return
             self._down.add(node_name)
+            self._id_when_down[node_name] = self._read_node_id(node_name)
             self._starting.add(node_name)
             self._relaunch_attempts[node_name] += 1
             attempts = self._relaunch_attempts[node_name]
@@ -596,10 +602,14 @@ class Supervisor(_PortWorker):
         if attempts > self.MAX_RELAUNCH_ATTEMPTS:
             with self._lock:
                 self._given_up.add(node_name)
+            # The scheduler output of its last attempt, which no relaunch
+            # follows to truncate it, holds the cause
             self.log.error(
-                "node %r exceeded %s relaunch attempts, giving up",
+                "node %r exceeded %s relaunch attempts, giving up; the cause is in "
+                "its scheduler output: %s",
                 node_name,
                 self.MAX_RELAUNCH_ATTEMPTS,
+                self._format_node_log_command(node_name),
             )
             self.on_node_permanently_failed(node_name)
         else:
@@ -690,6 +700,26 @@ class Supervisor(_PortWorker):
         if idx is not None:
             command += ["-t", str(idx)]
         return command
+
+    def _read_node_id(self, node_name):
+        """
+        Returns what the .id of `node_name` holds, "<pid>@<start time>", or
+        None when it does not exist.
+        """
+        try:
+            with open(self._get_node_filename(node_name, "id")) as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            return None
+
+    def _format_node_log_command(self, node):
+        """Returns the command that shows the scheduler output of `node`."""
+        command = (
+            f"debasher_get_sched_out -d {self._get_program_outdir()} "
+            f"-p {self._get_node_process_name(node)}"
+        )
+        idx = self._get_node_task_idx(node)
+        return command if idx is None else f"{command} -t {idx}"
 
     def _is_node_pid_alive(self, node_name):
         """
