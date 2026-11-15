@@ -91,15 +91,12 @@ read_pars()
                       every_secs=$1
                   fi
                   ;;
+            *) echo "Error! unknown option $1" >&2
+               exit 1
+               ;;
         esac
         shift
     done
-}
-
-########
-is_positive_int()
-{
-    [[ "$1" =~ ^[0-9]+$ ]] && [ "$1" -gt 0 ]
 }
 
 ########
@@ -120,13 +117,13 @@ check_pars()
         fi
     fi
 
-    if ! is_positive_int "${timeout_secs}"; then
+    if ! debasher::_str_is_positive_integer "${timeout_secs}"; then
         echo "Error! --timeout must be a positive number of seconds" >&2
         exit 1
     fi
 
     if [ -n "${every_secs}" ]; then
-        if ! is_positive_int "${every_secs}"; then
+        if ! debasher::_str_is_positive_integer "${every_secs}"; then
             echo "Error! --every must be a positive number of seconds" >&2
             exit 1
         fi

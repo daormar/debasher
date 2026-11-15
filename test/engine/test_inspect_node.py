@@ -421,7 +421,14 @@ def test_the_command_line_prints_json_and_ends_with_0(execdir):
 
 @pytest.mark.parametrize(
     "command",
-    [[], ["nonsense"], ["checkpoint", "x"], ["log", "--last", "0"], ["log", "--wrong"]],
+    [
+        [],
+        ["nonsense"],
+        ["--bogus", "summary"],
+        ["checkpoint", "x"],
+        ["log", "--last", "0"],
+        ["log", "--wrong"],
+    ],
 )
 def test_a_command_it_does_not_understand_is_an_error(execdir, command, capsys):
     argv = [

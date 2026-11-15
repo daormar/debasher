@@ -47,6 +47,33 @@ def test_a_reset_is_refused_while_a_debasher_exec_holds_the_lock_for_a_run(outdi
     assert "a debasher_exec is preparing or running the program" in result.stderr
 
 
+def _run_tool(tool, outdir, *args):
+    return subprocess.run([str(BINDIR / tool), "-d", str(outdir), *args], capture_output=True, text=True)
+
+
+@pytest.mark.parametrize(
+    "tool, args, error",
+    [
+        ("debasher_stop_resident", ["--timeout", "abc"], "--timeout must be a positive number"),
+        ("debasher_stop_resident", ["--timeout", "60s"], "--timeout must be a positive number"),
+        ("debasher_stop_resident", ["--timeout", ""], "--timeout must be a positive number"),
+        ("debasher_stop_resident", ["--timeout", "0"], "--timeout must be a positive number"),
+        ("debasher_snapshot_resident", ["--timeout", "abc"], "--timeout must be a positive number"),
+        ("debasher_snapshot_resident", ["--every", "0"], "--every must be a positive number"),
+        ("debasher_snapshot_resident", ["--every", "1.5"], "--every must be a positive number"),
+        ("debasher_snapshot_resident", ["--every", "5", "--timeout", "5"], "cannot be given together"),
+        ("debasher_stop_resident", ["--keep-supervisr"], "unknown option --keep-supervisr"),
+        ("debasher_snapshot_resident", ["--evry", "5"], "unknown option --evry"),
+        ("debasher_reset_resident", ["--delet"], "unknown option --delet"),
+        ("debasher_inspect_resident", ["-t", "0", "notices"], "-p and -t do not apply"),
+    ],
+)
+def test_a_bad_argument_is_refused_before_anything_is_loaded(outdir, tool, args, error):
+    result = _run_tool(tool, outdir, *args)
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert error in result.stderr, result.stderr
+
+
 HELLO_WORLD = REPO_ROOT / "data" / "programs" / "debasher_hello_world.sh"
 
 
@@ -69,6 +96,6 @@ def test_a_tool_for_resident_programs_refuses_a_general_one(tmp_path, tool, args
     )
     assert run.returncode == 0, run.stdout + run.stderr
 
-    result = subprocess.run([str(BINDIR / tool), "-d", str(outdir), *args], capture_output=True, text=True)
+    result = _run_tool(tool, outdir, *args)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "is not a resident program" in result.stderr

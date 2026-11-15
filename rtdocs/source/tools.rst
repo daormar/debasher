@@ -406,6 +406,13 @@ process that does not derive from ``FBPProcess``, such as the
 index not below its number of tasks) is an error: the tool ends with
 status 1 before it touches anything.
 
+Its exit status is 0 when every node stopped in order. It is 1 on a
+usage error (an unknown option, a ``--timeout`` that is not a whole
+number greater than 0, a name given to ``-x`` or ``--kill`` that is no
+node) or when the directory holds no resident program. It is 2 when
+the stop did not complete within ``--timeout`` and the tool fell back
+to ``debasher_stop``: the program ended, but not in order.
+
 debasher_snapshot_resident
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -444,9 +451,11 @@ directory, or while any process of the program is in progress: stop
 the program first (``debasher_stop_resident`` or ``debasher_stop``). A
 reset that fails part way stops with status 1 and names the path it
 could not move; what came before it is already reset. Run the tool
-again once the cause is fixed: it resets what is left. It is also the
-way out for a node that refuses to start because its input log was
-lost or cut (see the :ref:`resident` Section).
+again once the cause is fixed: it resets what is left. It also ends
+with status 1, touching nothing, on a usage error such as an unknown
+option. It is also the way out for a node that refuses to start
+because its input log was lost or cut (see the :ref:`resident`
+Section).
 
 ::
 

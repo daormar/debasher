@@ -112,6 +112,9 @@ read_pars()
                   ;;
             "--keep-supervisor") keep_supervisor=1
                   ;;
+            *) echo "Error! unknown option $1" >&2
+               exit 1
+               ;;
         esac
         shift
     done
@@ -133,6 +136,11 @@ check_pars()
             echo "Error! ${pdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME} file is missing" >&2
             exit 1
         fi
+    fi
+
+    if ! debasher::_str_is_positive_integer "${timeout_secs}"; then
+        echo "Error! --timeout must be a positive number of seconds" >&2
+        exit 1
     fi
 }
 

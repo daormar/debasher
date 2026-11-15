@@ -75,6 +75,9 @@ read_pars()
                   ;;
             "--delete") delete_state=1
                   ;;
+            *) echo "Error! unknown option $1" >&2
+               exit 1
+               ;;
         esac
         shift
     done
