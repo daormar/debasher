@@ -3499,11 +3499,21 @@ a program that loads is reached from an initiator (see "Validation when the
 program is loaded"), so the tool needs nothing else to reach every node.
 
 It then waits, up to `--timeout` seconds (60 by default), until every node has
-a checkpoint of that epoch or of a newer one: a newer round replaces an open
-one, and its cut is as recent a point to recover from. Once every node has one,
-the tool prints the epoch and returns 0. Otherwise it names the nodes that have
-none and returns 2 (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`), not 1, which
-is kept for usage and setup errors.
+a checkpoint of that epoch or of a newer one. A newer round replaces an open
+one. A node that the newer round reaches before the older one closes at it
+writes a checkpoint of the newer epoch only. That checkpoint is more recent
+than the one asked for, and the node can recover from it. So the tool counts it
+as well. Once every node has a checkpoint, the tool prints the epoch and
+returns 0.
+
+Otherwise, without `--every`, the tool returns 2
+(`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`). Code 1 is kept for usage and
+setup errors. The tool returns 2 in three cases. If `--timeout` passes, an error
+names the nodes that have no checkpoint. If a trigger cannot be written, an
+error names the control port, or the node whose control ports file never came.
+In both cases a warning then says that the round did not close at every node.
+If the program stops while the tool waits, the warning says instead that the
+program stopped before the round closed at every node.
 
 Several things keep a round from closing. A round does not close at a node that
 is down or stopped, nor at one that has a halt open, which ignores a snapshot,

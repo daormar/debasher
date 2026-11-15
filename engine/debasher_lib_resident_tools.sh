@@ -311,8 +311,9 @@ debasher::_resident_tool_trigger_every_node()
 ########
 # Returns 0 if node $2 has a checkpoint of the epoch $3 or of a later one:
 # the round numbered $3 closed at it, or a newer round did, whose checkpoint
-# is just as recent a point to recover from (a newer round replaces an open
-# one, and pruning can take the checkpoint of $3 away once newer ones exist).
+# is at least as recent a point to recover from. A newer round replaces an
+# open one, and pruning can take the checkpoint of $3 away once newer ones
+# exist.
 debasher::_resident_tool_node_has_checkpoint_since()
 {
     local absdirname=$1

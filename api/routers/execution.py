@@ -1321,8 +1321,9 @@ def relaunch_node(request: StopProcessRequest) -> RelaunchNodeResponse:
 
 class SnapshotResponse(BaseModel):
     output: str
-    # 0 for a round that closed at every node, 2 for one that did not close
-    # at some node, 1 for an error of usage or setup.
+    # 0 for a round that closed at every node, 2 for one that did not (the
+    # deadline passed, a trigger was not written, or the program stopped),
+    # 1 for an error of usage or setup.
     exitCode: int
     # The epoch of the round, when the tool started one.
     epoch: int | None = None
@@ -1332,9 +1333,10 @@ class SnapshotResponse(BaseModel):
 
 
 # What debasher_snapshot_resident prints of a round: "Round <epoch> closed
-# at every node ...", or "Warning: round <epoch> did not close ...", and,
-# before the latter, "Error: no checkpoint of round <epoch> or of a newer
-# one at <node> <node> ...".
+# at every node ...", "Warning: round <epoch> did not close ..." or
+# "Warning: <dir> stopped before round <epoch> closed ...", and, before
+# the first warning when the deadline passed, "Error: no checkpoint of
+# round <epoch> or of a newer one at <node> <node> ...".
 _ROUND_EPOCH_RE = re.compile(r"\b[Rr]ound (\d+)\b")
 _PENDING_NODES_RE = re.compile(r"^Error: no checkpoint of round \d+ or of a newer one at (.+)$", re.MULTILINE)
 

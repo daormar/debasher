@@ -416,6 +416,15 @@ program: every node saves a checkpoint and prunes its input log.
 * ``--every <int>``: take a snapshot every ``<int>`` seconds, until no
   node of the program is running.
 
+Its exit status is 0 when the round closed at every node (with
+``--every``, when the program stopped). It is 1 on a usage error or
+when no node of the program is running. It is 2 when the round did not
+close at every node, in one of three ways: the time of ``--timeout``
+passed (a node is down, a newer round is still open, or a node closed
+the round without a checkpoint because its outbound backlog was over
+its cap), a trigger could not be written, or the program stopped while
+the tool waited. What it writes on its standard error says which.
+
 debasher_reset_resident
 ^^^^^^^^^^^^^^^^^^^^^^^
 

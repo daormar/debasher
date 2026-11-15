@@ -715,7 +715,7 @@ def test_a_snapshot_period_that_is_not_a_positive_number_launches_nothing(tmp_pa
 def test_a_round_that_did_not_close_names_its_nodes(tmp_path, monkeypatch):
     output = (
         "Error: no checkpoint of round 1759000000123 or of a newer one at Sink Relay:1\n"
-        "Warning: round 1759000000123 did not close at every node of out within 60s\n"
+        "Warning: round 1759000000123 did not close at every node of out\n"
     )
     monkeypatch.setattr(execution, "_run_debasher_dir_tool_in_own_session", lambda program, tool: (output, 2))
 

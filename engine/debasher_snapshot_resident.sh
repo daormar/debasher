@@ -28,10 +28,11 @@
 # program that stopped); 1 is a usage or setup error (bad arguments, a
 # directory that is not a resident program's, a program that is not
 # running, and the like); 2 (DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT)
-# means the round did not close at every node within --timeout: a trigger
-# that could not be written, a node that is down, a newer round still open,
-# or a node that closed the round without writing a checkpoint because its
-# outbound backlog was over its cap.
+# means the round did not close at every node, in one of three ways: the
+# deadline of --timeout passed (a node that is down, a newer round still
+# open, or a node that closed the round without writing a checkpoint
+# because its outbound backlog was over its cap), a trigger could not be
+# written, or the program stopped while the tool waited.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
@@ -262,14 +263,19 @@ snapshot_resident_program()
         return $?
     fi
 
-    local epoch
+    local epoch status
     epoch=$(debasher::_now_ms)
-    if snapshot_once "${absdirname}" "${epoch}" "${deadline}"; then
-        echo "Round ${epoch} closed at every node of ${dirname}."
-        return 0
-    fi
-
-    echo "Warning: round ${epoch} did not close at every node of ${dirname} within ${timeout_secs}s" >&2
+    snapshot_once "${absdirname}" "${epoch}" "${deadline}"
+    status=$?
+    case ${status} in
+        0) echo "Round ${epoch} closed at every node of ${dirname}."
+           return 0
+           ;;
+        2) echo "Warning: ${dirname} stopped before round ${epoch} closed at every node" >&2
+           ;;
+        *) echo "Warning: round ${epoch} did not close at every node of ${dirname}" >&2
+           ;;
+    esac
     return "${DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT}"
 }
 
