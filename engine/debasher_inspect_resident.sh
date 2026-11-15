@@ -72,6 +72,7 @@ read_pars()
     d_given=0
     p_given=0
     t_given=0
+    task_idx=""
     command_args=()
     while [ $# -ne 0 ]; do
         case $1 in
@@ -149,21 +150,23 @@ check_pars()
 }
 
 ########
-# Echoes the node of process $2 that -t names: the process itself, or
+# Echoes the node of process $2, in the output directory $1, that the task
+# index $3 (-t, empty if not given) names: the process itself, or
 # <process>:<idx> for a task of an array process (see
 # debasher::_resident_tool_node_processname). Returns 1, with an error, if
-# -t is missing for an array process, given for any other, or not below its
-# number of tasks.
+# the process has no script, or if the index is missing for an array
+# process, given for any other, or not below its number of tasks.
 node_of_process()
 {
     local absdirname=$1
     local processname=$2
+    local task_idx=$3
 
     local num_tasks
     num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
 
     if [ "${num_tasks}" -eq 1 ]; then
-        if [ ${t_given} -eq 1 ]; then
+        if [ -n "${task_idx}" ]; then
             echo "Error: ${processname} is not an array process, -t does not apply" >&2
             return 1
         fi
@@ -171,7 +174,7 @@ node_of_process()
         return 0
     fi
 
-    if [ ${t_given} -eq 0 ]; then
+    if [ -z "${task_idx}" ]; then
         echo "Error: ${processname} is an array process of ${num_tasks} tasks: -t has to name one" >&2
         return 1
     fi
@@ -213,9 +216,18 @@ task_state_of_node()
 }
 
 ########
+# Prints, as debasher_inspect_node does, what the command given after $3
+# shows of the node of process $2, task index $3 (empty for a process of
+# one task), of the resident program whose output directory is $1. Returns
+# 1, with an error, on a program it cannot load or that is not a resident
+# one, on a process it refuses (one the program lacks, the Supervisor, one
+# never launched, a wrong task index), or on an error of the command.
 inspect_resident_node()
 {
     local dirname=$1
+    local processname=$2
+    local task_idx=$3
+    shift 3
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
 
     debasher::_resident_tool_load_program "${absdirname}" debasher_inspect_resident || return 1
@@ -225,6 +237,7 @@ inspect_resident_node()
         return 1
     fi
 
+    # The Supervisor keeps no node state to show
     local role
     role=$(debasher::_classify_resident_process_role "${processname}") || return 1
     if [ "${role}" = "supervisor" ]; then
@@ -232,14 +245,9 @@ inspect_resident_node()
         return 1
     fi
 
-    local script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
-    if [ ! -f "${script_file}" ]; then
-        echo "Error: ${processname} was never launched in ${dirname}" >&2
-        return 1
-    fi
-
+    # Refuses a process never launched, which has no script
     local node
-    node=$(node_of_process "${absdirname}" "${processname}") || return 1
+    node=$(node_of_process "${absdirname}" "${processname}" "${task_idx}") || return 1
     local idx=$(debasher::_resident_tool_node_task_idx "${node}")
 
     local -a task_opt=()
@@ -247,6 +255,8 @@ inspect_resident_node()
         task_opt=(--task-idx "${idx}")
     fi
 
+    # The state of the task needs debasher::_id_exists of the engine, which
+    # the Python half does not have; everything else it reads itself
     "${debasher_libexecdir}"/debasher_inspect_node \
         --process "${processname}" \
         "${task_opt[@]}" \
@@ -254,7 +264,7 @@ inspect_resident_node()
         --execdir "$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")" \
         --process-outdir "$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")" \
         --debasher-status "${debasher_bindir}/debasher_status" \
-        "${command_args[@]}"
+        "$@"
 }
 
 ########
@@ -305,7 +315,7 @@ check_pars || exit 1
 if [ "${command_args[0]}" = "notices" ]; then
     inspect_resident_notices "${pdir}"
 else
-    inspect_resident_node "${pdir}"
+    inspect_resident_node "${pdir}" "${processname}" "${task_idx}" "${command_args[@]}"
 fi
 
 exit $?
