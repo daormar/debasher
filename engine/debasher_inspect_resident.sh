@@ -153,17 +153,17 @@ check_pars()
 # Echoes the node of process $2, in the output directory $1, that the task
 # index $3 (-t, empty if not given) names: the process itself, or
 # <process>:<idx> for a task of an array process (see
-# debasher::_resident_tool_node_processname). Returns 1, with an error, if
+# debasher::_resident_tool_get_node_processname). Returns 1, with an error, if
 # the process has no script, or if the index is missing for an array
 # process, given for any other, or not below its number of tasks.
-node_of_process()
+get_node_of_process()
 {
     local absdirname=$1
     local processname=$2
     local task_idx=$3
 
     local num_tasks
-    num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
+    num_tasks=$(debasher::_resident_tool_read_num_tasks_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_get_now_secs)") || return 1
 
     if [ "${num_tasks}" -eq 1 ]; then
         if [ -n "${task_idx}" ]; then
@@ -192,13 +192,13 @@ node_of_process()
 # (see debasher::_read_ids_of_unfinished_tasks); otherwise alive while the
 # process that its .id names still runs, down with an .id, and not_launched
 # with no .id yet.
-task_state_of_node()
+get_task_state_of_node()
 {
     local absdirname=$1
     local node=$2
 
-    local id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
-    local finished_file=$(debasher::_resident_tool_node_finished_filename "${absdirname}" "${node}")
+    local id_file=$(debasher::_resident_tool_get_node_id_filename "${absdirname}" "${node}")
+    local finished_file=$(debasher::_resident_tool_get_node_finished_filename "${absdirname}" "${node}")
 
     if [ -f "${finished_file}" ]; then
         echo "finished"
@@ -247,8 +247,8 @@ inspect_resident_node()
 
     # Refuses a process never launched, which has no script
     local node
-    node=$(node_of_process "${absdirname}" "${processname}" "${task_idx}") || return 1
-    local idx=$(debasher::_resident_tool_node_task_idx "${node}")
+    node=$(get_node_of_process "${absdirname}" "${processname}" "${task_idx}") || return 1
+    local idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
 
     local -a task_opt=()
     if [ -n "${idx}" ]; then
@@ -260,7 +260,7 @@ inspect_resident_node()
     "${debasher_libexecdir}"/debasher_inspect_node \
         --process "${processname}" \
         "${task_opt[@]}" \
-        --task-state "$(task_state_of_node "${absdirname}" "${node}")" \
+        --task-state "$(get_task_state_of_node "${absdirname}" "${node}")" \
         --execdir "$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")" \
         --process-outdir "$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")" \
         --debasher-status "${debasher_bindir}/debasher_status" \
@@ -290,10 +290,10 @@ inspect_resident_notices()
         if [ ! -f "${script_file}" ]; then
             continue
         fi
-        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_now_secs)") || return 1
+        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "$(debasher::_resident_tool_get_now_secs)") || return 1
         execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
         while IFS= read -r node; do
-            idx=$(debasher::_resident_tool_node_task_idx "${node}")
+            idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
             node_args+=(--node "${processname}" "${idx:--}" "${execdir}")
         done <<< "${process_nodes}"
     done < <(printf '%s\n' "${!DEBASHER_PROGRAM_PROCESSES[@]}" | "${SORT}")

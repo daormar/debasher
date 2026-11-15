@@ -163,7 +163,7 @@ wait_for_round_to_close()
         if [ ${#pending[@]} -eq 0 ]; then
             return 0
         fi
-        if [ "$(debasher::_resident_tool_now_secs)" -ge "${deadline}" ]; then
+        if [ "$(debasher::_resident_tool_get_now_secs)" -ge "${deadline}" ]; then
             echo "Error: no checkpoint of round ${epoch} or of a newer one at ${pending[*]}" >&2
             return 1
         fi
@@ -185,7 +185,7 @@ sleep_while_running()
     local nodes_name=$2
     local deadline=$3
 
-    while [ "$(debasher::_resident_tool_now_secs)" -lt "${deadline}" ]; do
+    while [ "$(debasher::_resident_tool_get_now_secs)" -lt "${deadline}" ]; do
         if ! debasher::_resident_tool_some_node_is_running "${absdirname}" "${nodes_name}"; then
             return 1
         fi
@@ -227,7 +227,7 @@ snapshot_periodically()
     # trigger for a node that is gone blocks for its whole timeout.
     local next epoch status
     while debasher::_resident_tool_some_node_is_running "${absdirname}" "${nodes_name}"; do
-        next=$(( $(debasher::_resident_tool_now_secs) + every_secs ))
+        next=$(( $(debasher::_resident_tool_get_now_secs) + every_secs ))
         # Numbered as in snapshot_resident_program
         epoch=$(debasher::_now_ms)
         snapshot_once "${absdirname}" "${nodes_name}" "${epoch}" "${next}"
@@ -267,7 +267,7 @@ snapshot_resident_program()
     # The deadline of finding the nodes and, without --every, of the round;
     # with --every each round gets its own
     local wait_secs=${every_secs:-${timeout_secs}}
-    local deadline=$(( $(debasher::_resident_tool_now_secs) + wait_secs ))
+    local deadline=$(( $(debasher::_resident_tool_get_now_secs) + wait_secs ))
 
     local supervisor
     local -a nodes=()

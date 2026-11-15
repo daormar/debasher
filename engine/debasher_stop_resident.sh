@@ -173,7 +173,7 @@ wait_for_fresh_halted_marker()
                 return 0
             fi
         fi
-        if [ "$(debasher::_resident_tool_now_secs)" -ge "${deadline}" ]; then
+        if [ "$(debasher::_resident_tool_get_now_secs)" -ge "${deadline}" ]; then
             return 1
         fi
         "${SLEEP}" 0.2
@@ -190,7 +190,7 @@ read_running_pid_of_node()
     local node=$2
 
     local id_file id_info
-    id_file=$(debasher::_resident_tool_node_id_filename "${absdirname}" "${node}")
+    id_file=$(debasher::_resident_tool_get_node_id_filename "${absdirname}" "${node}")
     [ -f "${id_file}" ] || return 1
     id_info=$("${CAT}" "${id_file}" 2>/dev/null)
     [ -n "${id_info}" ] || return 1
@@ -272,7 +272,7 @@ capture_halted_marker_baselines()
     captured_baselines_ref=()
     local node
     for node in "${captured_nodes_ref[@]}"; do
-        captured_baselines_ref["${node}"]=$(read_halted_marker_or_baseline "$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" halted)")
+        captured_baselines_ref["${node}"]=$(read_halted_marker_or_baseline "$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" halted)")
     done
 }
 
@@ -291,7 +291,7 @@ wait_for_every_halted_marker()
 
     local node marker_file
     for node in "${waited_nodes_ref[@]}"; do
-        marker_file=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" halted)
+        marker_file=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" halted)
         if ! wait_for_fresh_halted_marker "${marker_file}" "${waited_baselines_ref[${node}]}" "${deadline}"; then
             echo "Error: ${node} never marked itself halted" >&2
             return 1
@@ -319,7 +319,7 @@ stop_every_node_and_wait_for_finished()
 
     local finished_file
     for node in "${stopped_nodes_ref[@]}"; do
-        finished_file=$(debasher::_resident_tool_node_finished_filename "${absdirname}" "${node}")
+        finished_file=$(debasher::_resident_tool_get_node_finished_filename "${absdirname}" "${node}")
         if ! debasher::_resident_tool_wait_for_file "${finished_file}" "${deadline}"; then
             echo "Error: ${node} never exited cleanly after a stop signal" >&2
             return 1
@@ -367,7 +367,7 @@ stop_resident_program()
     debasher::_resident_tool_load_program "${absdirname}" debasher_stop_resident || return 1
 
     # One deadline for every step
-    local deadline=$(( $(debasher::_resident_tool_now_secs) + timeout_secs ))
+    local deadline=$(( $(debasher::_resident_tool_get_now_secs) + timeout_secs ))
 
     # Every name checked before anything is touched
     local -a excluded_nodes=() killed_nodes=()

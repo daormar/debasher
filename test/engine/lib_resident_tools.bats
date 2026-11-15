@@ -32,24 +32,24 @@ setup() {
 # --- the files of a node ------------------------------------------------
 
 @test "a plain node names its process and has no task index" {
-    [ "$(debasher::_resident_tool_node_processname solo)" = "solo" ]
-    [ -z "$(debasher::_resident_tool_node_task_idx solo)" ]
+    [ "$(debasher::_resident_tool_get_node_processname solo)" = "solo" ]
+    [ -z "$(debasher::_resident_tool_get_node_task_idx solo)" ]
 }
 
 @test "a task of an array names its process and its index" {
-    [ "$(debasher::_resident_tool_node_processname arr:2)" = "arr" ]
-    [ "$(debasher::_resident_tool_node_task_idx arr:2)" = "2" ]
+    [ "$(debasher::_resident_tool_get_node_processname arr:2)" = "arr" ]
+    [ "$(debasher::_resident_tool_get_node_task_idx arr:2)" = "2" ]
 }
 
 @test "the execdir entry of a task carries its index, that of a plain node does not" {
-    [ "$(debasher::_resident_tool_node_execdir_entry "${outdir}" solo checkpoints)" = "${outdir}/__exec__/solo/checkpoints" ]
-    [ "$(debasher::_resident_tool_node_execdir_entry "${outdir}" arr:2 checkpoints)" = "${outdir}/__exec__/arr/checkpoints_2" ]
+    [ "$(debasher::_resident_tool_get_node_execdir_entry "${outdir}" solo checkpoints)" = "${outdir}/__exec__/solo/checkpoints" ]
+    [ "$(debasher::_resident_tool_get_node_execdir_entry "${outdir}" arr:2 checkpoints)" = "${outdir}/__exec__/arr/checkpoints_2" ]
 }
 
-# --- debasher::_resident_tool_trigger_json -------------------------------
+# --- debasher::_resident_tool_format_trigger_json -------------------------------
 
 @test "the trigger carries its command and its epoch" {
-    run debasher::_resident_tool_trigger_json start_snapshot 1700000000123
+    run debasher::_resident_tool_format_trigger_json start_snapshot 1700000000123
     [ "${status}" -eq 0 ]
     [ "${output}" = '{"type": "INTERACT", "payload": {"command": "start_snapshot", "args": {"epoch": 1700000000123}}}' ]
 }
@@ -111,7 +111,7 @@ setup() {
     debasher::_resident_tool_trigger_every_node "${outdir}" nodes start_snapshot 777 "${deadline}"
     wait "${reader}"
 
-    [ "$(cat "${BATS_TEST_TMPDIR}/received")" = "$(debasher::_resident_tool_trigger_json start_snapshot 777)" ]
+    [ "$(cat "${BATS_TEST_TMPDIR}/received")" = "$(debasher::_resident_tool_format_trigger_json start_snapshot 777)" ]
 }
 
 @test "a node that never writes its control_ports file is an error at the deadline" {

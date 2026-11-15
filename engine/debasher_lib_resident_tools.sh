@@ -27,9 +27,11 @@
 # itself.
 
 ########
-debasher::_resident_tool_now_secs()
+# Prints the time in seconds since the epoch.
+debasher::_resident_tool_get_now_secs()
 {
-    date +%s
+    # A builtin of bash, with no tool to call
+    printf '%(%s)T\n' -1
 }
 
 ########
@@ -39,7 +41,7 @@ debasher::_resident_tool_wait_for_file()
     local path=$1
     local deadline=$2
     while [ ! -e "${path}" ]; do
-        if [ "$(debasher::_resident_tool_now_secs)" -ge "${deadline}" ]; then
+        if [ "$(debasher::_resident_tool_get_now_secs)" -ge "${deadline}" ]; then
             return 1
         fi
         "${SLEEP}" 0.2
@@ -85,12 +87,12 @@ debasher::_resident_tool_load_program()
 # process (the same identity a Supervisor's NODE_PORTS gives it). The
 # functions below give the files of a node, which for a task carry its
 # index the way the engine names them (<process>_<idx>.id).
-debasher::_resident_tool_node_processname()
+debasher::_resident_tool_get_node_processname()
 {
     echo "${1%%:*}"
 }
 
-debasher::_resident_tool_node_task_idx()
+debasher::_resident_tool_get_node_task_idx()
 {
     case "$1" in
         *:*) echo "${1#*:}" ;;
@@ -98,12 +100,12 @@ debasher::_resident_tool_node_task_idx()
     esac
 }
 
-debasher::_resident_tool_node_id_filename()
+debasher::_resident_tool_get_node_id_filename()
 {
     local absdirname=$1
     local node=$2
-    local processname=$(debasher::_resident_tool_node_processname "${node}")
-    local idx=$(debasher::_resident_tool_node_task_idx "${node}")
+    local processname=$(debasher::_resident_tool_get_node_processname "${node}")
+    local idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
     if [ -z "${idx}" ]; then
         debasher::_get_processid_filename "${absdirname}" "${processname}"
     else
@@ -111,12 +113,12 @@ debasher::_resident_tool_node_id_filename()
     fi
 }
 
-debasher::_resident_tool_node_finished_filename()
+debasher::_resident_tool_get_node_finished_filename()
 {
     local absdirname=$1
     local node=$2
-    local processname=$(debasher::_resident_tool_node_processname "${node}")
-    local idx=$(debasher::_resident_tool_node_task_idx "${node}")
+    local processname=$(debasher::_resident_tool_get_node_processname "${node}")
+    local idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
     if [ -z "${idx}" ]; then
         debasher::_get_process_finished_filename "${absdirname}" "${processname}"
     else
@@ -127,13 +129,13 @@ debasher::_resident_tool_node_finished_filename()
 # The path of $3 in the process's own directory, as the node's runtime
 # names it (see _get_execdir_entry in engine/debasher_runtime_transport.py):
 # "<name>_<idx>" for a task, "<name>" otherwise.
-debasher::_resident_tool_node_execdir_entry()
+debasher::_resident_tool_get_node_execdir_entry()
 {
     local absdirname=$1
     local node=$2
     local name=$3
-    local processname=$(debasher::_resident_tool_node_processname "${node}")
-    local idx=$(debasher::_resident_tool_node_task_idx "${node}")
+    local processname=$(debasher::_resident_tool_get_node_processname "${node}")
+    local idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
     local execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
     if [ -z "${idx}" ]; then
         echo "${execdir}/${name}"
@@ -147,7 +149,7 @@ debasher::_resident_tool_node_execdir_entry()
 # for it before launching any of them (its DEBASHER_NUM_TASKS line), so
 # that tasks not started yet are counted too. Waits for the script until
 # the deadline $3, since a program can still be starting up.
-debasher::_resident_tool_num_tasks_of_process()
+debasher::_resident_tool_read_num_tasks_of_process()
 {
     local absdirname=$1
     local processname=$2
@@ -185,7 +187,7 @@ debasher::_resident_tool_list_nodes_of_process()
 
     local num_tasks
     # From the script, so that a task not started yet counts
-    num_tasks=$(debasher::_resident_tool_num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+    num_tasks=$(debasher::_resident_tool_read_num_tasks_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
     # A process of one task is a node named by its process alone
     if [ "${num_tasks}" -eq 1 ]; then
         echo "${processname}"
@@ -219,7 +221,7 @@ debasher::_resident_tool_resolve_node_names()
     IFS=',' read -ra names <<< "${names_csv}"
     local name processname role process_nodes node num_found
     for name in "${names[@]}"; do
-        processname=$(debasher::_resident_tool_node_processname "${name}")
+        processname=$(debasher::_resident_tool_get_node_processname "${name}")
         role=""
         if [ -n "${DEBASHER_PROGRAM_PROCESSES[${processname}]+x}" ]; then
             role=$(debasher::_classify_resident_process_role "${processname}") || role=""
@@ -325,7 +327,7 @@ debasher::_resident_tool_some_node_is_running()
 
     local node
     for node in "${running_nodes_ref[@]}"; do
-        if debasher::_process_is_in_progress "${absdirname}" "$(debasher::_resident_tool_node_processname "${node}")"; then
+        if debasher::_process_is_in_progress "${absdirname}" "$(debasher::_resident_tool_get_node_processname "${node}")"; then
             return 0
         fi
     done
@@ -335,7 +337,7 @@ debasher::_resident_tool_some_node_is_running()
 ########
 # The line of the trigger $1 (start_snapshot or shutdown), numbered with the
 # epoch $2.
-debasher::_resident_tool_trigger_json()
+debasher::_resident_tool_format_trigger_json()
 {
     local command=$1
     local epoch=$2
@@ -359,11 +361,11 @@ debasher::_resident_tool_trigger_every_node()
     local deadline=$5
 
     local trigger_json
-    trigger_json=$(debasher::_resident_tool_trigger_json "${command}" "${epoch}")
+    trigger_json=$(debasher::_resident_tool_format_trigger_json "${command}" "${epoch}")
 
     local node cp_file fifo
     for node in "${triggered_nodes_ref[@]}"; do
-        cp_file=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" control_ports)
+        cp_file=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" control_ports)
         # A program can still be starting up when this runs
         if ! debasher::_resident_tool_wait_for_file "${cp_file}" "${deadline}"; then
             echo "Error: ${node} never wrote its control_ports file" >&2
@@ -394,7 +396,7 @@ debasher::_resident_tool_node_has_checkpoint_since()
     local epoch=$3
 
     local checkpoints_dir
-    checkpoints_dir=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" checkpoints)
+    checkpoints_dir=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" checkpoints)
     local path name
     for path in "${checkpoints_dir}"/*.json; do
         name="${path##*/}"

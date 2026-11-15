@@ -109,7 +109,7 @@ check_pars()
 # them (see _get_execdir_entry in engine/debasher_runtime_transport.py), and the
 # output directory of the process unless it is empty. Only the paths that
 # exist.
-state_paths_of_process()
+list_state_paths_of_process()
 {
     local absdirname=$1
     local processname=$2
@@ -125,7 +125,7 @@ state_paths_of_process()
             # node_info and control_ports are left: nothing reads them back,
             # and every incarnation writes them again
             for name in checkpoints log halted notice; do
-                path=$(debasher::_resident_tool_node_execdir_entry "${absdirname}" "${node}" "${name}")
+                path=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" "${name}")
                 if [ -e "${path}" ]; then
                     echo "${path}"
                 fi
@@ -236,7 +236,7 @@ reset_resident_program()
                 return 1
             }
             num_paths=$((num_paths + 1))
-        done < <(state_paths_of_process "${absdirname}" "${processname}")
+        done < <(list_state_paths_of_process "${absdirname}" "${processname}")
     done
 
     # The output directory of every process is left there empty, as the

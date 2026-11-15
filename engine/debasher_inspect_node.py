@@ -53,7 +53,7 @@ def _get_execdir_entry(execdir, name, task_idx):
     return os.path.join(execdir, name if task_idx is None else f"{name}_{task_idx}")
 
 
-def _mtime(path):
+def _get_mtime(path):
     try:
         return os.path.getmtime(path)
     except FileNotFoundError:
@@ -75,20 +75,21 @@ def _read_json(path):
 # --- the files of a node ------------------------------------------------------
 
 
-class Node:
-    """The files of one node, a process or one task of an array process."""
+class NodeFileReader:
+    """Reads the files of one node, a process or one task of an array
+    process, anew at every call."""
 
     def __init__(self, execdir, task_idx):
         self.execdir = execdir
         self.task_idx = task_idx
 
-    def entry(self, name):
+    def get_entry_path(self, name):
         return _get_execdir_entry(self.execdir, name, self.task_idx)
 
-    def checkpoints(self):
+    def list_checkpoints(self):
         """[(epoch, path)] of the checkpoints that the node retains, oldest
         first."""
-        directory = self.entry("checkpoints")
+        directory = self.get_entry_path("checkpoints")
         try:
             names = os.listdir(directory)
         except FileNotFoundError:
@@ -103,11 +104,11 @@ class Node:
                 continue
         return [(epoch, os.path.join(directory, f"{epoch}.json")) for epoch in sorted(epochs)]
 
-    def latest_capture_pos(self):
+    def read_latest_capture_pos(self):
         """The capture_pos of the newest checkpoint of the schema version of
         the runtime library, or None if there is none. A checkpoint pruned
         while it is read is skipped."""
-        for _epoch, path in reversed(self.checkpoints()):
+        for _epoch, path in reversed(self.list_checkpoints()):
             checkpoint = _read_json(path)
             if checkpoint is None:
                 continue
@@ -116,17 +117,17 @@ class Node:
             return checkpoint.get("capture_pos")
         return None
 
-    def halted_epoch(self):
+    def read_halted_epoch(self):
         try:
-            with open(self.entry("halted")) as f:
+            with open(self.get_entry_path("halted")) as f:
                 return int(f.read().strip())
         except (FileNotFoundError, ValueError):
             return None
 
-    def node_info(self):
+    def read_node_info(self):
         """The node info file as the node last wrote it, with its age and
         whether it is stale, or None if the node has never written one."""
-        info = _read_json(self.entry("node_info"))
+        info = _read_json(self.get_entry_path("node_info"))
         if info is None:
             return None
         age = time.time() - info["updated_at"]
@@ -134,24 +135,24 @@ class Node:
         info["stale"] = age > 2 * info["heartbeat_interval_secs"]
         return info
 
-    def input_log(self):
-        return _InputLogReader(self.entry("log"))
+    def open_input_log(self):
+        return _InputLogReader(self.get_entry_path("log"))
 
-    def notice(self):
+    def read_notice(self):
         """The notice of the node, as its notice file holds it, or None
         without one."""
-        return _read_json(self.entry("notice"))
+        return _read_json(self.get_entry_path("notice"))
 
 
 # --- the commands -------------------------------------------------------------
 
 
 def summary(node, process, task_state):
-    checkpoints = node.checkpoints()
-    capture_pos = node.latest_capture_pos()
-    info = node.node_info()
+    checkpoints = node.list_checkpoints()
+    capture_pos = node.read_latest_capture_pos()
+    info = node.read_node_info()
 
-    log = node.input_log()
+    log = node.open_input_log()
     segments = log.list_segments()
     input_log = {
         "bytes": sum(size for _, size in segments),
@@ -179,13 +180,13 @@ def summary(node, process, task_state):
         "task": node.task_idx,
         "task_state": task_state,
         "checkpoints": [
-            {"epoch": epoch, "written_at": _mtime(path)} for epoch, path in checkpoints
+            {"epoch": epoch, "written_at": _get_mtime(path)} for epoch, path in checkpoints
         ],
         "capture_pos": capture_pos,
-        "halted_epoch": node.halted_epoch(),
+        "halted_epoch": node.read_halted_epoch(),
         "input_log": input_log,
         "node_info": info,
-        "notice": node.notice(),
+        "notice": node.read_notice(),
     }
 
 
@@ -198,7 +199,7 @@ def _count_by_port(messages):
 
 
 def checkpoint(node, epoch):
-    retained = node.checkpoints()
+    retained = node.list_checkpoints()
     path = dict(retained).get(epoch)
     content = _read_json(path) if path is not None else None
     if content is None:
@@ -209,7 +210,7 @@ def checkpoint(node, epoch):
     result = {
         "epoch": epoch,
         "path": path,
-        "written_at": _mtime(path),
+        "written_at": _get_mtime(path),
         "schema_version": schema_version,
         "readable": schema_version == FBPProcess.CHECKPOINT_SCHEMA_VERSION,
     }
@@ -230,7 +231,7 @@ def checkpoint(node, epoch):
 
 def log(node, port, last):
     records = []
-    for item in node.input_log().read_records_backwards():
+    for item in node.open_input_log().read_records_backwards():
         if len(records) >= last:
             break
         if isinstance(item, BadLine):
@@ -248,11 +249,11 @@ def log(node, port, last):
             }
         )
     records.reverse()
-    return {"capture_pos": node.latest_capture_pos(), "records": records}
+    return {"capture_pos": node.read_latest_capture_pos(), "records": records}
 
 
 def runs(node, process_outdir, debasher_status):
-    info = node.node_info()
+    info = node.read_node_info()
     if info is None:
         raise InspectError("the node has never written its node info file: it has not started yet")
     launcher = info.get("launcher")
@@ -280,25 +281,25 @@ def notices(nodes):
     execdir)], in their order, skipping a node without one."""
     result = []
     for process, task_idx, execdir in nodes:
-        notice = Node(execdir, task_idx).notice()
+        notice = NodeFileReader(execdir, task_idx).read_notice()
         if notice is not None:
             result.append({"process": process, "task": task_idx, **notice})
     return {"notices": result}
 
 
-def _node_arg(values):
+def _parse_node_arg(values):
     process, task_idx, execdir = values
-    return process, None if task_idx == "-" else _non_negative_int(task_idx), execdir
+    return process, None if task_idx == "-" else _parse_non_negative_int(task_idx), execdir
 
 
-def _non_negative_int(text):
+def _parse_non_negative_int(text):
     value = int(text)
     if value < 0:
         raise argparse.ArgumentTypeError(f"{text} is negative")
     return value
 
 
-def _positive_int(text):
+def _parse_positive_int(text):
     value = int(text)
     if value <= 0:
         raise argparse.ArgumentTypeError(f"{text} is not positive")
@@ -314,7 +315,7 @@ def build_arg_parser():
     parser = _Parser(prog="debasher_inspect_node", add_help=False)
     # Required by every command but notices, which is given its nodes.
     parser.add_argument("--process")
-    parser.add_argument("--task-idx", type=_non_negative_int)
+    parser.add_argument("--task-idx", type=_parse_non_negative_int)
     parser.add_argument("--task-state")
     parser.add_argument("--execdir")
     parser.add_argument("--process-outdir")
@@ -325,7 +326,7 @@ def build_arg_parser():
     checkpoint_parser.add_argument("epoch", type=int)
     log_parser = commands.add_parser("log", add_help=False)
     log_parser.add_argument("--port")
-    log_parser.add_argument("--last", type=_positive_int, default=100)
+    log_parser.add_argument("--last", type=_parse_positive_int, default=100)
     commands.add_parser("runs", add_help=False)
     notices_parser = commands.add_parser("notices", add_help=False)
     # One node each: its process, its task index ("-" but in an array) and
@@ -341,7 +342,7 @@ def run_command(argv):
     on an error of usage or setup."""
     args = build_arg_parser().parse_args(argv)
     if args.command == "notices":
-        return notices([_node_arg(values) for values in args.node])
+        return notices([_parse_node_arg(values) for values in args.node])
     missing = [
         f"--{name.replace('_', '-')}"
         for name in ("process", "task_state", "execdir", "process_outdir", "debasher_status")
@@ -349,7 +350,7 @@ def run_command(argv):
     ]
     if missing:
         raise InspectError(f"{args.command} needs {', '.join(missing)}")
-    node = Node(args.execdir, args.task_idx)
+    node = NodeFileReader(args.execdir, args.task_idx)
     if args.command == "summary":
         return summary(node, args.process, args.task_state)
     if args.command == "checkpoint":
