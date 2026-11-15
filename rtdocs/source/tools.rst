@@ -432,9 +432,12 @@ debasher_reset_resident
 its first run: it moves the checkpoints, input logs, notices and
 process outputs of every node under ``__reset__/<timestamp>/`` in the
 output directory, so that the next ``debasher_exec`` starts every node
-afresh. It refuses while any process of the program is running. It
-is also the way out for a node that refuses to start because its
-input log was lost or cut (see the :ref:`resident` Section).
+afresh. It refuses, with status 1, while a ``debasher_exec`` is
+preparing or running the program in that output directory, or while
+any process of the program is in progress: stop the program first
+(``debasher_stop_resident`` or ``debasher_stop``). It is also the way
+out for a node that refuses to start because its input log was lost or
+cut (see the :ref:`resident` Section).
 
 ::
 

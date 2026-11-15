@@ -2950,8 +2950,9 @@ line of the lock file. The `debasher_exec` of a run may still be preparing it,
 before the command line file that `debasher_status` reads exists, or while every
 process still shows its status from the run before, or `TO-DO`; and, as the
 built-in scheduler of the run outside oneshot mode, it waits between one process
-ending and the next starting. `debasher_status` checks the lock by taking it for
-an instant, and `debasher_exec` waits up to two seconds for the lock before it
+ending and the next starting. The tools that look at the lock
+(`debasher_status`, `debasher_stop`, `debasher_reset_resident`) take it for an
+instant, and `debasher_exec` waits up to two seconds for the lock before it
 refuses the output directory, so that a check never makes a launch fail.
 
 ## Reruns

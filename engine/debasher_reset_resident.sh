@@ -27,8 +27,9 @@
 # the program, or deletes them with --delete. It resets the whole program,
 # never one node: a node that starts afresh numbers the messages of its
 # channels from the start again, and a reader that kept its own state would
-# drop everything it sends as duplicates. It refuses to run while any
-# process of the program is.
+# drop everything it sends as duplicates. It refuses to run while a
+# debasher_exec holds the lock of the output directory for a run, or while
+# any process of the program is in progress.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
@@ -199,6 +200,15 @@ reset_resident_program()
     local dirname=$1
     local absdirname=$(debasher::_get_absolute_path "${dirname}")
     local command_line_file="${absdirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    # A debasher_exec that holds the lock prepares the run and launches the
+    # nodes before any of them is in progress. The lock is taken only for an
+    # instant, to look at it, never kept: debasher_stop would take a reset
+    # that kept it for the scheduler of a run
+    if debasher::_outdir_is_locked_for_a_run "${absdirname}"; then
+        echo "Error: a debasher_exec is preparing or running the program in ${dirname}; stop it first (debasher_stop_resident or debasher_stop)" >&2
+        return 1
+    fi
 
     local pfile
     pfile=$(debasher::_get_abspfile_from_command_line_file "${command_line_file}") || return 1

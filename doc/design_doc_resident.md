@@ -3571,8 +3571,15 @@ in the program's output directory, each path kept relative to it
 (`__reset__/<timestamp>/__exec__/<process>/checkpoints`,
 `__reset__/<timestamp>/<process>/...`). `--delete` deletes it instead.
 
-The tool acts only on a stopped program: it refuses while any process of the
-program is running, as `debasher_exec` does.
+The tool acts only on a stopped program. It refuses while a `debasher_exec`
+holds the lock of the output directory to prepare or run the program, as
+`debasher_status` and `debasher_stop` see it
+(`debasher::_outdir_is_locked_for_a_run`). It also refuses while any process of
+the program, the `Supervisor` included, is in progress. It takes the lock only
+for an instant, to look at it, as `debasher_status` does, and does not keep it
+while it resets. So a `debasher_exec` that starts during the reset is not kept
+out. A reset that kept the lock would not do: `debasher_stop` would take it for
+the scheduler of a run and stop it.
 
 ## `debasher_inspect_resident`: what a node keeps
 
