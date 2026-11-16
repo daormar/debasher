@@ -3361,13 +3361,13 @@ section says when the tool refuses.
 
 ## `debasher_stop_resident`: the graceful stop tool
 
-This section is about the graceful counterpart to `debasher_stop`. The tool
+`debasher_stop_resident` is the graceful counterpart to `debasher_stop`. It
 halts a resident program in an ordered way (see "Ordered shutdown"), so that
 every node can resume where it stopped. Only then does it stop the processes. It
 relies on the `Supervisor` stopping on a stop signal (see "Clean-completion
-detection"). The section goes through the options of the tool, how it finds the
-nodes of the program, the seven steps of the stop, and the stop signal that it
-sends.
+detection"). The rest of the section gives the options of the tool, how it finds
+the nodes of the program, the seven steps of the stop, and the stop signal that
+it sends.
 
 ```
 debasher_stop_resident -d <outdir> [-x <node>[,<node>...]]
@@ -3486,14 +3486,14 @@ trapped, and none of this affects it.
 
 ## `debasher_snapshot_resident`: rounds from outside the program
 
-This section is about the tool that starts snapshots in a running resident
-program. A node never starts a round on its own. The `Supervisor` starts a
-snapshot only when a trigger reaches its manual trigger channel. So without this
-tool, or someone else who writes triggers, a program closes no epoch and prunes
-nothing. It ends at the size cap of its input logs (see "Pruning and the size
-cap"). The section describes how the tool starts one round, how it waits for the
-round to close, what keeps a round from closing, the periodic mode, and the
-programs that the tool acts on.
+A node never starts a round on its own. The `Supervisor` starts a snapshot only
+when a trigger reaches its manual trigger channel. So without a tool or a person
+that writes triggers, a program closes no epoch and prunes nothing. It ends at
+the size cap of its input logs (see "Pruning and the size cap").
+`debasher_snapshot_resident` is that tool: it starts snapshots in a running
+resident program. The section describes how the tool starts one round, how it
+waits for the round to close, what keeps a round from closing, the periodic
+mode, and the programs that the tool acts on.
 
 ```
 debasher_snapshot_resident -d <outdir> [--timeout <secs> | --every <secs>]
@@ -3553,9 +3553,9 @@ resumed needs it started again.
 
 ## `debasher_reset_resident`: a clean start
 
-This section is about the tool that takes a stopped resident program back to its
-first run. It says what the tool takes away, why it always resets the whole
-program, where what it takes away goes, and when the tool refuses.
+`debasher_reset_resident` takes a stopped resident program back to its first
+run. The paragraphs below say what the tool takes away, why it always resets the
+whole program, where what it takes away goes, and when the tool refuses.
 
 ```
 debasher_reset_resident -d <outdir> [--delete]
@@ -3608,13 +3608,13 @@ the scheduler of a run and stop it.
 
 ## `debasher_inspect_resident`: what a node keeps
 
-This section is about the tool that shows what a node of a resident program
-keeps. It shows that to a person at the command line, and to the web UI, which
-shows what the tool prints (see "Observing and talking to a live program" in
-`doc/design_doc_webui.md`). The section describes the two forms of the tool and
-what the first one refuses, and how the tool reads the files of a node without
-disturbing it. It then describes the node info file, which a node writes for
-this tool, and each of the commands and the exit codes of the tool.
+`debasher_inspect_resident` shows what a node of a resident program keeps. It
+shows it to a person at the command line and to the web UI, which shows what
+the tool prints (see "Observing and talking to a live program" in
+`doc/design_doc_webui.md`). The section first describes the two forms of the
+tool and what the first one refuses, and how the tool reads the files of a node
+without disturbing it. It then describes the node info file, which a node
+writes for this tool, and each of the commands and the exit codes of the tool.
 
 ```
 debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>
