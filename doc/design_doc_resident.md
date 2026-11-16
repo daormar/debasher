@@ -502,9 +502,12 @@ to it.
   or the option `-runsdir` of its process gives.
 - **run directory**: the output directory of one batch run, `<runs root>/<run>`,
   where `<run>` is a relative path that the request names, or else the position
-  of the request in the input log.
-- **registration**: `launch.json` in a run directory, which records which
-  request of which life of a launcher node the directory belongs to.
+  of the request in the input log. Its `launch.json` records which request of
+  which life of the launcher node the directory belongs to.
+- **registration**: the file `.launcher/registrations/<position>.json` in the
+  output directory of the process of a launcher node, written when the request
+  at that position registers a batch run, and which names its run directory.
+  The registrations of a node are its queue of batch runs.
 - **life**: the time between two clean starts of a launcher node, identified by
   `life_id`, a random string kept in a file of the output directory of its
   process; `debasher_reset_resident` removes it, so every clean start begins a
@@ -3797,278 +3800,336 @@ another command without `-p`.
 
 # `ProgramLauncher`: batch runs from a node
 
-A resident program processes a stream of messages; a general program processes
-a batch of inputs and ends. A launcher node joins the two: every request it
-receives launches the same general program with the options of the request, in
-a run directory of its own. A bioinformatics system is the case in view: a BAM
+A resident program processes a stream of messages. A general program processes
+a batch of inputs and ends. A launcher node joins the two. Every request it
+receives launches the same general program, with the options of the request, in
+a run directory of its own. A bioinformatics system is the case in view. A BAM
 file arrives, and the pipeline that analyses it runs once for it, while other
-files keep arriving; when one analysis ends, a node downstream learns it, and
+files keep arriving. When one analysis ends, a node downstream learns it, and
 can go on with its results.
+
+The sections that follow go from the node to its batch runs. The first says how
+a module defines a launcher node and how the node finds its general program. The
+next two say what a request holds, and which request a run directory belongs
+to. The next two say how the node launches the batch runs that are registered
+and reads their state, and how a node downstream learns that one has ended. The
+last two cover a launcher node that runs a single process, and what stopping and
+resetting the resident program do to a launcher node and its batch runs.
 
 ## A node that launches a general program
 
+A module defines a launcher node with a class. This section goes through what
+that class sets up: the attributes of the node, how the node finds the general
+program, the options of the process that can replace the attributes, how the
+general program finds its modules, and what the node observes.
+
 `ProgramLauncher` is a subclass of `FBPProcess` in the runtime library
-(`engine/debasher_runtime_launcher.py`), not a new kind of process: to the
+(`engine/debasher_runtime_launcher.py`), not a new kind of process. To the
 engine, a launcher node is a node like any other, with its heartbeat and its
-control ports. A module defines one with a class that names the general program,
-`PFILE` (or an option does, see below), or, with `PROCESS`, a single process of
-that module (see "A single process"), and may give the runs root, `RUNS_ROOT`,
-an absolute path. By default the runs root is the output directory of the
-process, which the engine keeps across launches of a node (see "Ordered
-shutdown") and exports to it as `DEBASHER_PROCESS_OUTDIR`. `PFILE` is found as
-the module that declares the node would find a module it loads: a relative path
-is looked for in the directory of that module, where a program keeps its files,
-which the engine exports to the node as `DEBASHER_PROCESS_MODULE_DIR`, and then
-in the directories of `DEBASHER_MOD_DIR`, so that a program can launch one that
-another module keeps, at the price of depending on how the machine is set up.
-The node runs the engine's own search for this, `debasher_resolve_pfile`, from
-the directory of the module. An absolute path is accepted with a warning, since
-it ties the program to one machine. A node whose `PFILE` is not found stops when
-it is created. Every input port that carries data is a port of requests, and a
-node with none says so in a notice (see "Notices"); the output port `DONE_PORT`
-(`outdone` by default), if the node has it, tells when a batch run ends (see
-"The end of a batch run as an input event"). A launcher node cannot be a task of
-an array process, since the tasks would share its bookkeeping.
+control ports. Its class names the general program, `PFILE`. With `PROCESS`, it
+names instead a single process of the module of `PFILE` (see "A single
+process"). The class may also give the runs root, `RUNS_ROOT`, an absolute
+path. By default the runs root is the output directory of the process. The
+engine keeps that directory across launches of a node (see "Ordered shutdown"),
+and exports it to the node as `DEBASHER_PROCESS_OUTDIR`. An option of the
+process can give any of the three instead (see below).
+
+`PFILE` is found as the module that declares the node would find a module that
+it loads. A relative path is looked for first in the directory of that module,
+where a program keeps its files. The engine exports that directory to the node
+as `DEBASHER_PROCESS_MODULE_DIR`. The path is then looked for in the directories
+of `DEBASHER_MOD_DIR`. So a program can launch one that another module keeps, at
+the price of depending on how the machine is set up. The node runs the engine's
+own search for this, `debasher_resolve_pfile`, from the directory of the module.
+An absolute path is accepted with a warning, since it ties the program to one
+machine. A node whose `PFILE` is not found stops when it is created.
+
+Every input port that carries data is a port of requests. A node with none says
+so in a notice (see "Notices"). The output port `DONE_PORT` (`outdone` by
+default), if the node has it, tells when a batch run ends (see "The end of a
+batch run as an input event"). A launcher node cannot be a task of an array
+process, since the tasks would share its bookkeeping.
 
 An option of the process, when the process has it, gives `PFILE`, `PROCESS` or
-`RUNS_ROOT` instead, for a value that the command line chooses: the options that
-`PFILE_OPTION`, `PROCESS_OPTION` and `RUNS_ROOT_OPTION` name (`-pfile`,
-`-process` and `-runsdir` by default), so that the class of a launcher node
-needs no body. `-pfile` is not a file option (`define_cmdline_opt`, not
-`define_cmdline_infile_opt`): the engine leaves a relative name as it is, and
-the node looks for it as it looks for `PFILE`, with the warning for an absolute
-path; a node with neither `PFILE` nor `-pfile` stops when it is created.
-`-runsdir` has to be an absolute path, and a node given a relative one stops
-when it is created too.
+`RUNS_ROOT` instead of the class, for a value that the command line chooses.
+These are the options that `PFILE_OPTION`, `PROCESS_OPTION` and
+`RUNS_ROOT_OPTION` name: `-pfile`, `-process` and `-runsdir` by default. So the
+class of a launcher node needs no body. `-pfile` is not a file option: it is
+defined with `define_cmdline_opt`, not `define_cmdline_infile_opt`. The engine
+leaves a relative name as it is, and the node looks for it as it looks for
+`PFILE`, with the warning for an absolute path. A node with neither `PFILE` nor
+`-pfile` stops when it is created. `-runsdir` has to be an absolute path. A node
+given a relative one stops when it is created too.
 
-The modules that the general program loads are found with the
-`DEBASHER_MOD_DIR` of the launcher node, which inherits it along the whole
-chain of launches: the frontend puts it in the environment of the
-`debasher_exec` it runs, from the program's own settings (or the shell has it,
-on the command line); every node
-inherits the environment of `debasher_exec`, the `Supervisor` too, and so does
-a node that the `Supervisor` relaunches; and the launcher node runs each
-`debasher_exec` of a batch run with the environment of the node. The generated
-script of every process also carries the value that `debasher_exec` had when
-it generated it, so that a node relaunched by hand, from a shell without it,
-still has it; a new run, which generates the scripts again, takes its own. It
-carries the directory of the module of every process too, from which
-`DEBASHER_PROCESS_MODULE_DIR` comes.
+The modules that the general program loads are found with the `DEBASHER_MOD_DIR`
+of the launcher node. The node inherits it along the whole chain of launches.
+The frontend puts it in the environment of the `debasher_exec` that it runs,
+from the program's own settings; on the command line, the shell has it. Every
+node inherits the environment of `debasher_exec`, the `Supervisor` too. A node
+that the `Supervisor` relaunches inherits it as well. The launcher node runs
+each `debasher_exec` of a batch run with the environment of the node. The
+generated script of every process also carries the value that `debasher_exec`
+had when it generated it. So a node relaunched by hand, from a shell without it,
+still has it. A new run generates the scripts again, and takes its own value.
+The script also carries the directory of the module of every process, from
+which `DEBASHER_PROCESS_MODULE_DIR` comes.
 
-The launcher node observes its batch runs (see "Observing the outside
-world"): its `observe()` launches the registered ones and, if the node has
-`DONE_PORT`, brings in the end of each under the name `RUNS_DONE_PORT`
+The launcher node observes its batch runs (see "Observing the outside world").
+Its `observe()` launches the registered ones. If the node has `DONE_PORT`,
+`observe()` also brings in the end of each one under the name `RUNS_DONE_PORT`
 (`runs_done`), its observe port.
 
 ## Requests and run directories
 
-A request is a `DATA` whose payload is a JSON object: `opts`, the options of
-the general program, an object whose keys are option names with their leading
-dash and whose values are strings; and `run`, optional, the name of the run
-directory, a relative path of plain names, none of which starts with a dot.
-Without `run`, the name is the position of the
-request in the input log, which a replay gives the request again. For
-example:
+What a launcher node receives on a port of requests is a request, and each
+request has a run directory of its own. This section gives the format
+of a request, an example, and the requests that the node drops.
+
+A request is a `DATA` whose payload is a JSON object with these fields. `opts`
+holds the options of the general program: an object whose keys are option
+names, with their leading dash, and whose values are strings. `run`, optional,
+is the name of the run directory: a relative path of plain names, none of which
+starts with a dot. Without `run`, the name is the position of the request in the
+input log. A replay gives the request the same position, so the name does not
+change. For example:
 
 ```
 {"opts": {"-bam": "/data/incoming/s17.bam"}, "run": "s17"}
 ```
 
-A request whose `opts` is not such an object, or whose `run` is absolute,
-contains `..` or a name that starts with a dot, is logged as an error and
-dropped; a replay drops it again. The
-general program checks the options themselves when it is launched.
+The node logs as an error, and drops, a request whose `opts` is not such an
+object, or whose `run` is absolute, contains `..` or has a name that starts with
+a dot. A replay drops it again. The general program checks the options
+themselves when it is launched.
 
 ## Ownership of a run directory
 
-`process_data` does not launch anything: it registers the batch run. It writes
-`launch.json` in the run directory, with `life_id`, the position of the
-request in the input log and its options, and then
-`.launcher/registrations/<position>.json`, with the name of the run
-directory, in the output directory of its process: the list of registrations
-of the node. `.launcher/` holds all the bookkeeping of the node, and no run
-directory can clash with it, since no run name starts with a dot. Each
-file is written to a temporary one and renamed into place. Both writes are
-idempotent: a replay of the same request writes the same content to the same
-paths.
+Two requests may name the same run directory, and only one of them can own it.
+This section describes the two files that a request writes, the rule of
+ownership that decides between two requests, and the identifier of a life,
+which that rule needs.
 
-A run directory belongs to the request that registered it:
+`process_data` does not launch anything. It registers the batch run, in two
+writes. It first writes `launch.json` in the run directory, with `life_id`, the
+position of the request in the input log and its options. `life_id` identifies
+the life of the node, the time since its last clean start; the end of this
+section says why the rule needs it. It then writes the registration,
+`.launcher/registrations/<position>.json`, with the name of the run directory,
+in the output directory of its process. The registrations of the node form its
+queue of batch runs (see "Launching from the queue on disk"). `.launcher/` holds
+all the bookkeeping of the node. No run directory can clash with it, since no
+run name starts with a dot. Each file is written to a temporary one and renamed
+into place. Both writes are idempotent: a replay of the same request writes the
+same content to the same paths.
 
-- With no `launch.json`, the request registers it.
+A run directory belongs to the request that wrote its `launch.json`. The rule
+of ownership decides by that file:
+
+- With no `launch.json`, the request registers the batch run.
 - With a `launch.json` of the same life and the same position, the request is
-  the one that registered it, processed again by a replay, and nothing
-  changes.
+  the one that wrote it, processed again by a replay, and nothing changes.
 - With any other `launch.json`, the request is logged as an error and dropped:
   another request, or a request of another life, owns the directory. A request
   that wants to analyse the same input again with other options names another
   directory (`s17/v2`), so that no result is overwritten by mistake.
 
-The rule depends only on what the input log and the directory hold, never on
-whether a batch run is still going on, so a replay decides the same way.
+The rule of ownership depends only on what the input log and the directory hold,
+never on whether a batch run is still going on. So a replay decides the same
+way.
 
 `life_id` tells the requests of a life from those of the one before. After a
-clean start the input log begins again from its first position, and a run
-directory under an absolute runs root, which `debasher_reset_resident` does not
-reach, still holds a `launch.json` with a position of the old log; without the
-identifier, a new request at that position would be taken for the one that
-registered it, and never launched. The identifier is created, at random, the
-first time the node starts in a life (in `initialize_runtime()`, before its
-replay), and kept in `.launcher/life_id`, in the output directory of its
-process, which a reset empties. It cannot be part of the
-node state: a node that crashes before its first checkpoint would generate
-another one in its replay.
+clean start, the input log begins again from its first position. A run
+directory under an absolute runs root is out of the reach of
+`debasher_reset_resident`. It still holds a `launch.json` with a position of the
+old log. Without the identifier, a new request at that position would be taken
+for the one that wrote it, and never launched. The identifier is created at
+random the first time the node starts in a life, in `initialize_runtime()`,
+before its replay. It is kept in `.launcher/life_id`, in the output directory of
+its process, which a reset empties. It cannot be part of the node state: a node
+that crashes before its first checkpoint would generate another one in its
+replay.
 
 ## Launching from the queue on disk
 
-The node's `observe()`, on its observation thread, launches the batch runs
-that are registered, in the order of their positions, with at most
-`MAX_CONCURRENT_RUNS` running at a time (1 by default). Each one runs
+The registrations on disk are the queue of a launcher node. This section follows
+the node as it launches the batch runs of that queue and learns how each one is
+going: the launch, how the state of a batch run is read from its run directory,
+the states one by one, and what the node does with a batch run that has ended.
+
+The node's `observe()`, on its observation thread, launches the batch runs that
+are registered, in the order of their positions. The node has
+`MAX_CONCURRENT_RUNS` slots (1 by default), and a batch run holds one while it
+runs. Each one runs
 `debasher_exec --pfile <PFILE> --outdir <run directory> --sched <scheduler>`
-with the options of its request, in a session of its own, so that the batch
-run outlives a crash of the node and a stop of the resident program. The
+with the options of its request. It runs in a session of its own, so that the
+batch run outlives a crash of the node and a stop of the resident program. The
 scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
-itself, so that the batch runs do not depend on the scheduler that a machine
-would pick on its own; `SLURM` sends them to a cluster. A program sets both in
-the computational specifications of the process, `max_concurrent_runs` and
-`batch_sched`, like the limits of a node (see "Computational specifications of
-a resident process"); the engine checks, when it loads the program, that the
-first is a positive number and the second one of the schedulers that
-`debasher_exec` knows.
+itself. So the batch runs do not depend on the scheduler that a machine would
+pick on its own. `SLURM` sends them to a cluster. A program sets both in the
+computational specifications of the process, `max_concurrent_runs` and
+`batch_sched`, like the limits of a node (see "Computational specifications of a
+resident process"). When it loads the program, the engine checks that the first
+is a positive number and the second one of the schedulers that `debasher_exec`
+knows.
 
 How a batch run is going is read from its run directory alone, whatever the
-scheduler, so that a relaunched node, which has lost what its previous
-incarnation held in memory, and a tool outside the node (see
-"`debasher_inspect_resident`: what a node keeps") find the same state.
+scheduler. A relaunched node has lost what its previous incarnation held in
+memory, and a tool outside the node (see "`debasher_inspect_resident`: what a
+node keeps") never had it. Both find the same state in the directory.
 `debasher_exec` runs under a shell that records how it ended, since only its
-parent learns its exit code: the file `submitted` when it ends with 0, and
-`exit_code`, holding its exit code, when it fails (options that the program
-refuses, for example), each written into a temporary file renamed into place
-before the shell ends. `observe()` writes the id of that shell into the run
-directory, `launcher.pid`, and the output of both goes to `launcher.log`. The id
-is the PID of the shell together with the time at which its process started, as
-the engine keeps the id of a task of the built-in scheduler (see "The built-in
-scheduler" in `doc/design_doc_engine.md`): `<pid>@<start time>`. Without `ps`,
-the id is the PID alone; a shell that has already ended when its start time is
-read gets an empty one, and never runs. Once the shell has ended, as by a
-restart of the machine, the system may give its PID to another process, and a
-PID alone would then make the batch run look running for as long as that process
-lives: not launched again, not reported, and holding a slot.
+parent learns its exit code. The shell writes the file `submitted` when
+`debasher_exec` ends with 0. It writes `exit_code`, holding the exit code, when
+`debasher_exec` fails (options that the program refuses, for example). Each file
+is written into a temporary one and renamed into place before the shell ends.
+`observe()` writes the id of that shell into the run directory, in
+`launcher.pid`. The output of the shell and of `debasher_exec` goes to
+`launcher.log`.
 
-With the built-in scheduler, `debasher_exec` waits for the program to end, but
-with SLURM it only submits the jobs, and ends at once, so once it has ended well
-the node asks `debasher_status` on the run directory, at most once every
-`STATUS_CHECK_INTERVAL_SECS`, until nothing of the program is in progress. The
-states of a batch run, in the order in which the rule looks at its run
-directory:
+The id is the PID of the shell together with the time at which its process
+started, `<pid>@<start time>`, as the engine keeps the id of a task of the
+built-in scheduler (see "The built-in scheduler" in `doc/design_doc_engine.md`).
+Once the shell has ended, as by a restart of the machine, the system may give
+its PID to another process. A PID alone would then make the batch run look
+running for as long as that process lives: not launched again, not reported,
+and holding a slot. Without `ps`, the id is the PID alone. A shell that has
+already ended when its start time is read gets an empty id, and never runs.
+
+With the built-in scheduler, `debasher_exec` waits for the program to end. With
+SLURM it only submits the jobs, and ends at once. So, once `debasher_exec` has
+ended well, the node asks `debasher_status` on the run directory until nothing
+of the program is in progress. It asks at most once every
+`STATUS_CHECK_INTERVAL_SECS`.
+
+The state of a batch run is decided by a single function of its run directory,
+`_batch_run_state`, which the node and `debasher_inspect_resident` share. The
+node acts on the state: it writes the exit code of a batch run that has ended,
+reports its end, and launches the batch runs that are registered or stopped, as
+the free slots allow. The tool only prints the state. The states follow,
+in the order in which `_batch_run_state` looks at the run directory:
 
 - With `exit_code`: ended, finished if it holds 0, failed otherwise.
-- Submitted, with the program in progress according to `debasher_status`:
+- With `submitted`, and the program in progress according to `debasher_status`:
   running.
-- Submitted, with nothing in progress: ended, finished if every process of the
-  program finished (exit code 0), failed otherwise (the exit code that
+- With `submitted`, and nothing in progress: ended, finished if every process of
+  the program finished (exit code 0), failed otherwise (the exit code that
   `debasher_status` gives to an unfinished program). The node writes that exit
   code into `exit_code`.
-- With no `launcher.pid`: registered and not launched, launched when a slot is
-  free.
+- With no `launcher.pid`: registered and not launched. It is launched when a
+  slot is free.
 - With its shell alive: running. The shell is alive while a process with its PID
-  exists, the user of the node can signal it (a process of another user, such as
-  one that took the PID after a restart, is never the shell), and, when the id
-  has a start time, it started at that time. An id without a start time, or one
+  exists, the user of the node can signal it, and, when the id has a start time,
+  it started at that time. A process of another user, such as one that took the
+  PID after a restart, is never the shell. An id without a start time, or one
   checked when `ps` cannot give the current start time, is decided by the PID
   alone.
-- With its shell gone and neither file: it was stopped before it ended,
-  together with its shell, as by a restart of the machine. If
-  `debasher_status` says that something of the program is still in progress,
-  the batch run is running, and left to end; if it says that everything
-  finished, it is ended as finished; otherwise it is stopped, and
-  `debasher_exec` is launched again on the same directory, whose rerun logic
-  skips the processes that had finished and resumes the rest.
+- With its shell gone and neither file: it was stopped before it ended, together
+  with its shell, as by a restart of the machine. If `debasher_status` says that
+  something of the program is still in progress, the batch run is running, and
+  left to end. If it says that everything finished, the batch run is ended as
+  finished. Otherwise it is stopped, and `debasher_exec` is launched again on
+  the same directory. Its rerun logic skips the processes that had finished and
+  resumes the rest.
 
-The rule is a single function of the run directory (`_batch_run_state`),
-which the node and `debasher_inspect_resident` share: the node then acts on the
-state, writing the exit code of a batch run that has ended, reporting its end
-and launching, while the tool only prints it. A shell writes its file before
-it ends, so one that has ended but that the node has not yet waited for, whose
-PID still shows as alive, is never taken for a running one; the node waits for
-each shell that it launched only so that none is left a zombie. A
+In `_batch_run_state`, the files of a batch run take precedence over its
+shell. A shell writes its file
+before it ends. So a shell that has ended, but that the node has not yet waited
+for and whose PID still shows as alive, is never taken for a running one. The
+node waits for each shell that it launched only so that none is left a zombie. A
 `debasher_exec` killed alone, while its shell lives, ends with an exit code of
-its own, and the batch run is failed, not launched again.
+its own. The batch run is then failed, not launched again.
 
-An ended batch run keeps its exit code, `exit_code`, and is never launched
-again on its own: a program that always fails would be launched for ever. The
-queue is the list of registrations on disk: a relaunched node, or one resumed
-after a halt, finds it as it was, and `observe()` goes on from there.
-When a batch run is launched is not part of the node state, and does not need
-to be the same in a replay, since the node sends nothing when it launches.
+An ended batch run keeps its exit code, `exit_code`, and is never launched again
+on its own: a program that always fails would be launched for ever. A relaunched
+node, or one resumed after a halt, finds its queue as it was, and `observe()`
+goes on from there. When a batch run is launched is not part of the node state.
+It does not need to be the same in a replay, since the node sends nothing when
+it launches.
 
 ## The end of a batch run as an input event
 
-The directory of a batch run always says how it is going: its registration, the
-id of its shell and the exit code that `observe()` writes, and `debasher_status`
-on it for each of its processes. Anyone can read it, the frontend included, at
-no cost to the node.
+A node downstream may need to know when a batch run ends, to go on with its
+results. This section says why the end enters the launcher node as an event from
+outside the program, how that event goes from `observe()` to `DONE_PORT`, and
+what happens when it arrives twice or while the node is down.
 
-A node downstream can also be told, through an output port of the launcher
-node, `outdone`. `observe()` cannot send on it: a node sends only from
-`process_data`, whose calls the input log records and a replay reproduces. So
-the end of a batch run enters the node as what it is, an event from outside the
-program. Once the exit code is written, `observe()` brings
-`{"run": ..., "exit_code": ...}` in with `inject()`, under `runs_done`, its
-observe port, and only then, once it is logged, marks the run directory as
-notified, with a file `notified`. `process_data`, on `runs_done`, adds the
-batch run to the set of announced runs in its node state and sends
-`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `outdone`,
-with `run_dir` the absolute path of the run directory, so that the node that
-reads the results of the batch run does not have to know the runs root, and
-`status` `finished` for an exit code of 0 and `failed` for any other. The
-message then has everything a channel has: its numbering (G5), its replay, its
-part in the rounds. A replay sends the same `run_dir`, which follows from the
-runs root and the name of the run alone, as long as the runs root does not
-change between launches of the node.
+The directory of a batch run always says how it is going. It holds its
+`launch.json`, the id of its shell and the exit code that `observe()` writes,
+and `debasher_status` on it gives the state of each of its processes. Anyone can
+read it, the frontend included, at no cost to the node.
+
+A node downstream can also be told, through the output port `DONE_PORT`
+(`outdone` by default) of the launcher node. `observe()` cannot send on it. A
+node sends only from `process_data`, whose calls the input log records and a
+replay reproduces. So the end of a batch run enters the node as what it is, an
+event from outside the program. Once the exit code is written, `observe()`
+brings `{"run": ..., "exit_code": ...}` in with `inject()`, under
+`RUNS_DONE_PORT` (`runs_done`), its observe port. Only then, once the event is
+logged, does `observe()` mark the run directory as notified, with a file
+`notified`.
+
+`process_data`, on `RUNS_DONE_PORT`, adds the batch run to the set of announced
+runs in its node state. It then sends
+`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `DONE_PORT`.
+`run_dir` is the absolute path of the run directory, so that the node that reads
+the results of the batch run does not have to know the runs root. `status` is
+`finished` for an exit code of 0 and `failed` for any other. The message on
+`DONE_PORT` is then an ordinary message of a channel: it is numbered (G5),
+replayed, and part of the rounds. A replay sends the same `run_dir`, which
+follows from the runs root and the name of the run alone. This holds as long as
+the runs root does not change between launches of the node.
 
 - A node that goes down after writing the event and before marking the run
-  directory writes it again when it comes back. `process_data` drops the
-  second one, since the batch run is already in its announced set, and a
-  replay, which finds both in the log in the same order, drops it too: the
-  event may arrive more than once, the message on `outdone` goes out once.
+  directory writes the event again when it comes back. `process_data` drops the
+  second one, since the batch run is already in its announced set. A replay,
+  which finds both in the log in the same order, drops it too. So the event may
+  arrive more than once, but the message on `DONE_PORT` goes out once.
 - A batch run that ends while the node is down leaves no exit code, since no
   launcher node was waiting for it. When the node comes back, `observe()` asks
   `debasher_status`, which says that every process finished, and the message on
-  `outdone` goes out.
-- A launcher node without `outdone` brings in no event.
+  `DONE_PORT` goes out.
+- A launcher node without `DONE_PORT` brings in no event.
 
 ## A single process
 
+Instead of a whole program, a launcher node can run a single process of a
+module, the one that `PROCESS` names. This section says how that process is run,
+and the two points in which the states of its batch runs differ.
+
 With `PROCESS`, a launcher node launches that process of the module of `PFILE`
-alone, with
-`debasher_exec_process <PFILE> <PROCESS> -- <options>`,
-from the run directory, so that a relative path among the options of a
-request (the file the process writes, for example) lands there. There is no
-scheduler in between: `debasher_exec_process` runs the process function and
-ends when it ends, and the options of a request are the arguments of that
-function. The states of a batch run differ in two points. The shell that runs
-it writes `exit_code` whatever the exit code, 0 included, and never
-`submitted`, since nothing of the process is left to ask `debasher_status`
-about once it has ended. And with neither an exit code nor a live shell, the
-process was stopped before it ended, and it is launched again from the start,
-since `debasher_exec_process` has nothing to resume from: a process run this
-way has to be able to run twice, overwriting its results.
+alone, with `debasher_exec_process <PFILE> <PROCESS> -- <options>`. It launches
+it from the run directory, so that a relative path among the options of a
+request lands there (the file that the process writes, for example). There is no
+scheduler in between. `debasher_exec_process` runs the process function and ends
+when it ends, and the options of a request are the arguments of that function.
+The states of a batch run differ in two points:
+
+- The shell that runs it writes `exit_code` whatever the exit code, 0 included,
+  and never `submitted`, since once the process has ended nothing of it is left
+  to ask `debasher_status` about.
+- With neither an exit code nor a live shell, the process was stopped before it
+  ended. It is launched again from the start, since `debasher_exec_process` has
+  nothing to resume from. So a process run this way has to be able to run
+  twice, overwriting its results.
 
 ## Stopping and resetting a launcher node
 
-Stopping the resident program, by a halt or by a signal, does not stop the
-batch runs it launched: they are general programs, in sessions of their own,
-which `debasher_status` and `debasher_stop` reach on their run directories.
-When the program is resumed, `observe()` finds them running, or ended
-with no exit code, and goes on as above.
+The batch runs of a launcher node are general programs, which do not end with
+the resident program that launched them. This section says what stopping and
+resetting the resident program do to them, and to the bookkeeping of the node.
 
-`debasher_reset_resident` empties the output directory of the process: the
-list of registrations, the file of `life_id` and, with the default runs root,
-every run directory, set aside or deleted with the rest. With an absolute runs
-root, the run directories stay where they are, with the results; their
-registrations belong to a life that has ended, so a request of the new life
-that names one of them is dropped, and reusing that name means removing the
-directory by hand.
+Stopping the resident program, by a halt or by a signal, does not stop the batch
+runs that it launched. They run in sessions of their own, and
+`debasher_status` and `debasher_stop` reach them on their run directories. When
+the program is resumed, `observe()` finds them running, or ended with no exit
+code, and goes on as above.
+
+`debasher_reset_resident` empties the output directory of the process. That
+takes away the registrations, the file of `life_id` and, with the
+default runs root, every run directory, set aside or deleted with the rest. With
+an absolute runs root, the run directories stay where they are, with the
+results. Their `launch.json` belongs to a life that has ended. So a request of
+the new life that names one of them is dropped. Reusing that name means removing
+the directory by hand.
 
 # Extensions
 

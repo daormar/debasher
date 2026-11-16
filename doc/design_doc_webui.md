@@ -3429,18 +3429,18 @@ registered, one row each: its name, its run directory, its state (registered,
 running, finished, failed with its exit code, or stopped before it ended) and
 its exit code. From a row the user can read its `launcher.log`, read what
 `debasher_status` says of its run directory when the batch run is a whole
-general program, and open the run directory as any other path (see
-"Inspecting a process"). The state of a batch run is the one that the node
-itself deduces from the run directory (see "Launching from the queue on disk"
-in `doc/design_doc_resident.md`), and the same engine tool computes it, with a
+general program, and open the run directory as any other path (see "Inspecting a
+process"). The state of a batch run is the one that the node itself deduces from
+the run directory (see "Launching from the queue on disk" in
+`doc/design_doc_resident.md`), and the same engine tool computes it, with a
 command of its own, `runs`, from the code of the launcher node, so that the
-rule is written once. Whether a batch run is a whole general program, or the
-single process that the class attribute `PROCESS` of the launcher node names
-(see "A single process" in `doc/design_doc_resident.md`), comes from the node
-info file of the launcher node, as `summary` gives it. The action is enabled
-when "Show node state" is, and its list is read as every view here is, never
-polled. Launching again a batch run that failed is not offered until the
-engine has a command for it (see "Future work" in
+function that decides the state is written once. Whether a batch run is a whole
+general program, or the single process that the class attribute `PROCESS` of the
+launcher node names (see "A single process" in `doc/design_doc_resident.md`),
+comes from the node info file of the launcher node, as `summary` gives it. The
+action is enabled when "Show node state" is, and its list is read as every view
+here is, never polled. Launching again a batch run that failed is not offered
+until the engine has a command for it (see "Future work" in
 `doc/design_doc_resident.md`).
 
 **A `DirectoryWatcher`** has no view of its own. The files that it has asked
