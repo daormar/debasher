@@ -136,11 +136,26 @@ Python modules are reported apart, from the shallowest one:
 Who uses a module are the other modules of the report and the clients: the
 Bash or Python files under `engine`, `api`, `data` and `sdk` (`--clients`
 for others). Tests are not clients, nor are the installed copies under
-`share` and `lib`. The last row of each report takes all the modules as a
-single one, whose interface is what the clients use of it: the depth of the
-library as a whole, against which its files compare. With `--clients
-data/programs data/webui_programs`, it is the interface that the authors of
-modules see. `-v` lists the names and the state of each module.
+`share` and `lib`. These rows measure the design inside the engine, as its
+maintainers see it.
+
+The last row, the **facade for authors**, measures the library as its
+users see it: all the modules taken as one, whose interface is what an
+author of programs has to know. That is the functions the library declares
+public (in Bash, those without a leading `_` after the namespace, the ones
+`debasher::list_public_functions` lists; in Python, those in an
+`__all__`), plus any other name that author code uses: the programs under
+`data` (`--authors` for others). Bash authors call the public functions
+without the namespace, through the one line wrappers that the library
+defines (`f() { debasher::f "$@"; }`), and a call to a wrapper counts as
+one to the function.
+
+`-v` lists the names and the state of each module, and for the facade two
+lists that compare what the library declares with what authors use: the
+public names that no author code uses (a function public by name but used
+only inside the engine, or a part of the facade that no example shows),
+and the names with a leading `_` that author code uses (a function that is
+public in fact).
 
 The measure is a heuristic, as Ousterhout's own notion is: lines of code
 stand for functionality, and the informal part of an interface (the order

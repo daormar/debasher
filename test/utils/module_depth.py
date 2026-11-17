@@ -21,16 +21,24 @@ the lines of code of its implementation against the cost of its interface:
 - depth: code / I.
 
 Who uses a module are the other modules of the report and the clients:
-the Bash or Python files under the client directories, tests excluded. A
-last row takes all the modules as a single one, whose interface is what the
-clients use of it.
+the Bash or Python files under the client directories, tests excluded.
+
+A last row, the facade for authors, takes all the modules as a single one,
+whose interface is what the authors of programs see of it: the functions
+it declares public (in Bash, those without a leading `_` after the
+namespace; in Python, those of an `__all__`), and any other name that the
+files under the author directories use. Bash authors call the public
+functions without the namespace, through one line wrappers that the
+library defines (`f() { debasher::f "$@"; }`): a call to the wrapper counts
+as one to the function.
 
 The measure is a heuristic, as Ousterhout's own notion is: lines of code
 stand for functionality, and the informal part of an interface (the order
 of calls, files expected on disk) is not seen. It ranks modules to look at,
 it does not grade them.
 
-Usage: module_depth.py [--clients DIR ...] [PATH ...]
+Usage: module_depth.py [--clients DIR ...] [--authors DIR ...] [-v]
+           [PATH ...]
 
 PATH is a .sh or .py file, or a directory whose files are all taken
 (default: the Bash library of the engine, engine/debasher_lib_*.sh, and the
@@ -52,6 +60,7 @@ import bash_complexity as bc  # noqa: E402
 
 DEFAULT_PATHS = ["engine/debasher_lib_*.sh", "engine/debasher_runtime_*.py"]
 DEFAULT_CLIENTS = ["engine", "api", "data", "sdk"]
+DEFAULT_AUTHORS = ["data"]
 SKIPPED_DIRS = {"test", "tests", "__pycache__", "node_modules", "share", "lib"}
 
 BASH_WORD = re.compile(r"[A-Za-z_][\w:.\-]*")
@@ -63,6 +72,8 @@ BASH_DECLARE_GLOBAL = re.compile(
 BASH_POSITIONAL = re.compile(r"\$\{?([1-9])(?!\d)")
 BASH_ALL_ARGS = re.compile(r"\$\{?[@*]")
 SINGLE_QUOTED = re.compile(r"'[^']*'")
+BASH_WRAPPER = re.compile(
+    r'^\s*([A-Za-z_]\w*)\s*\(\)\s*\{\s*([\w:]+::\w+)\s+"\$@"\s*;?\s*\}')
 # Variables of the environment, which a script may set but no module owns
 ENVIRONMENT = {"PATH", "HOME", "PWD", "IFS", "LANG", "LC_ALL", "TMPDIR",
                "SHELL", "USER"}
@@ -75,6 +86,10 @@ class Module:
         self.names = []    # (name, params) used by other files
         self.state = []
         self.const = []
+        # Only for the facade: public names no author uses, and names with
+        # a leading _ that an author uses
+        self.unused = []
+        self.leaked = []
 
     @property
     def interface(self):
@@ -215,15 +230,35 @@ def get_bash_usage(path, names):
     return words, touched, written
 
 
-def measure_bash(modules, clients):
-    """One Module per Bash file of modules, and one for all of them."""
-    names = find_bash_globals(modules + clients)
-    usage = {p: get_bash_usage(p, names) for p in modules + clients}
-    written = set().union(*(u[2] for u in usage.values()))
-    client_words = set().union(*(usage[p][0] for p in clients))
-    client_touched = set().union(*(usage[p][1] for p in clients))
+def find_bash_wrappers(files):
+    """The one line wrappers of the files: wrapper name -> function."""
+    wrappers = {}
+    for path in files:
+        for line in read_lines(path):
+            m = BASH_WRAPPER.match(line)
+            if m:
+                wrappers[m.group(1)] = m.group(2)
+    return wrappers
 
-    whole = Module("all the modules")
+
+def is_public_bash_function(name):
+    return not name.split("::")[-1].startswith("_")
+
+
+def measure_bash(modules, clients, authors):
+    """One Module per Bash file of modules, and the facade for authors."""
+    names = find_bash_globals(modules + clients)
+    usage = {p: get_bash_usage(p, names) for p in set(modules + clients
+                                                     + authors)}
+    # A call to a wrapper is a call to the function it wraps
+    wrappers = find_bash_wrappers(modules)
+    for words, _, _ in usage.values():
+        words |= {wrappers[w] for w in words & wrappers.keys()}
+    written = set().union(*(u[2] for u in usage.values()))
+    author_words = set().union(*(usage[p][0] for p in authors))
+    author_touched = set().union(*(usage[p][1] for p in authors))
+
+    whole = Module("facade for authors")
     report = []
     for path in modules:
         mod = Module(path)
@@ -234,15 +269,20 @@ def measure_bash(modules, clients):
             mod.code += count_bash_code_lines(body)
             if fn.name in other_words:
                 mod.names.append((fn.name, count_bash_params(body)))
-            if fn.name in client_words:
+            public = is_public_bash_function(fn.name)
+            if public or fn.name in author_words:
                 whole.names.append((fn.name, count_bash_params(body)))
+            if public and fn.name not in author_words:
+                whole.unused.append(fn.name)
+            if not public and fn.name in author_words:
+                whole.leaked.append(fn.name)
         shared = usage[path][1] & other_touched
         mod.state = sorted(shared & written)
         mod.const = sorted(shared - written)
         whole.code += mod.code
         report.append(mod)
     modules_touched = set().union(*(usage[p][1] for p in modules))
-    shared = modules_touched & client_touched
+    shared = modules_touched & author_touched
     whole.state = sorted(shared & written)
     whole.const = sorted(shared - written)
     return report, whole
@@ -392,9 +432,22 @@ def add_python_name(mod, name, entry):
         mod.const.append(name)
 
 
-def measure_python(modules, clients):
-    """One Module per Python file of modules, and one for all of them."""
-    parsed = {p: parse_python(p) for p in modules + clients}
+def get_python_all(tree):
+    """The names of the __all__ of a module, or None if it has none."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__"
+                for t in node.targets) \
+                and isinstance(node.value, (ast.List, ast.Tuple)):
+            return {e.value for e in node.value.elts
+                    if isinstance(e, ast.Constant)}
+    return None
+
+
+def measure_python(modules, clients, authors):
+    """One Module per Python file of modules, and the facade for
+    authors."""
+    parsed = {p: parse_python(p) for p in set(modules + clients + authors)}
     parsed = {p: v for p, v in parsed.items() if v[1] is not None}
     module_name = {p: os.path.splitext(os.path.basename(p))[0]
                    for p in parsed}
@@ -404,8 +457,15 @@ def measure_python(modules, clients):
                  for p in modules if p in parsed}
     uses = {p: get_python_uses(parsed[p][1]) for p in parsed}
 
-    whole = Module("all the modules")
-    whole_names = set()
+    whole = Module("facade for authors")
+    # The declared facade: the __all__ of the modules, or their public
+    # names if none has one
+    declared = {(module_name[p], n) for p in modules if p in parsed
+                for n in get_python_all(parsed[p][1]) or ()}
+    if not declared:
+        declared = {(m, n) for m, d in defs.items() for n in d
+                    if not n.startswith("_")}
+    used_by_authors = set()
     report = []
     for path in modules:
         if path not in parsed:
@@ -420,18 +480,24 @@ def measure_python(modules, clients):
             if entry:
                 add_python_name(mod, n, entry)
         whole.code += mod.code
-        for p in clients:
+        for p in authors:
             if p in uses:
-                whole_names |= {(name, n) for n in uses[p].get(name, set())}
+                used_by_authors |= {(name, n)
+                                    for n in uses[p].get(name, set())}
         report.append(mod)
     # A name re-exported by a facade is one name of the whole, not two
     resolved = {}
-    for module, n in whole_names:
+    for module, n in declared | used_by_authors:
         entry = resolve_python_name(n, module, defs, reexports)
         if entry:
             resolved[n] = entry
+    used = {n for _, n in used_by_authors}
     for n, entry in sorted(resolved.items()):
         add_python_name(whole, n, entry)
+        if n not in used:
+            whole.unused.append(n)
+        elif n.startswith("_"):
+            whole.leaked.append(n)
     return report, whole
 
 
@@ -458,6 +524,10 @@ def print_report(title, report, whole, verbose):
                 print(f"{'':42}name  {n} ({p})")
             for n in mod.state:
                 print(f"{'':42}state {n}")
+            for n in mod.unused:
+                print(f"{'':42}unused by authors {n}")
+            for n in mod.leaked:
+                print(f"{'':42}private used by authors {n}")
     print()
 
 
@@ -475,8 +545,12 @@ Columns:
   I       cost of the interface: names + params + state
   depth   code / I; low means a shallow module, almost all interface,
           and "-" one that no client uses (tests are not clients)
-The last row takes all the modules as one, whose interface is what the
-clients use of it. Rows are ordered from the shallowest module."""
+Rows are ordered from the shallowest module. The last row, the facade for
+authors, takes all the modules as one, whose interface is what an author of
+programs sees: the functions it declares public (Bash: no leading _ after
+the namespace; Python: an __all__) and any other name that author code (the
+--authors directories) uses. With -v it lists the public names that no
+author code uses, and the private ones that some author code does."""
 
 
 def main():
@@ -490,6 +564,10 @@ def main():
                         help="directories of the files that use the modules, "
                         "tests excluded (default: "
                         + " ".join(DEFAULT_CLIENTS) + ")")
+    parser.add_argument("--authors", nargs="+", default=DEFAULT_AUTHORS,
+                        help="directories of the programs written by authors, "
+                        "for the facade (default: "
+                        + " ".join(DEFAULT_AUTHORS) + ")")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="list the names and the state of each module")
     args = parser.parse_args()
@@ -500,9 +578,11 @@ def main():
         if not modules:
             continue
         clients = find_client_files(args.clients, suffix, set(modules))
-        report, whole = measure(modules, clients)
+        authors = find_client_files(args.authors, suffix, set(modules))
+        report, whole = measure(modules, clients, authors)
         print_report(f"Depth of the {language} modules "
-                     f"(clients: {' '.join(args.clients)})",
+                     f"(clients: {' '.join(args.clients)}; "
+                     f"authors: {' '.join(args.authors)})",
                      report, whole, args.verbose)
     print(LEGEND)
 
