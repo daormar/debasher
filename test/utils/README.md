@@ -12,6 +12,7 @@ the project with its `make` target, or directly with the options its
 | `make bash-complexity` | `bash_complexity.py` | complexity of the Bash functions of the engine | Python 3 |
 | `make hotspots` | `hotspots.py` | files both complex and often changed, in every language | Python 3, git |
 | `make coupling` | `coupling.py` | files that change together in the same commits | Python 3, git |
+| `make module-depth` | `module_depth.py` | depth of the modules: code against the cost of their interface | Python 3 |
 
 ## CRAP score
 
@@ -99,3 +100,50 @@ The report ends with the **sum of coupling** of each file: for every commit
 that changed it, how many other files the commit also changed. A file with a
 high sum drags changes elsewhere; crossed with the hotspots, it tells whether
 a hotspot also spreads its changes.
+
+## Depth of the modules
+
+A deep module, in the sense of John Ousterhout (*A Philosophy of Software
+Design*), hides a lot of implementation behind a small interface; a shallow
+one is almost all interface, and its callers pay for what it saves them.
+`module_depth.py` weighs the two for every file of the Bash library of the
+engine (`engine/debasher_lib_*.sh`) and of its Python runtime library
+(`engine/debasher_runtime_*.py`), or of the files it is given. Bash and
+Python modules are reported apart, from the shallowest one:
+
+- **code**: the lines of code of the module, without blank lines, comments
+  or docstrings. It stands for what the module implements.
+- **names**: the functions of the module (in Python, also its classes) that
+  another file uses. The interface is what other files use, not what the
+  names say: a function with a leading `_` that another file calls is
+  interface all the same, and one without it that nobody calls is not.
+- **params**: the parameters of those names, since a function that takes
+  four costs its caller more than one that takes none. In Bash they are the
+  positional parameters that the body reads, plus one if it takes `"$@"`.
+  A Python class adds the parameters of its constructor and, for each public
+  method, one plus its parameters.
+- **state**: the variables of the module that other files share and that
+  some function writes. In Bash, the globals: variables in capitals,
+  declared at the top level or with `declare -g`. In Python, the module
+  variables that a function rebinds with `global`. Shared state couples
+  modules more than any call, so it counts as interface.
+- **const**: the shared variables that no function writes. They are shown,
+  but not counted: a constant costs its reader little.
+- **I**: the cost of the interface, names + params + state.
+- **depth**: code / I. A low depth is a shallow module. A module that no
+  other file uses shows `-`.
+
+Who uses a module are the other modules of the report and the clients: the
+Bash or Python files under `engine`, `api`, `data` and `sdk` (`--clients`
+for others). Tests are not clients, nor are the installed copies under
+`share` and `lib`. The last row of each report takes all the modules as a
+single one, whose interface is what the clients use of it: the depth of the
+library as a whole, against which its files compare. With `--clients
+data/programs data/webui_programs`, it is the interface that the authors of
+modules see. `-v` lists the names and the state of each module.
+
+The measure is a heuristic, as Ousterhout's own notion is: lines of code
+stand for functionality, and the informal part of an interface (the order
+of the calls, the files expected on disk) is not seen. Its parsers are line
+based for Bash (the one of the complexity report) and use `ast` for Python.
+It ranks modules to look at; it does not grade them.
