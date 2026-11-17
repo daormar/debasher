@@ -373,7 +373,7 @@ debasher::_check_no_output_opt_holds_subdivided_shdir()
 # were defined).
 debasher::_check_left_processes_not_running()
 {
-    local execdir=$(debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}")
+    local execdir=$(debasher::_get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}")
     [ -d "${execdir}" ] || return 0
 
     local procdir

@@ -1198,7 +1198,7 @@ debasher::_get_prg_exec_dir_for_process()
     local processname=$2
 
     # Get base exec dir
-    execdir=$(debasher::get_prg_exec_dir_given_basedir "${dirname}")
+    execdir=$(debasher::_get_prg_exec_dir_given_basedir "${dirname}")
 
     echo "${execdir}/${processname}"
 }
@@ -1406,7 +1406,7 @@ debasher::_get_process_finish_date()
 }
 
 ########
-debasher::list_proc_names()
+debasher::_list_proc_names()
 {
     while IFS= read -r func; do
         case "$func" in

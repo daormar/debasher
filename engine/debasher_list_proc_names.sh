@@ -27,4 +27,4 @@ fi
 file=$1
 source "$file"
 
-debasher::list_proc_names
+debasher::_list_proc_names

@@ -967,7 +967,7 @@ create_basic_dirs()
     local sched_opts_dir=$(debasher::_get_sched_opts_dir)
     "${MKDIR}" -p "${sched_opts_dir}" || { echo "Error! cannot create scheduler options directory" >&2; return 1; }
 
-    local graphsdir=$(debasher::get_prg_graphs_dir_given_basedir "${prepd}")
+    local graphsdir=$(debasher::_get_prg_graphs_dir_given_basedir "${prepd}")
     "${MKDIR}" -p "${graphsdir}" || { echo "Error! cannot create graphs directory" >&2; return 1; }
 
     local fifodir=$(debasher::_get_absolute_fifodir)
@@ -1443,7 +1443,7 @@ program_opts_file="${prg_file_pref}.${DEBASHER_PRGOPTS_FEXT}"
 old_program_opts_file="${outd}/${DEBASHER_PRG_PREF}.${DEBASHER_PRGOPTS_OLD_FEXT}"
 program_opts_exh_file="${prg_file_pref}.${DEBASHER_PRGOPTS_EXHAUSTIVE_FEXT}"
 program_fifos_file="${prg_file_pref}.${DEBASHER_FIFOS_FEXT}"
-prg_graphs_dir=$(debasher::get_prg_graphs_dir_given_basedir "${prepd}")
+prg_graphs_dir=$(debasher::_get_prg_graphs_dir_given_basedir "${prepd}")
 procgraph_file_prefix="${prg_graphs_dir}/process_graph"
 depgraph_file_prefix="${prg_graphs_dir}/dependency_graph"
 

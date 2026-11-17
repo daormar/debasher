@@ -356,7 +356,7 @@ debasher::_resolve_program_type()
 }
 
 ########
-debasher::get_prg_exec_dir_given_basedir()
+debasher::_get_prg_exec_dir_given_basedir()
 {
     local dirname=$1
 
@@ -366,11 +366,11 @@ debasher::get_prg_exec_dir_given_basedir()
 ########
 debasher::_get_prg_exec_dir()
 {
-    debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
+    debasher::_get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}"
 }
 
 ########
-debasher::get_prg_graphs_dir_given_basedir()
+debasher::_get_prg_graphs_dir_given_basedir()
 {
     local dirname=$1
 

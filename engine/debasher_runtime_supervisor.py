@@ -653,7 +653,7 @@ class Supervisor(_PortWorker):
     def _get_program_outdir(self):
         # The output directory of the program, which debasher_stop -d and
         # the other tools take, is the parent of __exec__ (see
-        # debasher::get_prg_exec_dir_given_basedir:
+        # debasher::_get_prg_exec_dir_given_basedir:
         # <dirname>/__exec__/<processname>)
         return os.path.dirname(self._get_program_exec_dir())
 

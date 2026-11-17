@@ -109,7 +109,7 @@ def _list_proc_names(preamble: str, program_env_vars: dict[str, str]) -> list[st
     if stdout is None:
         return []
 
-    # debasher::list_proc_names (engine/debasher_lib_processes.sh) echoes
+    # debasher::_list_proc_names (engine/debasher_lib_processes.sh) echoes
     # each process name once per required method it detects (e.g. both
     # "..._explain_cmdline_opts" and "..._explain_opts"), so dedupe here.
     names: list[str] = []

@@ -313,7 +313,7 @@ define_reporter_opts() {
     mkdir -p "${data}/2"
     define_writer_opts 0
     DEBASHER_PROGRAM_PROCESSES["writer"]=1
-    mkdir -p "$(debasher::get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}")/gone"
+    mkdir -p "$(debasher::_get_prg_exec_dir_given_basedir "${DEBASHER_PROGRAM_OUTDIR}")/gone"
     debasher::_process_is_in_progress() { [ "$2" = "gone" ]; }
 
     run debasher::_prepare_shared_subdirs 0
