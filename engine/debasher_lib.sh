@@ -61,6 +61,7 @@ DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backl
 # The scheduler with which a launcher node runs its batch runs, one of those
 # debasher_exec takes in --sched; the built-in one when not given
 DEBASHER_BATCH_SCHED_COMP_SPEC_NAME="batch_sched"
+DEBASHER_MAX_CONCURRENT_RUNS_COMP_SPEC_NAME="max_concurrent_runs"
 # The attributes that the engine reads, each in its part of the
 # specification of a process: the computational specifications and the
 # additional ones. Any other attribute, or one written in the other part, is

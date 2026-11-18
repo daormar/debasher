@@ -950,14 +950,15 @@ the specification is checked when the final process specification is built
 given among the computational specifications that belongs to the additional ones
 or the other way round, stops the preparation of the run, since it would
 otherwise be ignored. So do a process without `cpus`, `mem` or `time`, a setting
-of a resident node that is not a positive number, a `batch_sched` other than
-`BUILTIN` or `SLURM`, a dependency on a process that is not part of the program,
-and, under the Slurm scheduler, a process with more than one attempt whose
-explicit dependencies are joined by `?` (see "The Slurm scheduler"). The final
-process specification is the specification of each process with its dependencies
-added as a `processdeps` attribute, the inferred ones, or `none` when there are
-none, unless explicit dependencies were given. `program.procspec` holds it, one
-line per process, in no particular order:
+of a resident node that is not a positive number (a positive whole number for
+`max_concurrent_runs`), a `batch_sched` other than `BUILTIN` or `SLURM`, a
+dependency on a process that is not part of the program, and, under the Slurm
+scheduler, a process with more than one attempt whose explicit dependencies are
+joined by `?` (see "The Slurm scheduler"). The final process specification is
+the specification of each process with its dependencies added as a `processdeps`
+attribute, the inferred ones, or `none` when there are none, unless explicit
+dependencies were given. `program.procspec` holds it, one line per process, in
+no particular order:
 
 ```
 file_writer cpus=1 mem=32 time=00:01:00 |||  ; processdeps=none

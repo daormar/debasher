@@ -1564,18 +1564,18 @@ ends with the one limit that no specification sets:
   program.
 
 For example, `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00;
-out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds,
-and each value but `batch_sched`, when given, must be a positive number: the
-engine checks it when it loads the program
-(`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is launched. An
-`input_log_max_mb` or an `out_backlog_fail_mb` smaller than one message stops
-the node at its first message, which the engine cannot foresee, since it does
-not know the size of the messages. The built-in
-scheduler exports the computational specifications of the process to it as
-`DEBASHER_PROCESS_COMP_SPECS`, from the specification that the generated
-script carries, so a relaunch gets them too, and each class sets those that it
-reads on its instance when it is created (`_apply_comp_specs`), and ignores
-the other fields.
+out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds.
+Each value but `batch_sched`, when given, must be a positive number, and
+`max_concurrent_runs` a positive whole number. The engine checks them when it
+loads the program (`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is
+launched. An `input_log_max_mb` or an `out_backlog_fail_mb` smaller than one
+message stops the node at its first message, which the engine cannot foresee,
+since it does not know the size of the messages. The built-in scheduler exports
+the computational specifications of the process to it as
+`DEBASHER_PROCESS_COMP_SPECS`, from the specification that the generated script
+carries, so a relaunch gets them too, and each class sets those that it reads on
+its instance when it is created (`_apply_comp_specs`), and ignores the other
+fields.
 
 ## Observing the outside world
 
@@ -4069,16 +4069,18 @@ are registered, in the order of their positions. The node has
 `MAX_CONCURRENT_RUNS` slots (1 by default), and a batch run holds one while it
 runs. Each one runs
 `debasher_exec --pfile <program> --outdir <run directory> --sched <scheduler>`
-with the options of its request. It runs in a session of its own, so that the
-batch run outlives a crash of the node and a stop of the resident program. The
-scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
-itself. So the batch runs do not depend on the scheduler that a machine would
-pick on its own. `SLURM` sends them to a cluster. A program sets both in the
-computational specifications of the process, `max_concurrent_runs` and
-`batch_sched`, like the limits of a node (see "Computational specifications of a
-resident process"). When it loads the program, the engine checks that the first
-is a positive number and the second one of the schedulers that `debasher_exec`
-knows.
+with the options of its request. It runs in a session of
+its own, so that the batch run outlives a crash of the node and a stop of the
+resident program. The scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for
+the resident program itself. So the batch runs do not depend on the scheduler
+that a machine would pick on its own. `SLURM` sends them to a cluster. A program
+sets both in the computational specifications of the process,
+`max_concurrent_runs` and `batch_sched`, like the limits of a node (see
+"Computational specifications of a resident process"). When it loads the
+program, the engine checks that the first is a positive whole number and the
+second one of the schedulers that `debasher_exec` knows. The node checks the
+first again when it is created, since a node built without the engine has not
+been through that check.
 
 How a batch run is going is read from its run directory alone, whatever the
 scheduler. A relaunched node has lost what its previous incarnation held in

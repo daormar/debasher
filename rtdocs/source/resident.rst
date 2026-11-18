@@ -619,7 +619,9 @@ results, and ``status`` set to ``finished`` or ``failed``.
 ``MAX_CONCURRENT_RUNS`` (one by default) says how many batch runs run at
 a time, and ``BATCH_SCHED`` which scheduler they use (the built-in one
 by default); a program sets them for one process with the computational
-specifications ``max_concurrent_runs`` and ``batch_sched``.
+specifications ``max_concurrent_runs`` and ``batch_sched``. The first is
+a positive whole number: the engine checks it when it loads the
+program, and the node when it is created.
 Under Slurm the node gives ``debasher_exec`` the option ``--wait``:
 the ``debasher_exec`` of every batch run that runs stays alive on the
 machine of the node until the jobs of its program have ended, and its

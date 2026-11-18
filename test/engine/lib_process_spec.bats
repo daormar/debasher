@@ -156,3 +156,22 @@ register_processes() {
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"process p has an unknown additional specification: forse=yes"* ]]
 }
+
+# --- debasher::_check_resident_comp_spec_values ----------------------------
+
+@test "debasher::_check_resident_comp_spec_values takes the limits as positive numbers and the count of batch runs as a whole one" {
+    debasher::_check_resident_comp_spec_values "p" "cpus=1;mem=32"
+    debasher::_check_resident_comp_spec_values "p" "input_log_max_mb=0.5;max_concurrent_runs=2;batch_sched=SLURM"
+
+    run debasher::_check_resident_comp_spec_values "p" "input_log_max_mb=0"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"input_log_max_mb computational specification of process p must be a positive number"* ]]
+
+    run debasher::_check_resident_comp_spec_values "p" "max_concurrent_runs=0.5"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"max_concurrent_runs computational specification of process p must be a positive whole number"* ]]
+
+    run debasher::_check_resident_comp_spec_values "p" "batch_sched=PBS"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"batch_sched computational specification of process p must be"* ]]
+}

@@ -1516,8 +1516,9 @@ pairs, second argument):
 * ``batch_sched`` and the limits of a node (``input_log_max_mb``,
   ``out_backlog_max_mb``, ``out_backlog_fail_mb``,
   ``gil_switch_interval_ms``, ``heartbeat_timeout_s``,
-  ``startup_timeout_s``, ``max_concurrent_runs``): only for the
-  processes of a resident program (see the :ref:`resident` Section).
+  ``startup_timeout_s``, ``max_concurrent_runs``, a positive whole
+  number): only for the processes of a resident program (see the
+  :ref:`resident` Section).
 
 **HINT**: under the SLURM scheduler, ``mem`` and ``time`` may each be
 given as a comma-separated list (e.g. ``time=00:01:00,00:02:00``, as

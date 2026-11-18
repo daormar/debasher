@@ -72,23 +72,36 @@ debasher::_check_basic_comp_specs()
 }
 
 ########
-# The limits that a resident process reads, when given, must be positive
-# numbers: checked here, when the program is loaded, rather than by the
-# node when it starts, after it has been launched. The same goes for the
-# scheduler of the batch runs of a launcher node.
+# Returns 1, with an error, if a computational specification that a
+# resident process reads, given in $2 for process $1, has a value that the
+# node would refuse or misread: a limit that is not a positive number, a
+# count of batch runs that is not a positive whole number, or a scheduler
+# of the batch runs that debasher_exec does not know. Checked when the
+# program is loaded, rather than by the node after it has been launched.
 debasher::_check_resident_comp_spec_values()
 {
     local processname=$1
     local comp_specs=$2
 
+    # The limits are optional, and checked only when given
     local specname
     for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES}; do
         local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
-        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && ! debasher::_str_is_positive_number "${value}"; then
+        if [ "${value}" = "${DEBASHER_ATTR_NOT_FOUND}" ]; then
+            continue
+        fi
+        # A count of batch runs is whole: 0.5 would let no batch run start
+        if [ "${specname}" = "${DEBASHER_MAX_CONCURRENT_RUNS_COMP_SPEC_NAME}" ]; then
+            if ! debasher::_str_is_positive_integer "${value}"; then
+                echo "Error: ${specname} computational specification of process ${processname} must be a positive whole number, got \"${value}\"" >&2
+                return 1
+            fi
+        elif ! debasher::_str_is_positive_number "${value}"; then
             echo "Error: ${specname} computational specification of process ${processname} must be a positive number, got \"${value}\"" >&2
             return 1
         fi
     done
+    # The scheduler of the batch runs, one that debasher_exec knows
     local batch_sched=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}")
     if [ "${batch_sched}" != "${DEBASHER_ATTR_NOT_FOUND}" ] \
            && [ "${batch_sched}" != "${DEBASHER_BUILTIN_SCHEDULER}" ] \

@@ -768,6 +768,12 @@ def test_the_computational_specs_set_the_batch_runs_at_a_time(outdir, monkeypatc
     assert node.MAX_CONCURRENT_RUNS == 4
 
 
+def test_a_count_of_batch_runs_that_is_not_whole_stops_the_node(outdir, monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; max_concurrent_runs=0.5")
+    with pytest.raises(ValueError, match="not a positive whole number"):
+        _node()
+
+
 # --- a single process instead of a program -----------------------------------
 
 

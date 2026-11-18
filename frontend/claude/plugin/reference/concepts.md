@@ -467,13 +467,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   node (`get_code_prompt`) carries the reference of every hook, method and class
   attribute of its class, read from the installed runtime library: look there
   for one that this list does not name.
-- **Specifications of a node.** Besides `cpus`, `mem` and `time`, a node
-  takes limits in its `computationalSpecs` (`input_log_max_mb`,
-  `out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms`,
-  `startup_timeout_s`), a `ProgramLauncher` also `max_concurrent_runs` and
-  `batch_sched`, and the `Supervisor` only `heartbeat_timeout_s` and
-  `startup_timeout_s`; unset, a limit keeps the default of the class. A node
-  has no additional specifications and no additional methods.
+- **Specifications of a node.** Besides `cpus`, `mem` and `time`, a node takes
+  limits in its `computationalSpecs` (`input_log_max_mb`, `out_backlog_max_mb`,
+  `out_backlog_fail_mb`, `gil_switch_interval_ms`, `startup_timeout_s`), a
+  `ProgramLauncher` also `max_concurrent_runs` and `batch_sched`, and the
+  `Supervisor` only `heartbeat_timeout_s` and `startup_timeout_s`; unset, a
+  limit keeps the default of the class. Each limit, when given, is a positive
+  number, `max_concurrent_runs` (the batch runs at a time) a positive whole
+  number and `batch_sched` `BUILTIN` or `SLURM`: the engine refuses another
+  value when it loads the program. A node has no additional specifications and
+  no additional methods.
 - **Rounds and snapshots.** A snapshot is a round started by an initiator
   (`initiator: true`), which every node checkpoints; a program of independent
   parts needs an initiator in each. After a crash a node resumes from its

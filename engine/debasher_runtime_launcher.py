@@ -332,10 +332,12 @@ class ProgramLauncher(FBPProcess):
     #: node has it.
     DONE_PORT = "outdone"
     _RUNTIME_CLASS = "ProgramLauncher"
-    #: How many batch runs run at a time, and so, under Slurm, how many
-    #: debasher_exec wait at once on the machine of the node. A program sets
-    #: it for a process in its computational specifications,
-    #: `max_concurrent_runs`.
+    #: How many batch runs run at a time, a positive whole number, and so,
+    #: under Slurm, how many debasher_exec wait at once on the machine of the
+    #: node. A program sets it for a process in its computational
+    #: specifications, `max_concurrent_runs`, which the engine checks when it
+    #: loads the program; the node refuses to start with any other value, in
+    #: the specifications or in the class body.
     MAX_CONCURRENT_RUNS = 1
     #: The scheduler the batch runs use, given to debasher_exec as `--sched`:
     #: the built-in one by default, as for the resident program itself, so
@@ -373,6 +375,16 @@ class ProgramLauncher(FBPProcess):
         # The tasks of an array would share the bookkeeping of the node
         if self._get_task_idx() is not None:
             raise ValueError(f"{type(self).__name__}: a launcher node cannot be a task of an array process")
+        # A count of batch runs: 0.5 would let no batch run start. It comes
+        # as a float from the computational specifications
+        count = self.MAX_CONCURRENT_RUNS
+        if not (isinstance(count, (int, float)) and float(count).is_integer() and count >= 1):
+            raise ValueError(
+                f"{type(self).__name__}: max_concurrent_runs, {count!r}, is not a positive whole "
+                "number: set the computational specification max_concurrent_runs, or "
+                "MAX_CONCURRENT_RUNS in the class body, to 1 or more"
+            )
+        self.MAX_CONCURRENT_RUNS = int(self.MAX_CONCURRENT_RUNS)
         runs_root = self.opts.get(_RUNS_ROOT_OPTION)
         if runs_root and not os.path.isabs(runs_root):
             raise ValueError(
@@ -662,7 +674,7 @@ class ProgramLauncher(FBPProcess):
             else:
                 to_launch.append(run_dir)
         for run_dir in to_launch:
-            if running >= int(self.MAX_CONCURRENT_RUNS):
+            if running >= self.MAX_CONCURRENT_RUNS:
                 break
             self._launch(run_dir)
             running += 1

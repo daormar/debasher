@@ -43,8 +43,8 @@ def test_the_attributes_of_a_class_come_with_their_value_and_documentation():
     reference = node_reference.node_reference("ProgramLauncher")
 
     assert (
-        "- `MAX_CONCURRENT_RUNS = 1`: How many batch runs run at a time. A program sets it for "
-        "a process in its computational specifications, `max_concurrent_runs`."
+        "- `MAX_CONCURRENT_RUNS = 1`: How many batch runs run at a time, a positive whole number, "
+        "and so, under Slurm, how many debasher_exec wait at once on the machine of the node."
     ) in reference
 
 
