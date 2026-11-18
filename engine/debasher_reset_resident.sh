@@ -28,8 +28,9 @@
 # never one node: a node that starts afresh numbers the messages of its
 # channels from the start again, and a reader that kept its own state would
 # drop everything it sends as duplicates. It refuses to run while a
-# debasher_exec holds the lock of the output directory for a run, or while
-# any process of the program is in progress.
+# debasher_exec holds the lock of the output directory for a run, while
+# any process of the program is in progress, or while a launcher node has a
+# batch run in progress.
 
 # INCLUDE BASH LIBRARY
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
@@ -161,6 +162,46 @@ ensure_program_is_stopped()
 }
 
 ########
+# Returns 1, with an error naming their run directories, if some launcher
+# node of the program in $1 has a batch run in progress, as
+# debasher_inspect_node tells it from the run directories. Every node of a
+# process with a script is asked, the Supervisor apart; one that is no
+# launcher, or that never started, has none.
+ensure_no_batch_run_is_running()
+{
+    local absdirname=$1
+
+    local -a node_args=()
+    local processname role script_file process_nodes node idx execdir outdir
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        role=$(debasher::_classify_resident_process_role "${processname}") || return 1
+        if [ "${role}" = "supervisor" ]; then
+            continue
+        fi
+        script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
+        if [ ! -f "${script_file}" ]; then
+            continue
+        fi
+        # No wait: the script is there
+        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" 0) || return 1
+        execdir=$(debasher::_get_prg_exec_dir_for_process "${absdirname}" "${processname}")
+        outdir=$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")
+        while IFS= read -r node; do
+            idx=$(debasher::_resident_tool_get_node_task_idx "${node}")
+            node_args+=(--node "${idx:--}" "${execdir}" "${outdir}")
+        done <<< "${process_nodes}"
+    done
+
+    local running
+    running=$("${debasher_libexecdir}"/debasher_inspect_node \
+                  --debasher-status "${debasher_bindir}/debasher_status" running_runs "${node_args[@]}") || return 1
+    if [ -n "${running}" ]; then
+        echo "Error: batch runs of a launcher node still running: ${running//$'\n'/, }; wait for them to end, or stop them (debasher_stop -d <run directory>), before a reset" >&2
+        return 1
+    fi
+}
+
+########
 # Sets aside, or deletes if $4 (delete_state) is 1, what $2 names: a path in
 # the program's output directory $1. Set aside, it keeps its path relative to
 # $1 under $3. Returns 1 if it cannot.
@@ -185,9 +226,10 @@ reset_path()
 # Resets the resident program whose output directory is $1: sets aside the
 # state of every node under __reset__, or deletes it if $2 (--delete) is 1.
 # Prints what it did, or that there was nothing to reset. Returns 1, with an
-# error, while a debasher_exec holds the lock for a run or a process is in
-# progress, on a program it cannot load or that is not a resident one, and
-# on a path that it cannot reset.
+# error, while a debasher_exec holds the lock for a run, a process is in
+# progress or a launcher node has a batch run in progress, on a program it
+# cannot load or that is not a resident one, and on a path that it cannot
+# reset.
 reset_resident_program()
 {
     local dirname=$1
@@ -207,6 +249,11 @@ reset_resident_program()
 
     # After the loading, which gives the processes to look at
     ensure_program_is_stopped "${absdirname}" || return 1
+    # With the program stopped, no launcher node can launch another batch
+    # run in between. A batch run outlives the program, and the reset would
+    # move the run directory under it, or forget it under an absolute runs
+    # root, so that its end would never be announced
+    ensure_no_batch_run_is_running "${absdirname}" || return 1
 
     local stamp
     printf -v stamp '%(%Y%m%d_%H%M%S)T' -1

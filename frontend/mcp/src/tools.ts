@@ -732,7 +732,7 @@ const runningTools = [
 
   tool(
     "reset_output_dir",
-    "Deletes everything in the output directory of the program. Needs confirm.",
+    "Deletes everything in the output directory of the program. Needs confirm. On a resident program, use reset_program_state instead: this does not wait for the batch runs of a launcher node, which go on after the program stops.",
     { home_dir: schemas.homeDir, confirm },
     DELETES,
     async (backend, { home_dir, confirm: confirmed }) => {
@@ -746,7 +746,7 @@ const runningTools = [
 
   tool(
     "reset_program_state",
-    "Sets the program state of a resident program aside, or deletes it, so that the next launch starts afresh. Needs confirm.",
+    "Sets the program state of a resident program aside, or deletes it, so that the next launch starts afresh. Needs confirm. Refused while a run is in progress, and while a batch run of a launcher node runs: a batch run goes on after the program stops, and stop_program does not stop it. Then follow the batch runs with inspect_node (what: runs) until they end, or have the user stop each one with `debasher_stop -d <run directory>` (a command, not a tool).",
     { home_dir: schemas.homeDir, delete: z.boolean().optional().describe("Delete it rather than set it aside."), confirm },
     DELETES,
     async (backend, { home_dir, delete: deleteState, confirm: confirmed }) => {
@@ -756,7 +756,13 @@ const runningTools = [
         throw new Refusal("The next launch would start afresh, without the program state: call again with confirm.");
       }
       const { output, exitCode } = await backend.resetProgramState(program, deleteState ?? false);
-      return withOutput(exitCode === 0 ? "The program state was reset." : `The reset ended with exit code ${exitCode}.`, output, OUTPUT_LINES);
+      return withOutput(
+        exitCode === 0
+          ? "The program state was reset."
+          : `The reset ended with exit code ${exitCode}: if it names batch runs still running, wait for them (inspect_node, what: runs) or have the user stop each one with \`debasher_stop -d <run directory>\`.`,
+        output,
+        OUTPUT_LINES
+      );
     }
   ),
 

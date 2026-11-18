@@ -506,15 +506,18 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   end within 60 s, every process was killed and it ends with "forcing
   debasher_stop", and what the FIFOs held may be lost. Fix the node given up on,
   then launch the program again.
-- **Running.** Always the built-in scheduler; `run_program` waits for the
-  launch and resumes the saved program state; `stop_program` stops in order;
+- **Running.** Always the built-in scheduler; `run_program` waits for the launch
+  and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
-  its state. `restart_node` kills a live node, as in a crash, and has it
-  relaunched from its last checkpoint; `relaunch_node` relaunches a node
-  that is down in a program without a Supervisor. Every node runs at once:
-  when the `cpus` or `mem` of all the nodes together exceed
-  `builtinSchedCpus` or `builtinSchedMem`, the launch is refused before any
-  node starts; raise those limits, leave them empty, or lower the
+  its state. The batch runs of a launcher node go on after `stop_program`, and
+  `reset_program_state` refuses while one runs, naming its run directory: follow
+  them with `inspect_node` (`what: runs`) until they end, or offer the user to
+  stop each one with `debasher_stop -d <run directory>`. `restart_node` kills a
+  live node, as in a crash, and has it relaunched from its last checkpoint;
+  `relaunch_node` relaunches a node that is down in a program without a
+  Supervisor. Every node runs at once: when the `cpus` or `mem` of all the nodes
+  together exceed `builtinSchedCpus` or `builtinSchedMem`, the launch is refused
+  before any node starts; raise those limits, leave them empty, or lower the
   specifications of the nodes.
 - **Notices of a live program.** `get_status` lists the notices of the
   nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks

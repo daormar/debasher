@@ -448,7 +448,11 @@ within the same second), so that the next ``debasher_exec`` starts
 every node afresh. It refuses, with status 1, while a
 ``debasher_exec`` is preparing or running the program in that output
 directory, or while any process of the program is in progress: stop
-the program first (``debasher_stop_resident`` or ``debasher_stop``). A
+the program first (``debasher_stop_resident`` or ``debasher_stop``). It
+also refuses while a launcher node has a batch run in progress (a
+batch run goes on after the program stops), and names the run
+directories: wait for them to end, or stop each with
+``debasher_stop -d <run directory>``. A
 reset that fails part way stops with status 1 and names the path it
 could not move; what came before it is already reset. Run the tool
 again once the cause is fixed: it resets what is left. It also ends

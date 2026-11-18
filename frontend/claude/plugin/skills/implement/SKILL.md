@@ -126,7 +126,9 @@ Follow a run with `get_status`, and read what a process left with
 `get_process_output` when something fails. When a resident program with a
 Supervisor stopped by itself, read the scheduler output of the Supervisor
 (`kind: scheduler`): it names the node it gave up on, and whether the stop was
-forced.
+forced. When `reset_program_state` is refused because a batch run of a launcher
+node still runs, offer to wait for it (`inspect_node`, `what: runs`) or to stop
+it with `debasher_stop -d <run directory>`, and reset once it has ended.
 
 A run on an output directory that holds an earlier run resumes it, and does
 not run again a process that finished, even when its code changed since:

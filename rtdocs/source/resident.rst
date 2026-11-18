@@ -443,7 +443,9 @@ outside it; they are described in the :ref:`tools` Section.
   outputs of every node under ``__reset__/<timestamp>/`` in the output
   directory (or deletes them, with ``--delete``), so that the next
   launch starts every node afresh. It always resets the whole program,
-  never one node.
+  never one node. It refuses while a batch run of a launcher node is
+  still in progress (see `Batch Runs From a Node`_): wait for it to
+  end, or stop it with ``debasher_stop -d <run directory>``.
 * ``debasher_inspect_resident -d <outdir> -p <process> summary`` shows
   what a node keeps: its checkpoints, the size of its input log, its
   health and its notice. The commands ``checkpoint <epoch>`` and
@@ -628,7 +630,12 @@ machine of the node until the jobs of its program have ended, and its
 exit status becomes the ``exit_code`` of the batch run (0 when every
 process finished, 3 when some did not, 1 on an error such as options
 that the program refuses). ``MAX_CONCURRENT_RUNS`` bounds how many of
-those processes wait at once. A batch run that ends while the node is
+those processes wait at once. A batch run is a program of its own:
+stopping the resident program, or its launcher node, does not stop the
+batch runs in progress, which go on and are reported on ``-outdone``
+when the node comes back. ``debasher_stop -d <run directory>`` stops
+one, and ``debasher_reset_resident`` refuses while one is in progress.
+A batch run that ends while the node is
 down is still reported on ``-outdone`` when the node comes back.
 ``debasher_inspect_resident ... runs`` lists the batch runs of a
 launcher node and their states. The :doc:`webui_batch_launcher` shows a

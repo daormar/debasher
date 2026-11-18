@@ -3600,11 +3600,13 @@ The tool acts only on a stopped program. It refuses while a `debasher_exec`
 holds the lock of the output directory to prepare or run the program, as
 `debasher_status` and `debasher_stop` see it
 (`debasher::_outdir_is_locked_for_a_run`). It also refuses while any process of
-the program, the `Supervisor` included, is in progress. It takes the lock only
-for an instant, to look at it, as `debasher_status` does, and does not keep it
-while it resets. So a `debasher_exec` that starts during the reset is not kept
-out. A reset that kept the lock would not do: `debasher_stop` would take it for
-the scheduler of a run and stop it.
+the program, the `Supervisor` included, is in progress. And it refuses while a
+launcher node has a batch run in progress, and names the run directory of each
+one (see "Stopping and resetting a launcher node"). It takes the lock only for
+an instant, to look at it, as `debasher_status` does, and does not keep it while
+it resets. So a `debasher_exec` that starts during the reset is not kept out. A
+reset that kept the lock would not do: `debasher_stop` would take it for the
+scheduler of a run and stop it.
 
 ## `debasher_inspect_resident`: what a node keeps
 
@@ -3686,9 +3688,9 @@ class of the runtime library that the class of the node derives from
 (`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`). `started_at` is the
 time at which this incarnation ended its startup. `heartbeat_interval_secs` and
 `limits` are what their names say. `launcher`, only for a launcher node, gives
-its runs root and the process that its `-process` names, if any, which `runs`
-needs. The node first writes the file when its threads start, next to its
-control ports file.
+its runs root and the process that its `-process` names, if any, which `runs`,
+and `debasher_reset_resident` before a reset, need. The node first writes the
+file when its threads start, next to its control ports file.
 
 The heartbeat thread writes the file again, whole, at every tick, with the
 figures that change. It does so whether the program has a `Supervisor` or not.
@@ -4313,7 +4315,8 @@ has to be able to run twice, overwriting its results.
 
 The batch runs of a launcher node are general programs, which do not end with
 the resident program that launched them. This section says what stopping and
-resetting the resident program do to them, and to the bookkeeping of the node.
+resetting the resident program do to them, and to the bookkeeping of the node,
+and why a reset waits for them.
 
 Stopping the resident program, by a halt or by a signal, does not stop the batch
 runs that it launched. They run in sessions of their own, and
@@ -4322,12 +4325,26 @@ the program is resumed, `observe()` finds them running, or ended with no exit
 code, and goes on as above.
 
 `debasher_reset_resident` empties the output directory of the process. That
-takes away the registrations, the file of `life_id` and, with the
-default runs root, every run directory, set aside or deleted with the rest. With
-an absolute runs root, the run directories stay where they are, with the
-results. Their `launch.json` belongs to a life that has ended. So a request of
-the new life that names one of them is dropped. Reusing that name means removing
-the directory by hand.
+takes away the registrations, the file of `life_id` and, with the default runs
+root, every run directory, set aside or deleted with the rest. With an absolute
+runs root, the run directories stay where they are, with the results. Their
+`launch.json` belongs to a life that has ended. So a request of the new life
+that names one of them is dropped. Reusing that name means removing the
+directory by hand.
+
+So the reset refuses while a launcher node has a batch run in progress, under
+any runs root. Under the default one, it would set aside or delete the run
+directory under the batch run: what the batch run writes from then on, its exit
+code included, would find no directory. Under an absolute one, it would take
+away the registration, and the end of the batch run would never be announced.
+The reset asks `debasher_inspect_node` (`engine/debasher_inspect_node.py`, the
+tool that reads the files of a node for `debasher_inspect_resident`), with its
+command `running_runs`. It tells the state of each batch run by
+`_batch_run_state`, as the node does. A batch run is in progress when its state
+is `running` (see "Launching from the queue on disk"). The reset names the run
+directory of each one. Those batch runs have to end first, or be stopped with
+`debasher_stop -d <run directory>`. A batch run registered and not launched yet,
+or stopped, does not count: with the program stopped, nothing launches it.
 
 # Extensions
 

@@ -433,6 +433,28 @@ def test_the_notices_of_every_node_that_has_one_in_their_order(tmp_path):
     }
 
 
+def test_running_runs_names_the_batch_runs_in_progress_of_the_launcher_nodes(execdir, launcher, tmp_path, capsys):
+    # b, whose shell is gone, is in progress by debasher_status; a node
+    # that is not a launcher and one that never started have none
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "node_info").write_text(json.dumps(_node_info(runtime_class="FBPProcess")))
+    never = tmp_path / "never"
+    never.mkdir()
+    argv = [
+        "--debasher-status", str(launcher["status"]), "running_runs",
+        "--node", "-", str(execdir), str(launcher["process_outdir"]),
+        "--node", "-", str(other), "/nonexistent",
+        "--node", "-", str(never), "/nonexistent",
+    ]
+
+    assert inspect.main(argv) == 0
+    assert capsys.readouterr().out == f"{launcher['runs_root'] / 'b'}\n"
+
+    (launcher["runs_root"] / "b" / "fake_status").write_text("0\n")
+    assert inspect.run_command(argv) == []
+
+
 def test_notices_of_no_node_is_an_empty_list():
     assert inspect.run_command(["notices"]) == {"notices": []}
 

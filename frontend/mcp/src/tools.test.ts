@@ -632,6 +632,17 @@ describe("talking to a resident program", () => {
     return program({ programType: "resident", processes: [node] });
   }
 
+  it("says what to do when the reset is refused for a batch run still running", async () => {
+    const backend = fakeBackend([resident()], {
+      resetProgramState: async () => ({ output: "Error: batch runs of a launcher node still running: /o/launch/s17", exitCode: 1 }),
+    });
+
+    const shown = await text(backend, "reset_program_state", { home_dir: HOME, confirm: true });
+
+    expect(shown).toContain("The reset ended with exit code 1: if it names batch runs still running, wait for them (inspect_node, what: runs)");
+    expect(shown).toContain("still running: /o/launch/s17");
+  });
+
   it("writes only into an external input, by the name of its FIFO", async () => {
     const writes: string[] = [];
     const backend = fakeBackend([resident()], {

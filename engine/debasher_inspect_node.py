@@ -260,7 +260,34 @@ def runs(node, process_outdir, debasher_status):
     launcher = info.get("launcher")
     if info["runtime_class"] != "ProgramLauncher" or launcher is None:
         raise InspectError(f"the node is not a launcher node (its class derives from {info['runtime_class']})")
+    return {
+        "runs_root": launcher["runs_root"],
+        "runs": _list_batch_runs(launcher, process_outdir, debasher_status),
+    }
 
+
+def running_runs(nodes, debasher_status):
+    """The run directories of the batch runs in progress of the launcher
+    nodes among `nodes`, [(task index or None, execdir, process outdir)],
+    in their order."""
+    result = []
+    for task_idx, execdir, process_outdir in nodes:
+        info = NodeFileReader(execdir, task_idx).read_node_info()
+        # A node that is no launcher, or that never started, has none
+        launcher = (info or {}).get("launcher")
+        if launcher is None:
+            continue
+        result += [
+            run["run_dir"]
+            for run in _list_batch_runs(launcher, process_outdir, debasher_status)
+            if run["state"] == "running"
+        ]
+    return result
+
+
+def _list_batch_runs(launcher, process_outdir, debasher_status):
+    """The batch runs of a launcher node whose node info file gives
+    `launcher`, in the order of their positions, each with its state."""
     single_process = launcher["process"] is not None
     result = []
     for pos, run in _read_registrations(_registrations_dir_of(process_outdir)):
@@ -275,7 +302,7 @@ def runs(node, process_outdir, debasher_status):
         result.append(
             {"pos": pos, "run": run, "run_dir": run_dir, "state": state, "exit_code": exit_code}
         )
-    return {"runs_root": launcher["runs_root"], "runs": result}
+    return result
 
 
 # --- the command line ---------------------------------------------------------
@@ -339,15 +366,29 @@ def build_arg_parser():
     notices_parser.add_argument(
         "--node", nargs=3, action="append", default=[], metavar=("PROCESS", "TASK_IDX", "EXECDIR")
     )
+    running_parser = commands.add_parser("running_runs", add_help=False)
+    # One node each: its task index ("-" but in an array), the execdir and
+    # the output directory of its process.
+    running_parser.add_argument(
+        "--node", nargs=3, action="append", default=[], metavar=("TASK_IDX", "EXECDIR", "PROCESS_OUTDIR")
+    )
     return parser
 
 
 def run_command(argv):
-    """The JSON value that the command in `argv` prints. Raises InspectError
-    on an error of usage or setup."""
+    """What the command in `argv` prints: a JSON value, or a list of lines
+    for running_runs. Raises InspectError on an error of usage or setup."""
     args = build_arg_parser().parse_args(argv)
     if args.command == "notices":
         return notices([_parse_node_arg(values) for values in args.node])
+    if args.command == "running_runs":
+        if args.debasher_status is None:
+            raise InspectError("running_runs needs --debasher-status")
+        nodes = [
+            (None if idx == "-" else _parse_non_negative_int(idx), execdir, outdir)
+            for idx, execdir, outdir in args.node
+        ]
+        return running_runs(nodes, args.debasher_status)
     missing = [
         f"--{name.replace('_', '-')}"
         for name in ("process", "task_state", "execdir", "process_outdir", "debasher_status")
@@ -371,6 +412,11 @@ def main(argv):
     except InspectError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    # Read by debasher_reset_resident, a shell script: one line each
+    if isinstance(result, list):
+        for line in result:
+            print(line)
+        return 0
     json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0

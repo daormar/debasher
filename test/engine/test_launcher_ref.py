@@ -5,9 +5,11 @@ debasher_launcher_batch.sh, which launch finds next to its own module, in a
 run directory of its own, and sink gets a message when each one ends.
 Checks that the batch runs leave their results in their run directories,
 and that a launch killed while a batch run is going on is relaunched,
-leaves the batch run to end, and still tells sink, once. Every test runs
-with the built-in scheduler for the batch runs, and with SLURM too where the
-machine has it: there debasher_exec only submits the jobs and ends at once.
+leaves the batch run to end, and still tells sink, once; and that a batch
+run goes on after the program is stopped, and that a reset refuses while it
+does and then takes the state of the launcher node. Every test runs with the
+built-in scheduler for the batch runs, and with SLURM too where the machine
+has it: there the node gives debasher_exec --wait.
 """
 
 import os
@@ -20,6 +22,8 @@ import pytest
 
 from chaos_ref import SinkTailer
 from resident_run import (
+    DEBASHER_RESET_RESIDENT,
+    DEBASHER_STOP_RESIDENT,
     find_fifo,
     id_file,
     launch,
@@ -129,3 +133,33 @@ def test_a_batch_run_outlives_a_crash_of_its_launcher_and_is_announced_once(outd
         {"run": "slow", "run_dir": str(run_dir), "status": "finished", "exit_code": 0}
     ]
     assert (run_dir / "step" / "result.txt").read_text() == "late\n"
+
+
+def test_a_reset_waits_for_the_batch_runs_that_outlive_a_stop(outdir):
+    tailer = _start(outdir)
+    try:
+        _request(outdir, "slow", "late", 6)
+        run_dir = _run_dir(outdir, "slow")
+        assert wait_until(lambda: (run_dir / "launcher.pid").exists(), timeout=30.0)
+        stop = subprocess.run(
+            [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "30"], capture_output=True, text=True
+        )
+        assert stop.returncode == 0, f"{stop.stdout}\n{stop.stderr}"
+    finally:
+        tailer.stop_and_join()
+
+    # The batch run goes on after the stop, and the reset refuses meanwhile
+    assert not (run_dir / "exit_code").exists()
+    refused = subprocess.run([str(DEBASHER_RESET_RESIDENT), "-d", outdir], capture_output=True, text=True)
+    assert refused.returncode == 1
+    assert f"still running: {run_dir}" in refused.stderr
+    assert (run_dir / "launch.json").exists()
+
+    # Once it has ended, the reset takes the bookkeeping of the node and,
+    # under the default runs root, the run directories
+    assert wait_until(lambda: (run_dir / "exit_code").exists(), timeout=60.0)
+    assert (run_dir / "step" / "result.txt").read_text() == "late\n"
+    reset = subprocess.run([str(DEBASHER_RESET_RESIDENT), "-d", outdir], capture_output=True, text=True)
+    assert reset.returncode == 0, f"{reset.stdout}\n{reset.stderr}"
+    assert not (Path(outdir, "launch", ".launcher")).exists()
+    assert not run_dir.exists()

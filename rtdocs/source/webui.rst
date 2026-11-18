@@ -584,7 +584,8 @@ changes accordingly:
   do not grow until they stop them.
 * **Reset program state**, while the program is stopped, runs
   ``debasher_reset_resident``, so that the next launch starts every node
-  afresh.
+  afresh. It is refused while a batch run of a launcher node is still
+  in progress ("Show batch runs" lists them).
 * **Talk to FIFOs**, while the program is live, writes messages into an
   external input and reads, continuously, what a business output that
   no node reads carries. A message is written as JSON, or as text sent
