@@ -584,12 +584,20 @@ program alone, with ``debasher_exec_process``, instead of the whole
 program.
 
 Every input port of a launcher node receives requests. A request is a
-JSON object with the options of the general program and, optionally,
-the name of its run directory:
+JSON object with two optional fields: ``opts``, the options of the
+general program (names with their dash, values as strings), and
+``run``, the name of its run directory:
 
 ::
 
     {"opts": {"-text": "world", "-secs": "5"}, "run": "r1"}
+
+Without ``opts``, the program is launched with no options; without
+``run``, the run directory is named after the position of the request.
+A request may not give an option that ``debasher_exec`` reads itself,
+such as ``--outdir`` or ``--wait``: the node drops it, and logs why.
+Other fields of a request are ignored, and do not reach the message
+on ``-outdone``: a node downstream knows a batch run by its ``run``.
 
 The run directories go under the output directory of the launcher
 process, unless the option ``-runsdir`` gives another root, which has to

@@ -68,6 +68,19 @@ _PFILE_OPTION = "pfile"
 _PROCESS_OPTION = "process"
 _RUNS_ROOT_OPTION = "runsdir"
 
+# The options that debasher_exec reads itself (see read_pars in
+# engine/debasher_exec.sh), which a request may not give: they follow
+# --pfile, --outdir and --sched on its command line, and the last one
+# given wins
+_DEBASHER_EXEC_OPTIONS = frozenset({
+    "--help", "--version", "--pfile", "--outdir", "--sched",
+    "--builtinsched-cpus", "--builtinsched-mem", "--builtinsched-oneshot",
+    "--builtinsched-debug", "--dflt-nodes", "--dflt-throttle",
+    "--rerun-outdated-procs", "--conda-support", "--docker-support",
+    "--gen-proc-graph", "--show-cmdline-opts", "--check-proc-opts",
+    "--validate", "--debug", "--wait",
+})
+
 
 def _write_json_atomically(path, obj):
     """Writes `obj` to `path` through a temporary file renamed into place, so
@@ -289,14 +302,19 @@ class ProgramLauncher(FBPProcess):
     -pfile in the define_opts of its process.
 
     Every input port that carries data is a port of requests. A request is
-    a JSON object with `opts`, the options of the general program (names
-    with their leading dash, values as strings), and optionally `run`, the
-    name of its run directory, a relative path none of whose parts starts
-    with a dot:
-    `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `run`, the
-    run directory is named after the position of the request. A request
-    that does not follow this, or whose run directory belongs to another
-    request, is logged as an error and dropped.
+    a JSON object with two optional fields: `opts`, the options of the
+    general program (names with their leading dash, values as strings),
+    and `run`, the name of its run directory, a relative path none of whose
+    parts is empty or starts with a dot:
+    `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `opts`,
+    the program is launched with no options; without `run`, the run
+    directory is named after the position of the request. Other fields are
+    ignored. A request that does not follow this, that gives an option
+    that debasher_exec reads itself (those of debasher_exec --help, such as
+    --outdir, --sched, --wait or --debug), as a name or as a value, or
+    whose run
+    directory belongs to another request, is logged as an error and
+    dropped.
 
     If the node has an output port DONE_PORT, observe() brings in the end
     of every batch run under the name RUNS_DONE_PORT (its observe port,
@@ -498,8 +516,20 @@ class ProgramLauncher(FBPProcess):
         for name, value in opts.items():
             if not isinstance(name, str) or not name.startswith("-"):
                 return f"option {name!r} does not start with a dash"
+            if name in _DEBASHER_EXEC_OPTIONS:
+                return (
+                    f"option {name!r} is an option of debasher_exec, which the launcher runs "
+                    "itself, not of the general program: remove it from opts"
+                )
             if not isinstance(value, str):
                 return f"the value of option {name!r} is not a string"
+            # debasher_exec reads its arguments one by one, so it would take
+            # such a value for its own option
+            if value in _DEBASHER_EXEC_OPTIONS:
+                return (
+                    f"the value of option {name!r} is an option of debasher_exec, which would "
+                    "take it for its own: give another value"
+                )
         run = packet.get("run")
         if run is not None:
             if not isinstance(run, str) or not run:

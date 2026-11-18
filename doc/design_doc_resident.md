@@ -3910,25 +3910,51 @@ Its `observe()` launches the registered ones. If the node has `DONE_PORT`,
 ## Requests and run directories
 
 What a launcher node receives on a port of requests is a request, and each
-request has a run directory of its own. This section gives the format
-of a request, an example, and the requests that the node drops.
+request has a run directory of its own. This section gives the format of a
+request, an example, the options that a request may not give, and the requests
+that the node drops.
 
-A request is a `DATA` whose payload is a JSON object with these fields. `opts`
-holds the options of the general program: an object whose keys are option
-names, with their leading dash, and whose values are strings. `run`, optional,
-is the name of the run directory: a relative path of plain names, none of which
-starts with a dot. Without `run`, the name is the position of the request in the
-input log. A replay gives the request the same position, so the name does not
-change. For example:
+A request is a `DATA` whose payload is a JSON object with two fields, both
+optional:
+
+- `opts` holds the options of the general program: an object whose keys are
+  option names, with their leading dash, and whose values are strings. Without
+  it, the general program is launched with no options.
+- `run` is the name of the run directory: a relative path of plain names, none
+  of which is empty or starts with a dot. Without it, the name is the position
+  of the request in the input log. A replay gives the request the same position,
+  so the name does not change.
+
+Other fields are ignored. For example:
 
 ```
 {"opts": {"-bam": "/data/incoming/s17.bam"}, "run": "s17"}
 ```
 
-The node logs as an error, and drops, a request whose `opts` is not such an
-object, or whose `run` is absolute, contains `..` or has a name that starts with
-a dot. A replay drops it again. The general program checks the options
-themselves when it is launched.
+Without `-process`, the options follow `--pfile`, `--outdir` and `--sched` on
+the command line of `debasher_exec`. It reads its arguments one by one, and
+keeps the last value of an option given twice. So a request may not give an
+option that `debasher_exec` reads itself, such as `--outdir` or `--wait`, as a
+name or as a value. Otherwise it could run the program elsewhere, launch
+another one, or change how `debasher_exec` waits for it. The launcher keeps the
+list of those options, and a test keeps it in step with `debasher_exec`. Any
+other name is passed on, those that start with `--` included. With `-process`,
+the options follow `--` and reach the process function alone. The same names
+are refused there too, so that a request follows one rule.
+
+The node logs as an error, and drops, these requests:
+
+- a payload that is not a JSON object;
+- `opts` that is not an object, a name in it that does not start with a dash,
+  or a value that is not a string;
+- a name or a value in `opts` that `debasher_exec` reads itself;
+- `run` that is given, not `null`, but is not a non-empty string, or that is
+  absolute;
+- `run` with an empty name (`a//b`, a trailing `/`), `.`, `..`, or a name that
+  starts with a dot.
+
+A replay drops it again. The general program checks the options themselves when
+it is launched.
 
 ## The run directory and who owns it
 

@@ -8,15 +8,21 @@ reported through the node's own port and announced once.
 
 import json
 import os
+import re
 import signal
 import stat
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
 import debasher_runtime_launcher as launcher_mod
 import debasher_runtime_lib as lib
+
+
+# The sources of the engine, in the repository
+ENGINE_SOURCE_DIR = Path(__file__).resolve().parents[2] / "engine"
 
 
 class _Launcher(lib.ProgramLauncher):
@@ -281,6 +287,12 @@ def test_a_request_of_a_new_life_does_not_take_a_directory_of_the_old_one(outdir
         ({"opts": {}, "run": "s17/../x"}, "relative"),
         ({"opts": {}, "run": ".hidden"}, "dot"),
         ({"opts": {}, "run": ""}, "non-empty"),
+        ({"opts": {}, "run": 7}, "non-empty"),
+        ({"opts": {}, "run": "s17//x"}, "relative"),
+        ({"opts": {}, "run": "s17/"}, "relative"),
+        ({"opts": {"--outdir": "/elsewhere"}}, "option of debasher_exec"),
+        ({"opts": {"--builtinsched-oneshot": ""}}, "option of debasher_exec"),
+        ({"opts": {"-x": "--wait"}}, "is an option of debasher_exec"),
     ],
 )
 def test_a_malformed_request_is_dropped(outdir, caplog, packet, reason):
@@ -288,6 +300,20 @@ def test_a_malformed_request_is_dropped(outdir, caplog, packet, reason):
     _request(node, 5, packet)
     assert reason in caplog.text
     assert os.listdir(outdir / ".launcher" / "registrations") == []
+
+
+def test_a_request_without_opts_launches_the_program_with_none(outdir):
+    node = _node()
+    _request(node, 5, {"run": "a", "ignored": "field"})
+    assert _launch_record(outdir, "a")["opts"] == {}
+
+
+def test_the_options_refused_are_those_that_debasher_exec_reads():
+    # The labels of the case of read_pars in engine/debasher_exec.sh
+    source = (ENGINE_SOURCE_DIR / "debasher_exec.sh").read_text()
+    read_pars = source[source.index("\nread_pars()"):source.index("\ncheck_pars()")]
+    labels = set(re.findall(r'^\s*"(--[a-z-]+)"\)', read_pars, re.MULTILINE))
+    assert labels == launcher_mod._DEBASHER_EXEC_OPTIONS
 
 
 # --- the launcher thread's pass over the batch runs -------------------------

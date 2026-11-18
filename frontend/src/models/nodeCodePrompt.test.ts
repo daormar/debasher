@@ -176,7 +176,7 @@ describe("buildNodeCodePrompt", () => {
 
     it("says which options the class of a launcher uses, and what it takes and sends", () => {
       const prompt = buildNodeCodePrompt(pipeline, batch, emptyNodeCode(), "", library);
-      expect(prompt).toContain("The class `ProgramLauncher` takes every message on it as a request for a batch run: `{\"opts\": {\"-<option>\": \"<value>\", ...}, \"run\": \"<run directory>\"}`");
+      expect(prompt).toContain("The class `ProgramLauncher` takes every message on it as a request for a batch run: `{\"opts\": {\"-<option>\": \"<value>\", ...}, \"run\": \"<run directory>\"}`, both fields optional: `opts`, the options of the general program, names with their dash and values as strings, never an option of `debasher_exec` itself (those of `debasher_exec --help`, such as `--outdir`, `--sched`, `--wait`, `--debug`), as a name or a value; and `run`, the name of the run directory of the batch run, a relative path none of whose parts is empty or starts with a dot. The launcher node drops, with an error in its log, a request that breaks this.");
       expect(prompt).toContain("The class `ProgramLauncher` reads it: the general program to launch (required), looked for in the directory of the module that defines the node and then in `DEBASHER_MOD_DIR`. Set it as the value of this option");
       expect(prompt).toContain("The class `ProgramLauncher` reads it: the process of the general program to launch alone");
       expect(prompt).toContain("The class `ProgramLauncher` reads it: the absolute path under which the run directories go");
@@ -188,6 +188,11 @@ describe("buildNodeCodePrompt", () => {
       const prompt = buildNodeCodePrompt(pipeline, report, emptyNodeCode(), "", library);
       expect(prompt).toContain("Each message is `{\"run\": ..., \"run_dir\": ..., \"status\": ..., \"exit_code\": ...}`, with `run_dir` the absolute path of the run directory, where the results of the batch run are");
       expect(prompt).toContain("Each message is `{\"opts\": {\"-infile\": \"<path of the file>\"}, \"run\": \"<name of the file without its extension>\"}`, for one complete file.");
+    });
+
+    it("tells the node that writes requests to a launcher their format", () => {
+      const prompt = buildNodeCodePrompt(pipeline, watch, emptyNodeCode(), "", library);
+      expect(prompt).toContain("Each message is a request for a batch run: `{\"opts\": {\"-<option>\": \"<value>\", ...}, \"run\": \"<run directory>\"}`, both fields optional");
     });
 
     it("leaves the request to a request_for that the class body of the watcher redefines", () => {

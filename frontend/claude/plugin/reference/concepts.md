@@ -425,6 +425,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   its output directory, unless it has the option `-runsdir`, an absolute path.
   Each message on `-outdone` is `{"run", "run_dir", "status", "exit_code"}`, so
   a node that reads the results of a run takes its directory from `run_dir`.
+  A request to a launcher is `{"opts": {"-<option>": "<value>"}, "run": "<run
+  directory>"}`, both fields optional: `opts` holds options of the general
+  program (values as strings), never one that `debasher_exec` reads itself
+  (`--outdir`, `--sched`, `--wait`, `--debug`, ...), as a name or a value, and
+  `run` is a relative path with no part empty or starting with a dot. The
+  launcher drops any other request with an error in its scheduler output.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,

@@ -189,6 +189,11 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
         if (end) {
           notes.push(`Read by ${end.text}`, ...end.processNote);
         }
+        // A launcher drops a request that breaks its format, so the node
+        // that writes them is told the format too
+        if (program.processes.find(p => p.id === edge.targetProcessId)?.nodeKind === "ProgramLauncher") {
+          notes.push(`Each message is a request for a batch run: ${LAUNCHER_REQUEST}.`);
+        }
       }
       if (outgoing.length === 0 && !fanoutFamily) {
         notes.push("Nothing in the program reads it: someone outside the program reads it.");
@@ -239,7 +244,7 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
 // DONE_PORT for each batch run that ends (see ProgramLauncher in
 // engine/debasher_runtime_launcher.py).
 const LAUNCHER_REQUEST =
-  '`{"opts": {"-<option>": "<value>", ...}, "run": "<run directory>"}`: the options of the general program, names with their dash and values as strings, and, optionally, the name of the run directory of the batch run';
+  '`{"opts": {"-<option>": "<value>", ...}, "run": "<run directory>"}`, both fields optional: `opts`, the options of the general program, names with their dash and values as strings, never an option of `debasher_exec` itself (those of `debasher_exec --help`, such as `--outdir`, `--sched`, `--wait`, `--debug`), as a name or a value; and `run`, the name of the run directory of the batch run, a relative path none of whose parts is empty or starts with a dot. The launcher node drops, with an error in its log, a request that breaks this';
 const LAUNCHER_DONE_MESSAGE =
   '`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`, with `run_dir` the absolute path of the run directory, where the results of the batch run are, and `status` `"finished"` for an exit code of 0 and `"failed"` for any other';
 
