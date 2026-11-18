@@ -121,17 +121,16 @@ def _pid_start_time(pid):
 
 
 def _launch_id(pid):
-    """
-    What launcher.pid keeps of the shell of a batch run with process id
-    `pid`: "<pid>@<start time>". A process id alone does not name the shell
-    for good: once it has ended, the system may give the same id to another
-    process, which would then be taken for a shell that still runs, and the
-    batch run would never end. Without ps to ask, the process id alone; a
-    shell that has already ended gets an empty start time, and never runs.
-    """
+    """The id that launcher.pid keeps of the shell of a batch run with
+    process id `pid`: "<pid>@<start time>", "<pid>" without ps to ask, or
+    "<pid>@" for a shell already gone (see _shell_alive)."""
+    # The start time, since the system may give the PID of a shell that
+    # has ended to another process, which would then pass for the shell
     start = _pid_start_time(pid)
     if start is not None:
         return f"{pid}@{start}"
+    # Without ps, the PID alone; a shell already gone gets an empty start
+    # time, so that it is never taken for a running one
     return f"{pid}" if _pid_exists(pid) else f"{pid}@"
 
 
@@ -223,36 +222,35 @@ def _read_launch_pos(run_dir):
 def _batch_run_state(run_dir, single_process, program_status):
     """
     The state of the batch run of `run_dir`, from what the directory holds
-    alone, so that the node that launched it, a relaunched node and a tool
-    outside the node (debasher_inspect_resident) find the same one. Returns
-    (state, exit code): ("registered", None), never launched; ("running",
-    None); ("finished", 0) or ("failed", code), once it has ended, whether
-    its exit code is already in `exit_code` or follows from what
-    debasher_status says; or ("stopped", None), stopped before it ended
-    together with the shell that ran it, and to be launched again.
-
-    `single_process` is whether the batch run is a single process, run with
-    debasher_exec_process, which has nothing to resume from.
-    `program_status(run_dir)` is the exit code of debasher_status on the
-    directory, or None if the caller does not ask it now, which counts as
-    in progress.
-
-    The PID of the shell is read before its exit code: a shell writes it
-    before it ends, so one found gone had written it already, and one that
-    has ended but not yet been waited for, whose PID still shows as alive,
-    is never taken for a running one once its exit code is there.
+    alone, as (state, exit code): ("registered", None), never launched;
+    ("running", None); ("finished", 0) or ("failed", code), once it has
+    ended; or ("stopped", None), stopped before it ended, to be launched
+    again. `single_process` is whether it runs a single process with
+    debasher_exec_process. `program_status(run_dir)` gives the exit code of
+    debasher_status on the directory, or None when the caller does not ask
+    it now, which counts as in progress.
     """
+    # The PID before the exit code: a shell writes its exit code before it
+    # ends, so one found gone had written it already, and one that has
+    # ended but not yet been waited for, whose PID still shows, is never
+    # taken for a running one once its exit code is there
     launch_id = _read_launch_id(os.path.join(run_dir, _PID_FILE))
     alive = launch_id is not None and _shell_alive(launch_id)
     exit_code = _read_exit_code(run_dir)
+    # Ended: the exit code is final
     if exit_code is not None:
         return ("finished", 0) if exit_code == 0 else ("failed", exit_code)
+    # Never launched
     if launch_id is None:
         return ("registered", None)
     if alive:
         return ("running", None)
+    # The shell is gone without its exit code, as after a restart of the
+    # machine: a single process has nothing left to ask about
     if single_process:
         return ("stopped", None)
+    # The program may still be running under its scheduler, or have
+    # finished
     return _state_from_program_status(program_status(run_dir))
 
 
@@ -494,19 +492,20 @@ class ProgramLauncher(FBPProcess):
     # -- node hooks --
 
     def initialize_runtime(self):
-        """
-        Reads the identifier of this life of the node, or creates it the
-        first time the node starts in a life. It is kept in a file, not in
-        the node state: a node that crashed before its first checkpoint would
-        otherwise make up another one in its replay.
-        """
+        """Creates the list of registrations, and reads the identifier of
+        this life of the node, or creates it when the file is missing or
+        empty."""
         os.makedirs(self._registrations_dir(), exist_ok=True)
+        # In a file, not in the node state: a node that crashed before its
+        # first checkpoint would otherwise make up another one in its replay
         path = self._bookkeeping_path("life_id")
         try:
             with open(path) as f:
                 self._life_id = f.read().strip()
         except FileNotFoundError:
             self._life_id = None
+        # The first start of the node, or the first after a clean start,
+        # which emptied the output directory of the process
         if not self._life_id:
             self._life_id = uuid.uuid4().hex
             tmp_path = f"{path}.tmp"
@@ -564,14 +563,10 @@ class ProgramLauncher(FBPProcess):
         return None
 
     def _register(self, packet):
-        """
-        Registers the batch run that a request asks for: launch.json in its
-        run directory, and the registration in the node's list. A run
-        directory belongs to the request that registered it; a request of the
-        same life at the same position of the input log is that request,
-        processed again by a replay, and any other is dropped. Both writes
-        are idempotent, so a replay writes the same content again.
-        """
+        """Registers the batch run that the request `packet` asks for, with
+        launch.json in its run directory and the registration in the list of
+        the node; drops, with an error, a request that is not well formed or
+        whose run directory belongs to another request."""
         error = self._request_error(packet)
         if error is not None:
             self.log.error("dropping the request at position %s: %s", self._current_pos, error)
@@ -581,6 +576,9 @@ class ProgramLauncher(FBPProcess):
         run_dir = self._run_dir(run)
         record = {"life_id": self._life_id, "pos": pos, "opts": packet.get("opts", {})}
 
+        # The rule of ownership: the run directory belongs to the request
+        # that wrote its launch.json. The same life and position is that
+        # request, processed again by a replay; any other owner wins
         launch_path = os.path.join(run_dir, _LAUNCH_FILE)
         try:
             owner = _read_json(launch_path)
@@ -593,6 +591,9 @@ class ProgramLauncher(FBPProcess):
                 run_dir,
             )
             return
+        # launch.json before the registration, so that a registration
+        # always finds it; both writes are idempotent, so a replay writes
+        # the same content again
         os.makedirs(run_dir, exist_ok=True)
         _write_json_atomically(launch_path, record)
         _write_json_atomically(os.path.join(self._registrations_dir(), f"{pos}.json"), {"run": run})
