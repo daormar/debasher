@@ -27,7 +27,7 @@ declare -A MODULE_EMPTY_MAP
 declare MODULE_EMPTY_SCALAR
 module_func() { echo "module function"; }
 EOM
-    env -i PATH="/usr/bin:/bin" HOME=/tmp FOREIGN_VAR=foreign DEBASHER_EXPORTED=kept \
+    env -i PATH="/usr/bin:/bin" HOME=/tmp FOREIGN_VAR=foreign DEBASHER_EXPORTED=kept DEBASHER_MOD_DIR=/opt/mods \
         ENGINE_BUILDDIR="${ENGINE_BUILDDIR}" MODULE="${module}" CTX="${BATS_TEST_TMPDIR}/ctx.sh" \
         "${BASH}" -c '
             debasher_pkglibdir="${ENGINE_BUILDDIR}"
@@ -37,6 +37,7 @@ EOM
             exported_func() { :; }
             export -f exported_func
             declare -gA DEBASHER_OPT_LIST_proc_0=([-x]=1)
+            DEBASHER_PROCESS_PFILE_DIR[proc]=/home/prog
             debasher::_write_exec_context "${CTX}"
         '
 }
@@ -49,6 +50,17 @@ EOM
     grep -q '^debasher::_write_exec_context ()' "${BATS_TEST_TMPDIR}/ctx.sh"
     grep -q '^declare -x PATH=' "${BATS_TEST_TMPDIR}/ctx.sh"
     grep -q '^declare -x DEBASHER_EXPORTED="kept"$' "${BATS_TEST_TMPDIR}/ctx.sh"
+}
+
+@test "_write_exec_context carries DEBASHER_MOD_DIR, exported, and the directory of the module of each process" {
+    write_context
+
+    # A node relaunched by hand from a shell without DEBASHER_MOD_DIR still
+    # finds the modules that its general program loads, and passes the
+    # variable on to the debasher_exec of its batch runs
+    run env -i "${BASH}" -c "source '${BATS_TEST_TMPDIR}/ctx.sh' && \"${BASH}\" -c 'echo \"\${DEBASHER_MOD_DIR}\"' && echo \"\${DEBASHER_PROCESS_PFILE_DIR[proc]}\""
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "$(printf '/opt/mods\n/home/prog')" ]
 }
 
 @test "_write_exec_context leaves out bash's own, read-only and exported variables, and the options of each task" {
