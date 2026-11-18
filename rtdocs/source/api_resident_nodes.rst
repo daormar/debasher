@@ -89,10 +89,6 @@ Methods a module may redefine
 Class attributes
 ^^^^^^^^^^^^^^^^
 
-.. autoattribute:: debasher_runtime_lib.DirectoryWatcher.WATCH_DIR
-
-.. autoattribute:: debasher_runtime_lib.DirectoryWatcher.WATCH_DIR_OPTION
-
 .. autoattribute:: debasher_runtime_lib.DirectoryWatcher.PATTERN
 
 .. autoattribute:: debasher_runtime_lib.DirectoryWatcher.STABLE_OBSERVATIONS
@@ -108,18 +104,6 @@ ProgramLauncher
 
 Class attributes
 ^^^^^^^^^^^^^^^^
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.PFILE
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.PFILE_OPTION
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.PROCESS
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.PROCESS_OPTION
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.RUNS_ROOT
-
-.. autoattribute:: debasher_runtime_lib.ProgramLauncher.RUNS_ROOT_OPTION
 
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.DONE_PORT
 

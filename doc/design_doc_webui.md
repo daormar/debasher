@@ -2639,23 +2639,24 @@ it.
 (`ProgramProcess.nodeKind`), chosen when the process is added: `FBPProcess`, a
 business node; `ProgramLauncher`, which launches a general program for every
 request it receives; `DirectoryWatcher`, which brings in the files that arrive
-in a directory; and `Supervisor`, which a program has at most once. They are
-the classes of the engine's runtime library with the same names (see
-`doc/design_doc_resident.md`). The engine derives the role of a process from
-the base of its class, and the web UI stores the kind instead: the user never
-writes the class declaration, which script generation writes from the kind, so
-the kind and the code cannot disagree. A new `DirectoryWatcher` or
-`ProgramLauncher` that no module of the preamble defines starts with the options
-that its class needs, since without them the node runs and does nothing useful:
-`-watchdir`, a mandatory command line option, and the output port
-`-outrequests` for the first; an input option `-requests`, which becomes a port
-when a connection reaches it, and the output port `-outdone` for the second.
-The user removes those that the node does not need. The labels of the three
-that the classes name are constants of the frontend, which a test keeps in step
-with the attributes of the runtime library (`WATCH_DIR_OPTION`,
-`REQUESTS_PORT` and `DONE_PORT`); a launcher takes a request from any input, so
-`-requests` is only the label that a new one starts with. An option that an
-agent adds together with the node under one of those labels completes it
+in a directory; and `Supervisor`, which a program has at most once. They are the
+classes of the engine's runtime library with the same names (see
+`doc/design_doc_resident.md`). The engine derives the role of a process from the
+base of its class, and the web UI stores the kind instead: the user never writes
+the class declaration, which script generation writes from the kind, so the kind
+and the code cannot disagree. A new `DirectoryWatcher` or `ProgramLauncher` that
+no module of the preamble defines starts with the options that its class needs,
+since without them the node runs and does nothing useful: `-watchdir`, a
+mandatory command line option, and the output port `-outrequests` for the first.
+The second starts with `-pfile`, the general program to launch, whose value the
+user gives; an input option `-requests`, which becomes a port when a connection
+reaches it; and the output port `-outdone`. The user removes those that the node
+does not need. The labels of the options that the classes name are constants of
+the frontend. A test keeps them in step with the runtime library
+(`_WATCH_DIR_OPTION`, `REQUESTS_PORT`, `DONE_PORT`, `_PFILE_OPTION`,
+`_PROCESS_OPTION` and `_RUNS_ROOT_OPTION`). A launcher takes a request from any
+input, so `-requests` is only the label that a new one starts with. An option
+that an agent adds together with the node under one of those labels completes it
 instead of adding a second.
 
 **The code of a node.** A node is always written in Python, with no choice of
@@ -3435,7 +3436,7 @@ the run directory (see "Launching from the queue on disk" in
 `doc/design_doc_resident.md`), and the same engine tool computes it, with a
 command of its own, `runs`, from the code of the launcher node, so that the
 function that decides the state is written once. Whether a batch run is a whole
-general program, or the single process that the class attribute `PROCESS` of the
+general program, or the single process that the option `-process` of the
 launcher node names (see "A single process" in `doc/design_doc_resident.md`),
 comes from the node info file of the launcher node, as `summary` gives it. The
 action is enabled when "Show node state" is, and its list is read as every view
@@ -4007,13 +4008,12 @@ comment that starts with `TODO:` and says what goes there, so that a search for
   directory it watches, so its node test has none of the tests that feed the
   node. It has two instead, which observe: one checks what the node brings in
   when a file arrives in the directory, and one restarts the node and checks
-  that it requests no file twice. With the option `-watchdir`, both watch the
-  temporary directory of the test and write a placeholder file in it; without
-  it, a `TODO` says to write the files in the directory that `WATCH_DIR` names.
-  Each observes twice before it checks, since a file is complete only once it
-  has stayed the same for two observations in a row by default. So a skeleton
-  never fails because the node cannot be built, only on the line that makes it
-  fail or on a placeholder.
+  that it requests no file twice. Both give the node the temporary directory of
+  the test as its `-watchdir`, and write a placeholder file in it. Each observes
+  twice before it checks, since a file is complete only once it has stayed the
+  same for two observations in a row by default. So a skeleton never fails
+  because the node cannot be built, only on the line that makes it fail or on a
+  placeholder.
 
 A skeleton is a starting point, not a test, and it says so by failing: each of
 its tests ends with a line that fails on purpose (`false` in bats,

@@ -511,17 +511,17 @@ again brings every file in again, and ``process_data``, which keeps in
 the node state what it has already acted on, drops the repetitions.
 
 ``DirectoryWatcher``, a class of the runtime library, does this for a
-directory: it watches ``WATCH_DIR`` (or the directory that the option
-``-watchdir`` of the process gives), and sends a request on its output
-port ``outrequests`` for every file whose name matches ``PATTERN``
-once the file is complete, that is, once its size and modification
-time stop changing. A file is known by its path until a clean start of
-the program, so one that arrives again under the same name gets no
-request: the directory has to receive names that do not repeat. A
-module that only needs to set those attributes
-derives from it with no methods of its own, and runs it as any other
-node. The :doc:`webui_watch_tally`
-shows a complete program with a ``DirectoryWatcher``, and its tests.
+directory: it watches the directory that the option ``-watchdir`` of the
+process gives (relative to the directory of the module, unless it is
+absolute), and sends a request on its output port ``outrequests`` for
+every file whose name matches ``PATTERN`` once the file is complete,
+that is, once its size and modification time stop changing. A file is
+known by its path until a clean start of the program, so one that
+arrives again under the same name gets no request: the directory has to
+receive names that do not repeat. A module that only needs to set
+``PATTERN`` derives from it with no methods of its own, and runs it as
+any other node. The :doc:`webui_watch_tally` shows a complete program
+with a ``DirectoryWatcher``, and its tests.
 
 Notices
 ^^^^^^^
@@ -552,10 +552,8 @@ runs* ends. A bioinformatics system is the typical case: every time a
 sequencing file arrives, the pipeline that analyses it runs once for
 it.
 
-A launcher node is a subclass of ``ProgramLauncher`` that names the
-general program in ``PFILE``, as a path relative to the directory of
-its own module (the directories of ``DEBASHER_MOD_DIR`` are searched
-too):
+A launcher node is a subclass of ``ProgramLauncher``, which usually
+needs no code of its own:
 
 .. code-block:: python
 
@@ -563,10 +561,27 @@ too):
 
 
     class Launch(ProgramLauncher):
-        PFILE = "../webui_batch_greet/webui_batch_greet.sh"
+        pass
 
 
     Launch().run()
+
+The option ``-pfile`` of its process names the general program, as a
+path relative to the directory of its own module (the directories of
+``DEBASHER_MOD_DIR`` are searched too). A module that always launches
+the same program fixes it in the ``define_opts`` of the process:
+
+.. code-block:: bash
+
+    debasher::define_opt "-pfile" "../webui_batch_greet/webui_batch_greet.sh" optlist || return 1
+
+``-pfile`` is not a file option (define it with ``define_opt`` or
+``define_cmdline_opt``, not ``define_cmdline_infile_opt``), so that the
+engine leaves a relative name as it is. An absolute path is accepted
+with a warning, since it ties the program to one machine. With the
+option ``-process``, the node launches that process of the general
+program alone, with ``debasher_exec_process``, instead of the whole
+program.
 
 Every input port of a launcher node receives requests. A request is a
 JSON object with the options of the general program and, optionally,
@@ -577,27 +592,19 @@ the name of its run directory:
     {"opts": {"-text": "world", "-secs": "5"}, "run": "r1"}
 
 The run directories go under the output directory of the launcher
-process, unless the class sets ``RUNS_ROOT``, an absolute path.
-``PFILE``, ``PROCESS`` and ``RUNS_ROOT`` can also come from options of
-the process, ``-pfile``, ``-process`` and ``-runsdir``, whose values
-take precedence, so that the command line chooses them and the class
-needs no code at all. ``-pfile`` is not a file option (define it with
-``define_cmdline_opt``, not ``define_cmdline_infile_opt``): a relative
-name is looked for as ``PFILE`` is. ``-runsdir`` has to be
-an absolute path. When its
-process has an output port ``-outdone``, the node sends on it
-``{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`` for
-every batch run that ends, with ``run_dir`` the absolute path of the
-run directory, where a node downstream finds the results, and
-``status`` set to ``finished`` or ``failed``.
-``MAX_CONCURRENT_RUNS`` (one by default) says how many batch runs run
-at a time, and ``BATCH_SCHED`` which scheduler they use (the built-in
-one by default); a program sets them for one process with the
-computational specifications ``max_concurrent_runs`` and
-``batch_sched``. ``debasher_inspect_resident ... runs`` lists the batch
-runs of a launcher node and their states. The
-:doc:`webui_batch_launcher` shows a complete program with a launcher
-node.
+process, unless the option ``-runsdir`` gives another root, which has to
+be an absolute path. When its process has an output port ``-outdone``,
+the node sends on it ``{"run": ..., "run_dir": ..., "status": ...,
+"exit_code": ...}`` for every batch run that ends, with ``run_dir`` the
+absolute path of the run directory, where a node downstream finds the
+results, and ``status`` set to ``finished`` or ``failed``.
+``MAX_CONCURRENT_RUNS`` (one by default) says how many batch runs run at
+a time, and ``BATCH_SCHED`` which scheduler they use (the built-in one
+by default); a program sets them for one process with the computational
+specifications ``max_concurrent_runs`` and ``batch_sched``.
+``debasher_inspect_resident ... runs`` lists the batch runs of a
+launcher node and their states. The :doc:`webui_batch_launcher` shows a
+complete program with a launcher node.
 
 Limits of a Node
 ----------------

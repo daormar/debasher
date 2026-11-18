@@ -76,6 +76,8 @@ launch_document()
 
 launch_explain_opts()
 {
+    explain_opt "-pfile" "<string>" "module of the process to launch, found beside this module"
+    explain_opt "-process" "<string>" "process of that module to launch alone"
     explain_opt "-requests" "<fifo>" "input fifo from watch"
     explain_opt "-outdone" "<fifo>" "output fifo to sink, one notice per batch run"
     explain_opt "-outhb" "<fifo>" "heartbeat fifo to the supervisor"
@@ -89,6 +91,8 @@ launch_identify_cmdline_opts()
 launch_define_opts()
 {
     local optlist=""
+    define_opt "-pfile" "debasher_watch_batch.sh" optlist || return 1
+    define_opt "-process" "count_lines" optlist || return 1
     define_opt_from_proc_out "-requests" "watch" "-outrequests" optlist || return 1
     define_fifo_opt "-outdone" "launch_done" optlist || return 1
     define_fifo_opt "-outhb" "launch_hb" optlist || return 1
@@ -102,8 +106,6 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    PFILE = "debasher_watch_batch.sh"
-    PROCESS = "count_lines"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
     OBSERVE_INTERVAL_SECS = 0.2
 

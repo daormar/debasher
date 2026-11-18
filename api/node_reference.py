@@ -37,16 +37,14 @@ _CLASSES = {
         "debasher_runtime_watcher.py",
         (),
         ("request_for", "is_complete"),
-        ("WATCH_DIR", "WATCH_DIR_OPTION", "PATTERN", "STABLE_OBSERVATIONS", "REQUESTS_PORT", "FILE_OPTION"),
+        ("PATTERN", "STABLE_OBSERVATIONS", "REQUESTS_PORT", "FILE_OPTION"),
     ),
     "ProgramLauncher": (
         "debasher_runtime_launcher.py",
         (),
         (),
         (
-            "PFILE", "PFILE_OPTION", "PROCESS", "PROCESS_OPTION", "RUNS_ROOT",
-            "RUNS_ROOT_OPTION", "DONE_PORT", "MAX_CONCURRENT_RUNS", "BATCH_SCHED",
-            "STATUS_CHECK_INTERVAL_SECS",
+            "DONE_PORT", "MAX_CONCURRENT_RUNS", "BATCH_SCHED", "STATUS_CHECK_INTERVAL_SECS",
         ),
     ),
 }

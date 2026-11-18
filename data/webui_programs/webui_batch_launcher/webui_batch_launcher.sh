@@ -83,6 +83,7 @@ Launch_document()
 
 Launch_explain_opts()
 {
+    debasher::explain_opt "-pfile" "<string>" "the general program to run, next to this program's home directory"
     debasher::explain_opt "-requests" "<string>" "requests written from outside the program, one batch run each: {\"opts\": {\"-text\": ..., \"-secs\": ...}, \"run\": ...}"
     debasher::explain_opt "-outdone" "<string>" "a message for each batch run that ends"
     debasher::explain_opt "-outhb" "<string>" "heartbeat channel to the Supervisor"
@@ -105,6 +106,7 @@ Launch_define_opts()
     local process_outdir=$4
     local optlist=""
 
+    debasher::define_opt "-pfile" "../webui_batch_greet/webui_batch_greet.sh" optlist || return 1
     debasher::define_fifo_opt "-requests" "requests" optlist --external || return 1
     debasher::define_fifo_opt "-outdone" "done" optlist || return 1
     debasher::define_fifo_opt "-outhb" "Launch_hb" optlist || return 1
@@ -121,8 +123,7 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    # The general program to run, next to this program's home directory.
-    PFILE = "../webui_batch_greet/webui_batch_greet.sh"
+    pass
 
 
 Launch().run()

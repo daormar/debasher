@@ -406,20 +406,25 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   appear in a directory, once per path, so its names must not repeat, also in
   more than the extension with the default request), `Supervisor` (at most one,
   with no code, relaunching nodes that are down). A new `DirectoryWatcher` comes
-  with `-watchdir` (the directory to watch, from the command line) and the
-  output port `-outrequests`, and a new `ProgramLauncher` with the input
-  `-requests` (any input takes requests) and the output port `-outdone`. The
-  classes look for `-watchdir`, `-outrequests` and `-outdone` by name
-  (`WATCH_DIR_OPTION`, `REQUESTS_PORT`, `DONE_PORT`), so do not rename them;
-  give their fields as options with the same labels. A watcher without
+  with `-watchdir` (the directory to watch) and the output port `-outrequests`,
+  and a new `ProgramLauncher` with `-pfile` (the general program to launch), the
+  input `-requests` (any input that a connection feeds takes requests; `-pfile`,
+  `-process` and `-runsdir` do not) and the output port `-outdone`. `-pfile` and
+  `-watchdir` need a value, or `commandLine: true` so that the run gives it;
+  left empty, the node stops at its start (see its scheduler output). Either may
+  be a fixed value, absolute or relative to the directory of the module that
+  defines the node (this program's, for a node of its own). The classes look for
+  `-watchdir`, `-outrequests`, `-pfile`, `-process`, `-runsdir` and `-outdone`
+  by name, so do not rename them; give their fields as options with the same
+  labels. These options are the only way to set the directory, the program and
+  the runs root: the classes have no attribute for them. A watcher without
   `-outrequests` or a launcher without an input runs but does nothing, and says
-  so in a warning notice. A launcher puts its run directories in its output
-  directory, unless its class sets `RUNS_ROOT` or it has the option `-runsdir`
-  (`RUNS_ROOT_OPTION`, which wins); both are absolute paths. The program it
-  launches can come from the options `-pfile` and `-process` (data type
-  `string`, not `file`) instead of `PFILE` and `PROCESS` in the class body. Each
-  message on `-outdone` is `{"run", "run_dir", "status", "exit_code"}`, so a
-  node that reads the results of a run takes its directory from `run_dir`.
+  so in a warning notice. `-pfile` (data type `string`, not `file`) is looked
+  for in the directory of that module and then in `DEBASHER_MOD_DIR`; `-process`
+  names a process of it to launch alone. A launcher puts its run directories in
+  its output directory, unless it has the option `-runsdir`, an absolute path.
+  Each message on `-outdone` is `{"run", "run_dir", "status", "exit_code"}`, so
+  a node that reads the results of a run takes its directory from `run_dir`.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,
@@ -450,13 +455,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
     it. It is not part of the node state and every start of the node begins
     without one, so a notice that follows from the state is set again in
     `restore_node_state`.
-- **Class attributes** tune a node (`OBSERVE_PORT`,
-  `OBSERVE_INTERVAL_SECS`, `NOTICE_MAX_CHARS`, ...) and configure the
-  `DirectoryWatcher` (`WATCH_DIR`, `PATTERN`, ...) and the
-  `ProgramLauncher` (`PFILE`, `MAX_CONCURRENT_RUNS`, ...). The code prompt of
-  a node (`get_code_prompt`) carries the reference of every hook, method and
-  class attribute of its class, read from the installed runtime library:
-  look there for one that this list does not name.
+- **Class attributes** tune a node (`OBSERVE_PORT`, `OBSERVE_INTERVAL_SECS`,
+  `NOTICE_MAX_CHARS`, ...) and configure the `DirectoryWatcher` (`PATTERN`, ...)
+  and the `ProgramLauncher` (`MAX_CONCURRENT_RUNS`, ...). The code prompt of a
+  node (`get_code_prompt`) carries the reference of every hook, method and class
+  attribute of its class, read from the installed runtime library: look there
+  for one that this list does not name.
 - **Specifications of a node.** Besides `cpus`, `mem` and `time`, a node
   takes limits in its `computationalSpecs` (`input_log_max_mb`,
   `out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms`,

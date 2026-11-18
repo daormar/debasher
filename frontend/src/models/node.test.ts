@@ -37,7 +37,7 @@ const RUNTIME_SOURCES = import.meta.glob<string>(
 // The value of the class attribute `name` in the runtime library
 function runtimeAttribute(name: string): string | undefined {
   for (const source of Object.values(RUNTIME_SOURCES)) {
-    const match = new RegExp(`^\\s+${name} = "([^"]*)"`, "m").exec(source);
+    const match = new RegExp(`^\\s*${name} = "([^"]*)"`, "m").exec(source);
     if (match) {
       return match[1];
     }
@@ -265,13 +265,14 @@ describe("the options of a new node", () => {
     ]);
   });
 
-  it("gives a ProgramLauncher an input of requests that a connection can reach, and the port of the ends", () => {
+  it("gives a ProgramLauncher its program, an input of requests that a connection can reach, and the port of the ends", () => {
     const options = optionsOf("ProgramLauncher");
     expect(options.map(o => [o.label, o.direction, o.channel])).toEqual([
+      ["-pfile", "input", "none"],
       ["-requests", "input", "none"],
       ["-outdone", "output", "fifo"],
     ]);
-    expect(isBusinessInputCandidate(options[0])).toBe(true);
+    expect(isBusinessInputCandidate(options[1])).toBe(true);
   });
 
   it("gives the other kinds none", () => {
@@ -281,12 +282,12 @@ describe("the options of a new node", () => {
 
   it("names them as the classes of the runtime library look for them", () => {
     expect(Object.keys(RUNTIME_SOURCES)).toHaveLength(2);
-    expect(`-${runtimeAttribute("WATCH_DIR_OPTION")}`).toBe(WATCH_DIR_OPTION_LABEL);
+    expect(`-${runtimeAttribute("_WATCH_DIR_OPTION")}`).toBe(WATCH_DIR_OPTION_LABEL);
     expect(`-${runtimeAttribute("REQUESTS_PORT")}`).toBe(REQUESTS_PORT_LABEL);
     expect(`-${runtimeAttribute("DONE_PORT")}`).toBe(DONE_PORT_LABEL);
-    expect(`-${runtimeAttribute("PFILE_OPTION")}`).toBe(PFILE_OPTION_LABEL);
-    expect(`-${runtimeAttribute("PROCESS_OPTION")}`).toBe(PROCESS_OPTION_LABEL);
-    expect(`-${runtimeAttribute("RUNS_ROOT_OPTION")}`).toBe(RUNS_ROOT_OPTION_LABEL);
+    expect(`-${runtimeAttribute("_PFILE_OPTION")}`).toBe(PFILE_OPTION_LABEL);
+    expect(`-${runtimeAttribute("_PROCESS_OPTION")}`).toBe(PROCESS_OPTION_LABEL);
+    expect(`-${runtimeAttribute("_RUNS_ROOT_OPTION")}`).toBe(RUNS_ROOT_OPTION_LABEL);
   });
 
 });

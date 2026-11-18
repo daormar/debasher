@@ -38,8 +38,8 @@ export const NODE_KINDS: { value: NodeKind; label: string; description: string }
 ];
 
 // The labels of the options that the classes of the runtime library look
-// for by name: WATCH_DIR_OPTION and REQUESTS_PORT of DirectoryWatcher, and
-// DONE_PORT, PFILE_OPTION, PROCESS_OPTION and RUNS_ROOT_OPTION of
+// for by name: _WATCH_DIR_OPTION and REQUESTS_PORT of DirectoryWatcher, and
+// DONE_PORT, _PFILE_OPTION, _PROCESS_OPTION and _RUNS_ROOT_OPTION of
 // ProgramLauncher (a test keeps them in step with
 // engine/debasher_runtime_watcher.py and debasher_runtime_launcher.py).
 export const WATCH_DIR_OPTION_LABEL = "-watchdir";
@@ -76,6 +76,9 @@ export function standardNodeOptions(kind: NodeKind, newId: () => string): Progra
       ];
     case "ProgramLauncher":
       return [
+        createOption(newId(), PFILE_OPTION_LABEL, {
+          description: "general program to launch: a path relative to the directory of this program or to DEBASHER_MOD_DIR",
+        }),
         createOption(newId(), LAUNCHER_REQUESTS_LABEL, {
           description: "requests, one batch run each",
         }),

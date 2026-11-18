@@ -79,10 +79,10 @@ or change it before you edit anything:
   watcher, launcher of a general program, Supervisor), the external inputs
   fed from outside, and the initiators of the snapshots, one in each
   independent part;
-- for a launcher, the general program it runs (`PFILE` in its class body, or
-  the options `-pfile` and `-process`, which let the command line choose),
-  where its run directories go (its output directory, or `-runsdir`), and the
-  node that reads the results of each batch run, which takes the run
+- for a launcher, the general program it runs (the option `-pfile`, fixed to a
+  value or chosen on the command line, and `-process` for a single process of
+  it), where its run directories go (its output directory, or `-runsdir`), and
+  the node that reads the results of each batch run, which takes the run
   directory from `run_dir` in the messages on `-outdone`.
 
 Prefer few processes with a clear job each over many tiny ones, and the

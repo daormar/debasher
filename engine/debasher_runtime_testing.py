@@ -76,7 +76,7 @@ def load_node(process, opts=None, inputs=(), outputs=()):
     whose FIFO is never opened, and initialize_runtime() is called, as
     run() does before any thread starts. The directory of the program file
     is the directory of the module of the node, against which a relative
-    path, such as the WATCH_DIR of a DirectoryWatcher, is resolved.
+    path, such as the -watchdir of a DirectoryWatcher, is resolved.
     """
     pfile = os.environ.get("DEBASHER_TEST_PFILE")
     if not pfile:

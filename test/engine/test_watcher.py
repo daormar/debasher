@@ -46,10 +46,7 @@ def test_the_option_names_the_directory_to_watch(watch_dir):
 
 
 def test_a_relative_directory_is_resolved_against_the_module(watch_dir, tmp_path):
-    class Relative(_Watch):
-        WATCH_DIR = "incoming"
-
-    node = Relative(opts={"outrequests": "/dev/null"})
+    node = _Watch(opts={"outrequests": "/dev/null", "watchdir": "incoming"})
     assert node._watch_dir == str(tmp_path / "program" / "incoming")
 
 

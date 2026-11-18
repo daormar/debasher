@@ -36,20 +36,25 @@ from debasher_runtime_fbp import FBPProcess
 # sends the request, once per file, whatever a crash makes observe() bring
 # in again.
 
+# The option of the process, without its dash, that gives the directory to
+# watch.
+_WATCH_DIR_OPTION = "watchdir"
+
 
 class DirectoryWatcher(FBPProcess):
     """
     A node that watches a directory and sends a request for each file that
     arrives there, typically to a launcher node (see ProgramLauncher). A
-    module declares it with a subclass that sets WATCH_DIR (or gives the
-    process the option `-watchdir`) and, if needed, PATTERN.
+    module declares it with a subclass that sets, if needed, PATTERN.
 
-    WATCH_DIR is the directory to watch: an absolute path, or one relative to
-    the directory of the module that declares the node; an option of the
-    node named WATCH_DIR_OPTION (-watchdir), if it has one, gives it instead,
-    for a directory that the command line chooses. The files are those whose
-    name matches PATTERN, never one whose name starts with a dot, which is how
-    a file that is still being written is often named.
+    The option -watchdir of the process, required, gives the directory to
+    watch: an absolute path, or one relative to the directory of the module
+    that declares the node. A module that always watches the same directory
+    fixes -watchdir in the define_opts of its process.
+
+    The files are those whose name matches PATTERN, never one whose name
+    starts with a dot, which is how a file that is still being written is
+    often named.
 
     A file is complete once its size and its modification time have stayed
     the same for STABLE_OBSERVATIONS observations in a row, OBSERVE_INTERVAL_SECS
@@ -69,12 +74,6 @@ class DirectoryWatcher(FBPProcess):
     checkpoint grows with them; debasher_reset_resident forgets them.
     """
 
-    #: The directory to watch, an absolute path or one relative to the
-    #: directory of the module.
-    WATCH_DIR = None
-    #: The option of the process, without its dash, that gives the directory
-    #: to watch instead of WATCH_DIR, when the process has it.
-    WATCH_DIR_OPTION = "watchdir"
     #: The pattern, in the syntax of the shell, that the name of a file has to
     #: match.
     PATTERN = "*"
@@ -111,11 +110,12 @@ class DirectoryWatcher(FBPProcess):
         self._brought_in = set()
 
     def _find_watch_dir(self):
-        watch_dir = self.opts.get(self.WATCH_DIR_OPTION) or self.WATCH_DIR
+        watch_dir = self.opts.get(_WATCH_DIR_OPTION)
         if not watch_dir:
             raise ValueError(
-                f"{type(self).__name__}: no directory to watch: neither WATCH_DIR nor an "
-                f"option -{self.WATCH_DIR_OPTION}"
+                f"{type(self).__name__}: no directory to watch: the process has no option "
+                f"-{_WATCH_DIR_OPTION}, or an empty one: give it the directory as its value (in "
+                "the define_opts of the process), or define it as a command line option"
             )
         if not os.path.isabs(watch_dir):
             module_dir = os.environ.get("DEBASHER_PROCESS_MODULE_DIR")

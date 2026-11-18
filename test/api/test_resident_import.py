@@ -223,9 +223,10 @@ def test_a_reused_node_brings_its_code_and_options_without_the_wiring_nor_its_co
     launch = reuse_node(processes, edges, "launch")
 
     assert launch.nodeKind == "ProgramLauncher"
-    assert launch.nodeCode.classBody.startswith('PFILE = "debasher_launcher_batch.sh"')
+    assert launch.nodeCode.classBody.startswith("HEARTBEAT_INTERVAL_SECONDS = 0.2")
     assert launch.initiator is False
     assert [(o.label, o.channel, o.fifoTag, o.value) for o in launch.options] == [
+        ("-pfile", "none", None, "debasher_launcher_batch.sh"),
         ("-requests", "fifo", "external", "launch_requests"),
         ("-outdone", "fifo", None, "launch_done"),
     ]

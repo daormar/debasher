@@ -498,8 +498,8 @@ to it.
   the options of one request, by `debasher_exec` on a directory of its own,
   outside the resident program's scheduling.
 - **runs root**: the directory under which a launcher node places its batch
-  runs: the output directory of its process, or an absolute path that its class
-  or the option `-runsdir` of its process gives.
+  runs: the output directory of its process, or the absolute path that the
+  option `-runsdir` of its process gives.
 - **run directory**: the output directory of one batch run, `<runs root>/<run>`,
   where `<run>` is a relative path that the request names, or else the position
   of the request in the input log. Its `launch.json` records which request of
@@ -1617,17 +1617,17 @@ in again; `process_data` drops what it already acted on, keeping it in its
 node state, so an observation may enter more than once, and is acted on once.
 
 `DirectoryWatcher` (`engine/debasher_runtime_watcher.py`) is a node of the
-runtime library built on this: it watches a directory, `WATCH_DIR` or the
-option `-watchdir` (an absolute path, or one relative to the directory of its
-module), and for each file whose name matches `PATTERN` sends on
-`REQUESTS_PORT` a request for a launcher node (see "`ProgramLauncher`: batch
-runs from a node"), once the file is complete. A file is complete once its size
-and modification time have stayed the same for `STABLE_OBSERVATIONS`
-observations in a row, a file whose name starts with a dot never counts, and a
-module whose files are complete in another way (a companion file, a rename at
-the end of a copy) redefines `is_complete()`; `request_for()` makes the
-request from the path. A watcher without the output port `REQUESTS_PORT` sends
-nothing, and says so in a notice (see "Notices").
+runtime library built on this: it watches the directory that the option
+`-watchdir` of its process gives (an absolute path, or one relative to the
+directory of its module; a node without it stops when it is created), and for
+each file whose name matches `PATTERN` sends on `REQUESTS_PORT` a request for a
+launcher node (see "`ProgramLauncher`: batch runs from a node"), once the file
+is complete. A file is complete once its size and modification time have stayed
+the same for `STABLE_OBSERVATIONS` observations in a row, a file whose name
+starts with a dot never counts, and a module whose files are complete in another
+way (a companion file, a rename at the end of a copy) redefines `is_complete()`;
+`request_for()` makes the request from the path. A watcher without the output
+port `REQUESTS_PORT` sends nothing, and says so in a notice (see "Notices").
 
 A file is known by its path alone, until a clean start of the program: one
 removed that arrives again under the same name, with other contents, gets no
@@ -2196,7 +2196,7 @@ a node (its ports, its execdir and the directory of its module, which is that
 of the program file, with no computational specifications and no task index),
 and puts back what the test had afterwards, since several nodes under test
 share one process. The directory of the module is what a relative path of the
-node is resolved against, such as the `WATCH_DIR` of a `DirectoryWatcher`.
+node is resolved against, such as the `-watchdir` of a `DirectoryWatcher`.
 
 The test names the ports because the harness does not build the options of the
 program, which is what tells the engine which options of a process are ports.
@@ -3686,8 +3686,9 @@ class of the runtime library that the class of the node derives from
 (`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`). `started_at` is the
 time at which this incarnation ended its startup. `heartbeat_interval_secs` and
 `limits` are what their names say. `launcher`, only for a launcher node, gives
-its runs root and its `PROCESS`, which `runs` needs. The node first writes the
-file when its threads start, next to its control ports file.
+its runs root and the process that its `-process` names, if any, which `runs`
+needs. The node first writes the file when its threads start, next to its
+control ports file.
 
 The heartbeat thread writes the file again, whole, at every tick, with the
 figures that change. It does so whether the program has a `Supervisor` or not.
@@ -3769,18 +3770,18 @@ positions, every batch run that it has registered: its position, its name, its
 run directory, its state (`registered`, `running`, `finished`, `failed` or
 `stopped`) and, once it has ended, its exit code. The registrations come from
 `.launcher/registrations/` in the output directory of the process, and the runs
-root and `PROCESS` from the node info file. The state of each batch run comes
-from `_batch_run_state` (`engine/debasher_runtime_launcher.py`), the function
-with which the node itself reads it (see "Launching from the queue on disk").
-Only the node acts on that state: the tool writes no exit code and launches
-nothing. So a batch run that has ended can be shown as ended before the node has
-written its exit code. For some batch runs of a whole program the function asks
-`debasher_status`: those whose shell wrote `submitted`, and those whose shell is
-gone without writing `submitted` or `exit_code`. Each question runs
-`debasher_status` on the run directory. The node asks it at most once every
-`STATUS_CHECK_INTERVAL_SECS` for each batch run. The tool asks it every time,
-once for each such batch run. So `runs` takes longer when many batch runs are in
-that state.
+root and the process that `-process` names, if any, from the node info file. The
+state of each batch run comes from `_batch_run_state`
+(`engine/debasher_runtime_launcher.py`), the function with which the node itself
+reads it (see "Launching from the queue on disk"). Only the node acts on that
+state: the tool writes no exit code and launches nothing. So a batch run that
+has ended can be shown as ended before the node has written its exit code. For
+some batch runs of a whole program the function asks `debasher_status`: those
+whose shell wrote `submitted`, and those whose shell is gone without writing
+`submitted` or `exit_code`. Each question runs `debasher_status` on the run
+directory. The node asks it at most once every `STATUS_CHECK_INTERVAL_SECS` for
+each batch run. The tool asks it every time, once for each such batch run. So
+`runs` takes longer when many batch runs are in that state.
 
 `notices` is given with `-d` alone, since it covers the whole program. It gives
 the notice of every node that has one, sorted by the name of its process and by
@@ -3820,47 +3821,73 @@ runs.
 ## A node that launches a general program
 
 A module defines a launcher node with a class. This section goes through what
-that class sets up: the attributes of the node, how the node finds the general
-program, the options of the process that can replace the attributes, how the
-general program finds its modules, and what the node observes.
+sets the node up: the hooks that the class implements, the options of the
+process, how the node finds the general program, when it stops as it is
+created, how the general program finds its modules, and what the node observes.
 
 `ProgramLauncher` is a subclass of `FBPProcess` in the runtime library
 (`engine/debasher_runtime_launcher.py`), not a new kind of process. To the
 engine, a launcher node is a node like any other, with its heartbeat and its
-control ports. Its class names the general program, `PFILE`. With `PROCESS`, it
-names instead a single process of the module of `PFILE` (see "A single
-process"). The class may also give the runs root, `RUNS_ROOT`, an absolute
-path. By default the runs root is the output directory of the process. The
-engine keeps that directory across launches of a node (see "Ordered shutdown"),
-and exports it to the node as `DEBASHER_PROCESS_OUTDIR`. An option of the
-process can give any of the three instead (see below).
+control ports. The class implements every hook of a node. The table maps each
+one to what it does, and to the section that explains it:
 
-`PFILE` is found as the module that declares the node would find a module that
-it loads. A relative path is looked for first in the directory of that module,
-where a program keeps its files. The engine exports that directory to the node
-as `DEBASHER_PROCESS_MODULE_DIR`. The path is then looked for in the directories
-of `DEBASHER_MOD_DIR`. So a program can launch one that another module keeps, at
-the price of depending on how the machine is set up. The node runs the engine's
-own search for this, `debasher_resolve_pfile`, from the directory of the module.
-An absolute path is accepted with a warning, since it ties the program to one
-machine. A node whose `PFILE` is not found stops when it is created.
+| Hook | What it does in a launcher node | Where |
+|---|---|---|
+| `initialize_runtime()` | Creates the list of registrations, and reads the identifier of its life (`.launcher/life_id`) or creates it, before the replay | "The run directory and who owns it" |
+| `process_data()` | A request, on a port of requests: registers it (its `launch.json` and its registration). The end of a batch run, on `RUNS_DONE_PORT`: announces it on `DONE_PORT`, once | "Requests and run directories", "The run directory and who owns it", "The end of a batch run as an input event" |
+| `observe()` | At every pass: reads the state of every batch run, writes the exit code that is still missing, brings in the ends, and launches the batch runs that fit | "Launching from the queue on disk", "The end of a batch run as an input event" |
+| `capture_node_state()`, `restore_node_state()` | Save and restore the set of announced runs, all that the node state holds | "The end of a batch run as an input event" |
+
+A module needs to write none of these hooks. The class of a launcher node needs
+no body (`pass`), or only class attributes such as `OBSERVE_INTERVAL_SECS`. A
+module that overrides a hook calls the hook of the class
+(`super().process_data(port_name, packet)`, and so on). Otherwise the node stops
+doing what its row says.
+
+Three options of the process set the node up. The class has no attribute for
+them, so each value has a single source:
+
+- `-pfile`, required, names the general program.
+- `-process`, optional, names a single process of the module of `-pfile`, which
+  the node launches instead of the whole program (see "A single process").
+- `-runsdir`, optional, is the runs root, an absolute path. By default the runs
+  root is the output directory of the process. The engine keeps that directory
+  across launches of a node (see "Ordered shutdown"), and exports it to the
+  node as `DEBASHER_PROCESS_OUTDIR`.
+
+A module that always launches the same program fixes `-pfile` in the
+`define_opts` of the process (`define_opt "-pfile" "pipeline.sh" optlist`). One
+that leaves the choice to the command line defines it with `define_cmdline_opt`.
+Either way, `-pfile` is not a file option (one defined with
+`define_cmdline_infile_opt`): the engine leaves a relative name as it is, and
+the node looks for it itself. So the program that a node launches shows in the
+options of its process, not inside its code.
+
+A relative `-pfile` is looked for as the engine looks for a module that another
+module loads. It is looked for first in the directory of the module that
+declares the node, where a program keeps its files. The engine exports that
+directory to the node as `DEBASHER_PROCESS_MODULE_DIR`. It is then looked for
+in the directories of `DEBASHER_MOD_DIR`. So a program can launch one that
+another module keeps, at the price of depending on how the machine is set up.
+The node runs the engine's own search for this, `debasher_resolve_pfile`, from
+the directory of the module. An absolute path is accepted with a warning, since
+it ties the program to one machine.
+
+The node stops when it is created in four cases:
+
+- no `-pfile`, or an empty one;
+- a `-pfile` that is not found;
+- a relative `-runsdir`;
+- a node that is a task of an array process, since the tasks would share its
+  bookkeeping.
+
+The node does not check that the module of `-pfile` has the process that
+`-process` names (see "A single process").
 
 Every input port that carries data is a port of requests. A node with none says
 so in a notice (see "Notices"). The output port `DONE_PORT` (`outdone` by
 default), if the node has it, tells when a batch run ends (see "The end of a
-batch run as an input event"). A launcher node cannot be a task of an array
-process, since the tasks would share its bookkeeping.
-
-An option of the process, when the process has it, gives `PFILE`, `PROCESS` or
-`RUNS_ROOT` instead of the class, for a value that the command line chooses.
-These are the options that `PFILE_OPTION`, `PROCESS_OPTION` and
-`RUNS_ROOT_OPTION` name: `-pfile`, `-process` and `-runsdir` by default. So the
-class of a launcher node needs no body. `-pfile` is not a file option: it is
-defined with `define_cmdline_opt`, not `define_cmdline_infile_opt`. The engine
-leaves a relative name as it is, and the node looks for it as it looks for
-`PFILE`, with the warning for an absolute path. A node with neither `PFILE` nor
-`-pfile` stops when it is created. `-runsdir` has to be an absolute path. A node
-given a relative one stops when it is created too.
+batch run as an input event").
 
 The modules that the general program loads are found with the `DEBASHER_MOD_DIR`
 of the launcher node. The node inherits it along the whole chain of launches.
@@ -4013,7 +4040,7 @@ The node's `observe()`, on its observation thread, launches the batch runs that
 are registered, in the order of their positions. The node has
 `MAX_CONCURRENT_RUNS` slots (1 by default), and a batch run holds one while it
 runs. Each one runs
-`debasher_exec --pfile <PFILE> --outdir <run directory> --sched <scheduler>`
+`debasher_exec --pfile <program> --outdir <run directory> --sched <scheduler>`
 with the options of its request. It runs in a session of its own, so that the
 batch run outlives a crash of the node and a stop of the resident program. The
 scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
@@ -4145,15 +4172,26 @@ the runs root does not change between launches of the node.
 ## A single process
 
 Instead of a whole program, a launcher node can run a single process of a
-module, the one that `PROCESS` names. This section says how that process is run,
-and the two points in which the states of its batch runs differ.
+module, the one that `-process` names. This section says how that process is
+run, which settings apply to it, and the two points in which the states of its
+batch runs differ.
 
-With `PROCESS`, a launcher node launches that process of the module of `PFILE`
-alone, with `debasher_exec_process <PFILE> <PROCESS> -- <options>`. It launches
-it from the run directory, so that a relative path among the options of a
-request lands there (the file that the process writes, for example). There is no
-scheduler in between. `debasher_exec_process` runs the process function and ends
-when it ends, and the options of a request are the arguments of that function.
+With `-process`, a launcher node launches that process of the module of `-pfile`
+alone, with `debasher_exec_process <program> <process> -- <options>`. It
+launches it from the run directory, so that a relative path among the options of
+a request lands there (the file that the process writes, for example). There is
+no scheduler in between. `debasher_exec_process` runs the process function and
+ends when it ends, and the options of a request are the arguments of that
+function.
+
+Of the computational specifications of a launcher node, `max_concurrent_runs`
+applies to these batch runs. `batch_sched` does not, since nothing schedules
+them. It is ignored, and neither the node nor the engine refuses it.
+
+The node does not check that the module of `-pfile` has the process that
+`-process` names. A process that it lacks shows when a batch run ends: each one
+fails, its `exit_code` holds 1, and `launcher.log` says why.
+
 The states of a batch run differ in two points:
 
 - The shell that runs it writes `exit_code` whatever the exit code, 0 included,

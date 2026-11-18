@@ -26,6 +26,7 @@ launch_document()
 
 launch_explain_opts()
 {
+    explain_opt "-pfile" "<string>" "general program to launch, found beside this module"
     explain_opt "-requests" "<fifo>" "externally fed fifo of requests"
     explain_opt "-trigger" "<fifo>" "control fifo from the supervisor"
     explain_opt "-outdone" "<fifo>" "output fifo to sink, one message per batch run that ends"
@@ -40,6 +41,7 @@ launch_identify_cmdline_opts()
 launch_define_opts()
 {
     local optlist=""
+    define_opt "-pfile" "debasher_launcher_batch.sh" optlist || return 1
     define_fifo_opt "-requests" "launch_requests" optlist --external || return 1
     define_opt_from_proc_out "-trigger" "sup" "-outtrig" optlist || return 1
     define_fifo_opt "-outdone" "launch_done" optlist || return 1
@@ -54,7 +56,6 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    PFILE = "debasher_launcher_batch.sh"
     HEARTBEAT_INTERVAL_SECONDS = 0.2
     OBSERVE_INTERVAL_SECS = 0.2
     STATUS_CHECK_INTERVAL_SECS = 0.5

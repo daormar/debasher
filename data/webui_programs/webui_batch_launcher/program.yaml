@@ -23,6 +23,11 @@ processes:
     initiator: true
     position: {x: 120, y: 260}
     options:
+      -pfile:
+        type: string
+        description: >-
+          the general program to run, next to this program's home directory
+        value: ../webui_batch_greet/webui_batch_greet.sh
       -requests:
         type: string
         description: >-

@@ -20,7 +20,7 @@ import debasher_runtime_lib as lib
 
 
 class _Launcher(lib.ProgramLauncher):
-    PFILE = "pipeline.sh"
+    pass
 
 
 class _NotifyingLauncher(_Launcher):
@@ -125,8 +125,12 @@ def _node_log(caplog):
     logger.removeHandler(caplog.handler)
 
 
+# The options of a node of the tests, to which those of each test are added
+_OPTS = {"requests": "/dev/null", "pfile": "pipeline.sh"}
+
+
 def _node(cls=_Launcher, opts=None):
-    node = cls(opts=opts or {"requests": "/dev/null"})
+    node = cls(opts={**_OPTS, **(opts or {})})
     node.STATUS_CHECK_INTERVAL_SECS = 0
     node.initialize_runtime()
     return node
@@ -167,84 +171,46 @@ def test_a_new_life_begins_once_the_output_directory_is_emptied(outdir):
 
 
 def test_a_launcher_node_needs_its_program():
-    with pytest.raises(ValueError, match="neither PFILE nor an option -pfile"):
+    with pytest.raises(ValueError, match="the process has no option -pfile"):
         lib.ProgramLauncher(opts={"requests": "/dev/null"})
 
 
-def test_the_pfile_option_gives_the_program_without_a_class_attribute(outdir, tmp_path):
-    node = lib.ProgramLauncher(opts={"requests": "/dev/null", "pfile": "pipeline.sh"})
-    assert node._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
-    assert node.PROCESS is None
-
-
-def test_the_pfile_option_takes_the_place_of_pfile(outdir, tmp_path):
-    (tmp_path / "program" / "variant.sh").write_text("# a variant of the general program\n")
-    node = _Launcher(opts={"requests": "/dev/null", "pfile": "variant.sh"})
-    assert node._pfile == str((tmp_path / "program" / "variant.sh").resolve())
-    assert _node()._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
-
-
-def test_the_pfile_option_is_found_through_debasher_mod_dir(outdir, tmp_path, monkeypatch):
-    shared_dir = tmp_path / "shared"
-    shared_dir.mkdir()
-    (shared_dir / "shared.sh").write_text("# a general program of another module\n")
-    monkeypatch.setenv("DEBASHER_MOD_DIR", str(shared_dir))
-    node = lib.ProgramLauncher(opts={"requests": "/dev/null", "pfile": "shared.sh"})
-    assert node._pfile == str((shared_dir / "shared.sh").resolve())
-
-
-def test_a_pfile_option_that_is_not_found_stops_the_node(outdir):
-    with pytest.raises(ValueError, match="the general program nowhere.sh is not a file"):
-        _Launcher(opts={"requests": "/dev/null", "pfile": "nowhere.sh"})
-
-
-def test_the_process_option_takes_the_place_of_process(outdir):
-    node = _node(_Launcher, {"requests": "/dev/null", "process": "align"})
-    assert node.PROCESS == "align"
-    assert node._get_node_info_extra()["launcher"]["process"] == "align"
-    assert _node(_ProcessLauncher, {"requests": "/dev/null", "process": "sort"}).PROCESS == "sort"
-    assert _node(_ProcessLauncher).PROCESS == "align"
-    assert _node().PROCESS is None
-
-
 def test_a_relative_program_is_found_in_the_directory_of_the_module(outdir, tmp_path):
-    assert _node()._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+    node = _node()
+    assert node._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+    assert node._process is None
 
 
 def test_a_relative_program_is_found_through_debasher_mod_dir(outdir, tmp_path, monkeypatch):
-    class Shared(lib.ProgramLauncher):
-        PFILE = "shared.sh"
-
     shared_dir = tmp_path / "shared"
     shared_dir.mkdir()
     (shared_dir / "shared.sh").write_text("# a general program of another module\n")
     monkeypatch.setenv("DEBASHER_MOD_DIR", str(shared_dir))
-    node = Shared(opts={"requests": "/dev/null"})
+    node = _node(opts={"pfile": "shared.sh"})
     assert node._pfile == str((shared_dir / "shared.sh").resolve())
 
 
 def test_an_absolute_program_is_accepted_with_a_warning(outdir, tmp_path, caplog):
-    class Absolute(lib.ProgramLauncher):
-        PFILE = str(tmp_path / "program" / "pipeline.sh")
-
-    import logging
-
-    logger = logging.getLogger(Absolute.__name__)
-    logger.addHandler(caplog.handler)
-    try:
-        node = Absolute(opts={"requests": "/dev/null"})
-    finally:
-        logger.removeHandler(caplog.handler)
-    assert node._pfile == str((tmp_path / "program" / "pipeline.sh").resolve())
+    node = _node(opts={"pfile": str(tmp_path / "program" / "pipeline.sh")})
+    assert node._pfile == str(tmp_path / "program" / "pipeline.sh")
     assert "not portable across machines" in caplog.text
 
 
 def test_a_program_that_is_not_there_stops_the_node(outdir):
-    class Lost(lib.ProgramLauncher):
-        PFILE = "nowhere.sh"
+    with pytest.raises(ValueError, match="the general program nowhere.sh is not a file"):
+        _node(opts={"pfile": "nowhere.sh"})
 
-    with pytest.raises(ValueError, match="is not a file"):
-        Lost(opts={"requests": "/dev/null"})
+
+def test_the_process_option_names_the_process_to_launch_alone(outdir):
+    node = _node(opts={"process": "align"})
+    assert node._process == "align"
+    assert node._get_node_info_extra()["launcher"]["process"] == "align"
+
+
+def test_a_launcher_node_cannot_be_a_task_of_an_array(outdir, monkeypatch):
+    monkeypatch.setattr(_Launcher, "_get_task_idx", lambda self: 0)
+    with pytest.raises(ValueError, match="cannot be a task of an array process"):
+        _node()
 
 
 # --- registering requests ----------------------------------------------------
@@ -624,40 +590,26 @@ def test_a_single_process_whose_shell_is_gone_with_no_exit_code_was_stopped(tmp_
     assert _state(tmp_path, single_process=True) == (("stopped", None), [])
 
 
-def test_the_node_info_of_a_launcher_node_names_its_batch_runs(outdir):
-    class Rooted(_ProcessLauncher):
-        RUNS_ROOT = "runs"
-
-    node = _node(Rooted)
+def test_the_node_info_of_a_launcher_node_names_its_batch_runs(outdir, tmp_path):
+    node = _node(opts={"process": "align", "runsdir": str(tmp_path / "runs")})
     assert node._get_node_info_extra() == {
-        "launcher": {"runs_root": os.path.abspath("runs"), "process": "align"}
+        "launcher": {"runs_root": str(tmp_path / "runs"), "process": "align"}
     }
     assert _node()._get_node_info_extra() == {"launcher": {"runs_root": str(outdir), "process": None}}
     assert node._RUNTIME_CLASS == "ProgramLauncher"
 
 
 def test_the_runsdir_option_gives_the_runs_root(outdir, tmp_path):
-    class Rooted(_Launcher):
-        RUNS_ROOT = str(tmp_path / "class_runs")
-
     runs = tmp_path / "runs"
-    node = _node(Rooted, {"requests": "/dev/null", "runsdir": str(runs)})
+    node = _node(opts={"runsdir": str(runs)})
     _request(node, 1, {"opts": {}, "run": "a"})
 
     assert (runs / "a" / "launch.json").exists()
     assert not (outdir / "a").exists()
-    assert not (tmp_path / "class_runs" / "a").exists()
     assert node._get_node_info_extra()["launcher"]["runs_root"] == str(runs)
 
 
-def test_without_the_runsdir_option_the_runs_root_is_runs_root_or_the_output_directory(outdir, tmp_path):
-    class Rooted(_Launcher):
-        RUNS_ROOT = str(tmp_path / "class_runs")
-
-    node = _node(Rooted)
-    _request(node, 1, {"opts": {}, "run": "a"})
-    assert (tmp_path / "class_runs" / "a" / "launch.json").exists()
-
+def test_without_the_runsdir_option_the_runs_root_is_the_output_directory(outdir):
     node = _node()
     _request(node, 2, {"opts": {}, "run": "b"})
     assert (outdir / "b" / "launch.json").exists()
@@ -665,7 +617,7 @@ def test_without_the_runsdir_option_the_runs_root_is_runs_root_or_the_output_dir
 
 def test_a_relative_runsdir_option_stops_the_node(outdir):
     with pytest.raises(ValueError, match="not an absolute path"):
-        _node(opts={"requests": "/dev/null", "runsdir": "runs"})
+        _node(opts={"runsdir": "runs"})
 
 
 # --- the end of a batch run --------------------------------------------------
@@ -756,12 +708,12 @@ def test_the_computational_specs_set_the_batch_runs_at_a_time(outdir, monkeypatc
 # --- a single process instead of a program -----------------------------------
 
 
-class _ProcessLauncher(_Launcher):
-    PROCESS = "align"
+def _process_node():
+    return _node(opts={"process": "align"})
 
 
 def test_a_process_launcher_runs_the_process_alone_from_the_run_directory(outdir, tmp_path):
-    node = _node(_ProcessLauncher)
+    node = _process_node()
     _request(node, 1, {"opts": {"-bam": "/data/s17.bam", "-outf": "out.txt"}, "run": "a"})
 
     _check_until_ended(node, outdir, "a")
@@ -775,7 +727,7 @@ def test_a_process_launcher_runs_the_process_alone_from_the_run_directory(outdir
 
 def test_a_process_writes_its_own_exit_code(outdir, monkeypatch):
     monkeypatch.setenv("FAKE_EXIT", "4")
-    node = _node(_ProcessLauncher)
+    node = _process_node()
     _request(node, 1, {"opts": {}, "run": "a"})
 
     _check_until_ended(node, outdir, "a")
@@ -785,14 +737,14 @@ def test_a_process_writes_its_own_exit_code(outdir, monkeypatch):
 
 def test_the_exit_code_of_a_process_outlives_a_crash_of_its_launcher(outdir, monkeypatch):
     monkeypatch.setenv("FAKE_SLEEP", "1")
-    node = _node(_ProcessLauncher)
+    node = _process_node()
     _request(node, 1, {"opts": {}, "run": "a"})
     node._check_runs()
     assert _wait_until(lambda: _launches(outdir, "a"))
 
     # A new incarnation, which did not launch it: the process is still
     # running, and then writes its exit code on its own.
-    relaunched = _node(_ProcessLauncher)
+    relaunched = _process_node()
     relaunched._check_runs()
     assert not (outdir / "a" / "exit_code").exists()
     _check_until_ended(relaunched, outdir, "a")
@@ -802,7 +754,7 @@ def test_the_exit_code_of_a_process_outlives_a_crash_of_its_launcher(outdir, mon
 
 
 def test_a_process_stopped_before_it_ended_is_launched_again(outdir):
-    node = _node(_ProcessLauncher)
+    node = _process_node()
     _request(node, 1, {"opts": {}, "run": "a"})
     _orphan(outdir, "a")
 
@@ -810,14 +762,6 @@ def test_a_process_stopped_before_it_ended_is_launched_again(outdir):
 
     assert len(_launches(outdir, "a")) == 1
     assert (outdir / "a" / "exit_code").read_text().strip() == "0"
-
-
-def test_process_is_the_name_of_a_process(outdir):
-    class Nameless(_Launcher):
-        PROCESS = ""
-
-    with pytest.raises(ValueError, match="PROCESS"):
-        Nameless(opts={"requests": "/dev/null"})
 
 
 # --- its ports ------------------------------------------------------------------
@@ -828,4 +772,4 @@ def test_a_launcher_without_an_input_port_says_so(outdir):
         INPUT_PORTS = []
 
     assert _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})._find_wiring_problem() is None
-    assert Unwired(opts={})._find_wiring_problem().startswith("no input port")
+    assert Unwired(opts={"pfile": "pipeline.sh"})._find_wiring_problem().startswith("no input port")

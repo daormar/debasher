@@ -199,7 +199,7 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
 
   const tests =
     process.nodeKind === "DirectoryWatcher"
-      ? watcherTests(process, node)
+      ? watcherTests(node)
       : [
           [
             `def test_${name}_sends_what_it_should():`,
@@ -255,18 +255,13 @@ function observeTest(node: NodeSkeleton): string[] {
 // The tests of a DirectoryWatcher, which has no input to feed and is built
 // with the directory it watches: what it brings in when a file arrives
 // there, and that after a restart it requests no file twice.
-function watcherTests(process: ProgramProcess, node: NodeSkeleton): string[][] {
-  const hasWatchDirOption = process.options.some(option => option.label === WATCH_DIR_OPTION_LABEL);
-  const build = hasWatchDirOption
-    ? `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_OPTION_LABEL))}: str(tmp_path)})`
-    : "    under_test = node()";
-  const files = hasWatchDirOption
-    ? ["    # TODO: write in tmp_path the files that the test needs", '    (tmp_path / "TODO").write_text("TODO")']
-    : ["    # TODO: write in the directory that WATCH_DIR names the files that the test needs"];
-  const signature = hasWatchDirOption ? "(tmp_path)" : "()";
+function watcherTests(node: NodeSkeleton): string[][] {
+  // The class needs the directory to watch: the test gives it tmp_path
+  const build = `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_OPTION_LABEL))}: str(tmp_path)})`;
+  const files = ["    # TODO: write in tmp_path the files that the test needs", '    (tmp_path / "TODO").write_text("TODO")'];
   return [
     [
-      `def test_${node.name}_brings_in_what_it_observes${signature}:`,
+      `def test_${node.name}_brings_in_what_it_observes(tmp_path):`,
       build,
       ...files,
       "    # A file is complete once it stayed the same for STABLE_OBSERVATIONS",
@@ -279,7 +274,7 @@ function watcherTests(process: ProgramProcess, node: NodeSkeleton): string[][] {
       ...node.fail,
     ],
     [
-      `def test_${node.name}_requests_nothing_twice_after_a_restart${signature}:`,
+      `def test_${node.name}_requests_nothing_twice_after_a_restart(tmp_path):`,
       build,
       ...files,
       "    under_test.observe()",

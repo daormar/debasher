@@ -188,11 +188,11 @@ describe("the skeleton of a node that observes the outside world", () => {
       expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(2);
     });
 
-    it("points to WATCH_DIR when it has no option for its directory", () => {
+    it("gives the node tmp_path as its directory even without its option", () => {
       const bare = process("Watch", [out], { nodeKind: "DirectoryWatcher" });
 
       expect(testSkeleton(program("resident", [bare]), bare))
-        .toContain("# TODO: write in the directory that WATCH_DIR names the files that the test needs");
+        .toContain('    under_test = node(opts={"watchdir": str(tmp_path)})');
     });
   });
 });

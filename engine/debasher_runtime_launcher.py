@@ -61,6 +61,13 @@ _PROGRAM_UNFINISHED = 3
 # so that the two never clash.
 _BOOKKEEPING_DIR = ".launcher"
 
+# The options of the process, without their dash, that set up a launcher
+# node: the general program (required), the process of it to launch alone,
+# and the runs root, an absolute path.
+_PFILE_OPTION = "pfile"
+_PROCESS_OPTION = "process"
+_RUNS_ROOT_OPTION = "runsdir"
+
 
 def _write_json_atomically(path, obj):
     """Writes `obj` to `path` through a temporary file renamed into place, so
@@ -268,27 +275,24 @@ class ProgramLauncher(FBPProcess):
     receives, each in a run directory of its own, and can tell a node
     downstream when each of those batch runs ends.
 
-    A subclass names the general program to launch, PFILE, as a module that
-    declares the node would load it: a relative path is looked for in the
-    directory of that module, where a program keeps its files, and then in
-    the directories of DEBASHER_MOD_DIR; an absolute one is accepted with a
-    warning, since it ties the program to one machine. With PROCESS, the
-    name of a process of that module, it launches that process alone, with
-    debasher_exec_process, instead of the whole program. It may give
-    RUNS_ROOT, an absolute path under which the run directories go; without
-    it, the run directories go in the output directory of the process.
+    Three options of the process set it up. -pfile, required, names the
+    general program to launch. A relative name is looked for as a module
+    that the module declaring the node loads: in the directory of that
+    module, then in the directories of DEBASHER_MOD_DIR. An absolute one is
+    accepted with a warning. -process names a process of that program to
+    launch alone, with debasher_exec_process, instead of the whole program.
+    -runsdir, an absolute path, is where the run directories go; without
+    it, they go in the output directory of the process. -pfile is a plain
+    option (define_opt, or define_cmdline_opt for a value that the command
+    line gives), never a file option, so that the engine leaves a relative
+    name as it is. A module that always launches the same program fixes
+    -pfile in the define_opts of its process.
 
-    An option of the node gives any of the three instead, for a value that
-    the command line chooses, when the node has it: PFILE_OPTION (-pfile),
-    PROCESS_OPTION (-process) and RUNS_ROOT_OPTION (-runsdir). -pfile is not
-    a file option (define_cmdline_opt, not define_cmdline_infile_opt), so
-    that the engine leaves a relative name as it is and the node looks for
-    it as PFILE; -runsdir has to be an absolute path.
-
-    Every input port is a port of requests. A request is a JSON object
-    with `opts`, the options of the general program (names with their
-    leading dash, values as strings), and optionally `run`, the name of its
-    run directory, a relative path none of whose parts starts with a dot:
+    Every input port that carries data is a port of requests. A request is
+    a JSON object with `opts`, the options of the general program (names
+    with their leading dash, values as strings), and optionally `run`, the
+    name of its run directory, a relative path none of whose parts starts
+    with a dot:
     `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `run`, the
     run directory is named after the position of the request. A request
     that does not follow this, or whose run directory belongs to another
@@ -304,24 +308,6 @@ class ProgramLauncher(FBPProcess):
     A launcher node cannot be a task of an array process.
     """
 
-    #: The module of the general program to launch (required, unless the
-    #: process has the option PFILE_OPTION).
-    PFILE = None
-    #: The option of the process, without its dash, that gives the module of
-    #: the general program instead of PFILE, when the process has it.
-    PFILE_OPTION = "pfile"
-    #: The name of a process of PFILE to launch alone, instead of the whole
-    #: program, or None.
-    PROCESS = None
-    #: The option of the process, without its dash, that gives the process to
-    #: launch alone instead of PROCESS, when the process has it.
-    PROCESS_OPTION = "process"
-    #: The absolute path under which the run directories go, or None for the
-    #: output directory of the process.
-    RUNS_ROOT = None
-    #: The option of the process, without its dash, that gives the runs root
-    #: instead of RUNS_ROOT, as an absolute path, when the process has it.
-    RUNS_ROOT_OPTION = "runsdir"
     RUNS_DONE_PORT = "runs_done"
     #: The output port on which the end of each batch run is sent, if the
     #: node has it.
@@ -349,25 +335,25 @@ class ProgramLauncher(FBPProcess):
 
     def __init__(self, argv=None, opts=None):
         super().__init__(argv, opts)
-        # The options PFILE_OPTION and PROCESS_OPTION, when the process has
-        # them, take the place of the class attributes for this node.
-        self.PFILE = self.opts.get(self.PFILE_OPTION) or self.PFILE
-        self.PROCESS = self.opts.get(self.PROCESS_OPTION) or self.PROCESS
-        if not self.PFILE:
+        pfile = self.opts.get(_PFILE_OPTION)
+        if not pfile:
             raise ValueError(
-                f"{type(self).__name__}: the general program to launch is not set: neither "
-                f"PFILE nor an option -{self.PFILE_OPTION}"
+                f"{type(self).__name__}: the general program to launch is not set: the "
+                f"process has no option -{_PFILE_OPTION}, or an empty one: give it the general "
+                "program as its value (in the define_opts of the process), or define it as a "
+                "command line option"
             )
-        self._pfile = self._find_pfile()
-        if self.PROCESS is not None and (not isinstance(self.PROCESS, str) or not self.PROCESS):
-            raise ValueError(f"{type(self).__name__}: PROCESS is not the name of a process")
+        self._pfile = self._find_pfile(pfile)
+        # None launches the whole program
+        self._process = self.opts.get(_PROCESS_OPTION) or None
+        # The tasks of an array would share the bookkeeping of the node
         if self._get_task_idx() is not None:
             raise ValueError(f"{type(self).__name__}: a launcher node cannot be a task of an array process")
-        runs_root_opt = self.opts.get(self.RUNS_ROOT_OPTION)
-        if runs_root_opt and not os.path.isabs(runs_root_opt):
+        runs_root = self.opts.get(_RUNS_ROOT_OPTION)
+        if runs_root and not os.path.isabs(runs_root):
             raise ValueError(
-                f"{type(self).__name__}: the runs root given by -{self.RUNS_ROOT_OPTION}, "
-                f"{runs_root_opt}, is not an absolute path"
+                f"{type(self).__name__}: the runs root given by -{_RUNS_ROOT_OPTION}, "
+                f"{runs_root}, is not an absolute path"
             )
         # The node state: the batch runs whose end has been announced on
         # DONE_PORT, so that an end reported twice is announced once.
@@ -382,23 +368,22 @@ class ProgramLauncher(FBPProcess):
 
     # -- paths --
 
-    def _find_pfile(self):
+    def _find_pfile(self, pfile):
         """
-        PFILE as an absolute path. A relative one is resolved by
-        debasher_resolve_pfile, run from the directory of the module that
-        declares the node (DEBASHER_PROCESS_MODULE_DIR): the engine's own
-        search for a module, which looks in the current directory and then
-        in the directories of DEBASHER_MOD_DIR.
+        The general program `pfile` as an absolute path. Raises ValueError
+        when it is not found, and RuntimeError when the environment lacks
+        what the search needs.
         """
-        if os.path.isabs(self.PFILE):
+        # Accepted, but it ties the program to one machine
+        if os.path.isabs(pfile):
             self.log.warning(
                 "the general program uses an absolute path (%s). This program is not "
                 "portable across machines",
-                self.PFILE,
+                pfile,
             )
-            if not os.path.isfile(self.PFILE):
-                raise ValueError(f"{type(self).__name__}: the general program {self.PFILE} is not a file")
-            return os.path.realpath(self.PFILE)
+            if not os.path.isfile(pfile):
+                raise ValueError(f"{type(self).__name__}: the general program {pfile} is not a file")
+            return pfile
         module_dir = os.environ.get("DEBASHER_PROCESS_MODULE_DIR")
         if not module_dir:
             raise RuntimeError(
@@ -407,8 +392,11 @@ class ProgramLauncher(FBPProcess):
                 "of the module (only set by the engine's builtin scheduler when it "
                 "launches a process)"
             )
+        # The engine's own search, which looks in the current directory and
+        # then in DEBASHER_MOD_DIR: run from the directory of the module, it
+        # finds the program as that module would find a module it loads
         result = subprocess.run(
-            [self._libexec_tool("debasher_resolve_pfile"), self.PFILE],
+            [self._libexec_tool("debasher_resolve_pfile"), pfile],
             cwd=module_dir,
             stdin=subprocess.DEVNULL,
             capture_output=True,
@@ -416,10 +404,10 @@ class ProgramLauncher(FBPProcess):
         )
         if result.returncode != 0:
             raise ValueError(
-                f"{type(self).__name__}: the general program {self.PFILE} is not a file in the "
+                f"{type(self).__name__}: the general program {pfile} is not a file in the "
                 f"directory of the module nor in DEBASHER_MOD_DIR: {result.stderr.strip()}"
             )
-        return os.path.realpath(result.stdout.strip())
+        return result.stdout.strip()
 
     def _outdir(self):
         outdir = os.environ.get("DEBASHER_PROCESS_OUTDIR")
@@ -433,11 +421,8 @@ class ProgramLauncher(FBPProcess):
 
     def _runs_root(self):
         """The absolute path under which the run directories go: the option
-        RUNS_ROOT_OPTION, else RUNS_ROOT, else the output directory of the
-        process."""
-        return os.path.abspath(
-            self.opts.get(self.RUNS_ROOT_OPTION) or self.RUNS_ROOT or self._outdir()
-        )
+        -runsdir, else the output directory of the process."""
+        return self.opts.get(_RUNS_ROOT_OPTION) or self._outdir()
 
     def _bookkeeping_path(self, *names):
         return os.path.join(self._outdir(), _BOOKKEEPING_DIR, *names)
@@ -448,7 +433,7 @@ class ProgramLauncher(FBPProcess):
         return {
             "launcher": {
                 "runs_root": self._runs_root(),
-                "process": self.PROCESS,
+                "process": self._process,
             }
         }
 
@@ -611,7 +596,7 @@ class ProgramLauncher(FBPProcess):
         to_launch = []
         for _pos, run in self._registrations():
             run_dir = self._run_dir(run)
-            state, exit_code = _batch_run_state(run_dir, self.PROCESS is not None, self._program_status)
+            state, exit_code = _batch_run_state(run_dir, self._process is not None, self._program_status)
             if state in ("finished", "failed"):
                 if not os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
                     self._end_run(run_dir, exit_code)
@@ -707,14 +692,14 @@ class ProgramLauncher(FBPProcess):
         request, in a session of its own, so that it outlives a crash of the
         node and a stop of the resident program: the program with
         debasher_exec, which run again on a directory skips the processes
-        that had finished, or, with PROCESS, that process alone with
+        that had finished, or, with -process, that process alone with
         debasher_exec_process, from the run directory.
         """
         record = _read_json(os.path.join(run_dir, _LAUNCH_FILE))
         opts = []
         for name, value in record.get("opts", {}).items():
             opts += [name, value]
-        if self.PROCESS is None:
+        if self._process is None:
             args = [
                 "/bin/sh",
                 "-c",
@@ -739,7 +724,7 @@ class ProgramLauncher(FBPProcess):
                 run_dir,
                 self._tool("debasher_exec_process"),
                 self._pfile,
-                self.PROCESS,
+                self._process,
                 "--",
                 *opts,
             ]

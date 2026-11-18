@@ -881,8 +881,12 @@ def test_a_resident_program_survives_the_round_trip(tmp_path):
     launch = _node(
         "launch",
         "ProgramLauncher",
-        [_option("-requests", value="[counter;-outf]"), _option("-outdone", channel="fifo", value="launch_done")],
-        nodeCode=NodeCode(classBody='PFILE = "batch.sh"'),
+        [
+            _option("-pfile", value="batch.sh"),
+            _option("-requests", value="[counter;-outf]"),
+            _option("-outdone", channel="fifo", value="launch_done"),
+        ],
+        nodeCode=NodeCode(classBody="STATUS_CHECK_INTERVAL_SECS = 1.0"),
         computationalSpecs=ComputationalSpecs(
             cpus=1, mem=64, time="00:05:00", max_concurrent_runs=2, batch_sched="SLURM"
         ),

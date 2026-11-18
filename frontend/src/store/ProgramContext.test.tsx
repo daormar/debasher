@@ -62,7 +62,7 @@ describe("the processes of a resident program", () => {
 
   it("adds a node that a module of the preamble defines, with what it brings", () => {
     const { result } = renderStore(createEmptyProgram("p", "resident"));
-    const nodeCode = { ...emptyNodeCode(), classBody: 'PFILE = "batch.sh"' };
+    const nodeCode = { ...emptyNodeCode(), classBody: "MAX_CONCURRENT_RUNS = 2" };
     const options = [{
       id: "o1",
       label: "-requests",

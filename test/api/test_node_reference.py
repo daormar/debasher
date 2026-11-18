@@ -43,8 +43,8 @@ def test_the_attributes_of_a_class_come_with_their_value_and_documentation():
     reference = node_reference.node_reference("ProgramLauncher")
 
     assert (
-        "- `PFILE = None`: The module of the general program to launch (required, unless the "
-        "process has the option PFILE_OPTION)."
+        "- `MAX_CONCURRENT_RUNS = 1`: How many batch runs run at a time. A program sets it for "
+        "a process in its computational specifications, `max_concurrent_runs`."
     ) in reference
 
 

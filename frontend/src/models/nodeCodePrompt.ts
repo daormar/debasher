@@ -264,7 +264,7 @@ function classOptionNotes(process: ProgramProcess, option: ProgramOption, busine
   if (process.nodeKind === "DirectoryWatcher") {
     switch (option.label) {
       case WATCH_DIR_OPTION_LABEL:
-        return ["The class `DirectoryWatcher` reads it (`WATCH_DIR_OPTION`): the directory it watches, in place of `WATCH_DIR`."];
+        return ["The class `DirectoryWatcher` reads it: the directory it watches (required). Set it as the value of this option, or make it a command line option; the class body cannot set it, and empty, the node stops at its start."];
       case REQUESTS_PORT_LABEL:
         return [`The class \`DirectoryWatcher\` sends on it (\`REQUESTS_PORT\`), once for each complete file, what \`request_for()\` makes of its path, by default ${WATCHER_REQUEST}. Redefine \`request_for\` in the class body to send something else; the code does not send on it.`];
       default:
@@ -274,11 +274,11 @@ function classOptionNotes(process: ProgramProcess, option: ProgramOption, busine
   if (process.nodeKind === "ProgramLauncher") {
     switch (option.label) {
       case PFILE_OPTION_LABEL:
-        return ["The class `ProgramLauncher` reads it (`PFILE_OPTION`): the general program to launch, in place of `PFILE`."];
+        return ["The class `ProgramLauncher` reads it: the general program to launch (required), looked for in the directory of the module that defines the node and then in `DEBASHER_MOD_DIR`. Set it as the value of this option, or make it a command line option; the class body cannot set it, and empty, the node stops at its start."];
       case PROCESS_OPTION_LABEL:
-        return ["The class `ProgramLauncher` reads it (`PROCESS_OPTION`): the process of the general program to launch alone, in place of `PROCESS`."];
+        return ["The class `ProgramLauncher` reads it: the process of the general program to launch alone, instead of the whole program. The class body cannot set it."];
       case RUNS_ROOT_OPTION_LABEL:
-        return ["The class `ProgramLauncher` reads it (`RUNS_ROOT_OPTION`): the absolute path under which the run directories go, in place of `RUNS_ROOT`."];
+        return ["The class `ProgramLauncher` reads it: the absolute path under which the run directories go, instead of the output directory of the node. The class body cannot set it."];
       case DONE_PORT_LABEL:
         return [`The class \`ProgramLauncher\` sends on it (\`DONE_PORT\`), for each batch run that ends, ${LAUNCHER_DONE_MESSAGE}; the code does not send on it.`];
       default:

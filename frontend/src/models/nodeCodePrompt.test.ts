@@ -169,7 +169,7 @@ describe("buildNodeCodePrompt", () => {
 
     it("says which options the class of a watcher uses, and what it sends", () => {
       const prompt = buildNodeCodePrompt(pipeline, watch, emptyNodeCode(), "", library);
-      expect(prompt).toContain("The class `DirectoryWatcher` reads it (`WATCH_DIR_OPTION`)");
+      expect(prompt).toContain("The class `DirectoryWatcher` reads it: the directory it watches (required). Set it as the value of this option, or make it a command line option; the class body cannot set it");
       expect(prompt).toContain("The class `DirectoryWatcher` sends on it (`REQUESTS_PORT`), once for each complete file, what `request_for()` makes of its path, by default `{\"opts\": {\"-infile\": \"<path of the file>\"}");
       expect(prompt).not.toContain("Send on it with");
     });
@@ -177,9 +177,9 @@ describe("buildNodeCodePrompt", () => {
     it("says which options the class of a launcher uses, and what it takes and sends", () => {
       const prompt = buildNodeCodePrompt(pipeline, batch, emptyNodeCode(), "", library);
       expect(prompt).toContain("The class `ProgramLauncher` takes every message on it as a request for a batch run: `{\"opts\": {\"-<option>\": \"<value>\", ...}, \"run\": \"<run directory>\"}`");
-      expect(prompt).toContain("The class `ProgramLauncher` reads it (`PFILE_OPTION`): the general program to launch, in place of `PFILE`.");
-      expect(prompt).toContain("The class `ProgramLauncher` reads it (`PROCESS_OPTION`)");
-      expect(prompt).toContain("The class `ProgramLauncher` reads it (`RUNS_ROOT_OPTION`)");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it: the general program to launch (required), looked for in the directory of the module that defines the node and then in `DEBASHER_MOD_DIR`. Set it as the value of this option");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it: the process of the general program to launch alone");
+      expect(prompt).toContain("The class `ProgramLauncher` reads it: the absolute path under which the run directories go");
       expect(prompt).toContain("The class `ProgramLauncher` sends on it (`DONE_PORT`), for each batch run that ends, `{\"run\": ..., \"run_dir\": ..., \"status\": ..., \"exit_code\": ...}`");
       expect(prompt).not.toContain("Send on it with");
     });
@@ -233,7 +233,7 @@ describe("buildNodeCodePrompt", () => {
 
   it("shows the hooks that a node inherits, and which ones a body replaces", () => {
     const inherited = { processData: "def process_data(self, port_name, packet):\n    self._register(packet)", observe: "def observe(self):\n    pass" };
-    const draft = code({ classBody: "PFILE = \"greet.sh\"", observe: "super().observe()" });
+    const draft = code({ classBody: "MAX_CONCURRENT_RUNS = 2", observe: "super().observe()" });
     const prompt = buildNodeCodePrompt(program, launch, draft, "", { ...library, inherited });
     expect(prompt).toContain("`ProgramLauncher` already implements every hook");
     expect(prompt).toContain("such as `super().process_data(port_name, packet)`");

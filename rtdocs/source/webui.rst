@@ -496,15 +496,19 @@ Nodes
 ``FBPProcess``, a node whose code processes what arrives on its ports;
 ``ProgramLauncher``, which launches a general program for each request
 it receives; ``DirectoryWatcher``, which sends a request for each file
-that arrives in a directory; or ``Supervisor``, at most one per
-program. A mark in the head of each node shows its kind. A new
+that arrives in a directory; or ``Supervisor``, at most one per program.
+A mark in the head of each node shows its kind. A new
 ``DirectoryWatcher`` comes with the options that its class needs:
 ``-watchdir``, the directory to watch, given on the command line, and
 the output port ``-outrequests``. A new ``ProgramLauncher`` comes with
-an input ``-requests``, for the connection that brings its requests,
-and the output port ``-outdone``. Remove those that the node does not
-need; the class looks for ``-watchdir``, ``-outrequests`` and
-``-outdone`` by name, so do not rename them.
+``-pfile``, whose value names the general program to launch, relative to
+the directory of this program (set it, or make it a command line
+option), an input ``-requests``, for the connection that brings its
+requests, and the output port ``-outdone``. The node does not start
+without ``-pfile``; remove the others if the node does not need them.
+The classes look for ``-watchdir``, ``-outrequests``, ``-pfile``,
+``-process``, ``-runsdir`` and ``-outdone`` by name, so do not rename
+them.
 
 "Edit node code" in the Inspector edits the Python code of a node in
 parts: the *node preamble* (imports, helper functions), the *class
@@ -515,8 +519,8 @@ and ``observe``. The class declaration, named after the process, and
 the lines that create the node and run it are written by the web
 interface. For a ``ProgramLauncher`` or a ``DirectoryWatcher``, whose
 classes already implement every hook, the editor shows the code that
-the node inherits, read only, and what mostly needs setting is class
-attributes, such as ``PFILE`` for a launcher node.
+the node inherits, read only, and what mostly needs setting is options
+of the process, such as ``-pfile`` for a launcher node.
 
 The "AI prompt" button of the node code editor composes a prompt as
 for a process, which also carries what the node uses of its classes,

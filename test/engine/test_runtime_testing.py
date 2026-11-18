@@ -382,13 +382,12 @@ def test_a_restarted_directory_watcher_requests_nothing_twice(tmp_path):
 def test_a_relative_directory_is_the_one_beside_the_program(tmp_path, monkeypatch):
     (tmp_path / "inbox").mkdir()
     (tmp_path / "inbox" / "a.txt").write_text("data")
-    source = WATCHER.replace('PATTERN = "*.txt"', 'PATTERN = "*.txt"\n    WATCH_DIR = "inbox"')
-    monkeypatch.setenv("DEBASHER_LIBEXECDIR", str(_fake_libexec(tmp_path, source)))
+    monkeypatch.setenv("DEBASHER_LIBEXECDIR", str(_fake_libexec(tmp_path, WATCHER)))
     monkeypatch.setenv("DEBASHER_TEST_PFILE", str(tmp_path / "prg.sh"))
     monkeypatch.setattr(testing, "_source_cache", {})
     monkeypatch.delenv("DEBASHER_PROCESS_MODULE_DIR", raising=False)
 
-    node = testing.load_node("Watch", outputs=["outrequests"])
+    node = testing.load_node("Watch", opts={"watchdir": "inbox"}, outputs=["outrequests"])
     node.observe()
 
     assert node.observe() == [{"file": str(tmp_path / "inbox" / "a.txt")}]
