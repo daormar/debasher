@@ -3939,13 +3939,13 @@ this:
 
 ```
 <output directory of the process>/    the runs root, by default
-├── .launcher/
-│   ├── life_id
-│   └── registrations/
-│       ├── 7.json                    {"run": "s17"}
-│       └── 8.json                    {"run": "8"}
-├── s17/                              the run directory of position 7
-└── 8/                                the run directory of position 8
+|-- .launcher/
+|   |-- life_id
+|   `-- registrations/
+|       |-- 7.json                    {"run": "s17"}
+|       `-- 8.json                    {"run": "8"}
+|-- s17/                              the run directory of position 7
+`-- 8/                                the run directory of position 8
 ```
 
 With an absolute runs root, `.launcher/` stays where it is, and the run
@@ -3954,13 +3954,13 @@ node next to the output of the general program:
 
 ```
 s17/
-├── launch.json     {"life_id": "...", "pos": 7, "opts": {...}}
-├── launcher.pid    the id of the shell that runs the batch run
-├── launcher.log    the output of that shell and of debasher_exec
-├── submitted       debasher_exec ended with 0 (the run may go on)
-├── exit_code       how the batch run ended, from the shell or the node
-├── notified        its end has been brought in (with DONE_PORT)
-└── ...             the output of the general program (__exec__, ...)
+|-- launch.json     {"life_id": "...", "pos": 7, "opts": {...}}
+|-- launcher.pid    the id of the shell that runs the batch run
+|-- launcher.log    the output of that shell and of debasher_exec
+|-- submitted       debasher_exec ended with 0 (the run may go on)
+|-- exit_code       how the batch run ended, from the shell or the node
+|-- notified        its end has been brought in (with DONE_PORT)
+`-- ...             the output of the general program (__exec__, ...)
 ```
 
 `launch.json` is written when the request registers the batch run. The other
