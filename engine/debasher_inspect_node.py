@@ -37,6 +37,7 @@ from debasher_runtime_fbp import FBPProcess
 from debasher_runtime_inputlog import BadLine, _InputLogReader
 from debasher_runtime_launcher import (
     _batch_run_state,
+    _read_launch_pos,
     _read_registrations,
     _registrations_dir_of,
     program_status,
@@ -264,6 +265,10 @@ def runs(node, process_outdir, debasher_status):
     result = []
     for pos, run in _read_registrations(_registrations_dir_of(process_outdir)):
         run_dir = os.path.join(launcher["runs_root"], run)
+        # As the node does: a registration whose run directory is gone, or
+        # that a later request replaced, is no batch run
+        if _read_launch_pos(run_dir) != pos:
+            continue
         state, exit_code = _batch_run_state(
             run_dir, single_process, lambda d: program_status(debasher_status, d)
         )

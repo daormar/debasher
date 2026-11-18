@@ -329,6 +329,7 @@ def launcher(tmp_path, execdir):
     for pos, run in ((3, "b"), (1, "a"), (5, "c/v2")):
         (registrations / f"{pos}.json").write_text(json.dumps({"run": run}))
         (runs_root / run).mkdir(parents=True)
+        (runs_root / run / "launch.json").write_text(json.dumps({"life_id": "x", "pos": pos, "opts": {}}))
     (runs_root / "a" / "exit_code").write_text("0\n")
     gone = subprocess.Popen(["true"])
     gone.wait()
@@ -365,6 +366,19 @@ def test_the_batch_runs_of_a_launcher_node(execdir, launcher):
             {"pos": 5, "run": "c/v2", "run_dir": str(root / "c/v2"), "state": "registered", "exit_code": None},
         ],
     }
+
+
+def test_runs_leaves_out_a_registration_that_is_no_batch_run(execdir, launcher):
+    # As the node does: c/v2 lost its launch.json, and b was registered
+    # again by a later request
+    (launcher["runs_root"] / "c" / "v2" / "launch.json").unlink()
+    (launcher["runs_root"] / "b" / "launch.json").write_text(json.dumps({"life_id": "x", "pos": 9, "opts": {}}))
+
+    result = _run(
+        execdir, "runs", process_outdir=launcher["process_outdir"], debasher_status=launcher["status"]
+    )
+
+    assert [r["run"] for r in result["runs"]] == ["a"]
 
 
 def test_the_tool_only_reads_the_state_of_a_batch_run(execdir, launcher):

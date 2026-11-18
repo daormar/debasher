@@ -9,6 +9,7 @@ reported through the node's own port and announced once.
 import json
 import os
 import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -432,6 +433,35 @@ def test_debasher_status_is_asked_at_most_once_every_interval(outdir, monkeypatc
     assert asked == ["a", "b", "a"]
 
 
+def test_a_run_directory_removed_by_hand_is_skipped_and_logged_once(outdir, caplog):
+    node = _node()
+    _request(node, 1, {"opts": {}, "run": "a"})
+    _request(node, 2, {"opts": {}, "run": "b"})
+    shutil.rmtree(outdir / "a")
+
+    _check_until_ended(node, outdir, "b")
+    node._check_runs()
+
+    assert not (outdir / "a").exists()
+    assert caplog.text.count("skipping the batch run a") == 1
+
+
+def test_a_removed_run_directory_named_again_is_the_batch_run_of_the_new_request(outdir, caplog):
+    node = _node()
+    _request(node, 1, {"opts": {}, "run": "a"})
+    _check_until_ended(node, outdir, "a")
+    shutil.rmtree(outdir / "a")
+
+    _request(node, 2, {"opts": {"-k": "2"}, "run": "a"})
+    _check_until_ended(node, outdir, "a")
+    node._check_runs()
+
+    # The old registration is skipped, and the new one launched once
+    assert len(_launches(outdir, "a")) == 1
+    assert "-k 2" in (outdir / "a" / "fake_args").read_text()
+    assert "skipping the batch run" not in caplog.text
+
+
 def test_a_batch_run_whose_debasher_exec_is_gone_is_launched_again(outdir):
     node = _node()
     _request(node, 1, {"opts": {}, "run": "a"})
@@ -651,7 +681,7 @@ def test_the_end_of_a_batch_run_is_brought_in_once_and_then_marked(outdir):
     _check_until_ended(node, outdir, "a")
     node._check_runs()
 
-    assert brought_in == [{"run": "a", "exit_code": 0}]
+    assert brought_in == [{"run": "a", "pos": 1, "exit_code": 0}]
     assert (outdir / "a" / "notified").exists()
 
 
@@ -670,19 +700,19 @@ def _sent(node, tag):
 def test_an_end_is_announced_once_even_if_reported_twice(outdir):
     node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
 
-    _request(node, 5, {"run": "a", "exit_code": 0}, port="runs_done")
-    _request(node, 6, {"run": "a", "exit_code": 0}, port="runs_done")
+    _request(node, 5, {"run": "a", "pos": 1, "exit_code": 0}, port="runs_done")
+    _request(node, 6, {"run": "a", "pos": 1, "exit_code": 0}, port="runs_done")
 
     assert _sent(node, "outdone") == [
         {"run": "a", "run_dir": str(outdir / "a"), "status": "finished", "exit_code": 0}
     ]
-    assert node.capture_node_state() == {"announced": ["a"]}
+    assert node.capture_node_state() == {"announced": [1]}
 
 
 def test_the_end_of_a_failed_batch_run_is_announced_as_failed(outdir):
     node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
 
-    _request(node, 5, {"run": "a", "exit_code": 3}, port="runs_done")
+    _request(node, 5, {"run": "a", "pos": 1, "exit_code": 3}, port="runs_done")
 
     assert _sent(node, "outdone") == [
         {"run": "a", "run_dir": str(outdir / "a"), "status": "failed", "exit_code": 3}
@@ -693,7 +723,7 @@ def test_the_end_of_a_batch_run_names_its_run_directory_under_the_runsdir_option
     runs = tmp_path / "runs"
     node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null", "runsdir": str(runs)})
 
-    _request(node, 5, {"run": "s17/v2", "exit_code": 0}, port="runs_done")
+    _request(node, 5, {"run": "s17/v2", "pos": 1, "exit_code": 0}, port="runs_done")
 
     assert _sent(node, "outdone") == [
         {"run": "s17/v2", "run_dir": str(runs / "s17" / "v2"), "status": "finished", "exit_code": 0}
@@ -702,11 +732,31 @@ def test_the_end_of_a_batch_run_names_its_run_directory_under_the_runsdir_option
 
 def test_the_announced_runs_survive_a_restore(outdir):
     node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
-    node.restore_node_state({"announced": ["a"]})
+    node.restore_node_state({"announced": [1]})
+
+    _request(node, 5, {"run": "a", "pos": 1, "exit_code": 0}, port="runs_done")
+
+    assert _sent(node, "outdone") == []
+
+
+def test_the_end_of_a_run_directory_named_again_is_announced_too(outdir):
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
+
+    # The run directory a, removed by hand and named again by the request
+    # at position 9
+    _request(node, 5, {"run": "a", "pos": 1, "exit_code": 0}, port="runs_done")
+    _request(node, 10, {"run": "a", "pos": 9, "exit_code": 3}, port="runs_done")
+
+    assert [m["exit_code"] for m in _sent(node, "outdone")] == [0, 3]
+
+
+def test_an_end_with_no_position_is_dropped(outdir, caplog):
+    node = _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})
 
     _request(node, 5, {"run": "a", "exit_code": 0}, port="runs_done")
 
     assert _sent(node, "outdone") == []
+    assert "no run or position" in caplog.text
 
 
 # --- the computational specifications ----------------------------------------

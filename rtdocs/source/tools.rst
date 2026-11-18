@@ -490,7 +490,9 @@ task, for an array process. The commands are:
   epoch, as ``summary`` lists them.
 * ``log [--port <string>] [--last <int>]``: the latest records of the
   input log (100 by default), or those of one port.
-* ``runs``: the batch runs of a launcher node, with their states.
+* ``runs``: the batch runs of a launcher node, with their states (a
+  request whose run directory was removed is left out, see the
+  :ref:`resident` Section).
 * ``notices``: the notices of every node of the program (with ``-d``
   alone).
 

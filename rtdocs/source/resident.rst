@@ -599,6 +599,16 @@ such as ``--outdir`` or ``--wait``: the node drops it, and logs why.
 Other fields of a request are ignored, and do not reach the message
 on ``-outdone``: a node downstream knows a batch run by its ``run``.
 
+A run directory belongs to the request that created it: a later
+request that names the run directory of an earlier one is dropped, and
+the node logs why. To run a batch run again under the same name,
+remove its run directory and send the request again: the node skips
+the earlier registration, and the new request becomes the batch run of
+that directory. A run directory removed with no new request is skipped
+too: the node logs an error (once each time it starts), does not
+launch it again nor report it on ``-outdone``, and
+``debasher_inspect_resident ... runs`` leaves it out.
+
 The run directories go under the output directory of the launcher
 process, unless the option ``-runsdir`` gives another root, which has to
 be an absolute path. When its process has an output port ``-outdone``,

@@ -3766,9 +3766,10 @@ the log and does not recover from it: it is shown in its place, with its
 segment, its line number and why it does not parse.
 
 `runs`, for a launcher node only, gives its runs root and, in the order of their
-positions, every batch run that it has registered: its position, its name, its
-run directory, its state (`registered`, `running`, `finished`, `failed` or
-`stopped`) and, once it has ended, its exit code. The registrations come from
+positions, every batch run that it has registered and that still counts (see
+"Launching from the queue on disk"): its position, its name, its run directory,
+its state (`registered`, `running`, `finished`, `failed` or `stopped`) and, once
+it has ended, its exit code. The registrations come from
 `.launcher/registrations/` in the output directory of the process, and the runs
 root and the process that `-process` names, if any, from the node info file. The
 state of each batch run comes from `_batch_run_state`
@@ -3836,7 +3837,7 @@ one to what it does, and to the section that explains it:
 | `initialize_runtime()` | Creates the list of registrations, and reads the identifier of its life (`.launcher/life_id`) or creates it, before the replay | "The run directory and who owns it" |
 | `process_data()` | A request, on a port of requests: registers it (its `launch.json` and its registration). The end of a batch run, on `RUNS_DONE_PORT`: announces it on `DONE_PORT`, once | "Requests and run directories", "The run directory and who owns it", "The end of a batch run as an input event" |
 | `observe()` | At every pass: reads the state of every batch run, writes the exit code that is still missing, brings in the ends, and launches the batch runs that fit | "Launching from the queue on disk", "The end of a batch run as an input event" |
-| `capture_node_state()`, `restore_node_state()` | Save and restore the set of announced runs, all that the node state holds | "The end of a batch run as an input event" |
+| `capture_node_state()`, `restore_node_state()` | Save and restore the set of announced runs (the positions of their requests), all that the node state holds | "The end of a batch run as an input event" |
 
 A module needs to write none of these hooks. The class of a launcher node needs
 no body (`pass`), or only class attributes such as `OBSERVE_INTERVAL_SECS`. A
@@ -3976,12 +3977,13 @@ paths.
 
 The two files answer different questions. `launch.json` says which request the
 run directory belongs to, and with which options the batch run is launched. The
-registrations say which batch runs the node has to see to, and in which order.
-They are its queue (see "Launching from the queue on disk"). The node cannot
-find its batch runs by listing the runs root instead. An absolute runs root may
-be shared, and hold the directories of other nodes or of earlier lives. A run
-name may be a path (`s17/v2`), so an entry of the root is not always a run
-directory. A listing gives no order either.
+registrations say which batch runs the node has to see to, and in which order,
+as long as the `launch.json` of the run directory records their position. They
+are its queue (see "Launching from the queue on disk"). The node cannot find its
+batch runs by listing the runs root instead. An absolute runs root may be
+shared, and hold the directories of other nodes or of earlier lives. A run name
+may be a path (`s17/v2`), so an entry of the root is not always a run directory.
+A listing gives no order either.
 
 `.launcher/` holds all the bookkeeping of the node. No run directory can clash
 with it, since no run name starts with a dot. With the default runs root, the
@@ -4059,8 +4061,8 @@ for the one that wrote it, and never launched.
 The registrations on disk are the queue of a launcher node. This section follows
 the node as it launches the batch runs of that queue and learns how each one is
 going: the launch, how the state of a batch run is read from its run directory,
-how `debasher_exec` waits for its program, the states one by one, and what the
-node does with a batch run that has ended.
+how `debasher_exec` waits for its program, the states one by one, what the node
+does with a batch run that has ended, and which registrations count.
 
 The node's `observe()`, on its observation thread, launches the batch runs that
 are registered, in the order of their positions. The node has
@@ -4179,6 +4181,26 @@ goes on from there. When a batch run is launched is not part of the node state.
 It does not need to be the same in a replay, since the node sends nothing when
 it launches.
 
+A registration counts only while the `launch.json` of its run directory records
+the position of the registration. The node and `debasher_inspect_resident` apply
+the same rule. The node writes `launch.json` before the registration, so only a
+change by hand under the runs root makes a registration stop counting:
+
+- A run directory removed by hand, while its registration stays, leaves no
+  `launch.json`. `observe()` skips that batch run, and logs it as an error once
+  in each incarnation. It takes no slot. It is not launched, since its options
+  were in `launch.json`. No end is reported for it on `DONE_PORT`. The same
+  holds when `-runsdir` names another absolute runs root.
+- A later request may name the removed run directory again. It finds no
+  `launch.json`, so it registers the directory with its own position. The old
+  registration then no longer counts, and the directory is the batch run of the
+  new request, launched once.
+
+Only a request after the last checkpoint is processed again by a replay (see
+"Recovery: startup and replay"). With no `launch.json`, such a request owns the
+directory again, and its batch run is launched again. A request up to the
+checkpoint is not processed again, so its registration stays skipped.
+
 ## The end of a batch run as an input event
 
 A node downstream may need to know when a batch run ends, to go on with its
@@ -4196,27 +4218,31 @@ A node downstream can also be told, through the output port `DONE_PORT`
 node sends only from `process_data`, whose calls the input log records and a
 replay reproduces. So the end of a batch run enters the node as what it is, an
 event from outside the program. Once the exit code is written, `observe()`
-brings `{"run": ..., "exit_code": ...}` in with `inject()`, under
+brings `{"run": ..., "pos": ..., "exit_code": ...}` in with `inject()`, with
+`pos` the position of the request that registered the batch run, under
 `RUNS_DONE_PORT` (`runs_done`), its observe port. Only then, once the event is
 logged, does `observe()` mark the run directory as notified, with a file
 `notified`.
 
-`process_data`, on `RUNS_DONE_PORT`, adds the batch run to the set of announced
-runs in its node state. It then sends
-`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `DONE_PORT`.
-`run_dir` is the absolute path of the run directory, so that the node that reads
-the results of the batch run does not have to know the runs root. `status` is
-`finished` for an exit code of 0 and `failed` for any other. The message on
-`DONE_PORT` is then an ordinary message of a channel: it is numbered (G5),
-replayed, and part of the rounds. A replay sends the same `run_dir`, which
-follows from the runs root and the name of the run alone. This holds as long as
-the runs root does not change between launches of the node.
+`process_data`, on `RUNS_DONE_PORT`, adds that position to the set of announced
+runs in its node state. The set holds positions, not names. A later request may
+name a removed run directory again (see "Launching from the queue on disk"), and
+the end of its batch run is announced too. An event with no run or position is
+dropped, and logged as an error. `process_data` then sends
+`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`
+on `DONE_PORT`. `run_dir` is the absolute path of the run directory, so that the
+node that reads the results of the batch run does not have to know the runs
+root. `status` is `finished` for an exit code of 0 and `failed` for any other.
+The message on `DONE_PORT` is then an ordinary message of a channel: it is
+numbered (G5), replayed, and part of the rounds. A replay sends the same
+`run_dir`, which follows from the runs root and the name of the run alone. This
+holds as long as the runs root does not change between launches of the node.
 
 - A node that goes down after writing the event and before marking the run
   directory writes the event again when it comes back. `process_data` drops the
-  second one, since the batch run is already in its announced set. A replay,
-  which finds both in the log in the same order, drops it too. So the event may
-  arrive more than once, but the message on `DONE_PORT` goes out once.
+  second one, since its position is already in the set of announced runs. A
+  replay, which finds both in the log in the same order, drops it too. So the
+  event may arrive more than once, but the message on `DONE_PORT` goes out once.
 - A batch run that ends while the node is down still leaves its `exit_code`,
   since its shell outlives the node. When the node comes back, `observe()`
   finds it, and the message on `DONE_PORT` goes out.

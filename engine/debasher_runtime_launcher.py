@@ -211,6 +211,15 @@ def _read_registrations(registrations_dir):
     return sorted(registrations)
 
 
+def _read_launch_pos(run_dir):
+    """The position of the request that wrote the launch.json of `run_dir`,
+    or None when there is no launch.json."""
+    try:
+        return _read_json(os.path.join(run_dir, _LAUNCH_FILE)).get("pos")
+    except FileNotFoundError:
+        return None
+
+
 def _batch_run_state(run_dir, single_process, program_status):
     """
     The state of the batch run of `run_dir`, from what the directory holds
@@ -370,8 +379,9 @@ class ProgramLauncher(FBPProcess):
                 f"{type(self).__name__}: the runs root given by -{_RUNS_ROOT_OPTION}, "
                 f"{runs_root}, is not an absolute path"
             )
-        # The node state: the batch runs whose end has been announced on
-        # DONE_PORT, so that an end reported twice is announced once.
+        # The node state: the positions of the requests whose batch run has
+        # had its end announced on DONE_PORT, so that an end reported twice
+        # is announced once.
         self._announced = set()
         self._life_id = None
         # The batch runs this incarnation launched: run directory -> Popen of
@@ -380,6 +390,9 @@ class ProgramLauncher(FBPProcess):
         # When debasher_status was last asked about a run directory, to ask
         # at most once every STATUS_CHECK_INTERVAL_SECS.
         self._status_checked_at = {}
+        # The registered batch runs whose launch.json is gone, already
+        # logged by this incarnation, so that each is logged once.
+        self._missing_runs = set()
 
     # -- paths --
 
@@ -582,12 +595,15 @@ class ProgramLauncher(FBPProcess):
         run directory, is announced once.
         """
         run = packet.get("run") if isinstance(packet, dict) else None
-        if run is None:
-            self.log.error("dropping an end of a batch run with no run: %r", packet)
+        pos = packet.get("pos") if isinstance(packet, dict) else None
+        if run is None or not isinstance(pos, int):
+            self.log.error("dropping an end of a batch run with no run or position: %r", packet)
             return
-        if run in self._announced:
+        # By the position of the request, not by the name of the run: a run
+        # directory removed by hand may be named again by a later request
+        if pos in self._announced:
             return
-        self._announced.add(run)
+        self._announced.add(pos)
         if self.DONE_PORT in self.OUTPUT_PORTS:
             exit_code = packet.get("exit_code")
             status = "finished" if exit_code == 0 else "failed"
@@ -621,13 +637,26 @@ class ProgramLauncher(FBPProcess):
         self._reap_children()
         running = 0
         to_launch = []
-        for _pos, run in self._registrations():
+        for pos, run in self._registrations():
             run_dir = self._run_dir(run)
+            launch_pos = _read_launch_pos(run_dir)
+            # The node writes launch.json before the registration, so only a
+            # change by hand under the runs root leaves it missing: the
+            # batch run is skipped, not launched without its options
+            if launch_pos is None:
+                if run not in self._missing_runs:
+                    self._missing_runs.add(run)
+                    self.log.error("skipping the batch run %s: its run directory %s has no %s", run, run_dir, _LAUNCH_FILE)
+                continue
+            # A later request registered the same run directory again, once
+            # it was removed: the directory is that request's batch run
+            if launch_pos != pos:
+                continue
             state, exit_code = _batch_run_state(run_dir, self._process is not None, self._program_status)
             if state in ("finished", "failed"):
                 if not os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
                     self._end_run(run_dir, exit_code)
-                self._report_end(run, run_dir)
+                self._report_end(run, run_dir, pos)
             elif state == "running":
                 running += 1
             else:
@@ -764,7 +793,7 @@ class ProgramLauncher(FBPProcess):
         os.replace(tmp_path, os.path.join(run_dir, _PID_FILE))
         self.log.info("launched the batch run in %s (pid %s)", run_dir, child.pid)
 
-    def _report_end(self, run, run_dir):
+    def _report_end(self, run, run_dir, pos):
         """
         Brings the end of a batch run into the node (inject), and only then,
         once it is logged, marks the run directory as notified, so that a
@@ -776,6 +805,6 @@ class ProgramLauncher(FBPProcess):
             return
         with open(os.path.join(run_dir, _EXIT_CODE_FILE)) as f:
             exit_code = int(f.read().strip())
-        self.inject({"run": run, "exit_code": exit_code})
+        self.inject({"run": run, "pos": pos, "exit_code": exit_code})
         with open(notified, "w"):
             pass
