@@ -1636,7 +1636,7 @@ receive names that do not repeat and, with the default request, which names the
 run after the file without its extension, names that differ in more than their
 extension. Knowing a file by its size and modification time too would not be
 enough, since a launcher node drops a request for a run directory that another
-request owns (see "Ownership of a run directory"). The node state keeps one
+request owns (see "The run directory and who owns it"). The node state keeps one
 path per file brought in, also of those that are gone, so a checkpoint grows
 with them; `debasher_reset_resident` forgets them with the rest of the node
 state (a run directory under an absolute runs root stays, see "Stopping and
@@ -3810,11 +3810,12 @@ can go on with its results.
 
 The sections that follow go from the node to its batch runs. The first says how
 a module defines a launcher node and how the node finds its general program. The
-next two say what a request holds, and which request a run directory belongs
-to. The next two say how the node launches the batch runs that are registered
-and reads their state, and how a node downstream learns that one has ended. The
-last two cover a launcher node that runs a single process, and what stopping and
-resetting the resident program do to a launcher node and its batch runs.
+next two say what a request holds, then what a run directory holds and which
+request owns it. The next two say how the node launches the batch runs that are
+registered and reads their state, and how a node downstream learns that one has
+ended. The last two cover a launcher node that runs a single process, and what
+stopping and resetting the resident program do to a launcher node and its batch
+runs.
 
 ## A node that launches a general program
 
@@ -3902,25 +3903,82 @@ object, or whose `run` is absolute, contains `..` or has a name that starts with
 a dot. A replay drops it again. The general program checks the options
 themselves when it is launched.
 
-## Ownership of a run directory
+## The run directory and who owns it
 
-Two requests may name the same run directory, and only one of them can own it.
-This section describes the two files that a request writes, the rule of
-ownership that decides between two requests, and the identifier of a life,
-which that rule needs.
+Each batch run has a directory of its own, and two requests may name the same
+one. This section shows what a launcher node keeps on disk, in the output
+directory of its process and in each run directory. It then says what the
+identifier of a life is, and gives the rule of ownership, which decides the
+request that a run directory belongs to.
 
 `process_data` does not launch anything. It registers the batch run, in two
-writes. It first writes `launch.json` in the run directory, with `life_id`, the
-position of the request in the input log and its options. `life_id` identifies
-the life of the node, the time since its last clean start; the end of this
-section says why the rule needs it. It then writes the registration,
-`.launcher/registrations/<position>.json`, with the name of the run directory,
-in the output directory of its process. The registrations of the node form its
-queue of batch runs (see "Launching from the queue on disk"). `.launcher/` holds
-all the bookkeeping of the node. No run directory can clash with it, since no
-run name starts with a dot. Each file is written to a temporary one and renamed
-into place. Both writes are idempotent: a replay of the same request writes the
-same content to the same paths.
+writes. The first is `launch.json`, in the run directory of the batch run,
+`<runs root>/<run>`. It holds `life_id`, the position of the request in the
+input log and its options. There is one `launch.json` for each batch run. The
+second write is the registration, `.launcher/registrations/<position>.json`, in
+the output directory of the process. It holds the name of the run directory.
+Each file is written to a temporary one and renamed into place. Both writes are
+idempotent: a replay of the same request writes the same content to the same
+paths.
+
+The two files answer different questions. `launch.json` says which request the
+run directory belongs to, and with which options the batch run is launched. The
+registrations say which batch runs the node has to see to, and in which order.
+They are its queue (see "Launching from the queue on disk"). The node cannot
+find its batch runs by listing the runs root instead. An absolute runs root may
+be shared, and hold the directories of other nodes or of earlier lives. A run
+name may be a path (`s17/v2`), so an entry of the root is not always a run
+directory. A listing gives no order either.
+
+`.launcher/` holds all the bookkeeping of the node. No run directory can clash
+with it, since no run name starts with a dot. With the default runs root, the
+output directory of the process holds both `.launcher/` and the run directories.
+Say that the node has received two requests: one with `"run": "s17"` at position
+7, and one without `run` at position 8. Its output directory then looks like
+this:
+
+```
+<output directory of the process>/    the runs root, by default
+├── .launcher/
+│   ├── life_id
+│   └── registrations/
+│       ├── 7.json                    {"run": "s17"}
+│       └── 8.json                    {"run": "8"}
+├── s17/                              the run directory of position 7
+└── 8/                                the run directory of position 8
+```
+
+With an absolute runs root, `.launcher/` stays where it is, and the run
+directories go under that root. A run directory holds the files of the launcher
+node next to the output of the general program:
+
+```
+s17/
+├── launch.json     {"life_id": "...", "pos": 7, "opts": {...}}
+├── launcher.pid    the id of the shell that runs the batch run
+├── launcher.log    the output of that shell and of debasher_exec
+├── submitted       debasher_exec ended with 0 (the run may go on)
+├── exit_code       how the batch run ended, from the shell or the node
+├── notified        its end has been brought in (with DONE_PORT)
+└── ...             the output of the general program (__exec__, ...)
+```
+
+`launch.json` is written when the request registers the batch run. The other
+files of the node come later: when the node launches the batch run, when the
+batch run ends, and when its end is brought in. "Launching from the queue on
+disk" and "The end of a batch run as an input event" say who writes each of
+them, and when.
+
+`life_id` identifies the life of the node, the time since its last clean start.
+It is a random string of 32 hexadecimal digits. It is kept in
+`.launcher/life_id`, in the output directory of the process. The node reads it
+in `initialize_runtime()`, before its replay. It creates the file only when it
+is missing or empty. That happens the first time the node starts, and after a
+clean start, since `debasher_reset_resident` empties the output directory of the
+process. So a relaunch of the node keeps the identifier, although it begins a
+new incarnation. A halt and its resume keep it too. Only a clean start begins a
+new life. The identifier cannot be part of the node state: a node that crashes
+before its first checkpoint would generate another one in its replay.
 
 A run directory belongs to the request that wrote its `launch.json`. The rule
 of ownership decides by that file:
@@ -3942,12 +4000,7 @@ clean start, the input log begins again from its first position. A run
 directory under an absolute runs root is out of the reach of
 `debasher_reset_resident`. It still holds a `launch.json` with a position of the
 old log. Without the identifier, a new request at that position would be taken
-for the one that wrote it, and never launched. The identifier is created at
-random the first time the node starts in a life, in `initialize_runtime()`,
-before its replay. It is kept in `.launcher/life_id`, in the output directory of
-its process, which a reset empties. It cannot be part of the node state: a node
-that crashes before its first checkpoint would generate another one in its
-replay.
+for the one that wrote it, and never launched.
 
 ## Launching from the queue on disk
 
