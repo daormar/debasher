@@ -4207,8 +4207,9 @@ checkpoint is not processed again, so its registration stays skipped.
 
 A node downstream may need to know when a batch run ends, to go on with its
 results. This section says why the end enters the launcher node as an event from
-outside the program, how that event goes from `observe()` to `DONE_PORT`, and
-what happens when it arrives twice or while the node is down.
+outside the program, how that event goes from `observe()` to `DONE_PORT`, why
+the run directory is marked with a file, what happens when the event arrives
+twice or while the node is down, and what grows with the batch runs of a node.
 
 The directory of a batch run always says how it is going. It holds its
 `launch.json`, the id of its shell and how it ended (see "Launching from the
@@ -4226,6 +4227,14 @@ brings `{"run": ..., "pos": ..., "exit_code": ...}` in with `inject()`, with
 logged, does `observe()` mark the run directory as notified, with a file
 `notified`.
 
+`notified` is a file, and not part of the node state, because of the threads.
+`observe()` has to know, at every pass, which ends it has already brought in, or
+it would bring in the same one at every pass. The node state is no help there.
+It belongs to the brain thread, and gets the end only once `process_data`
+handles the event, after `inject()` has returned. A pass in between would bring
+the end in again. `notified` is written by the thread that reads it, the
+observation thread, right after the fact that it records.
+
 `process_data`, on `RUNS_DONE_PORT`, adds that position to the set of announced
 runs in its node state. The set holds positions, not names. A later request may
 name a removed run directory again (see "Launching from the queue on disk"), and
@@ -4236,9 +4245,10 @@ on `DONE_PORT`. `run_dir` is the absolute path of the run directory, so that the
 node that reads the results of the batch run does not have to know the runs
 root. `status` is `finished` for an exit code of 0 and `failed` for any other.
 The message on `DONE_PORT` is then an ordinary message of a channel: it is
-numbered (G5), replayed, and part of the rounds. A replay sends the same
-`run_dir`, which follows from the runs root and the name of the run alone. This
-holds as long as the runs root does not change between launches of the node.
+numbered like any other, replayed, and part of the rounds. A replay sends the
+same `run_dir`, which follows from the runs root and the name of the run alone.
+This holds as long as the runs root does not change between launches of the
+node.
 
 - A node that goes down after writing the event and before marking the run
   directory writes the event again when it comes back. `process_data` drops the
@@ -4249,6 +4259,26 @@ holds as long as the runs root does not change between launches of the node.
   since its shell outlives the node. When the node comes back, `observe()`
   finds it, and the message on `DONE_PORT` goes out.
 - A launcher node without `DONE_PORT` brings in no event.
+
+The set of announced runs only grows. A node keeps one position for each batch
+run whose end it ever announced, in memory and in every checkpoint. Pruning it
+would need to know that no event can bring an end in again. The two events of a
+crash between `inject()` and `notified` may straddle a checkpoint, with
+`notified` already written when the state is captured. A capture that left out
+the position of a run with `notified` would let the second event, live or in a
+replay, announce its end again.
+
+The list of registrations only grows too. Each pass of `observe()` reads a few
+files of every registered batch run, and checks whether its shell is alive,
+those ended long ago included. Removing the registration of a batch run whose
+directory has `notified` would not announce its end twice. The registration is
+kept as the record of the batch runs of the node, which
+`debasher_inspect_resident` lists.
+
+Both are limits of the design. The remedy is a clean start of the whole
+resident program (see "`debasher_reset_resident`: a clean start"). With the
+default runs root, it also sets the run directories aside (see "Stopping and
+resetting a launcher node").
 
 ## A single process
 

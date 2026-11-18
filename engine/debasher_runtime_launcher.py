@@ -602,20 +602,30 @@ class ProgramLauncher(FBPProcess):
 
     def _on_run_ended(self, packet):
         """
-        observe() reports that a batch run ended. An end reported
-        twice, by a node that went down between reporting it and marking the
-        run directory, is announced once.
+        Announces on DONE_PORT the end of a batch run that observe()
+        brought in: `packet` is what _report_end gave inject(),
+        {"run": <name of the run>, "pos": <position of its request>,
+        "exit_code": <int>}, as the input log gives it back, live or in a
+        replay. Sends {"run", "run_dir", "status", "exit_code"} once for
+        each request; drops, with an error, a packet without run or
+        position.
         """
         run = packet.get("run") if isinstance(packet, dict) else None
         pos = packet.get("pos") if isinstance(packet, dict) else None
+        # Only a hand-written record lacks them: _report_end gives both
         if run is None or not isinstance(pos, int):
             self.log.error("dropping an end of a batch run with no run or position: %r", packet)
             return
-        # By the position of the request, not by the name of the run: a run
-        # directory removed by hand may be named again by a later request
+        # The same end brought in twice, by a node that went down between
+        # inject() and `notified`, and the replay of both, are announced
+        # once. By the position of the request, not by the name of the
+        # run: a run directory removed by hand may be named again by a
+        # later request
         if pos in self._announced:
             return
         self._announced.add(pos)
+        # observe() brings ends in only with DONE_PORT, but a log written
+        # while the node had the port may be replayed after it lost it
         if self.DONE_PORT in self.OUTPUT_PORTS:
             exit_code = packet.get("exit_code")
             status = "finished" if exit_code == 0 else "failed"
