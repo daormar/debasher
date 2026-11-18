@@ -359,47 +359,30 @@ def test_a_batch_run_that_ended_keeps_its_exit_code_and_is_not_launched_again(ou
     assert len(_launches(outdir, "a")) == 1
 
 
-def test_a_program_that_fails_after_debasher_exec_ended_well_ends_failed(outdir, monkeypatch):
+@pytest.mark.parametrize("sched", ["BUILTIN", "SLURM"])
+def test_the_exit_code_of_debasher_exec_is_the_end_of_the_batch_run(outdir, monkeypatch, sched):
+    # debasher_exec waits for the program: its 0 is final, and
+    # debasher_status, which would say 3 here, is never asked
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", f"cpus=1; batch_sched={sched}")
     monkeypatch.setenv("FAKE_STATUS", "3")
     node = _node()
     _request(node, 1, {"opts": {}, "run": "a"})
 
     _check_until_ended(node, outdir, "a")
 
-    assert (outdir / "a" / "exit_code").read_text().strip() == "3"
-
-
-def test_a_batch_run_goes_on_after_debasher_exec_ends_until_its_program_does(outdir, monkeypatch):
-    # As with SLURM, where debasher_exec only submits the jobs.
-    monkeypatch.setenv("FAKE_STATUS", "2")
-    node = _node()
-    _request(node, 1, {"opts": {}, "run": "a"})
-
-    def submitted():
-        node._check_runs()
-        return (outdir / "a" / "submitted").exists()
-
-    assert _wait_until(submitted)
-
-    node._check_runs()
-    assert not (outdir / "a" / "exit_code").exists()
-
-    (outdir / "a" / "fake_status").write_text("0\n")
-    _check_until_ended(node, outdir, "a")
     assert (outdir / "a" / "exit_code").read_text().strip() == "0"
-    assert len(_launches(outdir, "a")) == 1
 
 
 def test_the_scheduler_of_the_batch_runs_reaches_debasher_exec(outdir, monkeypatch):
     monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; batch_sched=SLURM")
     node = _node()
     assert node.BATCH_SCHED == "SLURM"
-    _request(node, 1, {"opts": {"-a": "x"}, "run": "a"})
+    _request(node, 1, {"opts": {}, "run": "a"})
 
     _check_until_ended(node, outdir, "a")
 
-    assert "--sched SLURM" in (outdir / "a" / "fake_args").read_text()
-    assert "-a x" in (outdir / "a" / "fake_args").read_text()
+    # Under Slurm debasher_exec waits for the program only with --wait
+    assert "--sched SLURM --wait" in (outdir / "a" / "fake_args").read_text()
 
 
 def test_the_shell_of_a_batch_run_is_kept_with_its_start_time(outdir):
@@ -418,15 +401,35 @@ def test_without_a_scheduler_the_batch_runs_use_the_builtin_one(outdir):
     assert "--sched BUILTIN" in (outdir / "a" / "fake_args").read_text()
 
 
-def test_the_options_of_the_request_reach_debasher_exec(outdir, monkeypatch):
+def test_the_options_of_the_request_reach_debasher_exec(outdir, tmp_path):
     node = _node()
-    _request(node, 1, {"opts": {"-bam": "/data/s17.bam"}, "run": "a"})
-    calls = []
-    monkeypatch.setattr(lib.ProgramLauncher, "_launch", lambda self, run_dir: calls.append(run_dir))
+    _request(node, 1, {"opts": {"-bam": "/data/s17.bam", "-k": "3"}, "run": "a"})
 
-    node._check_runs()
+    _check_until_ended(node, outdir, "a")
 
-    assert calls == [str(outdir / "a")]
+    pfile = (tmp_path / "program" / "pipeline.sh").resolve()
+    assert (outdir / "a" / "fake_args").read_text().split() == [
+        "--pfile", str(pfile), "--outdir", str(outdir / "a"), "--sched", "BUILTIN",
+        "-bam", "/data/s17.bam", "-k", "3",
+    ]
+
+
+def test_debasher_status_is_asked_at_most_once_every_interval(outdir, monkeypatch):
+    node = _node()
+    node.STATUS_CHECK_INTERVAL_SECS = 5.0
+    asked = []
+    monkeypatch.setattr(launcher_mod, "program_status", lambda tool, run_dir: asked.append(run_dir) or 0)
+    now = [100.0]
+    monkeypatch.setattr(launcher_mod.time, "monotonic", lambda: now[0])
+
+    assert node._program_status("a") == 0
+    now[0] += 4.9
+    # Not asked again yet: counts as in progress
+    assert node._program_status("a") is None
+    assert node._program_status("b") == 0
+    now[0] += 0.2
+    assert node._program_status("a") == 0
+    assert asked == ["a", "b", "a"]
 
 
 def test_a_batch_run_whose_debasher_exec_is_gone_is_launched_again(outdir):
@@ -586,21 +589,6 @@ def test_a_shell_that_ended_is_told_by_its_file_even_before_it_is_waited_for(tmp
         (None, ("running", None)),
         (2, ("running", None)),
         (0, ("finished", 0)),
-        (3, ("failed", 3)),
-    ],
-)
-def test_a_submitted_run_is_what_debasher_status_says(tmp_path, status, state):
-    (tmp_path / "launcher.pid").write_text(f"{_dead_pid()}\n")
-    (tmp_path / "submitted").touch()
-    assert _state(tmp_path, status=status) == (state, [str(tmp_path)])
-
-
-@pytest.mark.parametrize(
-    "status, state",
-    [
-        (None, ("running", None)),
-        (2, ("running", None)),
-        (0, ("finished", 0)),
         (3, ("stopped", None)),
         (1, ("stopped", None)),
     ],
@@ -612,7 +600,6 @@ def test_a_run_whose_shell_is_gone_with_no_file_was_stopped(tmp_path, status, st
 
 def test_a_single_process_whose_shell_is_gone_with_no_exit_code_was_stopped(tmp_path):
     (tmp_path / "launcher.pid").write_text(f"{_dead_pid()}\n")
-    (tmp_path / "submitted").touch()  # never written for a single process
     assert _state(tmp_path, single_process=True) == (("stopped", None), [])
 
 

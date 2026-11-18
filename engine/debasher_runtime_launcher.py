@@ -44,16 +44,15 @@ from debasher_runtime_fbp import FBPProcess
 _LAUNCH_FILE = "launch.json"
 _PID_FILE = "launcher.pid"
 _EXIT_CODE_FILE = "exit_code"
-_SUBMITTED_FILE = "submitted"
 _NOTIFIED_FILE = "notified"
 _LOG_FILE = "launcher.log"
 
 # The exit codes of debasher_status (see DEBASHER_PROGRAM_*_EXIT_CODE in
-# engine/debasher_lib.sh): every process finished, some in progress, and
-# some unfinished with none in progress.
+# engine/debasher_lib.sh) that the state of a batch run looks for: every
+# process finished, and some in progress. Any other means that the program
+# did not finish.
 _PROGRAM_FINISHED = 0
 _PROGRAM_IN_PROGRESS = 2
-_PROGRAM_UNFINISHED = 3
 
 # The directory, in the output directory of its process, where a launcher
 # node keeps its own bookkeeping: the identifier of its life and the list of
@@ -224,49 +223,42 @@ def _batch_run_state(run_dir, single_process, program_status):
     together with the shell that ran it, and to be launched again.
 
     `single_process` is whether the batch run is a single process, run with
-    debasher_exec_process, whose shell writes `exit_code` whatever the exit
-    code; otherwise the shell of debasher_exec writes `submitted` when it
-    ends with 0 and `exit_code` when it fails, or when the run it waited for
-    did not finish (3). `program_status(run_dir)` is
-    the exit code of debasher_status on the directory, or None if the
-    caller does not ask it now, which counts as in progress.
+    debasher_exec_process, which has nothing to resume from.
+    `program_status(run_dir)` is the exit code of debasher_status on the
+    directory, or None if the caller does not ask it now, which counts as
+    in progress.
 
-    The PID of the shell is read before its files: a shell writes its file
+    The PID of the shell is read before its exit code: a shell writes it
     before it ends, so one found gone had written it already, and one that
     has ended but not yet been waited for, whose PID still shows as alive,
-    is never taken for a running one once its file is there.
+    is never taken for a running one once its exit code is there.
     """
     launch_id = _read_launch_id(os.path.join(run_dir, _PID_FILE))
     alive = launch_id is not None and _shell_alive(launch_id)
     exit_code = _read_exit_code(run_dir)
     if exit_code is not None:
         return ("finished", 0) if exit_code == 0 else ("failed", exit_code)
-    if not single_process and os.path.exists(os.path.join(run_dir, _SUBMITTED_FILE)):
-        return _state_from_program_status(program_status(run_dir), ended=True)
     if launch_id is None:
         return ("registered", None)
     if alive:
         return ("running", None)
     if single_process:
         return ("stopped", None)
-    return _state_from_program_status(program_status(run_dir), ended=False)
+    return _state_from_program_status(program_status(run_dir))
 
 
-def _state_from_program_status(status, ended):
+def _state_from_program_status(status):
     """
-    The state of a batch run whose debasher_exec is gone, from the exit
-    code of debasher_status on its run directory (None when not asked, which
-    counts as in progress): running while something of the program is in
-    progress; otherwise finished if everything finished, and, when
-    debasher_exec had ended well (`ended`), failed with that exit code, or
-    else stopped, to be launched again.
+    The state of a batch run whose debasher_exec is gone without leaving
+    its exit code, from the exit code of debasher_status on its run
+    directory (None when not asked, which counts as in progress): running
+    while something of the program is in progress, finished if everything
+    finished, and else stopped, to be launched again.
     """
     if status is None or status == _PROGRAM_IN_PROGRESS:
         return ("running", None)
     if status == _PROGRAM_FINISHED:
         return ("finished", 0)
-    if ended:
-        return ("failed", status)
     return ("stopped", None)
 
 
@@ -331,18 +323,23 @@ class ProgramLauncher(FBPProcess):
     #: node has it.
     DONE_PORT = "outdone"
     _RUNTIME_CLASS = "ProgramLauncher"
-    #: How many batch runs run at a time. A program sets it for a process in
-    #: its computational specifications, `max_concurrent_runs`.
+    #: How many batch runs run at a time, and so, under Slurm, how many
+    #: debasher_exec wait at once on the machine of the node. A program sets
+    #: it for a process in its computational specifications,
+    #: `max_concurrent_runs`.
     MAX_CONCURRENT_RUNS = 1
     #: The scheduler the batch runs use, given to debasher_exec as `--sched`:
     #: the built-in one by default, as for the resident program itself, so
     #: that the batch runs do not depend on the scheduler a machine would
     #: pick on its own. A program sets it for a process in its computational
-    #: specifications, `batch_sched` (BUILTIN or SLURM).
+    #: specifications, `batch_sched` (BUILTIN or SLURM). Under SLURM the node
+    #: also gives debasher_exec `--wait`, so that it waits for the jobs, alive
+    #: on the machine of the node, and its exit code is the end of the run.
     BATCH_SCHED = "BUILTIN"
     #: How often, at most, in seconds, observe() asks debasher_status how a
-    #: batch run is going (OBSERVE_INTERVAL_SECS is how often it looks at the
-    #: run directories).
+    #: batch run is going, for a batch run whose shell is gone without its
+    #: exit code, as after a restart of the machine (OBSERVE_INTERVAL_SECS is
+    #: how often it looks at the run directories).
     STATUS_CHECK_INTERVAL_SECS = 5.0
 
     _COMP_SPEC_ATTRS = {
@@ -693,27 +690,16 @@ class ProgramLauncher(FBPProcess):
             )
         return os.path.join(libexecdir, name)
 
-    # The shell commands that run a batch run and write into its run
-    # directory, $1, how it ended, through a temporary file renamed into
-    # place, before the shell ends: only the parent of a process learns its
-    # exit code, and written there it outlives a crash of the node, and any
-    # process can read it (see _batch_run_state). A single process leaves
-    # its exit code whatever it is; debasher_exec leaves `submitted` when it
-    # ends with 0, since under Slurm its program may still be running (under
-    # the built-in scheduler it waits for the run, and 0 means that every
-    # process finished), and its exit code otherwise, such as the 3 of a run
-    # it waited for that did not finish.
+    # The shell commands that run a batch run and write its exit code into
+    # its run directory, $1, through a temporary file renamed into place,
+    # before the shell ends: only the parent of a process learns its exit
+    # code, and written there it outlives a crash of the node, and any
+    # process can read it (see _batch_run_state). The exit code is the end
+    # of the batch run, since debasher_exec waits for its program, and a
+    # single process ends with its process.
     _RECORD_EXIT_CODE = (
         'dir=$1; shift; "$@"; code=$?; '
         'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"'
-    )
-    _RECORD_SUBMITTED = (
-        'dir=$1; shift; "$@"; code=$?; '
-        'if [ "$code" -eq 0 ]; then '
-        ': > "$dir/submitted.tmp" && mv "$dir/submitted.tmp" "$dir/submitted"; '
-        'else '
-        'echo "$code" > "$dir/exit_code.tmp" && mv "$dir/exit_code.tmp" "$dir/exit_code"; '
-        'fi'
     )
 
     def _launch(self, run_dir):
@@ -730,10 +716,13 @@ class ProgramLauncher(FBPProcess):
         for name, value in record.get("opts", {}).items():
             opts += [name, value]
         if self._process is None:
+            # Under the built-in scheduler debasher_exec waits for the
+            # program on its own; under Slurm it only does with --wait
+            wait = ["--wait"] if self.BATCH_SCHED == "SLURM" else []
             args = [
                 "/bin/sh",
                 "-c",
-                self._RECORD_SUBMITTED,
+                self._RECORD_EXIT_CODE,
                 "debasher_launcher",
                 run_dir,
                 self._tool("debasher_exec"),
@@ -743,6 +732,7 @@ class ProgramLauncher(FBPProcess):
                 run_dir,
                 "--sched",
                 self.BATCH_SCHED,
+                *wait,
                 *opts,
             ]
         else:

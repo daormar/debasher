@@ -3777,11 +3777,11 @@ reads it (see "Launching from the queue on disk"). Only the node acts on that
 state: the tool writes no exit code and launches nothing. So a batch run that
 has ended can be shown as ended before the node has written its exit code. For
 some batch runs of a whole program the function asks `debasher_status`: those
-whose shell wrote `submitted`, and those whose shell is gone without writing
-`submitted` or `exit_code`. Each question runs `debasher_status` on the run
-directory. The node asks it at most once every `STATUS_CHECK_INTERVAL_SECS` for
-each batch run. The tool asks it every time, once for each such batch run. So
-`runs` takes longer when many batch runs are in that state.
+whose shell is gone without writing `exit_code`. Each question runs
+`debasher_status` on the run directory. The node asks it at most once every
+`STATUS_CHECK_INTERVAL_SECS` for each batch run. The tool asks it every time,
+once for each such batch run. So `runs` takes longer when many batch runs are in
+that state.
 
 `notices` is given with `-d` alone, since it covers the whole program. It gives
 the notice of every node that has one, sorted by the name of its process and by
@@ -4010,7 +4010,6 @@ s17/
 |-- launch.json     {"life_id": "...", "pos": 7, "opts": {...}}
 |-- launcher.pid    the id of the shell that runs the batch run
 |-- launcher.log    the output of that shell and of debasher_exec
-|-- submitted       debasher_exec ended with 0 (the run may go on)
 |-- exit_code       how the batch run ended, from the shell or the node
 |-- notified        its end has been brought in (with DONE_PORT)
 `-- ...             the output of the general program (__exec__, ...)
@@ -4060,7 +4059,8 @@ for the one that wrote it, and never launched.
 The registrations on disk are the queue of a launcher node. This section follows
 the node as it launches the batch runs of that queue and learns how each one is
 going: the launch, how the state of a batch run is read from its run directory,
-the states one by one, and what the node does with a batch run that has ended.
+how `debasher_exec` waits for its program, the states one by one, and what the
+node does with a batch run that has ended.
 
 The node's `observe()`, on its observation thread, launches the batch runs that
 are registered, in the order of their positions. The node has
@@ -4081,15 +4081,14 @@ knows.
 How a batch run is going is read from its run directory alone, whatever the
 scheduler. A relaunched node has lost what its previous incarnation held in
 memory, and a tool outside the node (see "`debasher_inspect_resident`: what a
-node keeps") never had it. Both find the same state in the directory.
-`debasher_exec` runs under a shell that records how it ended, since only its
-parent learns its exit code. The shell writes the file `submitted` when
-`debasher_exec` ends with 0. It writes `exit_code`, holding the exit code, when
-`debasher_exec` fails (options that the program refuses, for example). Each file
-is written into a temporary one and renamed into place before the shell ends.
-`observe()` writes the id of that shell into the run directory, in
-`launcher.pid`. The output of the shell and of `debasher_exec` goes to
-`launcher.log`.
+node keeps") never had it. Both find the same state in the directory. So
+`debasher_exec` runs under a shell that writes its exit code into the run
+directory, in `exit_code`. The shell, not the node, writes it for two reasons.
+Only the parent of a process learns its exit code. And the shell, in a session
+of its own, outlives the node. The file is written into a temporary one and
+renamed into place before the shell ends. `observe()` writes the id of that
+shell into the run directory, in `launcher.pid`, just after it starts the shell.
+The output of the shell and of `debasher_exec` goes to `launcher.log`.
 
 The id is the PID of the shell together with the time at which its process
 started, `<pid>@<start time>`, as the engine keeps the id of a task of the
@@ -4100,11 +4099,46 @@ running for as long as that process lives: not launched again, not reported,
 and holding a slot. Without `ps`, the id is the PID alone. A shell that has
 already ended when its start time is read gets an empty id, and never runs.
 
-With the built-in scheduler, `debasher_exec` waits for the program to end. With
-SLURM it only submits the jobs, and ends at once. So, once `debasher_exec` has
-ended well, the node asks `debasher_status` on the run directory until nothing
-of the program is in progress. It asks at most once every
-`STATUS_CHECK_INTERVAL_SECS`.
+The node writes `launcher.pid` once `ps` has given that start time. A node that
+goes down in between, a window of a few milliseconds, finds no `launcher.pid`
+when it comes back. It launches the batch run a second time. What follows
+depends on the batch run:
+
+- For a whole program, the second `debasher_exec` waits
+  `DEBASHER_EXEC_LOCK_WAIT_SECS` for the lock of the first, which keeps it while
+  it waits for its program. Unless the first one ends within that time, the
+  second ends with 1. Its shell writes `exit_code` 1. The batch run is taken as
+  failed (and announced so on `DONE_PORT`), and frees its slot, while the first
+  one goes on. When the first one ends, its shell overwrites `exit_code` with
+  its own code.
+- With `-process`, `debasher_exec_process` takes no lock, and the process runs
+  twice at once in the same directory.
+
+`launcher.log` shows both launches. This is a limit of the design. Closing the
+window would need the shell to write its own id, which would still leave the
+time between the start of the shell and its first line.
+
+`debasher_exec` waits for its program under both schedulers. Under the built-in
+scheduler it waits on its own. Under `SLURM` it would only submit the jobs and
+end at once, so the node passes it `--wait`. Its exit code then says how the
+batch run ended. 0 means that every process finished, 3 that the program did not
+finish, and 1 an error, such as options that the program refuses. A request
+cannot change that, since `--builtinsched-oneshot` and `--wait` are options that
+it may not give (see "Requests and run directories"). `debasher_exec_process`
+ends with the exit code of the process function. So the shell of every batch run
+writes one file, `exit_code`, with whatever code it ends.
+
+The wait happens in the shell, never in the node. The node does not wait for the
+shell, and only polls it so that none is left a zombie. So the node goes on
+registering requests, beating and closing rounds while a batch run goes on. The
+wait is also what lets the node read the state cheaply. A live shell is a
+running batch run, and its exit code is the final one. The node asks
+`debasher_status` only about a batch run whose shell is gone without writing
+`exit_code`, as after a restart of the machine (see the states below). It asks
+at most once every `STATUS_CHECK_INTERVAL_SECS` for each run directory. Under
+`SLURM`, the price is a `debasher_exec` alive for each batch run that runs, on
+the machine of the node, holding the lock of its run directory.
+`MAX_CONCURRENT_RUNS` bounds how many there are.
 
 The state of a batch run is decided by a single function of its run directory,
 `_batch_run_state`, which the node and `debasher_inspect_resident` share. The
@@ -4114,12 +4148,6 @@ the free slots allow. The tool only prints the state. The states follow,
 in the order in which `_batch_run_state` looks at the run directory:
 
 - With `exit_code`: ended, finished if it holds 0, failed otherwise.
-- With `submitted`, and the program in progress according to `debasher_status`:
-  running.
-- With `submitted`, and nothing in progress: ended, finished if every process of
-  the program finished (exit code 0), failed otherwise (the exit code that
-  `debasher_status` gives to an unfinished program). The node writes that exit
-  code into `exit_code`.
 - With no `launcher.pid`: registered and not launched. It is launched when a
   slot is free.
 - With its shell alive: running. The shell is alive while a process with its PID
@@ -4128,21 +4156,21 @@ in the order in which `_batch_run_state` looks at the run directory:
   PID after a restart, is never the shell. An id without a start time, or one
   checked when `ps` cannot give the current start time, is decided by the PID
   alone.
-- With its shell gone and neither file: it was stopped before it ended, together
-  with its shell, as by a restart of the machine. If `debasher_status` says that
-  something of the program is still in progress, the batch run is running, and
-  left to end. If it says that everything finished, the batch run is ended as
-  finished. Otherwise it is stopped, and `debasher_exec` is launched again on
-  the same directory. Its rerun logic skips the processes that had finished and
-  resumes the rest.
+- With its shell gone and no `exit_code`: it was stopped before it ended,
+  together with its shell, as by a restart of the machine. If `debasher_status`
+  says that something of the program is still in progress, the batch run is
+  running, and left to end. If it says that everything finished, the batch run
+  is ended as finished. Otherwise it is stopped, and `debasher_exec` is launched
+  again on the same directory. Its rerun logic skips the processes that had
+  finished and resumes the rest.
 
-In `_batch_run_state`, the files of a batch run take precedence over its
-shell. A shell writes its file
-before it ends. So a shell that has ended, but that the node has not yet waited
-for and whose PID still shows as alive, is never taken for a running one. The
-node waits for each shell that it launched only so that none is left a zombie. A
-`debasher_exec` killed alone, while its shell lives, ends with an exit code of
-its own. The batch run is then failed, not launched again.
+In `_batch_run_state`, the exit code of a batch run takes precedence over its
+shell. A shell writes `exit_code` before it ends. So a shell that has ended, but
+that the node has not yet waited for and whose PID still shows as alive, is
+never taken for a running one. The node waits for each shell that it launched
+only so that none is left a zombie. A `debasher_exec` killed alone, while its
+shell lives, ends with an exit code of its own. The batch run is then failed,
+not launched again.
 
 An ended batch run keeps its exit code, `exit_code`, and is never launched again
 on its own: a program that always fails would be launched for ever. A relaunched
@@ -4159,9 +4187,9 @@ outside the program, how that event goes from `observe()` to `DONE_PORT`, and
 what happens when it arrives twice or while the node is down.
 
 The directory of a batch run always says how it is going. It holds its
-`launch.json`, the id of its shell and the exit code that `observe()` writes,
-and `debasher_status` on it gives the state of each of its processes. Anyone can
-read it, the frontend included, at no cost to the node.
+`launch.json`, the id of its shell and how it ended (see "Launching from the
+queue on disk"), and `debasher_status` on it gives the state of each of its
+processes. Anyone can read it, the frontend included, at no cost to the node.
 
 A node downstream can also be told, through the output port `DONE_PORT`
 (`outdone` by default) of the launcher node. `observe()` cannot send on it. A
@@ -4189,18 +4217,17 @@ the runs root does not change between launches of the node.
   second one, since the batch run is already in its announced set. A replay,
   which finds both in the log in the same order, drops it too. So the event may
   arrive more than once, but the message on `DONE_PORT` goes out once.
-- A batch run that ends while the node is down leaves no exit code, since no
-  launcher node was waiting for it. When the node comes back, `observe()` asks
-  `debasher_status`, which says that every process finished, and the message on
-  `DONE_PORT` goes out.
+- A batch run that ends while the node is down still leaves its `exit_code`,
+  since its shell outlives the node. When the node comes back, `observe()`
+  finds it, and the message on `DONE_PORT` goes out.
 - A launcher node without `DONE_PORT` brings in no event.
 
 ## A single process
 
 Instead of a whole program, a launcher node can run a single process of a
 module, the one that `-process` names. This section says how that process is
-run, which settings apply to it, and the two points in which the states of its
-batch runs differ.
+run, which settings apply to it, and the point in which the states of its batch
+runs differ.
 
 With `-process`, a launcher node launches that process of the module of `-pfile`
 alone, with `debasher_exec_process <program> <process> -- <options>`. It
@@ -4218,15 +4245,11 @@ The node does not check that the module of `-pfile` has the process that
 `-process` names. A process that it lacks shows when a batch run ends: each one
 fails, its `exit_code` holds 1, and `launcher.log` says why.
 
-The states of a batch run differ in two points:
-
-- The shell that runs it writes `exit_code` whatever the exit code, 0 included,
-  and never `submitted`, since once the process has ended nothing of it is left
-  to ask `debasher_status` about.
-- With neither an exit code nor a live shell, the process was stopped before it
-  ended. It is launched again from the start, since `debasher_exec_process` has
-  nothing to resume from. So a process run this way has to be able to run
-  twice, overwriting its results.
+The states of these batch runs differ in one point. With neither an exit code
+nor a live shell, the process was stopped before it ended. Nothing of it is left
+to ask `debasher_status` about. It is launched again from the start, since
+`debasher_exec_process` has nothing to resume from. So a process run this way
+has to be able to run twice, overwriting its results.
 
 ## Stopping and resetting a launcher node
 

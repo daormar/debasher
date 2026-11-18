@@ -320,8 +320,8 @@ exit "$(cat "$2/fake_status")"
 @pytest.fixture
 def launcher(tmp_path, execdir):
     """A launcher node with three registered batch runs: one that ended
-    well, one submitted whose program is still in progress, and one never
-    launched."""
+    well, one whose shell is gone while its program is still in progress,
+    and one never launched."""
     runs_root = tmp_path / "runs"
     process_outdir = tmp_path / "launch"
     registrations = process_outdir / ".launcher" / "registrations"
@@ -330,7 +330,9 @@ def launcher(tmp_path, execdir):
         (registrations / f"{pos}.json").write_text(json.dumps({"run": run}))
         (runs_root / run).mkdir(parents=True)
     (runs_root / "a" / "exit_code").write_text("0\n")
-    (runs_root / "b" / "submitted").touch()
+    gone = subprocess.Popen(["true"])
+    gone.wait()
+    (runs_root / "b" / "launcher.pid").write_text(f"{gone.pid}\n")
     (runs_root / "b" / "fake_status").write_text("2\n")
     (execdir / "node_info").write_text(
         json.dumps(
@@ -366,16 +368,16 @@ def test_the_batch_runs_of_a_launcher_node(execdir, launcher):
 
 
 def test_the_tool_only_reads_the_state_of_a_batch_run(execdir, launcher):
-    # The program of b has ended: the rule finds it failed, and only the
-    # node writes that down.
-    (launcher["runs_root"] / "b" / "fake_status").write_text("3\n")
+    # The program of b has finished: the rule finds it finished, and only
+    # the node writes that down.
+    (launcher["runs_root"] / "b" / "fake_status").write_text("0\n")
 
     result = _run(
         execdir, "runs", process_outdir=launcher["process_outdir"], debasher_status=launcher["status"]
     )
 
-    assert result["runs"][1]["state"] == "failed"
-    assert result["runs"][1]["exit_code"] == 3
+    assert result["runs"][1]["state"] == "finished"
+    assert result["runs"][1]["exit_code"] == 0
     assert not (launcher["runs_root"] / "b" / "exit_code").exists()
 
 

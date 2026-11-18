@@ -610,6 +610,14 @@ results, and ``status`` set to ``finished`` or ``failed``.
 a time, and ``BATCH_SCHED`` which scheduler they use (the built-in one
 by default); a program sets them for one process with the computational
 specifications ``max_concurrent_runs`` and ``batch_sched``.
+Under Slurm the node gives ``debasher_exec`` the option ``--wait``:
+the ``debasher_exec`` of every batch run that runs stays alive on the
+machine of the node until the jobs of its program have ended, and its
+exit status becomes the ``exit_code`` of the batch run (0 when every
+process finished, 3 when some did not, 1 on an error such as options
+that the program refuses). ``MAX_CONCURRENT_RUNS`` bounds how many of
+those processes wait at once. A batch run that ends while the node is
+down is still reported on ``-outdone`` when the node comes back.
 ``debasher_inspect_resident ... runs`` lists the batch runs of a
 launcher node and their states. The :doc:`webui_batch_launcher` shows a
 complete program with a launcher node.

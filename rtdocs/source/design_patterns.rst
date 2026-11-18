@@ -58,7 +58,9 @@ other (see ``debasher_exec_batch`` in :ref:`tools`).
 Under the Slurm scheduler the cluster shares out the resources among
 the runs by itself. When the entries arrive over time, a launcher node
 of a resident program launches one run for each request that it
-receives (see :ref:`resident`).
+receives (see :ref:`resident`); its specification
+``max_concurrent_runs`` (one by default) says how many of those runs go
+at once.
 
 With one run for each entry, a step that combines the results of every
 entry is not part of any of them: it runs separately, as a program of
