@@ -95,7 +95,7 @@ def _read_json(path):
         return json.load(f)
 
 
-def _pid_start_time(pid):
+def _get_pid_start_time(pid):
     """
     The start time of the process `pid` as the engine records it for a task
     of the built-in scheduler (see debasher::_builtin_sched_pid_start_time in
@@ -120,21 +120,21 @@ def _pid_start_time(pid):
     return "_".join(words)
 
 
-def _launch_id(pid):
+def _get_launch_id(pid):
     """The id that launcher.pid keeps of the shell of a batch run with
     process id `pid`: "<pid>@<start time>", "<pid>" without ps to ask, or
-    "<pid>@" for a shell already gone (see _shell_alive)."""
+    "<pid>@" for a shell already gone (see _is_shell_alive)."""
     # The start time, since the system may give the PID of a shell that
     # has ended to another process, which would then pass for the shell
-    start = _pid_start_time(pid)
+    start = _get_pid_start_time(pid)
     if start is not None:
         return f"{pid}@{start}"
     # Without ps, the PID alone; a shell already gone gets an empty start
     # time, so that it is never taken for a running one
-    return f"{pid}" if _pid_exists(pid) else f"{pid}@"
+    return f"{pid}" if _is_pid_signalable(pid) else f"{pid}@"
 
 
-def _pid_exists(pid):
+def _is_pid_signalable(pid):
     """Whether a process with id `pid` exists that this user can signal: a
     process of another user is never the shell of a batch run."""
     try:
@@ -144,9 +144,9 @@ def _pid_exists(pid):
     return True
 
 
-def _shell_alive(launch_id):
+def _is_shell_alive(launch_id):
     """
-    Whether the shell that `launch_id` (see _launch_id) names still runs: a
+    Whether the shell that `launch_id` (see _get_launch_id) names still runs: a
     process with its id exists, this user can signal it, and, when the id has
     a start time, it started at that time. A start time that cannot be read
     now, with no ps to ask, leaves the process id alone to decide, as does an
@@ -154,18 +154,18 @@ def _shell_alive(launch_id):
     """
     pid_text, has_start, recorded = launch_id.partition("@")
     pid = int(pid_text)
-    if not _pid_exists(pid):
+    if not _is_pid_signalable(pid):
         return False
     if not has_start:
         return True
     if not recorded:
         return False
-    current = _pid_start_time(pid)
+    current = _get_pid_start_time(pid)
     return current is None or current == recorded
 
 
 def _read_launch_id(path):
-    """The id in launcher.pid (see _launch_id), or None when there is none,
+    """The id in launcher.pid (see _get_launch_id), or None when there is none,
     or none that gives a process id."""
     try:
         with open(path) as f:
@@ -184,7 +184,7 @@ def _read_exit_code(run_dir):
         return None
 
 
-def _registrations_dir_of(process_outdir):
+def _get_registrations_dir_of(process_outdir):
     """Where a launcher node lists its registrations, in the output directory
     of its process."""
     return os.path.join(process_outdir, _BOOKKEEPING_DIR, "registrations")
@@ -219,14 +219,14 @@ def _read_launch_pos(run_dir):
         return None
 
 
-def _batch_run_state(run_dir, single_process, program_status):
+def _get_batch_run_state(run_dir, single_process, ask_program_status):
     """
     The state of the batch run of `run_dir`, from what the directory holds
     alone, as (state, exit code): ("registered", None), never launched;
     ("running", None); ("finished", 0) or ("failed", code), once it has
     ended; or ("stopped", None), stopped before it ended, to be launched
     again. `single_process` is whether it runs a single process with
-    debasher_exec_process. `program_status(run_dir)` gives the exit code of
+    debasher_exec_process. `ask_program_status(run_dir)` gives the exit code of
     debasher_status on the directory, or None when the caller does not ask
     it now, which counts as in progress.
     """
@@ -235,7 +235,7 @@ def _batch_run_state(run_dir, single_process, program_status):
     # ended but not yet been waited for, whose PID still shows, is never
     # taken for a running one once its exit code is there
     launch_id = _read_launch_id(os.path.join(run_dir, _PID_FILE))
-    alive = launch_id is not None and _shell_alive(launch_id)
+    alive = launch_id is not None and _is_shell_alive(launch_id)
     exit_code = _read_exit_code(run_dir)
     # Ended: the exit code is final
     if exit_code is not None:
@@ -251,10 +251,10 @@ def _batch_run_state(run_dir, single_process, program_status):
         return ("stopped", None)
     # The program may still be running under its scheduler, or have
     # finished
-    return _state_from_program_status(program_status(run_dir))
+    return _get_state_from_program_status(ask_program_status(run_dir))
 
 
-def _state_from_program_status(status):
+def _get_state_from_program_status(status):
     """
     The state of a batch run whose debasher_exec is gone without leaving
     its exit code, from the exit code of debasher_status on its run
@@ -269,7 +269,7 @@ def _state_from_program_status(status):
     return ("stopped", None)
 
 
-def program_status(debasher_status, run_dir):
+def ask_program_status(debasher_status, run_dir):
     """The exit code of `debasher_status` (the path of the tool) on a run
     directory."""
     result = subprocess.run(
@@ -434,7 +434,7 @@ class ProgramLauncher(FBPProcess):
         # then in DEBASHER_MOD_DIR: run from the directory of the module, it
         # finds the program as that module would find a module it loads
         result = subprocess.run(
-            [self._libexec_tool("debasher_resolve_pfile"), pfile],
+            [self._get_libexec_tool_path("debasher_resolve_pfile"), pfile],
             cwd=module_dir,
             stdin=subprocess.DEVNULL,
             capture_output=True,
@@ -447,7 +447,7 @@ class ProgramLauncher(FBPProcess):
             )
         return result.stdout.strip()
 
-    def _outdir(self):
+    def _get_outdir(self):
         outdir = os.environ.get("DEBASHER_PROCESS_OUTDIR")
         if not outdir:
             raise RuntimeError(
@@ -457,29 +457,26 @@ class ProgramLauncher(FBPProcess):
             )
         return outdir
 
-    def _runs_root(self):
+    def _get_runs_root(self):
         """The absolute path under which the run directories go: the option
         -runsdir, else the output directory of the process."""
-        return self.opts.get(_RUNS_ROOT_OPTION) or self._outdir()
+        return self.opts.get(_RUNS_ROOT_OPTION) or self._get_outdir()
 
-    def _bookkeeping_path(self, *names):
-        return os.path.join(self._outdir(), _BOOKKEEPING_DIR, *names)
+    def _get_bookkeeping_path(self, *names):
+        return os.path.join(self._get_outdir(), _BOOKKEEPING_DIR, *names)
 
     def _get_node_info_extra(self):
         """What debasher_inspect_resident needs to find the batch runs of
         the node and tell their states."""
         return {
             "launcher": {
-                "runs_root": self._runs_root(),
+                "runs_root": self._get_runs_root(),
                 "process": self._process,
             }
         }
 
-    def _registrations_dir(self):
-        return _registrations_dir_of(self._outdir())
-
-    def _run_dir(self, run):
-        return os.path.join(self._runs_root(), run)
+    def _get_run_dir(self, run):
+        return os.path.join(self._get_runs_root(), run)
 
     def _find_wiring_problem(self):
         if not [port for port in self.INPUT_PORTS if port not in self.CONTROL_PORTS]:
@@ -495,10 +492,10 @@ class ProgramLauncher(FBPProcess):
         """Creates the list of registrations, and reads the identifier of
         this life of the node, or creates it when the file is missing or
         empty."""
-        os.makedirs(self._registrations_dir(), exist_ok=True)
+        os.makedirs(_get_registrations_dir_of(self._get_outdir()), exist_ok=True)
         # In a file, not in the node state: a node that crashed before its
         # first checkpoint would otherwise make up another one in its replay
-        path = self._bookkeeping_path("life_id")
+        path = self._get_bookkeeping_path("life_id")
         try:
             with open(path) as f:
                 self._life_id = f.read().strip()
@@ -527,7 +524,7 @@ class ProgramLauncher(FBPProcess):
 
     # -- registration --
 
-    def _request_error(self, packet):
+    def _find_request_error(self, packet):
         """What is wrong with a request, or None if nothing is."""
         if not isinstance(packet, dict):
             return "a request is a JSON object"
@@ -567,13 +564,13 @@ class ProgramLauncher(FBPProcess):
         launch.json in its run directory and the registration in the list of
         the node; drops, with an error, a request that is not well formed or
         whose run directory belongs to another request."""
-        error = self._request_error(packet)
+        error = self._find_request_error(packet)
         if error is not None:
             self.log.error("dropping the request at position %s: %s", self._current_pos, error)
             return
         pos = self._current_pos
         run = packet.get("run") or str(pos)
-        run_dir = self._run_dir(run)
+        run_dir = self._get_run_dir(run)
         record = {"life_id": self._life_id, "pos": pos, "opts": packet.get("opts", {})}
 
         # The rule of ownership: the run directory belongs to the request
@@ -596,7 +593,8 @@ class ProgramLauncher(FBPProcess):
         # the same content again
         os.makedirs(run_dir, exist_ok=True)
         _write_json_atomically(launch_path, record)
-        _write_json_atomically(os.path.join(self._registrations_dir(), f"{pos}.json"), {"run": run})
+        registration_path = os.path.join(_get_registrations_dir_of(self._get_outdir()), f"{pos}.json")
+        _write_json_atomically(registration_path, {"run": run})
         self.observe_now()
 
     # -- end of a batch run --
@@ -632,12 +630,12 @@ class ProgramLauncher(FBPProcess):
             status = "finished" if exit_code == 0 else "failed"
             self.send_data(
                 self.DONE_PORT,
-                {"run": run, "run_dir": self._run_dir(run), "status": status, "exit_code": exit_code},
+                {"run": run, "run_dir": self._get_run_dir(run), "status": status, "exit_code": exit_code},
             )
 
     # -- the observation of the batch runs --
 
-    def _observe_port(self):
+    def _get_observe_port(self):
         """RUNS_DONE_PORT if the node has DONE_PORT to send done messages
         on, so that observe() brings in the end of each batch run; None
         otherwise, and observe() only launches."""
@@ -646,10 +644,10 @@ class ProgramLauncher(FBPProcess):
     def observe(self):
         self._check_runs()
 
-    def _registrations(self):
+    def _list_registrations(self):
         """The registered batch runs, (position, run), in the order of their
         positions."""
-        return _read_registrations(self._registrations_dir())
+        return _read_registrations(_get_registrations_dir_of(self._get_outdir()))
 
     def _check_runs(self):
         """
@@ -660,8 +658,8 @@ class ProgramLauncher(FBPProcess):
         self._reap_children()
         running = 0
         to_launch = []
-        for pos, run in self._registrations():
-            run_dir = self._run_dir(run)
+        for pos, run in self._list_registrations():
+            run_dir = self._get_run_dir(run)
             launch_pos = _read_launch_pos(run_dir)
             # The node writes launch.json before the registration, so only a
             # change by hand under the runs root leaves it missing: the
@@ -675,10 +673,10 @@ class ProgramLauncher(FBPProcess):
             # it was removed: the directory is that request's batch run
             if launch_pos != pos:
                 continue
-            state, exit_code = _batch_run_state(run_dir, self._process is not None, self._program_status)
+            state, exit_code = _get_batch_run_state(run_dir, self._process is not None, self._ask_program_status)
             if state in ("finished", "failed"):
                 if not os.path.exists(os.path.join(run_dir, _EXIT_CODE_FILE)):
-                    self._end_run(run_dir, exit_code)
+                    self._write_exit_code(run_dir, exit_code)
                 self._report_end(run, run_dir, pos)
             elif state == "running":
                 running += 1
@@ -695,17 +693,17 @@ class ProgramLauncher(FBPProcess):
         Waits for the shells of the batch runs that this incarnation launched
         and that have ended, so that none is left a zombie. How a batch run
         ended is not learned here: its shell wrote it into the run directory
-        before it ended (see _batch_run_state).
+        before it ended (see _get_batch_run_state).
         """
         for run_dir, child in list(self._children.items()):
             if child.poll() is not None:
                 del self._children[run_dir]
 
-    def _program_status(self, run_dir):
+    def _ask_program_status(self, run_dir):
         """
         The exit code of debasher_status on a run directory, asked at most
         once every STATUS_CHECK_INTERVAL_SECS for each; None when it was
-        asked more recently than that, which _batch_run_state counts as in
+        asked more recently than that, which _get_batch_run_state counts as in
         progress.
         """
         now = time.monotonic()
@@ -713,16 +711,16 @@ class ProgramLauncher(FBPProcess):
         if last is not None and now - last < self.STATUS_CHECK_INTERVAL_SECS:
             return None
         self._status_checked_at[run_dir] = now
-        return program_status(self._tool("debasher_status"), run_dir)
+        return ask_program_status(self._get_tool_path("debasher_status"), run_dir)
 
     @staticmethod
-    def _end_run(run_dir, exit_code):
+    def _write_exit_code(run_dir, exit_code):
         tmp_path = os.path.join(run_dir, f"{_EXIT_CODE_FILE}.tmp")
         with open(tmp_path, "w") as f:
             f.write(f"{exit_code}\n")
         os.replace(tmp_path, os.path.join(run_dir, _EXIT_CODE_FILE))
 
-    def _tool(self, name):
+    def _get_tool_path(self, name):
         bindir = os.environ.get("DEBASHER_BINDIR")
         if not bindir:
             raise RuntimeError(
@@ -732,7 +730,7 @@ class ProgramLauncher(FBPProcess):
             )
         return os.path.join(bindir, name)
 
-    def _libexec_tool(self, name):
+    def _get_libexec_tool_path(self, name):
         libexecdir = os.environ.get("DEBASHER_LIBEXECDIR")
         if not libexecdir:
             raise RuntimeError(
@@ -746,7 +744,7 @@ class ProgramLauncher(FBPProcess):
     # its run directory, $1, through a temporary file renamed into place,
     # before the shell ends: only the parent of a process learns its exit
     # code, and written there it outlives a crash of the node, and any
-    # process can read it (see _batch_run_state). The exit code is the end
+    # process can read it (see _get_batch_run_state). The exit code is the end
     # of the batch run, since debasher_exec waits for its program, and a
     # single process ends with its process.
     _RECORD_EXIT_CODE = (
@@ -777,7 +775,7 @@ class ProgramLauncher(FBPProcess):
                 self._RECORD_EXIT_CODE,
                 "debasher_launcher",
                 run_dir,
-                self._tool("debasher_exec"),
+                self._get_tool_path("debasher_exec"),
                 "--pfile",
                 self._pfile,
                 "--outdir",
@@ -794,7 +792,7 @@ class ProgramLauncher(FBPProcess):
                 self._RECORD_EXIT_CODE,
                 "debasher_launcher",
                 run_dir,
-                self._tool("debasher_exec_process"),
+                self._get_tool_path("debasher_exec_process"),
                 self._pfile,
                 self._process,
                 "--",
@@ -812,7 +810,7 @@ class ProgramLauncher(FBPProcess):
         self._children[run_dir] = child
         tmp_path = os.path.join(run_dir, f"{_PID_FILE}.tmp")
         with open(tmp_path, "w") as f:
-            f.write(f"{_launch_id(child.pid)}\n")
+            f.write(f"{_get_launch_id(child.pid)}\n")
         os.replace(tmp_path, os.path.join(run_dir, _PID_FILE))
         self.log.info("launched the batch run in %s (pid %s)", run_dir, child.pid)
 
@@ -824,7 +822,7 @@ class ProgramLauncher(FBPProcess):
         DONE_PORT reports nothing.
         """
         notified = os.path.join(run_dir, _NOTIFIED_FILE)
-        if os.path.exists(notified) or self._observe_port() is None:
+        if os.path.exists(notified) or self._get_observe_port() is None:
             return
         with open(os.path.join(run_dir, _EXIT_CODE_FILE)) as f:
             exit_code = int(f.read().strip())

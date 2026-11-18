@@ -3774,7 +3774,7 @@ its state (`registered`, `running`, `finished`, `failed` or `stopped`) and, once
 it has ended, its exit code. The registrations come from
 `.launcher/registrations/` in the output directory of the process, and the runs
 root and the process that `-process` names, if any, from the node info file. The
-state of each batch run comes from `_batch_run_state`
+state of each batch run comes from `_get_batch_run_state`
 (`engine/debasher_runtime_launcher.py`), the function with which the node itself
 reads it (see "Launching from the queue on disk"). Only the node acts on that
 state: the tool writes no exit code and launches nothing. So a batch run that
@@ -4147,11 +4147,11 @@ the machine of the node, holding the lock of its run directory.
 `MAX_CONCURRENT_RUNS` bounds how many there are.
 
 The state of a batch run is decided by a single function of its run directory,
-`_batch_run_state`, which the node and `debasher_inspect_resident` share. The
+`_get_batch_run_state`, which the node and `debasher_inspect_resident` share. The
 node acts on the state: it writes the exit code of a batch run that has ended,
 reports its end, and launches the batch runs that are registered or stopped, as
 the free slots allow. The tool only prints the state. The states follow,
-in the order in which `_batch_run_state` looks at the run directory:
+in the order in which `_get_batch_run_state` looks at the run directory:
 
 - With `exit_code`: ended, finished if it holds 0, failed otherwise.
 - With no `launcher.pid`: registered and not launched. It is launched when a
@@ -4170,7 +4170,7 @@ in the order in which `_batch_run_state` looks at the run directory:
   again on the same directory. Its rerun logic skips the processes that had
   finished and resumes the rest.
 
-In `_batch_run_state`, the exit code of a batch run takes precedence over its
+In `_get_batch_run_state`, the exit code of a batch run takes precedence over its
 shell. A shell writes `exit_code` before it ends. So a shell that has ended, but
 that the node has not yet waited for and whose PID still shows as alive, is
 never taken for a running one. The node waits for each shell that it launched
@@ -4340,7 +4340,7 @@ away the registration, and the end of the batch run would never be announced.
 The reset asks `debasher_inspect_node` (`engine/debasher_inspect_node.py`, the
 tool that reads the files of a node for `debasher_inspect_resident`), with its
 command `running_runs`. It tells the state of each batch run by
-`_batch_run_state`, as the node does. A batch run is in progress when its state
+`_get_batch_run_state`, as the node does. A batch run is in progress when its state
 is `running` (see "Launching from the queue on disk"). The reset names the run
 directory of each one. Those batch runs have to end first, or be stopped with
 `debasher_stop -d <run directory>`. A batch run registered and not launched yet,

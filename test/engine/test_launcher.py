@@ -419,17 +419,17 @@ def test_debasher_status_is_asked_at_most_once_every_interval(outdir, monkeypatc
     node = _node()
     node.STATUS_CHECK_INTERVAL_SECS = 5.0
     asked = []
-    monkeypatch.setattr(launcher_mod, "program_status", lambda tool, run_dir: asked.append(run_dir) or 0)
+    monkeypatch.setattr(launcher_mod, "ask_program_status", lambda tool, run_dir: asked.append(run_dir) or 0)
     now = [100.0]
     monkeypatch.setattr(launcher_mod.time, "monotonic", lambda: now[0])
 
-    assert node._program_status("a") == 0
+    assert node._ask_program_status("a") == 0
     now[0] += 4.9
     # Not asked again yet: counts as in progress
-    assert node._program_status("a") is None
-    assert node._program_status("b") == 0
+    assert node._ask_program_status("a") is None
+    assert node._ask_program_status("b") == 0
     now[0] += 0.2
-    assert node._program_status("a") == 0
+    assert node._ask_program_status("a") == 0
     assert asked == ["a", "b", "a"]
 
 
@@ -538,11 +538,11 @@ def _dead_pid():
 def _state(run_dir, single_process=False, status=None):
     asked = []
 
-    def program_status(d):
+    def ask_program_status(d):
         asked.append(d)
         return status
 
-    return launcher_mod._batch_run_state(str(run_dir), single_process, program_status), asked
+    return launcher_mod._get_batch_run_state(str(run_dir), single_process, ask_program_status), asked
 
 
 def test_a_run_with_no_pid_is_registered(tmp_path):
@@ -570,7 +570,7 @@ def test_a_run_whose_shell_is_alive_is_running(tmp_path):
 def test_a_run_whose_shell_is_alive_since_its_start_time_is_running(tmp_path):
     shell = subprocess.Popen(["sleep", "10"])
     try:
-        (tmp_path / "launcher.pid").write_text(f"{launcher_mod._launch_id(shell.pid)}\n")
+        (tmp_path / "launcher.pid").write_text(f"{launcher_mod._get_launch_id(shell.pid)}\n")
         assert "@" in (tmp_path / "launcher.pid").read_text()
         assert _state(tmp_path) == (("running", None), [])
     finally:

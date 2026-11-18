@@ -337,7 +337,7 @@ class FBPProcess(_PortWorker):
         self._observe_thread = None
         self._observe_stop = threading.Event()
         self._observe_wake = threading.Event()
-        observe_port = self._observe_port()
+        observe_port = self._get_observe_port()
         if observe_port is not None and observe_port in self.INPUT_PORTS:
             raise ValueError(
                 f"{type(self).__name__}: OBSERVE_PORT names {observe_port!r}, which is one of "
@@ -761,7 +761,7 @@ class FBPProcess(_PortWorker):
     def _observes(self):
         return type(self).observe is not FBPProcess.observe
 
-    def _observe_port(self):
+    def _get_observe_port(self):
         """The name under which inject() brings what the node observes to
         process_data, or None if it has none. A subclass may decide it from
         its ports."""
@@ -801,7 +801,7 @@ class FBPProcess(_PortWorker):
                 f"{type(self).__name__}: inject() brings in what observe() sees; "
                 "process_data() sends with send_data()"
             )
-        port = self._observe_port()
+        port = self._get_observe_port()
         if port is None:
             raise RuntimeError(
                 f"{type(self).__name__}: inject() needs OBSERVE_PORT, the name under which "

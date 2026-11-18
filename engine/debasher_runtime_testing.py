@@ -313,7 +313,7 @@ class NodeUnderTest:
         test, or its OBSERVE_PORT, for something that observe() would have
         brought in.
         """
-        observe_port = self.node._observe_port()
+        observe_port = self.node._get_observe_port()
         if port not in self._inputs and (observe_port is None or port != observe_port):
             raise ValueError(
                 f"feed: {port!r} is neither an input port of the node under test "
@@ -342,7 +342,7 @@ class NodeUnderTest:
         try:
             with self._node_env():
                 for payload in injected:
-                    self.node._run_process_data(self.node._observe_port(), payload)
+                    self.node._run_process_data(self.node._get_observe_port(), payload)
         finally:
             self._collect_sent()
         return injected
