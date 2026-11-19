@@ -5575,8 +5575,9 @@ address of the WebSocket and the answers of the request in
   with a branch for each business input. For a node that sends to a fanout
   family, a routing that is already deterministic, such as a counter kept in the
   node state, since a routing that a replay may change would make the sequence
-  numbers of a channel label other messages (see "Fan-out and fan-in sized from
-  the command line" in `doc/design_doc_resident.md`).
+  numbers of a channel label other messages (see the obligation "`process_data`
+  is deterministic" in "Obligations of module authors" in
+  `doc/design_doc_resident.md`).
 - **What import loses.** Giving the dependency types of `_define_opt_deps`,
   the termination handler `_slurm_sigterm_handler` and the program type of
   `_program_type` a place in the model. The last is needed by resident
