@@ -935,6 +935,98 @@ by hand, with a handful of mutants per piece chosen among the ways the code
 could plausibly be wrong; it is not an automated mutation-testing tool and it
 does not measure coverage.
 
+### How the tests are built
+
+The focused tests of the guarantees and the chaos test share a reference
+program, `test/engine/debasher_chaos_ref.sh`, and the helpers of
+`test/engine/chaos_ref.py`. Each test is a real run of `debasher_exec`.
+
+The program has three business nodes and a `Supervisor`, `sup`:
+
+```
+        the test (a source)
+              |
+              | ext: external port, numbered DATA
+              v
+         +---------+  outloop       from_fanin  +--------+
+         |  fanin  |--------------------------->|  loop  |
+         |         |<---------------------------| (echo) |
+         +---------+  loop_in         outfanin  +--------+
+              |
+              | outsink
+              v
+         +---------+
+         |  sink   |  its input log is the trace
+         +---------+
+```
+
+Each node sends heartbeats to `sup`. `sup` has an initiator port to `fanin`
+and a manual trigger port fed from outside. It holds the FIFOs of the three
+business channels, unless the program is given `-no-hold-fifos`.
+
+`fanin` keeps a node state of two parts. One is a count of the messages it has
+processed on each port. The other is a digest that folds every message it has
+processed, on both ports, in order. For each message, `fanin` sends `sink` a
+copy with its port, its value, its count and its digest. What arrives on `ext`
+it also sends to `loop`, which sends it back. So `fanin` processes each value
+twice, once on `ext` and once on `loop_in`, and `k` values make `2k` copies at
+`sink`.
+
+Four kinds of thread of the test act on the run:
+
+- The feeder (`ExtFeeder`) is a source outside the program. It writes the
+  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
+  open for the whole run, so that what is unread survives a crash of `fanin`.
+  While `fanin` is down, a write fails at once, and the feeder writes the same
+  value again until `fanin` reopens the FIFO. So no value is lost or
+  duplicated on its way into the FIFO. One lost after `fanin` has read it is
+  reported by its number (see "External inputs" in "Limits and non-goals").
+- The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
+  trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
+  checkpoints are written and logs are pruned during the run, and the kills of
+  the test land before, during and after a round.
+- The tailer (`SinkTailer`) follows the input log of `sink` from the start of
+  the run, segment after segment. Pruning deletes the segments of an
+  incarnation of `sink` once a later checkpoint covers them, so a log read
+  after the run would miss part of the trace.
+- The output tailers (`SchedOutTailer`), one per node that may be killed,
+  follow the output of each such node from the start of the run, since a
+  relaunch truncates it. They run only in the tests that kill nodes.
+
+A run with no kill ends with `halt_and_wait_for_finished`, which runs
+`debasher_stop_resident` and waits for `sup` to end. A run with random kills
+ends with `halt_and_check_trace`. It runs the same tool, and looks in the
+output of the nodes for the error of a loss: a gap that names its range, or a
+fragment that no `HELLO` follows. Each loss has to come from a node that was
+killed. With no loss, the halt has to end cleanly, and the trace has to meet
+`assert_trace_matches`. With a loss, the halt may not complete, since the
+reader that found it has stopped, and the trace has to meet
+`assert_trace_with_reported_losses`. The test of a loss engineered on purpose
+does not halt: it waits for the escalation of `sup` to end the program.
+
+Four functions check the trace:
+
+- `assert_trace_matches` is the criterion of a run with no loss. On each port,
+  the values are exactly 1 to `k`, in order. Then it runs
+  `assert_node_state_restored`.
+- `assert_node_state_restored` checks the state of `fanin`. Its counts go 1, 2,
+  3 on each port, with no jump and no restart: the state was restored across
+  every relaunch and resume. Folding the trace gives the digest of every copy:
+  the replay processed the ports in the same order as before the crash.
+- `assert_trace_with_reported_losses` is the exception, for a run in which a
+  killed node reported a loss. The trace is a gapless prefix of the sequence
+  numbers of its channel, which ends before the gap if the gap is that of
+  `sink`. On each port, the values are in order, with no duplicate and none
+  that was never sent. The state of `fanin` is restored.
+- `assert_engineered_gap_trace` does the same for a loss engineered on
+  purpose, in the case of "Both endpoints of a channel crashed" in "Limits and
+  non-goals". When the error names a range, the prefix ends exactly where it
+  begins; otherwise the prefix only has to be shorter than the `2k` copies.
+
+The checks rest on the values and on the state of `fanin`. Of the four, only
+the two after a loss read the sequence numbers, to check the prefix that a
+loss leaves. The test of channel order reads them too.
+
 # Control envelope
 
 Every message on a channel of a resident program is an envelope: one line
