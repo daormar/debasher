@@ -65,9 +65,8 @@ failure", which gives it back its channels; the "`Supervisor` class", which
 watches the nodes, relaunches them and holds the FIFOs of their business
 channels; the "Tools for resident programs", which act on a live program from
 outside; and "`ProgramLauncher`", a node that launches batch runs. The document
-ends with what is still open, "Future work", and with "The tests of the
-Contract", an appendix on how the tests that show that the Contract holds are
-built. Sections are cited in the text by name, as here.
+ends with what is still open, "Future work". Sections are cited in the text by
+name, as here.
 
 # Glossary
 
@@ -599,8 +598,9 @@ by at least one end-to-end test that states it in the same words (see
 This section states what it assumes, what it promises and where the promise
 ends: the failures it tolerates ("Failure model"), what the code of a module
 must do in return ("Obligations of module authors"), the guarantees themselves
-("Guarantees"), where they stop ("Limits and non-goals"), and how they are shown
-to hold ("Acceptance").
+("Guarantees"), where they stop ("Limits and non-goals"), how they are shown to
+hold ("Acceptance"), and how the tests that show them are built ("The tests of
+the Contract").
 
 ## Failure model
 
@@ -902,9 +902,8 @@ change.
 
 Reliability is claimed only for what passes a **chaos test**, a run of a
 reference program under random kills of its nodes, and each guarantee has a
-focused test of its own. Both drive real runs of `debasher_exec`, not mocks.
-How the tests are built is in "The tests of the Contract", at the end of this
-document.
+focused test of its own. Both drive real runs of `debasher_exec`, not mocks. How
+the tests are built is in the next section, "The tests of the Contract".
 
 The reference program, `test/engine/debasher_chaos_ref.sh`, has the shapes
 that matter: a cycle, a source, a sink, and a fan-in node with more than one
@@ -989,6 +988,70 @@ be, and whichever it is gets fixed before the piece counts as done. It is done
 by hand, with a handful of mutants per piece chosen among the ways the code
 could plausibly be wrong; it is not an automated mutation-testing tool and it
 does not measure coverage.
+
+## The tests of the Contract
+
+This section says how the tests of "Acceptance" are built, for a reader who
+follows one of them. They share the reference program that "Acceptance"
+describes, `test/engine/debasher_chaos_ref.sh`, and the helpers of
+`test/engine/chaos_ref.py` and `test/engine/resident_run.py`. The section goes
+through the threads that act on a run, how a run ends, and the functions that
+check its trace.
+
+Four kinds of thread of the test act on the run:
+
+- The feeder (`ExtFeeder`) is a source outside the program. It writes the
+  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
+  open for the whole run, so that what is unread survives a crash of `fanin`.
+  While `fanin` is down, a write fails at once, and the feeder writes the same
+  value again until `fanin` reopens the FIFO. So no value is lost or
+  duplicated on its way into the FIFO. One lost after `fanin` has read it is
+  reported by its number (see limit 2, "External inputs").
+- The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
+  trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
+  checkpoints are written and logs are pruned during the run, and the kills of
+  the test land before, during and after a round.
+- The tailer (`SinkTailer`) follows the input log of `sink` from the start of
+  the run, segment after segment. Pruning deletes the segments of an
+  incarnation of `sink` once a later checkpoint covers them, so a log read
+  after the run would miss part of the trace.
+- The output tailers (`SchedOutTailer`), one per node that may be killed,
+  follow the output of each such node from the start of the run, since a
+  relaunch truncates it. They run only in the tests that kill nodes.
+
+A run with no kill ends with `halt_and_wait_for_finished`, which runs
+`debasher_stop_resident` and waits for `sup` to end. A run with random kills
+ends with `halt_and_check_trace`. It runs the same tool, and looks in the
+output of the nodes for the error of a loss: a gap that names its range, or a
+fragment that no `HELLO` follows. Each loss has to come from a node that was
+killed. With no loss, the halt has to end cleanly, and the trace has to meet
+`assert_trace_matches`. With a loss, the halt may not complete, since the
+reader that found it has stopped, and the trace has to meet
+`assert_trace_with_reported_losses`. The test of a loss engineered on purpose
+does not halt: it waits for the escalation of `sup` to end the program.
+
+Four functions check the trace:
+
+- `assert_trace_matches` is the criterion of a run with no loss. On each port,
+  the values are exactly 1 to `k`, in order. Then it runs
+  `assert_node_state_restored`.
+- `assert_node_state_restored` checks the state of `fanin`. Its counts go 1, 2,
+  3 on each port, with no jump and no restart: the state was restored across
+  every relaunch and resume. Folding the trace gives the digest of every copy:
+  the replay processed the ports in the same order as before the crash.
+- `assert_trace_with_reported_losses` is the exception, for a run in which a
+  killed node reported a loss. The trace is a gapless prefix of the sequence
+  numbers of its channel, which ends before the gap if the gap is that of
+  `sink`. On each port, the values are in order, with no duplicate and none
+  that was never sent. The state of `fanin` is restored.
+- `assert_engineered_gap_trace` does the same for a loss engineered on purpose,
+  in the case of limit 1, "Both endpoints of a channel crashed". When the error
+  names a range, the prefix ends exactly where it begins; otherwise the prefix
+  only has to be shorter than the `2k` copies.
+
+The checks rest on the values and on the state of `fanin`. Of the four, only
+the two after a loss read the sequence numbers, to check the prefix that a
+loss leaves. The test of channel order reads them too.
 
 # Control envelope
 
@@ -4845,67 +4908,3 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
   moves to the protocol itself, one envelope and one record for each message,
   which only larger packets (many values in one `DATA`) push back, in any
   language.
-
-# The tests of the Contract
-
-This chapter says how the tests of "Acceptance" are built, for a reader who
-follows one of them. They share the reference program that "Acceptance"
-describes, `test/engine/debasher_chaos_ref.sh`, and the helpers of
-`test/engine/chaos_ref.py` and `test/engine/resident_run.py`. The chapter goes
-through the threads that act on a run, how a run ends, and the functions that
-check its trace.
-
-Four kinds of thread of the test act on the run:
-
-- The feeder (`ExtFeeder`) is a source outside the program. It writes the
-  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
-  open for the whole run, so that what is unread survives a crash of `fanin`.
-  While `fanin` is down, a write fails at once, and the feeder writes the same
-  value again until `fanin` reopens the FIFO. So no value is lost or
-  duplicated on its way into the FIFO. One lost after `fanin` has read it is
-  reported by its number (see limit 2, "External inputs").
-- The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
-  trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
-  checkpoints are written and logs are pruned during the run, and the kills of
-  the test land before, during and after a round.
-- The tailer (`SinkTailer`) follows the input log of `sink` from the start of
-  the run, segment after segment. Pruning deletes the segments of an
-  incarnation of `sink` once a later checkpoint covers them, so a log read
-  after the run would miss part of the trace.
-- The output tailers (`SchedOutTailer`), one per node that may be killed,
-  follow the output of each such node from the start of the run, since a
-  relaunch truncates it. They run only in the tests that kill nodes.
-
-A run with no kill ends with `halt_and_wait_for_finished`, which runs
-`debasher_stop_resident` and waits for `sup` to end. A run with random kills
-ends with `halt_and_check_trace`. It runs the same tool, and looks in the
-output of the nodes for the error of a loss: a gap that names its range, or a
-fragment that no `HELLO` follows. Each loss has to come from a node that was
-killed. With no loss, the halt has to end cleanly, and the trace has to meet
-`assert_trace_matches`. With a loss, the halt may not complete, since the
-reader that found it has stopped, and the trace has to meet
-`assert_trace_with_reported_losses`. The test of a loss engineered on purpose
-does not halt: it waits for the escalation of `sup` to end the program.
-
-Four functions check the trace:
-
-- `assert_trace_matches` is the criterion of a run with no loss. On each port,
-  the values are exactly 1 to `k`, in order. Then it runs
-  `assert_node_state_restored`.
-- `assert_node_state_restored` checks the state of `fanin`. Its counts go 1, 2,
-  3 on each port, with no jump and no restart: the state was restored across
-  every relaunch and resume. Folding the trace gives the digest of every copy:
-  the replay processed the ports in the same order as before the crash.
-- `assert_trace_with_reported_losses` is the exception, for a run in which a
-  killed node reported a loss. The trace is a gapless prefix of the sequence
-  numbers of its channel, which ends before the gap if the gap is that of
-  `sink`. On each port, the values are in order, with no duplicate and none
-  that was never sent. The state of `fanin` is restored.
-- `assert_engineered_gap_trace` does the same for a loss engineered on purpose,
-  in the case of limit 1, "Both endpoints of a channel crashed". When the error
-  names a range, the prefix ends exactly where it begins; otherwise the prefix
-  only has to be shorter than the `2k` copies.
-
-The checks rest on the values and on the state of `fanin`. Of the four, only
-the two after a loss read the sequence numbers, to check the prefix that a
-loss leaves. The test of channel order reads them too.
