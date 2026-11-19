@@ -60,13 +60,14 @@ comes the design of the mechanism that provides them, from the wire up: the
 "Control envelope" that every line of a FIFO carries; the "Channel kinds
 declared with the fifo", which tell the engine what each FIFO is for and give
 each process its ports; the node ("`FBPProcess` class") and its "Input log",
-which together give a relaunched node back its state; "Reconnecting after a
-node failure", which gives it back its channels; the "`Supervisor` class",
-which watches the nodes, relaunches them and holds the FIFOs of their business
+which together give a relaunched node back its state; "Reconnecting after a node
+failure", which gives it back its channels; the "`Supervisor` class", which
+watches the nodes, relaunches them and holds the FIFOs of their business
 channels; the "Tools for resident programs", which act on a live program from
-outside; and "`ProgramLauncher`", a node that launches batch runs. The
-document ends with what is still open, "Future work". Sections are cited in
-the text by name, as here.
+outside; and "`ProgramLauncher`", a node that launches batch runs. The document
+ends with what is still open, "Future work", and with "The tests of the
+Contract", an appendix on how the tests that show that the Contract holds are
+built. Sections are cited in the text by name, as here.
 
 # Glossary
 
@@ -749,10 +750,10 @@ guarantee in words and never cite these numbers, which may change.
   writer or brain threads died). It is then relaunched up to
   `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a
-  channel's sequence numbers, a checkpoint with another schema version, an input
-  log over its size cap, an input log that does not reach its latest
-  checkpoint, an exhausted relaunch budget), the node or the
-  `Supervisor` raises an error that stops the affected part, instead of
+  channel's sequence numbers, a fragment that no `HELLO` follows, a checkpoint
+  with another schema version, an input log over its size cap, an input log that
+  does not reach its latest checkpoint, an exhausted relaunch budget), the node
+  or the `Supervisor` raises an error that stops the affected part, instead of
   continuing with silently wrong state. What happens after that stop is manual
   today; the planned fallback is a coordinated global rollback to the last
   consistent cut, **not built** (see Future work).
@@ -766,187 +767,150 @@ Contract holds only within its "Failure model" (the built-in scheduler, no
 failure of the machine) and only for nodes that keep the "Obligations of module
 authors" (a deterministic `process_data`, idempotent effects outside the graph).
 
-- **Both endpoints of a channel crashed while no other process held the FIFO.**
-  What a FIFO holds is destroyed only when no process holds it open.
-  - One endpoint down. Nothing is lost: the other holds the FIFO, and what was
-    sent and not yet read waits in it. What the writer had numbered and queued
-    but not yet written is in the outbound backlog of its checkpoint, and its
-    recovery sends it again before anything else. A relaunched node holds its
-    FIFOs from the first step of its recovery, before it restores its checkpoint
-    or replays its input log, until it dies.
-  - Both endpoints down. Both may crash together, or the second before the first
-    has been relaunched, which takes the time to notice the crash and start the
-    new process. The `Supervisor`, if there is one, still holds the FIFO (see
-    "Holding the business channels"). What the FIFO held waits for the
-    relaunched reader. What the relaunched writer sends again comes after it,
-    with the same numbers, as duplicates that the reader drops (G5).
-  - When the content of the FIFO is destroyed. With both endpoints down, no
-    process holds the FIFO when the `Supervisor` is down too (it is not
-    supervised, see "Failure model"), when the program has no `Supervisor`, or
-    when its `Supervisor` is given `-no-hold-fifos`. At most what a pipe holds
-    is destroyed (64 KiB on Linux).
-  - What comes back. The relaunched writer restores its latest checkpoint and
-    replays its input log after `capture_pos`. It sends again, with the same
-    numbers, everything it produced after that point. The destroyed messages
-    among those reach the reader after all. The reader cannot tell that they
-    were destroyed and sent again, and need not: it gets each once, in order.
-  - What is lost. What the writer had written into the FIFO before its capture
-    came from inputs before `capture_pos`, which the replay does not reach. Its
-    `out_seq` counts it as sent, so it is not sent again. If some of it was
-    still unread in the FIFO, it is lost. The reader finds the hole in the
-    sequence numbers when a later message arrives on that channel (G8). Ways to
-    repair more are in "Future work", none designed.
-  - Where it cannot happen. Nodes that are not adjacent may crash together with
-    no such loss. Two nodes joined only by the channels of a cycle cannot lose
-    messages this way either. A round closes on one of their channels only while
-    both are alive and responsive. So no closed checkpoint covers a backlog
-    built while one was down, and a relaunched sender always replays from an
-    older, already drained checkpoint and sends that backlog again. A crash of a
-    node with a self-loop is a crash of both endpoints of the loop, and loses
-    nothing either: its round closes only once its marker has come back round
-    the loop, so a message still in the loop was sent after its latest
-    checkpoint, and the replay sends it again (G5).
-- **External inputs.** What enters the graph from outside it (a manual write to
-  a FIFO, an external program) cannot be regenerated by any node, so at that
-  boundary delivery is at most once; inside the graph, the guarantees start from
-  the first message a node logs. A source may number its `DATA` as a node does
-  (`seq`, from 1, one more for each message, never reused): the receiver checks
-  those numbers as on any other channel, so that a message lost at the boundary,
-  in the window of the next limit, is reported (G8) and not lost silently. What
-  a source sends without numbers gets no such check.
-- **Messages read from a FIFO but not yet written to the input log** when a node
-  crashes. Such a message is lost, since its sender considers it delivered, and
-  the sequence numbers of G5 show the hole (G8).
-  - The window. A reader thread takes a block from the FIFO, up to 64 KiB, and
-    writes every message of it to the log in one write before it queues any of
-    them. The window runs from taking the block to that write: decoding and
-    checking its lines, and getting the GIL back if another thread holds it.
-    `FBPProcess` bounds that wait by setting the switch interval of the process
-    to `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms.
-  - Long messages. A message longer than one read, one larger than the FIFO in
-    particular, is in memory in part from its first read to its last. It stays
-    exposed for as long as its writer takes to write the rest. If the node
-    crashes before the last read, the rest reaches the relaunched reader as a
-    fragment that no `HELLO` follows, which stops it (keeping the first part on
-    disk is in "Future work").
-  - Closing the window. A FIFO offers no way to look at what it holds without
-    taking it, so the window can be made short but not closed.
-  - A stop signal. A reader stops only between two blocks, and hands over every
-    message of the block it holds. So of what the reader has taken from the
-    FIFO, a stop loses only the part already read of a message whose end has not
-    arrived, which the reader holds in memory. After a halt, that message
-    follows the marker of the halt on its channel, so its writer sends it again
-    on resume. With no halt, it is lost like anything else the FIFO held, and G8
-    reports the hole. Its rest stays in the FIFO, and matters only if the FIFO
-    outlives the stop, as on an external port whose source keeps it open: the
-    reader of the next incarnation finds it as a fragment that no `HELLO`
-    follows, which stops that reader.
-- **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
-  loop, deadlock) is not detected today: the heartbeat proves that its threads
-  are alive, not that they make progress. Not a goal for now (see "Progress in
-  the heartbeat" in Future work).
-- **Python nodes only.** The engine refuses a process of a resident program
-  whose code is not a Python heredoc of a class of the runtime library
-  (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
-  on the wire depends on Python (see "Nodes in a compiled language" in Future
-  work).
-- **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
-  frontend's "Watch FIFO") is not available in resident programs: declaring it
-  aborts the load of the program, before anything is launched. Resident
-  processes keep their own input log.
-- **A node that has finished for good** takes no part in later rounds, so the
-  consistent cut of an epoch that starts after it finished has no checkpoint of
-  that node: its channel to the others is empty and its last state is its final
-  one. Localized recovery does not need it; a global rollback would have to
-  treat it (see Future work).
-- **A round that a newer one replaces** leaves the nodes that had not closed it
-  without a checkpoint for its epoch, so that epoch has no complete cut. The
-  round that replaced it does complete, at every node it reaches, and that is
-  the cut that counts; localized recovery never uses a cut. It holds if the
-  initiators start the same epoch (see numbered trigger in the Glossary). Rounds
-  started closer together than they take to complete keep replacing each other,
-  and none completes until they stop, so whatever starts rounds periodically
-  has to leave more time between them than a round takes.
-- **A crash while a round is open.** A node that crashes while a round is open
-  comes back with no round open. The markers it had received for that round are
-  not replayed: the replay brings back only `DATA` and `CLOSE`. Making the case
-  recoverable would need a round's partial progress to be durable, which is not
-  designed.
-  - A node that is not an initiator. The next marker of that round opens it
-    again, and the node waits forever for the markers it had already received.
-    It writes no checkpoint for that epoch, and the next round replaces it.
-  - An initiator whose round a trigger opened. It had received no marker, so the
-    round opens again when its own marker comes back round a cycle, and closes
-    there. Its capture is then later than the first, so that epoch is not a
-    consistent cut (see the global rollback in "Future work").
-  - A halt. It cannot wait for the next round, because a node that has halted
-    ignores every later trigger. So a node that is not an initiator and crashes
-    while its halt is open never halts, while every other node does. The
-    `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
-    reason a halted marker never goes past its baseline. Then the tool falls
-    back to the hard kill of `debasher_stop`, and reports it with its own exit
-    code (see "Failing loudly instead of retrying").
-- **A node that crashes again right after every relaunch** is not retried
-  forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
-  the escalation applies.
+The limits are numbered so that this document can cite them. Tests and code
+comments state a limit in words and never cite these numbers, which may
+change.
+
+1. **Both endpoints of a channel crashed while no other process held the FIFO.**
+   What a FIFO holds is destroyed only when no process holds it open.
+   - One endpoint down. Nothing is lost: the other holds the FIFO, and what was
+     sent and not yet read waits in it. What the writer had numbered and queued
+     but not yet written is in the outbound backlog of its checkpoint, and its
+     recovery sends it again before anything else. A relaunched node holds its
+     FIFOs from the first step of its recovery, before it restores its
+     checkpoint or replays its input log, until it dies.
+   - Both endpoints down. Both may crash together, or the second before the
+     first has been relaunched, which takes the time to notice the crash and
+     start the new process. The `Supervisor`, if there is one, still holds the
+     FIFO (see "Holding the business channels"). What the FIFO held waits for
+     the relaunched reader. What the relaunched writer sends again comes after
+     it, with the same numbers, as duplicates that the reader drops (G5).
+   - When the content of the FIFO is destroyed. With both endpoints down, no
+     process holds the FIFO when the `Supervisor` is down too (it is not
+     supervised, see "Failure model"), when the program has no `Supervisor`, or
+     when its `Supervisor` is given `-no-hold-fifos`. At most what a pipe holds
+     is destroyed (64 KiB on Linux).
+   - What comes back. The relaunched writer restores its latest checkpoint and
+     replays its input log after `capture_pos`. It sends again, with the same
+     numbers, everything it produced after that point. The destroyed messages
+     among those reach the reader after all. The reader cannot tell that they
+     were destroyed and sent again, and need not: it gets each once, in order.
+   - What is lost. What the writer had written into the FIFO before its capture
+     came from inputs before `capture_pos`, which the replay does not reach. Its
+     `out_seq` counts it as sent, so it is not sent again. If some of it was
+     still unread in the FIFO, it is lost. The reader finds the hole in the
+     sequence numbers when a later message arrives on that channel (G8). Ways to
+     repair more are in "Future work", none designed.
+   - Where it cannot happen. Nodes that are not adjacent may crash together with
+     no such loss. Two nodes joined only by the channels of a cycle cannot lose
+     messages this way either. A round closes on one of their channels only
+     while both are alive and responsive. So no closed checkpoint covers a
+     backlog built while one was down, and a relaunched sender always replays
+     from an older, already drained checkpoint and sends that backlog again. A
+     crash of a node with a self-loop is a crash of both endpoints of the loop,
+     and loses nothing either: its round closes only once its marker has come
+     back round the loop, so a message still in the loop was sent after its
+     latest checkpoint, and the replay sends it again (G5).
+2. **External inputs.** What enters the graph from outside it (a manual write to
+   a FIFO, an external program) cannot be regenerated by any node, so at that
+   boundary delivery is at most once; inside the graph, the guarantees start
+   from the first message a node logs. A source may number its `DATA` as a node
+   does (`seq`, from 1, one more for each message, never reused): the receiver
+   checks those numbers as on any other channel, so that a message lost at the
+   boundary, in the window of the next limit, is reported (G8) and not lost
+   silently. What a source sends without numbers gets no such check.
+3. **Messages read from a FIFO but not yet written to the input log** when a
+   node crashes. Such a message is lost, since its sender considers it
+   delivered, and the sequence numbers of G5 show the hole (G8).
+   - The window. A reader thread takes a block from the FIFO, up to 64 KiB, and
+     writes every message of it to the log in one write before it queues any of
+     them. The window runs from taking the block to that write: decoding and
+     checking its lines, and getting the GIL back if another thread holds it.
+     `FBPProcess` bounds that wait by setting the switch interval of the process
+     to `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms.
+   - Long messages. A message longer than one read, one larger than the FIFO in
+     particular, is in memory in part from its first read to its last. It stays
+     exposed for as long as its writer takes to write the rest. If the node
+     crashes before the last read, the rest reaches the relaunched reader as a
+     fragment that no `HELLO` follows, which stops it (keeping the first part on
+     disk is in "Future work").
+   - Closing the window. A FIFO offers no way to look at what it holds without
+     taking it, so the window can be made short but not closed.
+   - A stop instead of a crash. A node may be stopped with a stop signal (see
+     the Glossary) instead of killed, and then it loses less. A reader stops
+     only between two blocks, and hands over every message of the block it
+     holds. So of what the reader has taken from the FIFO, a stop loses only the
+     part already read of a message whose end has not arrived, which the reader
+     holds in memory. In the ordered stop of `debasher_stop_resident`, the stop
+     signal comes after a halt: that message follows the marker of the halt on
+     its channel, so its writer sends it again on resume. A stop signal with no
+     halt before it (sent by hand, for instance) loses it like anything else the
+     FIFO held, and G8 reports the hole. Its rest stays in the FIFO, and matters
+     only if the FIFO outlives the stop, as on an external port whose source
+     keeps it open: the reader of the next incarnation finds it as a fragment
+     that no `HELLO` follows, which stops that reader.
+4. **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
+   loop, deadlock) is not detected today: the heartbeat proves that its threads
+   are alive, not that they make progress. Not a goal for now (see "Progress in
+   the heartbeat" in Future work).
+5. **Python nodes only.** The engine refuses a process of a resident program
+   whose code is not a Python heredoc of a class of the runtime library
+   (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
+   on the wire depends on Python (see "Nodes in a compiled language" in Future
+   work).
+6. **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
+   frontend's "Watch FIFO") is not available in resident programs: declaring it
+   aborts the load of the program, before anything is launched. Resident
+   processes keep their own input log.
+7. **A node that has finished for good** takes no part in later rounds, so the
+   consistent cut of an epoch that starts after it finished has no checkpoint of
+   that node: its channel to the others is empty and its last state is its final
+   one. Localized recovery does not need it; a global rollback would have to
+   treat it (see Future work).
+8. **A round that a newer one replaces** leaves the nodes that had not closed it
+   without a checkpoint for its epoch, so that epoch has no complete cut. The
+   round that replaced it does complete, at every node it reaches, and that is
+   the cut that counts; localized recovery never uses a cut. It holds if the
+   initiators start the same epoch (see numbered trigger in the Glossary).
+   Rounds started closer together than they take to complete keep replacing each
+   other, and none completes until they stop, so whatever starts rounds
+   periodically has to leave more time between them than a round takes.
+9. **A crash while a round is open.** A node that crashes while a round is open
+   comes back with no round open. The markers it had received for that round are
+   not replayed: the replay brings back only `DATA` and `CLOSE`. Making the case
+   recoverable would need a round's partial progress to be durable, which is not
+   designed.
+   - A node that is not an initiator. The next marker of that round opens it
+     again, and the node waits forever for the markers it had already received.
+     It writes no checkpoint for that epoch, and the next round replaces it.
+   - An initiator whose round a trigger opened. It had received no marker, so
+     the round opens again when its own marker comes back round a cycle, and
+     closes there. Its capture is then later than the first, so that epoch is
+     not a consistent cut (see the global rollback in "Future work").
+   - A halt. It cannot wait for the next round, because a node that has halted
+     ignores every later trigger. So a node that is not an initiator and crashes
+     while its halt is open never halts, while every other node does. The
+     `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
+     reason a halted marker never goes past its baseline. Then the tool falls
+     back to the hard kill of `debasher_stop`, and reports it with its own exit
+     code (see "Failing loudly instead of retrying").
+10. **A node that crashes again right after every relaunch** is not retried
+    forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
+    the escalation applies.
 
 ## Acceptance: how reliability is shown
 
-Reliability is claimed only for what passes a **chaos test**: a reference
-resident program with the shapes that matter (a fan-in node with more than one
-input port, which keeps a node state and whose `process_data` is sensitive to
-the order across ports, a cycle, a source and a sink), run under `kill -9` of
-random nodes at random moments (including several at once, adjacent pairs, and
-moments in which a snapshot round is open), with the `Supervisor` relaunching
-them, and halted and resumed.
+Reliability is claimed only for what passes a **chaos test**, a run of a
+reference program under random kills of its nodes, and each guarantee has a
+focused test of its own. Both drive real runs of `debasher_exec`, not mocks.
+How the tests are built is in "The tests of the Contract", at the end of this
+document.
 
-Pass criterion: for each port the fan-in node reads, the messages it is seen
-to have processed on that port, in a run's own trace, form exactly the
-sequence that port's writer actually sent, in the order it sent them, with no
-duplicate and no missing message. The fan-in node also sends, with each
-message, its node state after processing it, and that state must go on across
-every relaunch and resume as if the node had never stopped. The run's full
-trace only has to be some interleaving of those per-port sequences, never a
-byte-for-byte match against one frozen reference run: which interleaving comes
-out, even with no failure at all, is itself a race between independent writers
-that a single run does not pin down uniquely. The exception follows from two
-limits of the Contract, after which a message can be lost beyond repair: both
-endpoints of a channel crashed while no other process held the FIFO, which the
-chaos test reaches with `-no-hold-fifos` (see "Holding the business
-channels"), and a node killed with a message that it has read from a FIFO but
-not yet written to its input log. A run that hits either passes if it ends
-with an error of G8 that names the channel and the numbers of the missing
-messages, in place of the reference result. The source of the reference
-program numbers what it sends (see "External inputs" in the Contract's
-limits), so that a message lost at the port it feeds ends in that error too.
-What always fails is a different result with no error (a message duplicated,
-lost or altered that nobody reported) and a run that never ends and reports
-nothing. The chaos test runs against real `debasher_exec` runs, not mocks.
-
-Besides it, each guarantee gets its own focused end-to-end test, written in the
-guarantee's words (for the no-silent-loss guarantee: "send 5 and then 7 through
-a fan-in node while a round is open: `process_data` receives both").
-
-Every piece of the implementation also gets a **mutation check**, because a test
-that passes on the correct code does not show that it would fail on broken code.
-On a scratch copy of the code, never in the repository, one specific fault that
-the new tests are meant to catch is put back on purpose (the reader ends at
-`CLOSE` again, a flag is ignored, a condition is inverted) and the suite is run:
-at least one test must fail, and the faulty copy, the mutant, is then said to be
-killed. If the suite still passes, the mutant survived: either the tests do not
-really protect that behavior, or the mutant was not the fault it was meant to
-be, and whichever it is gets fixed before the piece counts as done. It is done
-by hand, with a handful of mutants per piece chosen among the ways the code
-could plausibly be wrong; it is not an automated mutation-testing tool and it
-does not measure coverage.
-
-### How the tests are built
-
-The focused tests of the guarantees and the chaos test share a reference
-program, `test/engine/debasher_chaos_ref.sh`, and the helpers of
-`test/engine/chaos_ref.py`. Each test is a real run of `debasher_exec`.
-
-The program has three business nodes and a `Supervisor`, `sup`:
+The reference program, `test/engine/debasher_chaos_ref.sh`, has the shapes
+that matter: a cycle, a source, a sink, and a fan-in node with more than one
+input port. The fan-in node keeps a node state, and its `process_data` is
+sensitive to the order across ports. The program has three business nodes and
+a `Supervisor`, `sup`:
 
 ```
         the test (a source)
@@ -975,62 +939,56 @@ processed, on both ports, in order. For each message, `fanin` sends `sink` a
 copy with its port, its value, its count and its digest. What arrives on `ext`
 it also sends to `loop`, which sends it back. So `fanin` processes each value
 twice, once on `ext` and once on `loop_in`, and `k` values make `2k` copies at
-`sink`.
+`sink`. The input log of `sink` is the trace of the run.
 
-Four kinds of thread of the test act on the run:
+The chaos test runs the reference program and kills random nodes with
+`kill -9` at random moments: several at once, adjacent pairs, and while a
+snapshot round is open. The `Supervisor` relaunches them, and the run is
+halted and resumed.
 
-- The feeder (`ExtFeeder`) is a source outside the program. It writes the
-  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
-  open for the whole run, so that what is unread survives a crash of `fanin`.
-  While `fanin` is down, a write fails at once, and the feeder writes the same
-  value again until `fanin` reopens the FIFO. So no value is lost or
-  duplicated on its way into the FIFO. One lost after `fanin` has read it is
-  reported by its number (see "External inputs" in "Limits and non-goals").
-- The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
-  trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
-  checkpoints are written and logs are pruned during the run, and the kills of
-  the test land before, during and after a round.
-- The tailer (`SinkTailer`) follows the input log of `sink` from the start of
-  the run, segment after segment. Pruning deletes the segments of an
-  incarnation of `sink` once a later checkpoint covers them, so a log read
-  after the run would miss part of the trace.
-- The output tailers (`SchedOutTailer`), one per node that may be killed,
-  follow the output of each such node from the start of the run, since a
-  relaunch truncates it. They run only in the tests that kill nodes.
+**Pass criterion.** A run with no loss passes when the trace shows that
+`fanin` processed what was sent to it, each message once and in order, and
+kept its state. A run with a loss passes only as "The exception" below says.
 
-A run with no kill ends with `halt_and_wait_for_finished`, which runs
-`debasher_stop_resident` and waits for `sup` to end. A run with random kills
-ends with `halt_and_check_trace`. It runs the same tool, and looks in the
-output of the nodes for the error of a loss: a gap that names its range, or a
-fragment that no `HELLO` follows. Each loss has to come from a node that was
-killed. With no loss, the halt has to end cleanly, and the trace has to meet
-`assert_trace_matches`. With a loss, the halt may not complete, since the
-reader that found it has stopped, and the trace has to meet
-`assert_trace_with_reported_losses`. The test of a loss engineered on purpose
-does not halt: it waits for the escalation of `sup` to end the program.
+- Per port. On each port of `fanin`, the messages that the trace shows it
+  processed are exactly the sequence that the writer of that port sent, in
+  the order it sent them, with no duplicate and none missing.
+- Node state. The state that `fanin` sends with each copy, its state after
+  processing that message, goes on across every relaunch and resume, as if
+  the node had never stopped.
+- Interleaving. The whole trace only has to be some interleaving of the
+  sequences of the ports, never a match with one frozen run. Which
+  interleaving comes out is a race between independent writers, even with no
+  failure.
+- The exception. Limits 1 and 3 can lose a message beyond repair. The chaos
+  test reaches limit 1 with `-no-hold-fifos` (see "Holding the business
+  channels"). A run that hits either passes if it ends with an error of G8
+  that names the channel, and the numbers of the missing messages when it can
+  tell them.
+- The source. The test, the source of `ext`, numbers what it sends (see
+  limit 2, "External inputs"), so a message lost at that port ends in that
+  error too.
+- What always fails. A different result with no error (a message duplicated,
+  lost or altered that nobody reported), and a run that never ends and reports
+  nothing.
 
-Four functions check the trace:
+Besides the chaos test, each guarantee gets its own focused end-to-end test,
+written in the guarantee's words (for the no-silent-loss guarantee: "send 5 and
+then 7 through a fan-in node while a round is open: `process_data` receives
+both").
 
-- `assert_trace_matches` is the criterion of a run with no loss. On each port,
-  the values are exactly 1 to `k`, in order. Then it runs
-  `assert_node_state_restored`.
-- `assert_node_state_restored` checks the state of `fanin`. Its counts go 1, 2,
-  3 on each port, with no jump and no restart: the state was restored across
-  every relaunch and resume. Folding the trace gives the digest of every copy:
-  the replay processed the ports in the same order as before the crash.
-- `assert_trace_with_reported_losses` is the exception, for a run in which a
-  killed node reported a loss. The trace is a gapless prefix of the sequence
-  numbers of its channel, which ends before the gap if the gap is that of
-  `sink`. On each port, the values are in order, with no duplicate and none
-  that was never sent. The state of `fanin` is restored.
-- `assert_engineered_gap_trace` does the same for a loss engineered on
-  purpose, in the case of "Both endpoints of a channel crashed" in "Limits and
-  non-goals". When the error names a range, the prefix ends exactly where it
-  begins; otherwise the prefix only has to be shorter than the `2k` copies.
-
-The checks rest on the values and on the state of `fanin`. Of the four, only
-the two after a loss read the sequence numbers, to check the prefix that a
-loss leaves. The test of channel order reads them too.
+Every piece of the implementation also gets a **mutation check**, because a test
+that passes on the correct code does not show that it would fail on broken code.
+On a scratch copy of the code, never in the repository, one specific fault that
+the new tests are meant to catch is put back on purpose (the reader ends at
+`CLOSE` again, a flag is ignored, a condition is inverted) and the suite is run:
+at least one test must fail, and the faulty copy, the mutant, is then said to be
+killed. If the suite still passes, the mutant survived: either the tests do not
+really protect that behavior, or the mutant was not the fault it was meant to
+be, and whichever it is gets fixed before the piece counts as done. It is done
+by hand, with a handful of mutants per piece chosen among the ways the code
+could plausibly be wrong; it is not an automated mutation-testing tool and it
+does not measure coverage.
 
 # Control envelope
 
@@ -4887,3 +4845,67 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
   moves to the protocol itself, one envelope and one record for each message,
   which only larger packets (many values in one `DATA`) push back, in any
   language.
+
+# The tests of the Contract
+
+This chapter says how the tests of "Acceptance" are built, for a reader who
+follows one of them. They share the reference program that "Acceptance"
+describes, `test/engine/debasher_chaos_ref.sh`, and the helpers of
+`test/engine/chaos_ref.py` and `test/engine/resident_run.py`. The chapter goes
+through the threads that act on a run, how a run ends, and the functions that
+check its trace.
+
+Four kinds of thread of the test act on the run:
+
+- The feeder (`ExtFeeder`) is a source outside the program. It writes the
+  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
+  open for the whole run, so that what is unread survives a crash of `fanin`.
+  While `fanin` is down, a write fails at once, and the feeder writes the same
+  value again until `fanin` reopens the FIFO. So no value is lost or
+  duplicated on its way into the FIFO. One lost after `fanin` has read it is
+  reported by its number (see limit 2, "External inputs").
+- The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
+  trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
+  checkpoints are written and logs are pruned during the run, and the kills of
+  the test land before, during and after a round.
+- The tailer (`SinkTailer`) follows the input log of `sink` from the start of
+  the run, segment after segment. Pruning deletes the segments of an
+  incarnation of `sink` once a later checkpoint covers them, so a log read
+  after the run would miss part of the trace.
+- The output tailers (`SchedOutTailer`), one per node that may be killed,
+  follow the output of each such node from the start of the run, since a
+  relaunch truncates it. They run only in the tests that kill nodes.
+
+A run with no kill ends with `halt_and_wait_for_finished`, which runs
+`debasher_stop_resident` and waits for `sup` to end. A run with random kills
+ends with `halt_and_check_trace`. It runs the same tool, and looks in the
+output of the nodes for the error of a loss: a gap that names its range, or a
+fragment that no `HELLO` follows. Each loss has to come from a node that was
+killed. With no loss, the halt has to end cleanly, and the trace has to meet
+`assert_trace_matches`. With a loss, the halt may not complete, since the
+reader that found it has stopped, and the trace has to meet
+`assert_trace_with_reported_losses`. The test of a loss engineered on purpose
+does not halt: it waits for the escalation of `sup` to end the program.
+
+Four functions check the trace:
+
+- `assert_trace_matches` is the criterion of a run with no loss. On each port,
+  the values are exactly 1 to `k`, in order. Then it runs
+  `assert_node_state_restored`.
+- `assert_node_state_restored` checks the state of `fanin`. Its counts go 1, 2,
+  3 on each port, with no jump and no restart: the state was restored across
+  every relaunch and resume. Folding the trace gives the digest of every copy:
+  the replay processed the ports in the same order as before the crash.
+- `assert_trace_with_reported_losses` is the exception, for a run in which a
+  killed node reported a loss. The trace is a gapless prefix of the sequence
+  numbers of its channel, which ends before the gap if the gap is that of
+  `sink`. On each port, the values are in order, with no duplicate and none
+  that was never sent. The state of `fanin` is restored.
+- `assert_engineered_gap_trace` does the same for a loss engineered on purpose,
+  in the case of limit 1, "Both endpoints of a channel crashed". When the error
+  names a range, the prefix ends exactly where it begins; otherwise the prefix
+  only has to be shorter than the `2k` copies.
+
+The checks rest on the values and on the state of `fanin`. Of the four, only
+the two after a loss read the sequence numbers, to check the prefix that a
+loss leaves. The test of channel order reads them too.
