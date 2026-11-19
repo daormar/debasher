@@ -766,77 +766,81 @@ Contract holds only within its "Failure model" (the built-in scheduler, no
 failure of the machine) and only for nodes that keep the "Obligations of module
 authors" (a deterministic `process_data`, idempotent effects outside the graph).
 
-- **Both endpoints of a channel crashed while no other process held the
-  FIFO.** When one endpoint of a channel crashes, nothing is lost: the other
-  holds the FIFO open, and what the writer had sent and the reader had not yet
-  read waits in it. That also covers what the writer had only numbered and
-  queued but not yet written when it crashed: the checkpoint's outbound backlog
-  carries it, and recovery sends it again before anything else. A relaunched
-  node holds its FIFOs from the first step of its recovery, before it restores
-  its checkpoint or replays its input log, until it dies. If the second endpoint
-  crashes before the first has been relaunched and has reopened the FIFO, which
-  takes the time to notice the crash and start the new process, or if both crash
-  together, neither holds the FIFO for a while, and the `Supervisor` still does
-  (see "Holding the business channels"): what the FIFO held waits for the
-  relaunched reader, and what the relaunched writer sends again from its input
-  log comes after it, with the same numbers, as duplicates that the reader drops
-  (G5). Only when no process holds the FIFO at some moment is what it held
-  destroyed, at most what a pipe holds (64 KiB): both endpoints down while the
-  `Supervisor` is down too (it is not supervised, see the failure model), in a
-  program without a `Supervisor`, or in one whose `Supervisor` is given
-  `-no-hold-fifos`. Whether the loss is repaired then depends on where the
-  destroyed messages came from. A relaunched writer restores its latest
-  checkpoint and replays its input log after `capture_pos`, so it sends again,
-  with the same sequence numbers, everything it produced from that point on: the
-  destroyed messages among those reach the reader after all, and it cannot tell.
-  What it had sent before that checkpoint is inside the node state that it
-  restores and is not sent again: if some of it was still unread in the FIFO, it
-  is lost, and the reader finds the hole in the sequence numbers when the next
-  message arrives (G8). Ways to repair more are listed in Future work, none
-  designed. Non-adjacent nodes may crash together with no such problem, and two
-  nodes joined only by a cycle's channels cannot hit this limit at all: closing
-  a round on either of their shared channels needs both alive and responsive, so
-  a backlog built while one is down can never be covered by a checkpoint that
-  has actually closed, and on relaunch the sender always replays from an older,
-  already-drained checkpoint and resends that backlog. A crash of a node with a
-  self-loop is a crash of both endpoints of the loop, and nothing is lost
-  either. Its round closes only once its marker has come back round the loop. So
-  a message still in the loop was sent after its latest checkpoint, and the
-  replay sends it again (G5).
+- **Both endpoints of a channel crashed while no other process held the FIFO.**
+  What a FIFO holds is destroyed only when no process holds it open.
+  - One endpoint down. Nothing is lost: the other holds the FIFO, and what was
+    sent and not yet read waits in it. What the writer had numbered and queued
+    but not yet written is in the outbound backlog of its checkpoint, and its
+    recovery sends it again before anything else. A relaunched node holds its
+    FIFOs from the first step of its recovery, before it restores its checkpoint
+    or replays its input log, until it dies.
+  - Both endpoints down. Both may crash together, or the second before the first
+    has been relaunched, which takes the time to notice the crash and start the
+    new process. The `Supervisor`, if there is one, still holds the FIFO (see
+    "Holding the business channels"). What the FIFO held waits for the
+    relaunched reader. What the relaunched writer sends again comes after it,
+    with the same numbers, as duplicates that the reader drops (G5).
+  - When the content of the FIFO is destroyed. With both endpoints down, no
+    process holds the FIFO when the `Supervisor` is down too (it is not
+    supervised, see "Failure model"), when the program has no `Supervisor`, or
+    when its `Supervisor` is given `-no-hold-fifos`. At most what a pipe holds
+    is destroyed (64 KiB on Linux).
+  - What comes back. The relaunched writer restores its latest checkpoint and
+    replays its input log after `capture_pos`. It sends again, with the same
+    numbers, everything it produced after that point. The destroyed messages
+    among those reach the reader after all. The reader cannot tell that they
+    were destroyed and sent again, and need not: it gets each once, in order.
+  - What is lost. What the writer had written into the FIFO before its capture
+    came from inputs before `capture_pos`, which the replay does not reach. Its
+    `out_seq` counts it as sent, so it is not sent again. If some of it was
+    still unread in the FIFO, it is lost. The reader finds the hole in the
+    sequence numbers when a later message arrives on that channel (G8). Ways to
+    repair more are in "Future work", none designed.
+  - Where it cannot happen. Nodes that are not adjacent may crash together with
+    no such loss. Two nodes joined only by the channels of a cycle cannot lose
+    messages this way either. A round closes on one of their channels only while
+    both are alive and responsive. So no closed checkpoint covers a backlog
+    built while one was down, and a relaunched sender always replays from an
+    older, already drained checkpoint and sends that backlog again. A crash of a
+    node with a self-loop is a crash of both endpoints of the loop, and loses
+    nothing either: its round closes only once its marker has come back round
+    the loop, so a message still in the loop was sent after its latest
+    checkpoint, and the replay sends it again (G5).
 - **External inputs.** What enters the graph from outside it (a manual write to
   a FIFO, an external program) cannot be regenerated by any node, so at that
   boundary delivery is at most once; inside the graph, the guarantees start from
-  the first message a node logs. A source may number its `DATA` as a node
-  does (`seq`, from 1, one more for each message, never reused): the receiver
-  checks those numbers as on any other channel, so that a message lost at the
-  boundary, in the window of the next limit, is reported (G8) and not lost
-  silently. What a source sends without numbers gets no such check.
+  the first message a node logs. A source may number its `DATA` as a node does
+  (`seq`, from 1, one more for each message, never reused): the receiver checks
+  those numbers as on any other channel, so that a message lost at the boundary,
+  in the window of the next limit, is reported (G8) and not lost silently. What
+  a source sends without numbers gets no such check.
 - **Messages read from a FIFO but not yet written to the input log** when a node
-  crashes. A reader thread takes a block from the FIFO, up to 64 KiB, and
-  writes every message of it to the log in one write before any of them is
-  queued, so this window is the time between taking the block and that write:
-  decoding and checking its lines, and getting the GIL back after the read if
-  another thread of the node holds it, which `FBPProcess` bounds by setting the
-  process's switch interval to `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms. A message
-  longer than what one read brings, one larger than the FIFO in particular, is
-  in memory, in part, from its first read until its last, so it stays exposed
-  for as long as its writer takes to write the rest. A message lost in that
-  window is not recovered, since its sender considers it delivered, but the
-  sequence numbers of G5 make the hole detectable (G8), and the rest of a
-  message cut in two reaches the relaunched reader as a fragment that no
-  `HELLO` follows, which stops it (keeping that first part on disk is in
-  Future work). A FIFO offers no way to look at what it holds without taking
-  it, so the window can be made short but not closed. A stop signal loses
-  nothing that a reader has taken from its FIFO, except the part already read of
-  a message whose end has not arrived yet, which the reader holds in memory when
-  it stops: a reader stops only between two blocks, and hands over every message
-  of the block it holds. After a halt that message follows the marker of the
-  halt on its channel, so its writer sends it again on resume; a stop signal
-  with no halt behind it loses it like anything else the FIFO held, and G8
-  reports the hole. Its rest stays in the FIFO, and matters only if the FIFO
-  outlives the stop, as on an external port whose source keeps it open, where
-  the reader of the node's next incarnation finds it as a fragment that no
-  `HELLO` follows, which stops it.
+  crashes. Such a message is lost, since its sender considers it delivered, and
+  the sequence numbers of G5 show the hole (G8).
+  - The window. A reader thread takes a block from the FIFO, up to 64 KiB, and
+    writes every message of it to the log in one write before it queues any of
+    them. The window runs from taking the block to that write: decoding and
+    checking its lines, and getting the GIL back if another thread holds it.
+    `FBPProcess` bounds that wait by setting the switch interval of the process
+    to `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms.
+  - Long messages. A message longer than one read, one larger than the FIFO in
+    particular, is in memory in part from its first read to its last. It stays
+    exposed for as long as its writer takes to write the rest. If the node
+    crashes before the last read, the rest reaches the relaunched reader as a
+    fragment that no `HELLO` follows, which stops it (keeping the first part on
+    disk is in "Future work").
+  - Closing the window. A FIFO offers no way to look at what it holds without
+    taking it, so the window can be made short but not closed.
+  - A stop signal. A reader stops only between two blocks, and hands over every
+    message of the block it holds. So of what the reader has taken from the
+    FIFO, a stop loses only the part already read of a message whose end has not
+    arrived, which the reader holds in memory. After a halt, that message
+    follows the marker of the halt on its channel, so its writer sends it again
+    on resume. With no halt, it is lost like anything else the FIFO held, and G8
+    reports the hole. Its rest stays in the FIFO, and matters only if the FIFO
+    outlives the stop, as on an external port whose source keeps it open: the
+    reader of the next incarnation finds it as a fragment that no `HELLO`
+    follows, which stops that reader.
 - **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
   loop, deadlock) is not detected today: the heartbeat proves that its threads
   are alive, not that they make progress. Not a goal for now (see "Progress in
@@ -863,24 +867,25 @@ authors" (a deterministic `process_data`, idempotent effects outside the graph).
   started closer together than they take to complete keep replacing each other,
   and none completes until they stop, so whatever starts rounds periodically
   has to leave more time between them than a round takes.
-- **A crash while a round is open.** The node comes back with no round open,
-  and the markers it had received for that round are not replayed (only `DATA`
-  and `CLOSE` are). At a node that is not an initiator, the next marker of
-  that round opens it again, and it waits for ever for the markers already
-  received: it writes no checkpoint for that epoch, and the next round
-  replaces it. At an initiator whose round a trigger opened, no marker was
-  received, so the round opens again when its own marker comes back around a
-  cycle and closes there, with a capture later than the first: that epoch is
-  not a consistent cut (see the global rollback in Future work). A halt
-  cannot wait for the next round, because a node that has halted ignores
-  every later trigger, so a node that is not an initiator and crashes while
-  its halt is open never halts, while every other node does.
-  `debasher_stop_resident`'s `--timeout` bounds the wait for the halted
-  markers whatever the reason one never goes past its baseline, then falls
-  back to the hard kill of `debasher_stop` and reports it with its own exit
-  code (see "Failing loudly instead of retrying"). Making the case
-  recoverable needs a round's partial progress to be durable, which is not
+- **A crash while a round is open.** A node that crashes while a round is open
+  comes back with no round open. The markers it had received for that round are
+  not replayed: the replay brings back only `DATA` and `CLOSE`. Making the case
+  recoverable would need a round's partial progress to be durable, which is not
   designed.
+  - A node that is not an initiator. The next marker of that round opens it
+    again, and the node waits forever for the markers it had already received.
+    It writes no checkpoint for that epoch, and the next round replaces it.
+  - An initiator whose round a trigger opened. It had received no marker, so the
+    round opens again when its own marker comes back round a cycle, and closes
+    there. Its capture is then later than the first, so that epoch is not a
+    consistent cut (see the global rollback in "Future work").
+  - A halt. It cannot wait for the next round, because a node that has halted
+    ignores every later trigger. So a node that is not an initiator and crashes
+    while its halt is open never halts, while every other node does. The
+    `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
+    reason a halted marker never goes past its baseline. Then the tool falls
+    back to the hard kill of `debasher_stop`, and reports it with its own exit
+    code (see "Failing loudly instead of retrying").
 - **A node that crashes again right after every relaunch** is not retried
   forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
   the escalation applies.
