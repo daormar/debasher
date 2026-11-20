@@ -1009,7 +1009,7 @@ follows one of them. They share the reference program that "Acceptance"
 describes, `test/engine/debasher_chaos_ref.sh`, and the helpers of
 `test/engine/chaos_ref.py` and `test/engine/resident_run.py`. The section goes
 through the threads that act on a run, how a run ends, and the functions that
-check its trace.
+check its trace and its checkpoints.
 
 Four kinds of thread of the test act on the run:
 
@@ -1065,6 +1065,16 @@ Four functions check the trace:
 The checks rest on the values and on the state of `fanin`. Of the four, only
 the two after a loss read the sequence numbers, to check the prefix that a
 loss leaves. The test of channel order reads them too.
+
+One more check reads the checkpoints instead of the trace.
+`assert_checkpoints_form_a_consistent_cut` takes the checkpoints that one round
+closed. On every channel between two nodes, what the writer counts as sent at
+its capture (`out_seq`) must be what the reader had processed at its own
+(`last_seq`) plus the number of messages that its channel state holds for that
+port. If the reader holds more, a message was counted twice; if it holds fewer,
+one was lost at the cut. It checks the counters of a consistent cut, not the
+messages themselves. The test of G6 runs it on its halt, whose cut holds the
+echoes in transit to `fanin` on `loop_in`.
 
 # Control envelope
 

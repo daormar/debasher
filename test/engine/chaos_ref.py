@@ -302,6 +302,45 @@ def assert_node_state_restored(records, context=""):
         )
 
 
+# The channels between two nodes of the reference program, as (writer,
+# output port, reader, input port); the writer of ext is the test, which
+# keeps no checkpoint
+NODE_CHANNELS = (
+    ("fanin", "outloop", "loop", "from_fanin"),
+    ("loop", "outfanin", "fanin", "loop_in"),
+    ("fanin", "outsink", "sink", "from_fanin"),
+)
+
+
+def assert_checkpoints_form_a_consistent_cut(outdir, epoch):
+    """
+    Consistent snapshots: the checkpoints that the round `epoch` closed
+    form a consistent cut. On every channel between two nodes, what the
+    writer counts as sent at its capture is what the reader had processed
+    at its own, plus what was in transit, which the reader kept as the
+    state of the channel. If the reader holds more, a message was counted
+    twice; if it holds fewer, one was lost at the cut. It checks the
+    counters, not the messages themselves. Returns the checkpoints, by
+    node.
+    """
+
+    def read_checkpoint(name):
+        path = os.path.join(outdir, "__exec__", name, "checkpoints", f"{epoch}.json")
+        with open(path) as f:
+            return json.load(f)
+
+    checkpoints = {name: read_checkpoint(name) for name in KILLABLE_NODES}
+    for writer, out_port, reader, in_port in NODE_CHANNELS:
+        sent = checkpoints[writer]["out_seq"].get(out_port, 0)
+        processed = checkpoints[reader]["last_seq"].get(in_port, 0)
+        in_transit = len(checkpoints[reader]["channel_state"].get(in_port, []))
+        assert sent == processed + in_transit, (
+            f"round {epoch} is no consistent cut on {writer}.{out_port} -> {reader}.{in_port}: "
+            f"{sent} sent, {processed} processed and {in_transit} in transit"
+        )
+    return checkpoints
+
+
 def assert_trace_matches(records, k, context=""):
     """
     The reformulated Acceptance criterion: each port's own sequence,

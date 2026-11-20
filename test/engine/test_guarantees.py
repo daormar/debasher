@@ -30,6 +30,7 @@ from chaos_ref import (
     KILLABLE_NODES,
     SinkTailer,
     SnapshotPacer,
+    assert_checkpoints_form_a_consistent_cut,
     assert_node_state_restored,
     assert_trace_matches,
     copy_at_sink,
@@ -376,6 +377,11 @@ def test_a_program_resumed_after_a_halt_goes_on_where_it_stopped(outdir):
     with open(sup_out) as f:
         assert "node 'loop' is down" not in f.read(), "the Supervisor relaunched the frozen loop"
     first_halt = _read_halted_epochs(outdir)
+    assert len(set(first_halt.values())) == 1, first_halt
+    cut = assert_checkpoints_form_a_consistent_cut(outdir, first_halt["fanin"])
+    # The echoes of the values fed while loop was frozen were in transit to
+    # fanin, so the cut has a channel state to count
+    assert len(cut["fanin"]["channel_state"]["loop_in"]) == k_before - k_frozen
 
     launch_chaos(outdir)
     feed(find_fifo(outdir, "fanin_ext"), k_before + 1, k, interval)
