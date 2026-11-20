@@ -7,6 +7,7 @@ import pytest
 
 import debasher_runtime_lib as lib
 import debasher_runtime_transport as transport
+from chaos_ref import find_loss_error
 
 
 def _wait_until(predicate, timeout=5.0, interval=0.01):
@@ -145,6 +146,50 @@ def test_a_gap_is_raised_before_anything_is_logged_or_queued():
     assert proc._accepted_seq == {"inf": 1}
 
 
+def _arrive_marker(proc, port, payload):
+    """Delivers one marker with `payload` the way a reader thread does."""
+    line = json.dumps({"type": lib.TYPE_BARRIER, "payload": payload})
+    proc._on_arrival(port, lib.decode_envelope(line), line)
+
+
+def test_a_marker_that_claims_more_than_was_accepted_is_a_loss_error():
+    # The last messages of a channel lost, and nothing sent after them: the
+    # marker of the next round is what reveals it
+    proc = _Recorder(opts=_OPTS)
+    for seq in (1, 2, 3):
+        _arrive(proc, "inf", seq, seq=seq)
+
+    with pytest.raises(ValueError, match=r"'inf'.*missing 4 to 5"):
+        _arrive_marker(proc, "inf", {"epoch": 0, "halt": True, "last_seq": 5})
+
+    # Neither logged nor queued, as a DATA after a gap: the round never
+    # closes at this node, so no checkpoint takes the loss for a cut
+    assert [r.envelope.payload for r in _log_records(proc)] == [1, 2, 3]
+    assert proc._inbound_queue.qsize() == 3
+    assert proc._accepted_seq == {"inf": 3}
+
+
+def test_a_marker_that_claims_what_was_accepted_is_logged_and_queued():
+    proc = _Recorder(opts=_OPTS)
+    for seq in (1, 2, 3):
+        _arrive(proc, "inf", seq, seq=seq)
+
+    _arrive_marker(proc, "inf", {"epoch": 0, "halt": False, "last_seq": 3})
+
+    assert proc._inbound_queue.qsize() == 4
+    assert len(_log_records(proc)) == 4
+
+
+def test_a_marker_with_no_last_seq_is_not_checked():
+    # A source outside the program that knows the protocol numbers nothing
+    proc = _Recorder(opts=_OPTS)
+    _arrive(proc, "inf", "a", seq=1)
+
+    _arrive_marker(proc, "inf", {"epoch": 0, "halt": False})
+
+    assert proc._inbound_queue.qsize() == 2
+
+
 def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_path):
     # The reader thread dying from an uncaught exception is expected here
     # (same passive health-reporting design as elsewhere): pytest reports it
@@ -163,6 +208,38 @@ def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_p
         assert not proc._are_all_threads_alive()
     finally:
         proc.stop_threads(timeout=2)
+
+
+def test_a_marker_that_follows_lost_messages_kills_the_reader_thread_end_to_end(fifo_path):
+    # The sender sent 1, 2 and 3 and then captured its state, but 3 never
+    # reached this node, and nothing else is sent on the channel: only the
+    # marker of the round reveals the loss
+    proc = _Recorder(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_data("a", seq=1) + "\n")
+            w.write(lib.encode_data("b", seq=2) + "\n")
+            w.write(lib.encode_barrier(0, halt=True, last_seq=3) + "\n")
+            w.flush()
+
+        reader = proc._reader_threads["inf"]
+        assert _wait_until(lambda: not reader.is_alive())
+        assert not proc._are_all_threads_alive()
+        assert [r.envelope.type for r in _log_records(proc)] == ["DATA", "DATA"]
+    finally:
+        proc.stop_threads(timeout=2)
+
+
+def test_the_error_of_a_marker_that_follows_lost_messages_names_the_range_as_a_gap_does():
+    # The chaos tests read the missing range of a loss from the error, in
+    # either of its forms
+    proc = _Recorder(opts=_OPTS)
+    _arrive(proc, "inf", "a", seq=1)
+    with pytest.raises(ValueError) as excinfo:
+        _arrive_marker(proc, "inf", {"epoch": 2, "halt": False, "last_seq": 4})
+
+    assert find_loss_error(str(excinfo.value), "inf") == (2, 4)
 
 
 def test_a_data_with_no_number_is_always_accepted_and_never_moves_the_counters():

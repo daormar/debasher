@@ -859,7 +859,9 @@ class FBPProcess(_PortWorker):
         Returns the (envelope, line) pairs of `envelopes` to log, the
         (CLOSE, number accepted by then) pairs to check (see
         _check_close_claims), and the ValueError of a gap in the sequence
-        numbers, or None. After a gap it returns only what came before it.
+        numbers, or None: a DATA numbered above the next one, or a marker
+        whose last_seq is above the last one accepted. After a gap it
+        returns only what came before it.
         """
         accepted_envelopes = []
         close_checks = []
@@ -892,6 +894,23 @@ class FBPProcess(_PortWorker):
                     )
                     return accepted_envelopes, close_checks, gap
                 self._accepted_seq[tag] = envelope.seq
+            # A marker says what its writer had sent when it captured its
+            # state, all of it ahead of the marker on the channel: more than
+            # was accepted is a loss that no later DATA may reveal, the last
+            # messages of a channel that goes quiet. Refused as a DATA after
+            # a gap, before it is logged, so that the round never closes on
+            # a cut that lacks them.
+            if envelope.type == TYPE_BARRIER:
+                claimed = envelope.payload.get("last_seq")
+                last = self._accepted_seq.get(tag, 0)
+                if claimed is not None and claimed > last:
+                    gap = ValueError(
+                        f"{type(self).__name__}: gap in the sequence numbers on {tag!r}: "
+                        f"the marker of round {envelope.payload['epoch']} follows "
+                        f"{claimed} messages, but only {last} arrived, "
+                        f"missing {_format_missing_numbers(last + 1, claimed)}"
+                    )
+                    return accepted_envelopes, close_checks, gap
             if envelope.type == TYPE_CLOSE:
                 close_checks.append((envelope, self._accepted_seq.get(tag, 0)))
             accepted_envelopes.append((envelope, line))
@@ -1444,7 +1463,10 @@ class FBPProcess(_PortWorker):
             # take part in the barrier protocol, only in INTERACT.
             if out_port == self.SUPERVISOR_PORT:
                 continue
-            self._send_barrier(out_port, epoch, halt=halt)
+            # What the capture counts as sent on the port, all of it queued
+            # before the marker, so that the reader can tell whether it
+            # accepted every message of the cut
+            self._send_barrier(out_port, epoch, halt=halt, last_seq=capture.out_seq.get(out_port, 0))
 
         # A control port carries no markers, a port fed only from outside the
         # program carries none either (unless its source knows the protocol,

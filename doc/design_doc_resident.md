@@ -219,8 +219,10 @@ to it.
 - **`DATA`**: the business traffic. It is the only type that reaches
   `process_data` and the only one that is replayed.
 - **`BARRIER`, marker**: the envelope that carries a round's `epoch` and its
-  `halt` flag. Each node forwards it on its output ports, along the same
-  channels as `DATA`, and never to the `Supervisor`.
+  `halt` flag and, from a sender that numbers what it sends, `last_seq`, its
+  `out_seq` for the channel at its capture (G5). Each node forwards it on its
+  output ports, along the same channels as `DATA`, and never to the
+  `Supervisor`.
 - **`INTERACT`**: a control command, with `command` and `args`
   (`start_snapshot`, `shutdown`, `heartbeat`, `checkpoint_saved`, and any that
   are added later: the catalog is open). It travels on its own channels, not on
@@ -729,15 +731,24 @@ guarantee in words and never cite these numbers, which may change.
   to be insensitive to how their messages interleave.
 - **G5, no duplicates and no silent loss across a crash**: a neighbor that keeps
   running observes each message of a relaunched node once, not twice, and in
-  order; and if a message is lost anyway, the receiver notices. Mechanism:
-  each `DATA` carries a sequence number per channel,
-  assigned by the sender; the sender's counters are stored in its checkpoint, so
-  that replay regenerates the same numbers; the receiver drops any `DATA` whose
-  number is not above the last one it accepted from that channel (a duplicate),
-  and treats a jump as a lost message, an error in the sense of G8. The
-  receiver's last numbers are rebuilt from its checkpoint and its log. It relies
-  on determinism: a replay that produced different outputs would reuse numbers
-  for different messages.
+  order; and if a message is lost anyway, the receiver notices, when the next
+  numbered message, the next marker of a round or a `CLOSE` arrives on the
+  channel. Mechanism: each `DATA` carries a sequence number per channel,
+  assigned by the sender; the sender's counters are stored in its checkpoint,
+  so that replay regenerates the same numbers; the receiver drops any `DATA`
+  whose number is not above the last one it accepted from that channel (a
+  duplicate), and treats a jump as a lost message, an error in the sense of
+  G8. A marker carries the number of the last `DATA` that its sender had sent
+  on the channel when it captured its state, and a receiver that accepted
+  fewer treats the rest as lost too. So, on a channel between two nodes, a
+  loss shows at the latest at the next round. A halt never completes over a
+  loss: either its marker reports it, or the marker was lost with the
+  messages and the halt does not close at that node (see "Chandy-Lamport
+  barrier propagation"). On an external port whose source sends no markers,
+  or on a channel that goes quiet with no round, a loss stays unseen until the
+  next message. The receiver's last numbers are rebuilt from its checkpoint
+  and its log. It relies on determinism: a replay that produced different
+  outputs would reuse numbers for different messages.
 - **G6, consistent snapshots and orderly halt**: while no node crashes during a
   round, the checkpoints closed by that round form a consistent cut, and after a
   halt every node resumes in the state it had when it stopped: it loads its
@@ -750,9 +761,10 @@ guarantee in words and never cite these numbers, which may change.
   writer or brain threads died). It is then relaunched up to
   `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a
-  channel's sequence numbers, a fragment that no `HELLO` follows, a checkpoint
-  with another schema version, an input log over its size cap, an input log that
-  does not reach its latest checkpoint, an exhausted relaunch budget), the node
+  channel's sequence numbers, a marker or a `CLOSE` that follows messages that
+  never arrived, a fragment that no `HELLO` follows, a checkpoint with another
+  schema version, an input log over its size cap, an input log that does not
+  reach its latest checkpoint, an exhausted relaunch budget), the node
   or the `Supervisor` raises an error that stops the affected part, instead of
   continuing with silently wrong state. What happens after that stop is manual
   today; the planned fallback is a coordinated global rollback to the last
@@ -799,8 +811,9 @@ change.
      came from inputs before `capture_pos`, which the replay does not reach. Its
      `out_seq` counts it as sent, so it is not sent again. If some of it was
      still unread in the FIFO, it is lost. The reader finds the hole in the
-     sequence numbers when a later message arrives on that channel (G8). Ways to
-     repair more are in "Future work", none designed.
+     sequence numbers when a later message, or the marker of a round, arrives
+     on that channel (G8). Ways to repair more are in "Future work", none
+     designed.
    - Where it cannot happen. Nodes that are not adjacent may crash together with
      no such loss. Two nodes joined only by the channels of a cycle cannot lose
      messages this way either. A round closes on one of their channels only
@@ -1091,7 +1104,7 @@ interpreting `payload`):
 
 ```json
 {"type": "DATA", "seq": <int>, "payload": <any JSON value>}
-{"type": "BARRIER", "payload": {"epoch": <int>, "halt": <bool>}}
+{"type": "BARRIER", "payload": {"epoch": <int>, "halt": <bool>, "last_seq": <int>}}
 {"type": "INTERACT", "payload": {"command": <string>, "args": {...}}}
 {"type": "CLOSE", "payload": {"last_seq": <int>}}
 {"type": "HELLO", "payload": {}}
@@ -1110,6 +1123,12 @@ interpreting `payload`):
   need to carry the initiator's identity).
 - `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown
   (see "Ordered shutdown") instead of a snapshot.
+- `BARRIER.payload.last_seq`: the `out_seq` of the sender for that channel when
+  it captured its state, left out when the sender does not number what it
+  sends. Every message that this number counts was queued before the marker,
+  so it goes ahead of the marker on the channel. A reader that has accepted
+  fewer has lost the rest, and it stops with the error of a gap (G5, G8),
+  before it logs the marker.
 - `INTERACT.payload.command`/`args`: an open catalog, extended as needed by
   whichever sections trigger it (`start_snapshot`, `shutdown`, `heartbeat`,
   `checkpoint_saved`, ...). `start_snapshot` and `shutdown` take an optional
@@ -2689,16 +2708,16 @@ tells the module about a `CLOSE`.
 
 ## Sequence numbers in the input log
 
-A node that replays its input log, after a crash or a halt, sends again what
-it had sent after its checkpoint, so its neighbors receive part of its messages
+A node that replays its input log, after a crash or a halt, sends again what it
+had sent after its checkpoint, so its neighbors receive part of its messages
 twice; and a message can be lost, by a node that crashes after taking it from
 its FIFO and before logging it. Sequence numbers tell a receiver both: each
 `DATA` carries a number of its channel, the receiver drops one it has already
-accepted, and a number that skips another says that a message was lost. The
-mechanism and the guarantee it gives are G5 in the Contract, and the error of a
-loss is G8. This section says how the input log carries the numbers, and how a
-relaunched node rebuilds its own counters from it, so that it still drops what
-its log already covers.
+accepted, and a number that skips another, or a marker that claims more than
+arrived, says that a message was lost. The mechanism and the guarantee it gives
+are G5 in the Contract, and the error of a loss is G8. This section says how the
+input log carries the numbers, and how a relaunched node rebuilds its own
+counters from it, so that it still drops what its log already covers.
 
 A `DATA`'s `seq` travels inside its record's embedded `env`, with no change to
 the record format (see "Log structure and record format"). The receiver keeps
@@ -2716,7 +2735,8 @@ The numbers do not cover every loss. A reader thread takes a block from its
 FIFO and logs its messages in one write; between the two, the messages exist
 only in the memory of the process. A message lost there, in a crash, is not
 recovered, since its sender considers it delivered and does not send it again,
-but the receiver notices it, because the next message skips its number (G8).
+but the receiver notices it: the next message skips its number, or the next
+marker of a round says that more were sent than arrived (G8).
 This is the Contract's limit "Messages read from a FIFO but not yet written to
 the input log".
 
@@ -2870,16 +2890,16 @@ reader had already consumed before it died.
 With no EOF, a reader never ends because its peer crashed or was relaunched. It
 ends only on a stop request, or on an error, which the heartbeat then reports:
 of its stream (an unparsable line not followed by `HELLO`, a gap in the sequence
-numbers, a `CLOSE` that claims more than was accepted) or of its input log (at
-its size cap, or a failed write to it). The writer never sees `EPIPE` either: a
-dead peer means backpressure instead, the writer blocks once the pipe holds 64
-KiB, and since a blocked writer cannot be woken, `stop_threads()` joins writer
-threads with a bounded timeout. A reader, unlike a writer, never blocks for
-long: it waits for data with `poll`, at most `_READER_POLL_MS` (200 ms) at a
-time, and looks between two waits whether its node is stopping, so it sees a
-stop even on a quiet FIFO. Nothing is written into the FIFO to wake it: a write
-there could land in the middle of a message longer than `PIPE_BUF` that its
-writer is writing, and cut it in two.
+numbers, a marker or a `CLOSE` that claims more than was accepted) or of its
+input log (at its size cap, or a failed write to it). The writer never sees
+`EPIPE` either: a dead peer means backpressure instead, the writer blocks once
+the pipe holds 64 KiB, and since a blocked writer cannot be woken,
+`stop_threads()` joins writer threads with a bounded timeout. A reader, unlike a
+writer, never blocks for long: it waits for data with `poll`, at most
+`_READER_POLL_MS` (200 ms) at a time, and looks between two waits whether its
+node is stopping, so it sees a stop even on a quiet FIFO. Nothing is written
+into the FIFO to wake it: a write there could land in the middle of a message
+longer than `PIPE_BUF` that its writer is writing, and cut it in two.
 
 The `Supervisor` learns that a node finished only from its `.finished` file, and
 none of its readers can hang waiting for an EOF that never comes.

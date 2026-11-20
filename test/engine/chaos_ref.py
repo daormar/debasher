@@ -35,14 +35,18 @@ def launch_chaos(outdir, *program_opts):
 # Two shapes a loss on a killed node's channel is seen to take in
 # practice (see "Acceptance" in the design doc): a clean one naming
 # the exact missing sequence numbers, raised when the reader notices the
-# jump itself; and a "torn line" one with no numbers, raised when a freshly
-# relaunched reader reattaches mid-message to a fifo whose writer never
-# itself died (so no fresh HELLO is coming to excuse the fragment). Both
-# stop the affected part and are detected, never silent, so both count as
-# the accepted exception; only the first names a range to cross-check.
+# jump itself, from a later message or from the marker of a round that
+# follows messages that never arrived; and a "torn line" one with no
+# numbers, raised when a freshly relaunched reader reattaches mid-message
+# to a fifo whose writer never itself died (so no fresh HELLO is coming to
+# excuse the fragment). Both stop the affected part and are detected,
+# never silent, so both count as the accepted exception; only the first
+# names a range to cross-check.
 LOSS_GAP_RE = re.compile(
     r"gap in the sequence numbers on '(?P<channel>[^']+)': "
-    r"expected \d+, got \d+, missing (?P<lo>\d+)(?: to (?P<hi>\d+))?"
+    r"(?:expected \d+, got \d+"
+    r"|the marker of round \d+ follows \d+ messages, but only \d+ arrived), "
+    r"missing (?P<lo>\d+)(?: to (?P<hi>\d+))?"
 )
 
 

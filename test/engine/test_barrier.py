@@ -98,7 +98,7 @@ def test_single_pending_port_closes_as_soon_as_its_marker_arrives():
 
     assert proc.closed_epochs == [(0, False, {"marker": "initial"}, {})]
     assert lib.decode_envelope(_out(proc, "x")) == lib.Envelope(
-        type="BARRIER", payload={"epoch": 0, "halt": False}
+        type="BARRIER", payload={"epoch": 0, "halt": False, "last_seq": 0}
     )
 
 
@@ -118,8 +118,20 @@ def test_barrier_is_forwarded_on_every_output_port_when_a_round_opens():
     proc = _BarrierWorker(opts=_FAKE_OPTS)
     proc._on_barrier("a", {"epoch": 3, "halt": False})
 
-    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 3, "halt": False}
-    assert lib.decode_envelope(_out(proc, "y")).payload == {"epoch": 3, "halt": False}
+    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 3, "halt": False, "last_seq": 0}
+    assert lib.decode_envelope(_out(proc, "y")).payload == {"epoch": 3, "halt": False, "last_seq": 0}
+
+
+def test_a_marker_carries_the_number_of_the_last_message_sent_on_its_port():
+    # What the capture counts as sent, so that the reader can tell whether
+    # it accepted all of it
+    proc = _BarrierWorker(opts=_FAKE_OPTS)
+    proc._out_seq = {"x": 4}
+
+    proc._on_barrier("a", {"epoch": 3, "halt": True})
+
+    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 3, "halt": True, "last_seq": 4}
+    assert lib.decode_envelope(_out(proc, "y")).payload == {"epoch": 3, "halt": True, "last_seq": 0}
 
 
 # --- self-triggered rounds (INTERACT start_snapshot/shutdown) -----------
@@ -131,7 +143,7 @@ def test_start_snapshot_leaves_every_input_port_pending():
 
     assert proc._round.pending == {"a", "b"}
     assert proc.closed_epochs == []
-    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 0, "halt": False}
+    assert lib.decode_envelope(_out(proc, "x")).payload == {"epoch": 0, "halt": False, "last_seq": 0}
 
 
 def test_a_root_node_with_no_input_ports_closes_instantly():
@@ -449,7 +461,7 @@ def test_the_marker_is_still_forwarded_when_a_round_opens_with_closed_ports():
 
     for port in ("x", "y"):
         assert lib.decode_envelope(_out(proc, port)) == lib.Envelope(
-            type="BARRIER", payload={"epoch": 0, "halt": False}
+            type="BARRIER", payload={"epoch": 0, "halt": False, "last_seq": 0}
         )
 
 
@@ -466,7 +478,7 @@ def test_a_node_whose_inputs_have_all_closed_starts_and_closes_a_round_like_a_so
 
     assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
     for port in ("x", "y"):
-        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False, "last_seq": 0}
 
 
 def test_a_later_round_after_two_ports_closed_opens_and_closes_without_ending_the_brain_thread():
@@ -516,7 +528,7 @@ def test_an_initiator_whose_only_input_is_a_control_port_closes_its_round_when_i
 
     assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
     for port in ("x", "y"):
-        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False, "last_seq": 0}
 
 
 def test_a_control_port_takes_no_part_in_a_round_that_a_peer_starts():
@@ -576,7 +588,7 @@ def test_an_initiator_whose_only_input_is_an_external_port_closes_its_round_when
 
     assert [epoch for epoch, *_ in proc.closed_epochs] == [0]
     for port in ("x", "y"):
-        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False}
+        assert lib.decode_envelope(_out(proc, port)).payload == {"epoch": 0, "halt": False, "last_seq": 0}
 
 
 def test_a_round_does_not_wait_for_an_external_port_when_a_peer_starts_it():
@@ -710,8 +722,8 @@ def test_a_snapshot_trigger_that_finds_a_snapshot_open_replaces_it_with_the_next
     assert proc._round.capture.node_state == {"n": 1}
     assert proc.received == [("b", 5), ("b", 6)]  # the node went on processing
     assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
-        {"epoch": 0, "halt": False},
-        {"epoch": 1, "halt": False},
+        {"epoch": 0, "halt": False, "last_seq": 0},
+        {"epoch": 1, "halt": False, "last_seq": 0},
     ]
 
 
@@ -729,8 +741,8 @@ def test_a_shutdown_trigger_that_finds_a_snapshot_open_replaces_it_with_the_halt
 
     assert (proc._round.epoch, proc._round.halt, proc._round.pending) == (1, True, {"a", "b"})
     assert [lib.decode_envelope(_out(proc, "x")).payload for _ in range(2)] == [
-        {"epoch": 0, "halt": False},
-        {"epoch": 1, "halt": True},
+        {"epoch": 0, "halt": False, "last_seq": 0},
+        {"epoch": 1, "halt": True, "last_seq": 0},
     ]
     _run_brain(proc, [_marker("a", 1, halt=True), _marker("b", 1, halt=True)])
     assert [(epoch, halt) for epoch, halt, *_ in proc.closed_epochs] == [(1, True)]

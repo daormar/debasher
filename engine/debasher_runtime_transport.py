@@ -858,8 +858,8 @@ class _PortWorker:
         """
         self._outbound_queues[tag].put(encode_data(payload, seq=seq))
 
-    def _send_barrier(self, tag, epoch, halt=False):
-        self._outbound_queues[tag].put(encode_barrier(epoch, halt=halt))
+    def _send_barrier(self, tag, epoch, halt=False, last_seq=None):
+        self._outbound_queues[tag].put(encode_barrier(epoch, halt=halt, last_seq=last_seq))
 
     def _send_interact(self, tag, command, args=None):
         self._outbound_queues[tag].put(encode_interact(command, args))

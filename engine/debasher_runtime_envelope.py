@@ -67,13 +67,19 @@ def encode_data(payload, seq=None):
     return json.dumps(obj, allow_nan=False)
 
 
-def encode_barrier(epoch, halt=False):
+def encode_barrier(epoch, halt=False, last_seq=None):
     """
     Encodes a BARRIER envelope (a Chandy-Lamport marker). `epoch`
     identifies the snapshot round. `halt=True` reuses the same marker
-    for an ordered shutdown instead of a snapshot.
+    for an ordered shutdown instead of a snapshot. `last_seq` is the
+    number of the last DATA that the sender had sent on the channel when
+    it captured its state; omitted (not even the key) when the sender
+    numbers nothing.
     """
-    return _encode(TYPE_BARRIER, {"epoch": epoch, "halt": halt})
+    payload = {"epoch": epoch, "halt": halt}
+    if last_seq is not None:
+        payload["last_seq"] = last_seq
+    return _encode(TYPE_BARRIER, payload)
 
 
 def encode_interact(command, args=None):
@@ -181,6 +187,8 @@ def _check_fields(envelope_type, payload, seq):
             return f"its epoch {payload.get('epoch')!r} is not an integer"
         if not isinstance(payload.get("halt"), bool):
             return f"its halt {payload.get('halt')!r} is not a boolean"
+        if "last_seq" in payload and not _is_int(payload["last_seq"]):
+            return f"its last_seq {payload['last_seq']!r} is not an integer"
     elif envelope_type == TYPE_INTERACT:
         if not isinstance(payload.get("command"), str):
             return f"its command {payload.get('command')!r} is not a string"
