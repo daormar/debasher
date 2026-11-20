@@ -1155,6 +1155,19 @@ def test_a_general_program_has_no_program_state_to_reset(tmp_path):
     assert refused.value.status_code == 400
 
 
+def test_a_resident_program_is_never_reset_by_emptying_its_output_directory(tmp_path):
+    program = _relay(tmp_path)
+    _with_program_state(tmp_path)
+    checkpoints = tmp_path / "out" / "__exec__" / "Relay" / "checkpoints"
+
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.reset_output_dir(program)
+
+    assert refused.value.status_code == 400
+    assert "/reset-program-state" in refused.value.detail
+    assert checkpoints.exists()
+
+
 @_needs_engine
 def test_a_program_killed_before_it_kept_anything_starts_afresh(tmp_path):
     program = _relay(tmp_path)

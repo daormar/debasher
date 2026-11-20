@@ -509,16 +509,18 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 - **Running.** Always the built-in scheduler; `run_program` waits for the launch
   and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
-  its state. The batch runs of a launcher node go on after `stop_program`, and
-  `reset_program_state` refuses while one runs, naming its run directory: follow
-  them with `inspect_node` (`what: runs`) until they end, or offer the user to
-  stop each one with `debasher_stop -d <run directory>`. `restart_node` kills a
-  live node, as in a crash, and has it relaunched from its last checkpoint;
-  `relaunch_node` relaunches a node that is down in a program without a
-  Supervisor. Every node runs at once: when the `cpus` or `mem` of all the nodes
-  together exceed `builtinSchedCpus` or `builtinSchedMem`, the launch is refused
-  before any node starts; raise those limits, leave them empty, or lower the
-  specifications of the nodes.
+  its state. `reset_output_dir` is refused on a resident program: start afresh
+  with `reset_program_state`, which sets the program state aside (or deletes
+  it with `delete`). The batch runs of a launcher node go on after
+  `stop_program`, and `reset_program_state` refuses while one runs, naming its
+  run directory: follow them with `inspect_node` (`what: runs`) until they end,
+  or offer the user to stop each one with `debasher_stop -d <run directory>`.
+  `restart_node` kills a live node, as in a crash, and has it relaunched from
+  its last checkpoint; `relaunch_node` relaunches a node that is down in a
+  program without a Supervisor. Every node runs at once: when the `cpus` or
+  `mem` of all the nodes together exceed `builtinSchedCpus` or
+  `builtinSchedMem`, the launch is refused before any node starts; raise those
+  limits, leave them empty, or lower the specifications of the nodes.
 - **Notices of a live program.** `get_status` lists the notices of the
   nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks
   a node that has one, an "i" in a blue circle for `info` and an "!" in an
@@ -586,8 +588,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   whose dependencies can no longer hold (`afterok` on a process that failed)
   is cancelled and counts as failed; under the built-in scheduler, so is a
   task that still waits when the run can launch nothing else and nothing
-  runs, whose marker says so. To start from scratch, empty the output
-  directory with `reset_output_dir`.
+  runs, whose marker says so. To start a general program from scratch, empty
+  the output directory with `reset_output_dir` (a resident program uses
+  `reset_program_state`).
 - `get_process_output` reads what a process left (`stdout`, `scheduler`,
   `options`, `resolved_options`), task by task (`get_process_tasks`) for a
   process of several tasks.

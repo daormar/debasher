@@ -30,11 +30,12 @@ the web UI shows them.
   need: the toolbar (Env vars, Preamble, Description, Shared dirs, Sequential
   processes, Add process, Add program, Save, Run, Help, Close), the Run menu
   (output directory, execution and program options, Validate program, Run tests,
-  Run program, status, stop, Reset output directory), the Inspector on the
-  right, which edits the selected process, with the "AI prompt" button of each
-  code editor, the context menu of a process or an edge on the canvas, the
-  Legend of the canvas, which says what its borders, marks and edges mean, and
-  the "Program files" panel in its corner.
+  Run program, status, stop, Reset output directory on a general program, and
+  on a resident one Kill program, Take snapshot and Reset program state), the
+  Inspector on the right, which edits the selected process, with the "AI
+  prompt" button of each code editor, the context menu of a process or an edge
+  on the canvas, the Legend of the canvas, which says what its borders, marks
+  and edges mean, and the "Program files" panel in its corner.
 - When the question is about Claude Code in the editor: "Claude Code..." in the
   Help menu gives the command of `debasher_claude` to copy, with the
   conversation to take up. Where the backend offers it, "Where" chooses between

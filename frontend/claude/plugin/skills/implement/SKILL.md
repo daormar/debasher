@@ -130,15 +130,17 @@ forced. When `reset_program_state` is refused because a batch run of a launcher
 node still runs, offer to wait for it (`inspect_node`, `what: runs`) or to stop
 it with `debasher_stop -d <run directory>`, and reset once it has ended.
 
-A run on an output directory that holds an earlier run resumes it, and does
-not run again a process that finished, even when its code changed since:
-after fixing the code of such a process, say so, and offer to set
-`rerunOutdatedProcs` among the execution options or to empty the output
-directory (`reset_output_dir`, which deletes everything in it, so only when
-the user agrees). An array that stopped partway runs only its tasks left on
-the next run; for every task of it to run with the fixed code, offer to set
-`force` on it for one run (and unset it after) or to empty the output
-directory. While a run or a validation is in progress, saving and running
+A run of a general program on an output directory that holds an earlier run
+resumes it, and does not run again a process that finished, even when its
+code changed since: after fixing the code of such a process, say so, and
+offer to set `rerunOutdatedProcs` among the execution options or to empty
+the output directory (`reset_output_dir`, which deletes everything in it, so
+only when the user agrees). An array that stopped partway runs only its
+tasks left on the next run; for every task of it to run with the fixed code,
+offer to set `force` on it for one run (and unset it after) or to empty the
+output directory. For a resident program, emptying the output directory is
+refused: to start afresh, offer `reset_program_state` (only when the user
+agrees). While a run or a validation is in progress, saving and running
 are refused: wait for it to end.
 
 If a tool refuses a save because the program changed on disk, the user (or

@@ -643,6 +643,22 @@ describe("talking to a resident program", () => {
     expect(shown).toContain("still running: /o/launch/s17");
   });
 
+  it("refuses to empty the output directory of a resident program, before asking for confirm", async () => {
+    let resets = 0;
+    const backend = fakeBackend([resident()], {
+      resetOutputDir: async () => {
+        resets += 1;
+        return true;
+      },
+    });
+
+    await expect(call(backend, "reset_output_dir", { home_dir: HOME }))
+      .rejects.toThrow("reset its state with reset_program_state");
+    await expect(call(backend, "reset_output_dir", { home_dir: HOME, confirm: true }))
+      .rejects.toThrow("reset its state with reset_program_state");
+    expect(resets).toBe(0);
+  });
+
   it("writes only into an external input, by the name of its FIFO", async () => {
     const writes: string[] = [];
     const backend = fakeBackend([resident()], {

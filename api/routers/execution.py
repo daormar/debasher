@@ -1445,8 +1445,23 @@ def reset_output_dir(program: Program) -> ResetOutputDirResponse:
     and .debasher/program.json live, and any files added through the
     program-files panel, none of which "resetting the output directory"
     should ever be able to wipe out. Refused while there is a run in
-    progress in it, whose processes may still use its files.
+    progress in it, whose processes may still use its files, and refused
+    for a resident program (400), whose state goes through
+    /reset-program-state.
     """
+    # Emptying the directory would delete the checkpoints and input logs
+    # with nothing set aside, and the run directory of a batch run of a
+    # launcher node that outlives a stop, which the run guard does not see
+    if _is_resident(program):
+        raise HTTPException(
+            status_code=400,
+            detail="A resident program keeps its state in its output directory: "
+            "reset it with Reset program state (/reset-program-state, the MCP tool "
+            "reset_program_state), which sets "
+            "the state aside and refuses while a batch run of a launcher node is "
+            "still running.",
+        )
+
     outdir = program.outputDir.strip()
     if not outdir:
         return ResetOutputDirResponse(cleared=False)

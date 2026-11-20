@@ -3040,9 +3040,17 @@ every node afresh. By default the tool sets the state aside under
 lost cannot be made again, and the dialog offers to delete it instead
 (`--delete`). As for a general program, the frontend refuses to reset while
 there is a run in progress, and the backend and the tool refuse it too; the
-action is offered while the program is `stopped`, since a program that is `new`
-has nothing to reset. What is set aside stays in the output directory until the
-user deletes it.
+tool also refuses while a batch run of a launcher node is still running (see
+"`debasher_reset_resident`: a clean start" in `doc/design_doc_resident.md`).
+The action is offered while the program is `stopped`, since a program that is
+`new` has nothing to reset. What is set aside stays in the output directory
+until the user deletes it. The backend refuses to empty the output directory
+of a resident program (`/reset-output-dir`) and names "Reset program state" in
+its answer. Emptying it would delete the program state with nothing set aside.
+It would also delete the run directory of a batch run of a launcher node
+placed there, which goes on after a stop and which the check of a run in
+progress does not see. The MCP tool `reset_output_dir`, which goes through the
+backend, is refused too.
 
 **Launching a program with state.** A node resumes from its checkpoint and
 replays its input log with the code that the program has when it is launched,
@@ -3827,7 +3835,8 @@ too.
   module that the preamble loads goes unseen (see "The directories of a
   resident program").
 - **A reset loses no checkpoint unless asked to.** "Reset program state" sets
-  the program state aside by default (see "The directories of a resident
+  the program state aside by default, and the backend refuses to empty the
+  output directory of a resident program (see "The directories of a resident
   program").
 - **No change under a live program.** While the program is `live`, the frontend
   refuses to save, to reset the program state and to change the output
@@ -4684,10 +4693,11 @@ fails, answers with the reason as an error.
   that this program did not produce, or that no launch record describes, is
   launched only when the call says `resume_changed_program`, as the Run menu
   asks; the answer of the refusal says so, and that `reset_program_state` starts
-  afresh instead. `reset_output_dir` deletes what a run left,
-  `reset_program_state` sets the program state aside or deletes it, and a hard
-  kill loses what the FIFOs held, so they are refused unless the call says
-  `confirm`.
+  afresh instead. `reset_output_dir` deletes what a run left, and is refused
+  on a resident program, which `reset_program_state` resets instead (see "The
+  directories of a resident program"). `reset_program_state` sets the program
+  state aside or deletes it, and a hard kill loses what the FIFOs held, so
+  these three are refused unless the call says `confirm`.
 - **Resident programs.** `inspect_node` (the summary of a node, a checkpoint,
   its input log, or the batch runs of a launcher node), `snapshot`,
   `restart_node` (refused unless the call says `confirm`, with the warning
@@ -4712,8 +4722,9 @@ fails, answers with the reason as an error.
 
 The MCP tools keep the guards of the editor through the backend, not by
 repeating them: the backend refuses a second run on an output directory, the two
-directories of a program in one, and a save, a reset of the output directory or
-a change of it while there is a run in progress.
+directories of a program in one, a save, a reset of the output directory or
+a change of it while there is a run in progress, and a reset of the output
+directory of a resident program at any time.
 
 ## Building, installing and testing
 

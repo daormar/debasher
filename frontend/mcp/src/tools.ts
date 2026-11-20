@@ -732,11 +732,16 @@ const runningTools = [
 
   tool(
     "reset_output_dir",
-    "Deletes everything in the output directory of the program. Needs confirm. On a resident program, use reset_program_state instead: this does not wait for the batch runs of a launcher node, which go on after the program stops.",
+    "Deletes everything in the output directory of the program. Needs confirm. Refused on a resident program: use reset_program_state, which sets its state aside and refuses while a batch run of a launcher node, which goes on after the program stops, is still running.",
     { home_dir: schemas.homeDir, confirm },
     DELETES,
     async (backend, { home_dir, confirm: confirmed }) => {
       const program = await programWithOutputDir(backend, home_dir);
+      // Before asking for confirm, which would only lead to the refusal of
+      // the backend
+      if (program.programType === "resident") {
+        throw new Refusal("Emptying the output directory is refused on a resident program: reset its state with reset_program_state.");
+      }
       if (!confirmed) {
         throw new Refusal(`This deletes everything in ${program.outputDir}: call again with confirm.`);
       }
