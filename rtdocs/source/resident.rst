@@ -699,8 +699,8 @@ program gives these guarantees:
 
 * On every channel, messages arrive in the order in which they were
   sent, and with no failure every message is delivered once.
-* A node that crashes (killed, out of memory, an uncaught exception)
-  and is relaunched returns to the state it would have had without the
+* A node that crashes (killed, out of memory, an exception that ends
+  its process) and is relaunched returns to the state it would have had without the
   crash, and its readers receive neither duplicates nor gaps.
 * A snapshot captures a consistent state of every node, and an orderly
   stop followed by a new launch loses nothing.

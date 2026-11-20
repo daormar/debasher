@@ -180,7 +180,7 @@ function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
       label: "Threads",
       value: info.healthy
         ? "every thread alive at the latest tick"
-        : "a thread was dead at the latest tick: the node does nothing, although its process lives",
+        : "a thread was dead at the latest tick: its part of the work stopped, although the process lives",
       warning: !info.healthy,
     },
     ...outboundBacklogRows(info),

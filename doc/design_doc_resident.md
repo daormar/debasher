@@ -37,7 +37,8 @@ precisely what is promised.
   shutdown closed, each node returning to the state it had when it stopped.
 - **Detect failures actively, within a bounded time**, without depending on a
   human noticing that something stopped responding, and without false positives
-  when a process is simply busy with a long operation.
+  when a process is simply busy with a long operation, except for a call that
+  keeps the GIL of Python (see "Limits and non-goals").
 - **Reconstruct the communication history between processes**: every node keeps
   a durable log of what it received since its last checkpoint, in the exact
   order it processed it, so that a relaunched node re-processes what it had
@@ -464,11 +465,20 @@ to it.
 ## Failure and recovery
 
 - **crash**: the death of a node's process that is neither a halt nor a finish
-  for good: `SIGKILL`, an uncaught exception, an out-of-memory kill, or a
-  non-zero exit. A deliberate error exit and a crash are treated the same.
+  for good: `SIGKILL`, an out-of-memory kill, an exception in its main thread
+  during the startup (restore, `initialize_runtime`, replay), or a non-zero
+  exit. A deliberate error exit and a crash are treated the same. An exception
+  that ends another thread of a node other than the `Supervisor` is not a crash,
+  but the `Supervisor` treats it as one (see "Failure model").
 - **relaunch**: starting a new incarnation of a node, by the `Supervisor`
   (through `debasher_launch_process`) or by hand. It is the same operation as
   the first launch: there is no recovery mode.
+- **clean start**: a start of a resident program with none of the state that
+  its earlier runs left, as on its first run. That state is the checkpoints,
+  the input log, the halted marker and the notice of each node, and the output
+  directory of each process. `debasher_reset_resident` gives one to the whole
+  program (see "`debasher_reset_resident`: a clean start"). A relaunch and a
+  resume after a halt keep that state, so neither is a clean start.
 - **recovery**: what a relaunched node does at startup: open its FIFOs, load its
   latest checkpoint, `restore_node_state`, `initialize_runtime`, start its
   writer threads, replay the input log after `capture_pos`, then start its
@@ -514,10 +524,10 @@ to it.
   output directory of the process of a launcher node, written when the request
   at that position registers a batch run, and which names its run directory.
   The registrations of a node are its queue of batch runs.
-- **life**: the time between two clean starts of a launcher node, identified by
-  `life_id`, a random string kept in a file of the output directory of its
-  process; `debasher_reset_resident` removes it, so every clean start begins a
-  new life.
+- **life**: the time between two clean starts of the program, as seen by a
+  launcher node, identified by `life_id`, a random string kept in a file of the
+  output directory of its process; `debasher_reset_resident` removes it, so
+  every clean start begins a new life.
 
 ## Testing a node
 
@@ -613,16 +623,29 @@ A guarantee means something only against a list of what can go wrong. This
 section says which failures the guarantees survive, what they assume keeps
 working, and which failures they do not cover.
 
-- **Tolerated**: the crash of any process of a `resident` program (SIGKILL,
-  uncaught exception, out-of-memory kill) and its relaunch, by the `Supervisor`
-  or by hand. Any number of nodes may crash at any time, including while other
-  nodes are recovering, with the exceptions listed under "Limits and non-goals".
-  There is deliberately no bound on how many nodes fail simultaneously: each
-  node recovers from its own checkpoint and input log, on stable storage,
-  independently of the others, so correctness does not depend on how many failed
-  at once. (A bound on simultaneous failures only buys something in designs
-  whose redundancy lives in other nodes' volatile memory, such as logging at the
-  sender or replication with quorums; this design has neither.)
+- **Tolerated**: the crash of any process of a `resident` program (see crash in
+  the Glossary) and its relaunch, by the `Supervisor` or by hand. An exception
+  that ends another thread of a node other than the `Supervisor` (a reader,
+  writer, brain or observation thread) does not end its process. The node stays
+  alive but unhealthy, and its heartbeats stop. The `Supervisor` treats it as a
+  crash. It relaunches the node, which kills the earlier incarnation. For a
+  program without a `Supervisor`, see "A node with a dead thread and no
+  `Supervisor`" in the Contract's limits. The `Supervisor` itself ends with an
+  error when one of its own threads dies (see "Failure detection"). Any number
+  of nodes may crash at any time, including while other nodes are recovering,
+  with the exceptions listed under "Limits and non-goals". There is deliberately
+  no bound on how many nodes fail simultaneously: each node recovers from its
+  own checkpoint and input log, on stable storage, independently of the others,
+  so correctness does not depend on how many failed at once. (A bound on
+  simultaneous failures only buys something in designs whose redundancy lives in
+  other nodes' volatile memory, such as logging at the sender or replication
+  with quorums; this design has neither.)
+  - An exception that recurs. `process_data` is deterministic, so an exception
+    it raises on a message comes back when the relaunch replays that message,
+    in the main thread. Every relaunch then dies in its startup, until the
+    `Supervisor` gives the node up. Only an exception that does not recur, such
+    as a failure outside the graph that is gone at the replay, ends in a
+    recovery.
 - **Assumed to keep working**: the machine and its operating system, and the
   filesystem under the program's outdir (it keeps what was written: checkpoints,
   input logs, markers). Resident programs run on a single machine (BUILTIN
@@ -640,23 +663,19 @@ working, and which failures they do not cover.
   `Supervisor`" in Future work).
 
 **Note on `fsync`, and why the level above is enough for now.** When a process
-writes to a file, the operating system copies the data into its own memory (the
-page cache) and answers at once; it writes it to disk some time later (15 to 30
-seconds on the development machine). `fsync` forces that write and returns only
-when the data is on disk. If a process dies, what it wrote is already in the
-operating system's memory and is not lost, so logs and checkpoints survive a
-`kill -9`, an uncaught exception or an out-of-memory kill, which is exactly what
-the failure model covers. If the machine crashes or loses power, whatever was
-still only in memory is lost: the last seconds of log and, with bad luck, a
-checkpoint that was renamed into place but is empty. If that cuts the log of a
-node below its latest checkpoint, the node refuses to start (see "Recovery:
-startup and replay"). Surviving that has a price,
-measured on the development machine (NVMe, ext4): an append to the log takes 0.8
-microseconds without `fsync`, 13 with an `fsync` every 100 appends and about
-1050 with one after every append (roughly 950 messages per second); saving a
-checkpoint takes 39 microseconds without it and 1.9 ms with `fsync` of the file
-and of its directory. Hence it is left out for now, and the cheap first step is
-noted in Future work.
+writes to a file, the operating system copies the data into its own memory, the
+page cache, and answers at once. It writes the data to disk later. `fsync`
+forces that write and returns only when the data is on disk. If a process dies,
+what it wrote is already in the memory of the operating system, so logs and
+checkpoints survive a `kill -9`, an exception that ends it or an out-of-memory
+kill, which is what the failure model covers. If the machine crashes or loses
+power, what was only in memory is lost: the last part of a log and, with bad
+luck, a checkpoint renamed into place but empty. A node whose log no longer
+reaches its latest checkpoint then refuses to start (see "Recovery: startup and
+replay"). Without `fsync`, an append and a save are a copy into memory. With an
+`fsync` after every append, each message waits for the disk, which costs orders
+of magnitude in throughput. Hence it is left out, and the cheap first step is in
+Future work (see "Durability against machine failure (`fsync`)").
 
 ## Obligations of module authors
 
@@ -873,51 +892,77 @@ change.
    loop, deadlock) is not detected today: the heartbeat proves that its threads
    are alive, not that they make progress. Not a goal for now (see "Progress in
    the heartbeat" in Future work).
-5. **Python nodes only.** The engine refuses a process of a resident program
+5. **A long call that keeps the GIL looks like a dead node.** While
+   `process_data` or `observe()` is inside a call of a C extension that does not
+   release the GIL, no other thread of the node runs, the heartbeat thread
+   included.
+   - What follows. A call longer than `HEARTBEAT_TIMEOUT_SECS` makes the
+     `Supervisor` declare the node down and relaunch it, which kills the call.
+     The replay makes the same call, so the node may end given up.
+   - The remedy. A `heartbeat_timeout_s` of the `Supervisor` above the longest
+     such call (see "Failure detection"). A call that releases the GIL, as
+     blocking I/O does, does not stop the heartbeat.
+   - Beyond it. See "Python without the GIL" in Future work.
+6. **A node with a dead thread and no `Supervisor`.** In a program without a
+   `Supervisor`, a node one of whose threads died stays up, unhealthy and
+   `IN-PROGRESS`, until it is stopped.
+   - What stops. The part of the work of the dead thread stops, and nothing
+     replaces it. With a dead brain thread, the node processes nothing; with a
+     dead reader, nothing more of its port; with a dead observation thread,
+     nothing more of the outside world. With a dead writer, the outbound
+     backlog of its port fills until `send_data` raises.
+   - Its readers. They go on logging what arrives, until the input log reaches
+     `INPUT_LOG_MAX_BYTES`, where they stop with an error (G8).
+   - What shows it. The node info file says that the node is not healthy, and
+     the web UI shows it.
+   - A relaunch. Nothing relaunches it. The "Restart node" action of the web UI
+     kills it and relaunches it (see "Running a resident program" in
+     `doc/design_doc_webui.md`).
+7. **Python nodes only.** The engine refuses a process of a resident program
    whose code is not a Python heredoc of a class of the runtime library
    (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
    on the wire depends on Python (see "Nodes in a compiled language" in Future
    work).
-6. **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
+8. **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
    frontend's "Watch FIFO") is not available in resident programs: declaring it
    aborts the load of the program, before anything is launched. Resident
    processes keep their own input log.
-7. **A node that has finished for good** takes no part in later rounds, so the
+9. **A node that has finished for good** takes no part in later rounds, so the
    consistent cut of an epoch that starts after it finished has no checkpoint of
    that node: its channel to the others is empty and its last state is its final
    one. Localized recovery does not need it; a global rollback would have to
    treat it (see Future work).
-8. **A round that a newer one replaces** leaves the nodes that had not closed it
-   without a checkpoint for its epoch, so that epoch has no complete cut. The
-   round that replaced it does complete, at every node it reaches, and that is
-   the cut that counts; localized recovery never uses a cut. It holds if the
-   initiators start the same epoch (see numbered trigger in the Glossary).
-   Rounds started closer together than they take to complete keep replacing each
-   other, and none completes until they stop, so whatever starts rounds
-   periodically has to leave more time between them than a round takes.
-9. **A crash while a round is open.** A node that crashes while a round is open
-   comes back with no round open. The markers it had received for that round are
-   not replayed: the replay brings back only `DATA` and `CLOSE`. Making the case
-   recoverable would need a round's partial progress to be durable, which is not
-   designed.
-   - A node that is not an initiator. The next marker of that round opens it
-     again, and the node waits forever for the markers it had already received.
-     It writes no checkpoint for that epoch, and the next round replaces it.
-   - An initiator whose round a trigger opened. It had received no marker, so
-     the round opens again when its own marker comes back round a cycle, and
-     closes there. Its capture is then later than the first, so that epoch is
-     not a consistent cut (see the global rollback in "Future work").
-   - A halt. It cannot wait for the next round, because a node that has halted
-     ignores every later trigger. So a node that is not an initiator and crashes
-     while its halt is open never halts, while every other node does. The
-     `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
-     reason a halted marker never goes past its baseline. Then the tool falls
-     back to the hard kill of `debasher_stop`, and reports it with its own exit
-     code (see "Failing loudly instead of retrying").
-10. **A node that crashes again right after every relaunch** is not retried
+10. **A round that a newer one replaces** leaves the nodes that had not closed
+    it without a checkpoint for its epoch, so that epoch has no complete cut.
+    The round that replaced it does complete, at every node it reaches, and that
+    is the cut that counts; localized recovery never uses a cut. It holds if the
+    initiators start the same epoch (see numbered trigger in the Glossary).
+    Rounds started closer together than they take to complete keep replacing
+    each other, and none completes until they stop, so whatever starts rounds
+    periodically has to leave more time between them than a round takes.
+11. **A crash while a round is open.** A node that crashes while a round is open
+    comes back with no round open. The markers it had received for that round
+    are not replayed: the replay brings back only `DATA` and `CLOSE`. Making the
+    case recoverable would need a round's partial progress to be durable, which
+    is not designed.
+    - A node that is not an initiator. The next marker of that round opens it
+      again, and the node waits forever for the markers it had already received.
+      It writes no checkpoint for that epoch, and the next round replaces it.
+    - An initiator whose round a trigger opened. It had received no marker, so
+      the round opens again when its own marker comes back round a cycle, and
+      closes there. Its capture is then later than the first, so that epoch is
+      not a consistent cut (see the global rollback in "Future work").
+    - A halt. It cannot wait for the next round, because a node that has halted
+      ignores every later trigger. So a node that is not an initiator and
+      crashes while its halt is open never halts, while every other node does.
+      The `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
+      reason a halted marker never goes past its baseline. Then the tool falls
+      back to the hard kill of `debasher_stop`, and reports it with its own exit
+      code (see "Failing loudly instead of retrying").
+12. **A node that crashes again right after every relaunch** is not retried
     forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
     the escalation applies.
-11. **The cause of a crash outside the output of the `Supervisor`.** The
+13. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
     log (see "Relaunching a downed node"). Three cases fall outside that output.
@@ -2008,11 +2053,11 @@ A SIGTERM during the startup is honored when the startup ends, since the replay
 does not look at it; only a `send_data` that waits for room stops waiting, since
 it looks at `_stop_signaled` too.
 
-A clean start is an external operation: it is enough to remove what a node
-finds at startup, with no flag or special logic in the process or the
+A clean start is an external operation: it is enough to remove what the nodes of
+the program find at startup, with no flag or special logic in the process or the
 `Supervisor`. That is more than the checkpoints, since with none a node replays
-its whole input log and ends in the state it had. `debasher_reset_resident`
-does it for a whole program (see "`debasher_reset_resident`: a clean start").
+its whole input log and ends in the state it had. `debasher_reset_resident` does
+it for a whole program (see "`debasher_reset_resident`: a clean start").
 
 ## Chandy-Lamport barrier propagation
 
@@ -2888,14 +2933,14 @@ so it is logged and its port can leave the barrier's pending set. Why the
 reader then keeps reading and drops what follows instead of ending, and what
 `closed_ports` records, is in "`CLOSE` and closed ports".
 
-A process that exits with an error (an exception, a non-zero exit) sends no
-`CLOSE` and is treated as a crash, consistent with the `Supervisor`'s own
-detection. Once a node can finish for good, a `CLOSE` followed by a later
-failure is harmless, since peers keep reading and drop whatever the relaunched
-node sends afterward (see "`CLOSE` and closed ports"). The `Supervisor`'s own
-channel does not need `CLOSE`: it keeps using the node's `.finished` file, since
-a `CLOSE` does not prove the node succeeded, and a node that closed and then
-failed must still be heard again when relaunched.
+A process that exits with an error (an exception in its main thread, a non-zero
+exit) sends no `CLOSE` and is treated as a crash, consistent with the
+`Supervisor`'s own detection. Once a node can finish for good, a `CLOSE`
+followed by a later failure is harmless, since peers keep reading and drop
+whatever the relaunched node sends afterward (see "`CLOSE` and closed ports").
+The `Supervisor`'s own channel does not need `CLOSE`: it keeps using the node's
+`.finished` file, since a `CLOSE` does not prove the node succeeded, and a node
+that closed and then failed must still be heard again when relaunched.
 
 ## Ghost connections: holding both ends of a FIFO
 
@@ -3267,8 +3312,8 @@ holds its PID. So a dead PID is a certain shortcut to "down", the heartbeat
 timeout is the only judge of a node that is alive but not working, and a live
 PID is never taken by itself as a sign of health.
 
-Two things could make a live node look silent without being so. The first is
-the clock: every time kept to measure the silence of a node is taken from the
+Two things could make a live node look silent without being so. The first is the
+clock: every time kept to measure the silence of a node is taken from the
 monotonic clock (`time.monotonic()`), never from the wall clock, which can jump
 forward (an NTP correction, a machine coming back from suspend) and make every
 node look silent at once. The second is the `Supervisor` itself not running for
@@ -3281,10 +3326,13 @@ more than one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves the
 (`_credit_own_stall`): the time the `Supervisor` did not run is not counted
 against any node. A node whose process is gone is still declared down at once,
 by its PID, which does not depend on the time elapsed. The other way round, a
-node that is itself starved of CPU for longer than `HEARTBEAT_TIMEOUT_SECS`, or
-its startup deadline, is declared down, since from outside it cannot be told
-from one that is stuck: a program where that is expected gives its `Supervisor`
-a longer `heartbeat_timeout_s`.
+node that does not run for longer than `HEARTBEAT_TIMEOUT_SECS`, or its startup
+deadline, is declared down, since from outside it cannot be told from one that
+is stuck. That is the case of a node starved of CPU, and of one whose
+`process_data` is inside a call that keeps the GIL (see
+"A long call that keeps the GIL looks like a dead node" in the Contract's
+limits). A program where that is expected gives its `Supervisor` a longer
+`heartbeat_timeout_s`.
 
 Nothing supervises the `Supervisor` (see "Failure model"), so it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread
@@ -4236,8 +4284,8 @@ batch run ends, and when its end is brought in. "Launching from the queue on
 disk" and "The end of a batch run as an input event" say who writes each of
 them, and when.
 
-`life_id` identifies the life of the node, the time since its last clean start.
-It is a random string of 32 hexadecimal digits. It is kept in
+`life_id` identifies the life of the node, the time since the last clean start
+of the program. It is a random string of 32 hexadecimal digits. It is kept in
 `.launcher/life_id`, in the output directory of the process. The node reads it
 in `initialize_runtime()`, before its replay. It creates the file only when it
 is missing or empty. That happens the first time the node starts, and after a
@@ -4488,10 +4536,10 @@ directory has `notified` would not announce its end twice. The registration is
 kept as the record of the batch runs of the node, which
 `debasher_inspect_resident` lists.
 
-Both are limits of the design. The remedy is a clean start of the whole
-resident program (see "`debasher_reset_resident`: a clean start"). With the
-default runs root, it also sets the run directories aside (see "Stopping and
-resetting a launcher node").
+Both are limits of the design. The remedy is a clean start of the resident
+program (see "`debasher_reset_resident`: a clean start"). With the default runs
+root, it also sets the run directories aside (see
+"Stopping and resetting a launcher node").
 
 ## A single process
 
@@ -4758,11 +4806,11 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
   the input log first, so that on disk it reaches the checkpoint's `capture_pos`
   (a node whose log does not is refused at startup, see "Recovery: startup and
   replay"), then of the checkpoint file and of its directory; and of the log at
-  a halt (about 2 ms per round); together with the global rollback above it lets
-  a program go back, after a machine crash, to its last consistent snapshot.
-  Second step: `fsync` of the input log every few messages (group commit), which
-  also protects the work since that snapshot, at a cost in throughput. Neither
-  is designed nor built.
+  a halt; together with the global rollback above it lets a program go back,
+  after a machine crash, to its last consistent snapshot. Second step: `fsync`
+  of the input log every few messages (group commit), which also protects the
+  work since that snapshot, at a cost in throughput. Neither is designed nor
+  built.
 - **A hook for the module to learn that a port closed.** Today only the engine
   records a `CLOSE`: the barrier will use it and it is stored in `closed_ports`,
   but `capture_node_state()` and `restore_node_state()` never see it, so a
@@ -4906,24 +4954,25 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
 - **A restart of every node, with no test written for it.** The test runner
   checking `restart()` on every node of a program; the harness would need the
   options that the constructor of each node reads.
-- **Python without the GIL.** The free-threaded build of CPython
-  (`python3.14t`) runs the threads of a node in parallel. The reader threads
-  decode and log their lines while the brain thread runs `process_data`,
-  which helps a node with many ports and much traffic. The heartbeat thread
-  goes on while `process_data` is inside a long call of a C extension that
-  keeps the GIL, which would otherwise stop every other thread until it
-  returned, so that a busy node is not taken for a dead one. And the window of
+- **Python without the GIL.** The free-threaded build of CPython (`python3.14t`)
+  runs the threads of a node in parallel. The reader threads decode and log
+  their lines while the brain thread runs `process_data`, which helps a node
+  with many ports and much traffic. The heartbeat thread goes on while
+  `process_data` is inside a long call of a C extension that keeps the GIL,
+  which would otherwise stop every other thread until it returned, so that a
+  busy node is not taken for a dead one. And the window of
   "Messages read from a FIFO but not yet written to the input log" (in the
   Contract's limits) no longer includes the wait for the GIL. The runtime
-  library uses only the standard library, and is meant to guard what its
-  threads share with queues, events and locks, never with the GIL, so it is
-  expected to run on that build as it is. Running its tests and its chaos
-  tests many times on that build would bring out any race that true
-  parallelism makes more likely. `GIL_SWITCH_INTERVAL_SECS` would then have no
-  effect, and that limit of the Contract would be written without the GIL. A
-  node with a single busy thread gains nothing and pays the small cost of that
-  build, and a module that imports an extension not marked as safe without the
-  GIL turns it back on for its whole process.
+  library uses only the standard library, and is meant to guard what its threads
+  share with queues, events and locks, never with the GIL, so it is expected to
+  run on that build as it is. Running its tests and its chaos tests many times
+  on that build would bring out any race that true parallelism makes more
+  likely. `GIL_SWITCH_INTERVAL_SECS` would then have no effect, and that limit
+  of the Contract would be written without the GIL, while
+  "A long call that keeps the GIL looks like a dead node" would go away. A node
+  with a single busy thread gains nothing and pays the small cost of that build,
+  and a module that imports an extension not marked as safe without the GIL
+  turns it back on for its whole process.
 - **Nodes in a compiled language, such as Go.** The brain thread runs
   `process_data` in sequence, so a node whose logic is plain Python is bound by
   the speed of the interpreter when it has many messages and little work for
