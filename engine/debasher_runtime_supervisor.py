@@ -113,6 +113,9 @@ class Supervisor(_PortWorker):
     HEARTBEAT_TIMEOUT_SECS = 30
     #: How often, in seconds, the Supervisor checks the heartbeats.
     HEARTBEAT_CHECK_INTERVAL_SECS = 5
+    #: How many of the last lines of the scheduler output of a node the
+    #: Supervisor copies into its own log before it relaunches the node.
+    NODE_OUTPUT_TAIL_LINES = 20
     # The startup deadline: how long a node has, from each launch, to send
     # its first heartbeat, which comes only after it has restored its
     # checkpoint, run initialize_runtime() and replayed its input log.
@@ -627,12 +630,25 @@ class Supervisor(_PortWorker):
             )
             self.on_node_permanently_failed(node_name)
         else:
-            self.log.warning(
-                "node %r is down (attempt %s/%s), relaunching",
-                node_name,
-                attempts,
-                self.MAX_RELAUNCH_ATTEMPTS,
-            )
+            # The relaunch truncates the scheduler output of the node, where
+            # the cause of the crash is, so its tail is kept here first
+            tail = self._read_node_output_tail(node_name)
+            if tail is None:
+                self.log.warning(
+                    "node %r is down (attempt %s/%s), relaunching",
+                    node_name,
+                    attempts,
+                    self.MAX_RELAUNCH_ATTEMPTS,
+                )
+            else:
+                self.log.warning(
+                    "node %r is down (attempt %s/%s), relaunching; the last lines "
+                    "of its scheduler output:\n%s",
+                    node_name,
+                    attempts,
+                    self.MAX_RELAUNCH_ATTEMPTS,
+                    tail,
+                )
             self.on_node_down(node_name)
 
     def _end_run_if_all_resolved(self):
@@ -683,7 +699,7 @@ class Supervisor(_PortWorker):
     def _get_node_filename(self, node, extension):
         """
         Returns the path of the engine's file of `node` with `extension`
-        ("id", "finished"): <execdir>/<process>_<idx>.<extension> for a
+        ("id", "finished", "sched_out"): <execdir>/<process>_<idx>.<extension> for a
         task of a process with several tasks, <execdir>/<process>.<extension>
         otherwise.
         """
@@ -714,6 +730,23 @@ class Supervisor(_PortWorker):
         if idx is not None:
             command += ["-t", str(idx)]
         return command
+
+    def _read_node_output_tail(self, node_name):
+        """
+        Returns the last NODE_OUTPUT_TAIL_LINES lines of the scheduler output
+        of `node_name`, or None when it has none.
+        """
+        # Only the end of the file is read: a node may have written a lot
+        path = self._get_node_filename(node_name, "sched_out")
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                f.seek(max(0, f.tell() - 64 * 1024))
+                data = f.read()
+        except FileNotFoundError:
+            return None
+        lines = data.decode("utf-8", errors="replace").splitlines()[-self.NODE_OUTPUT_TAIL_LINES:]
+        return "\n".join(lines) if lines else None
 
     def _read_node_id(self, node_name):
         """

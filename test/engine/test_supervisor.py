@@ -614,6 +614,38 @@ def test_declare_down_gives_up_after_exceeding_the_budget():
     assert "a" in proc._given_up
 
 
+def test_declare_down_logs_the_tail_of_the_scheduler_output_before_the_relaunch_truncates_it(
+    execdir, caplog
+):
+    # The relaunch rewrites the .sched_out of the node, where the cause of
+    # the crash is; the log of the Supervisor keeps it
+    lines = [f"line {i}" for i in range(30)] + ["Traceback (most recent call last):", "RuntimeError: the cause"]
+    _node_dir(execdir, "a").joinpath("a.sched_out").write_text("\n".join(lines) + "\n")
+    proc = _Sup(opts=_FAKE_OPTS)
+    logged_before_relaunch = []
+    proc.on_node_down = lambda node: logged_before_relaunch.append(caplog.text)
+
+    with caplog.at_level("WARNING"):
+        proc._declare_down("a")
+
+    assert "RuntimeError: the cause" in logged_before_relaunch[0]
+    assert f"line {30 - proc.NODE_OUTPUT_TAIL_LINES + 2}" in logged_before_relaunch[0]
+    assert f"line {30 - proc.NODE_OUTPUT_TAIL_LINES + 1}\n" not in logged_before_relaunch[0]
+
+
+def test_declare_down_relaunches_a_node_that_left_no_scheduler_output(execdir, caplog):
+    proc = _Sup(opts=_FAKE_OPTS)
+    down_calls = []
+    proc.on_node_down = lambda node: down_calls.append(node)
+
+    with caplog.at_level("WARNING"):
+        proc._declare_down("a")
+
+    assert down_calls == ["a"]
+    assert "node 'a' is down" in caplog.text
+    assert "scheduler output" not in caplog.text
+
+
 def test_declare_down_resets_last_heartbeat_to_start_a_fresh_grace_period():
     proc = _Sup(opts=_FAKE_OPTS)
     proc._last_heartbeat["a"] = 0

@@ -616,6 +616,10 @@ general program but "Watch FIFO":
 * **Relaunch node**, in a program without a ``Supervisor``: relaunches
   the tasks of the node that are down.
 
+Both rewrite the scheduler output of the node: read it first with "Show
+scheduler output" to keep why it went down. With a ``Supervisor``, the
+last lines of it are kept in the log of the ``Supervisor``.
+
 A node with a notice (see the :ref:`resident` Section) shows a mark, an
 ``i`` or a ``!``, whose tooltip gives the text; "Show node state"
 gives it too.

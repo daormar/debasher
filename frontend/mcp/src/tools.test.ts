@@ -643,6 +643,56 @@ describe("talking to a resident program", () => {
     expect(shown).toContain("still running: /o/launch/s17");
   });
 
+  it("says that a stopped program stopped in order when every process finished", async () => {
+    const backend = fakeBackend([resident()], {
+      getProcessStatuses: async () => ({
+        statuses: { n: "FINISHED" }, runInProgress: false, hasProgramState: true, output: "", notices: [],
+      }),
+    });
+
+    const shown = await text(backend, "get_status", { home_dir: HOME });
+
+    expect(shown).toContain("Run phase: stopped\nProgram stopped in order.");
+  });
+
+  it("says that a stopped program stopped abruptly, and where the cause of each failure is", async () => {
+    const backend = fakeBackend([resident()], {
+      getProcessStatuses: async () => ({
+        statuses: { n: "FAILED", sup: "FINISHED" }, runInProgress: false, hasProgramState: true, output: "", notices: [],
+      }),
+    });
+
+    const shown = await text(backend, "get_status", { home_dir: HOME });
+
+    expect(shown).toContain("Program stopped abruptly");
+    expect(shown).toContain("Not finished: n.");
+    expect(shown).toContain("left the cause in its own scheduler output (get_process_output, kind: scheduler)");
+    expect(shown).toContain("Read them before launching the program again");
+  });
+
+  it("sends an AI to the output of the Supervisor first after an abrupt stop of a program that has one", async () => {
+    const supervised = resident();
+    const sup = process("sup", []);
+    sup.nodeKind = "Supervisor";
+    supervised.processes.push(sup);
+    const backend = fakeBackend([supervised], {
+      getProcessStatuses: async () => ({
+        statuses: { n: "FAILED", sup: "FAILED" }, runInProgress: false, hasProgramState: true, output: "", notices: [],
+      }),
+    });
+
+    const shown = await text(backend, "get_status", { home_dir: HOME });
+
+    expect(shown).toContain("Read first the scheduler output of the Supervisor");
+    expect(shown).toContain("the last lines of the scheduler output of each node it relaunched");
+  });
+
+  it("tells an AI to read the scheduler output of a node before relaunching it", () => {
+    const relaunch = TOOLS.find(candidate => candidate.name === "relaunch_node")!;
+
+    expect(relaunch.description).toContain("read it first with get_process_output (kind: scheduler)");
+  });
+
   it("refuses to empty the output directory of a resident program, before asking for confirm", async () => {
     let resets = 0;
     const backend = fakeBackend([resident()], {

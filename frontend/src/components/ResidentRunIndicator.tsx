@@ -1,4 +1,4 @@
-import type { ResidentRunPhase } from "../models/residentRun";
+import { STOPPED_ABRUPTLY, STOPPED_IN_ORDER, type ResidentRunPhase } from "../models/residentRun";
 
 interface Props {
   phase: Exclude<ResidentRunPhase, "new">;
@@ -14,15 +14,6 @@ const MESSAGE: Record<Exclude<ResidentRunPhase, "new" | "stopped">, string> = {
   live: "Program live: it runs until it is stopped.",
   stopping: "Stopping program…",
 };
-
-const STOPPED_IN_ORDER =
-  "Program stopped in order. The next launch resumes it with nothing lost.";
-
-const STOPPED_ABRUPTLY =
-  "Program stopped abruptly: some node did not end cleanly, after a hard " +
-  "kill, a node that failed, or a Supervisor that gave up on a node. The " +
-  "next launch resumes each node from its last checkpoint and its input " +
-  "log, and what the FIFOs held may have been lost.";
 
 export default function ResidentRunIndicator({ phase, inOrder, onHide }: Props) {
 

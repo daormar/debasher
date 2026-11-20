@@ -3248,6 +3248,11 @@ it as the `Supervisor` would:
   the node: the process status of an `array` or `generator` process shows it
   in progress while any of its tasks runs, even with others down.
 
+The relaunch rewrites the scheduler output of each task, where the cause of
+its crash is. Nothing keeps it, unlike a relaunch by the `Supervisor`, which
+copies its last lines into its own log. So it is read first ("Show scheduler
+output").
+
 It is not offered in a program with a `Supervisor`, whose own relaunches it
 would compete with. The backend reads the `.id` and `.finished` files by the
 names that the engine gives to them, as the `Supervisor` does, and would have
@@ -4679,7 +4684,9 @@ fails, answers with the reason as an error.
 - **Running.** `validate_program` (validating the program and checking its
   options, as the Run menu does), `run_program`, `stop_program` (an orderly
   stop, or a hard kill), `get_status` (the run phase and the process statuses,
-  and for a resident program the notices of its nodes), `get_process_output`
+  and for a resident program the notices of its nodes and, once stopped,
+  whether it stopped in order or abruptly, with where to read the cause),
+  `get_process_output`
   (the standard output, the scheduler output, the options or the resolved
   options of a process, or of one of its tasks) and `get_process_tasks`. The
   launch of a general program runs in the background, and the first readings of
@@ -4702,7 +4709,9 @@ fails, answers with the reason as an error.
   its input log, or the batch runs of a launcher node), `snapshot`,
   `restart_node` (refused unless the call says `confirm`, with the warning
   that "Restart node" asks the user to confirm) and `relaunch_node`, offered
-  on the nodes on which the canvas offers them; and `list_fifos`, `write_fifo`
+  on the nodes on which the canvas offers them, whose description says to
+  read the scheduler output of the node first, since the relaunch rewrites
+  it; and `list_fifos`, `write_fifo`
   and `read_fifo`, which talk to the FIFOs that "Talk to FIFOs" offers, with
   its rules (see "Observing and talking to a live program").
 - **Business tests.** `run_tests` and `add_test` (see "Business tests from the

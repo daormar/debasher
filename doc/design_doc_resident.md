@@ -910,6 +910,22 @@ change.
 10. **A node that crashes again right after every relaunch** is not retried
     forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
     the escalation applies.
+11. **The cause of a crash outside the output of the `Supervisor`.** The
+    `Supervisor` keeps the cause of each crash after which it relaunches the
+    node, by copying the tail of the scheduler output of the node into its own
+    log (see "Relaunching a downed node"). Three cases fall outside that output.
+    - A long cause. Only the last `NODE_OUTPUT_TAIL_LINES` lines are copied, so
+      the start of a longer traceback is lost.
+    - A relaunch by hand. It copies nothing, and rewrites the `.sched_out` of
+      the node: `debasher_launch_process` in any program, and the "Relaunch
+      node" action of the web UI and the MCP server in a program without a
+      `Supervisor` (see "Running a resident program" in
+      `doc/design_doc_webui.md`). Whoever relaunches the node reads that output
+      first.
+    - A new launch of the `Supervisor`. A relaunch of it by hand, or the next
+      launch of the program, rewrites the `.sched_out` of the `Supervisor` too,
+      with the tails it held (see "What the `Supervisor` knows of each node, on
+      disk" in Future work).
 
 ## Acceptance: how reliability is shown
 
@@ -3398,6 +3414,19 @@ output of the node (its `.sched_out`), which holds the cause:
 process with several, `-t <idx>`. It is the output of its last attempt, which no
 relaunch follows to truncate it.
 
+A crash that a relaunch follows leaves its cause too. Each launch of the
+built-in scheduler rewrites the `.sched_out` of the node, so a relaunch would
+erase the traceback of the crash that caused it. Before it relaunches a node,
+the `Supervisor` copies into its own log, with the warning that the node is
+down, at most the last `NODE_OUTPUT_TAIL_LINES` lines (20) of that file, taken
+from its last 64 KiB. The output of the `Supervisor` keeps them until the
+`Supervisor` itself is launched again, by hand or by the next launch of the
+program, which rewrites it too. Until then, the cause of every crash that a
+relaunch followed is in that output, which the web UI and the MCP tool
+`get_process_output` (kind scheduler) show. What this leaves out is a limit of
+the Contract (see "The cause of a crash outside the output of the `Supervisor`"
+in the Contract's limits).
+
 ## Escalation on a permanent node failure
 
 This section is about what the `Supervisor` does once it gives up on a node. The
@@ -4529,11 +4558,12 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
   The web UI would offer it then (see "Future work" in
   `doc/design_doc_webui.md`).
 - **What the `Supervisor` knows of each node, on disk.** Whether a node that
-  is down is being relaunched, how many relaunches it has had, and whether the
-  `Supervisor` has given up on it, today only in the log of the `Supervisor`,
-  written also into a file that a tool can read, so that the web UI can show
-  it (see "Observing and talking to a live program" in
-  `doc/design_doc_webui.md`).
+  is down is being relaunched, how many relaunches it has had, whether the
+  `Supervisor` has given up on it, and the tail of the scheduler output of each
+  crash, today only in the log of the `Supervisor`, written also into a file
+  that a tool can read, so that the web UI can show it (see "Observing and
+  talking to a live program" in `doc/design_doc_webui.md`). Such a file would
+  also outlive a new launch of the `Supervisor`, which rewrites its log.
 - **A single orderly stop at a time.** `debasher_stop_resident` taking a lock
   in the output directory, so that a second orderly stop of the same program,
   from another tab of the web UI or from the command line, waits for the first

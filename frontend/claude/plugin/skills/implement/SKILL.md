@@ -120,15 +120,21 @@ that makes a skeleton fail on purpose is gone.
 ## Running the program
 
 Once the processes have code, `validate_program` checks the whole program
-without running it. Running it (`run_program`) writes into its output
-directory and may take long: offer it, and run it only when the user agrees.
-Follow a run with `get_status`, and read what a process left with
-`get_process_output` when something fails. When a resident program with a
-Supervisor stopped by itself, read the scheduler output of the Supervisor
-(`kind: scheduler`): it names the node it gave up on, and whether the stop was
-forced. When `reset_program_state` is refused because a batch run of a launcher
-node still runs, offer to wait for it (`inspect_node`, `what: runs`) or to stop
-it with `debasher_stop -d <run directory>`, and reset once it has ended.
+without running it. Running it (`run_program`) writes into its output directory
+and may take long: offer it, and run it only when the user agrees. Follow a run
+with `get_status`, and read what a process left with `get_process_output` when
+something fails; on a stopped resident program, `get_status` says whether it
+stopped in order or abruptly, and which processes did not finish. When a
+resident program with a Supervisor stopped by itself, read the scheduler output
+of the Supervisor (`kind: scheduler`): it names the node it gave up on, and
+whether the stop was forced. A node that crashed and was relaunched while the
+program goes on left the cause in the scheduler output of the Supervisor, not in
+its own, which the relaunch rewrote. Without a Supervisor, read the scheduler
+output of a node before `relaunch_node`. Read these outputs before launching
+again, which rewrites them. When `reset_program_state` is refused because a
+batch run of a launcher node still runs, offer to wait for it (`inspect_node`,
+`what: runs`) or to stop it with `debasher_stop -d <run directory>`, and reset
+once it has ended.
 
 A run of a general program on an output directory that holds an earlier run
 resumes it, and does not run again a process that finished, even when its

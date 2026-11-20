@@ -44,6 +44,17 @@ export function stoppedInOrder(statuses: Record<string, string>): boolean {
   return values.length > 0 && values.every(status => status === "FINISHED");
 }
 
+// What a stopped program says of how it stopped, said both by the indicator
+// of the run and by get_status of the MCP.
+export const STOPPED_IN_ORDER =
+  "Program stopped in order. The next launch resumes it with nothing lost.";
+
+export const STOPPED_ABRUPTLY =
+  "Program stopped abruptly: some node did not end cleanly, after a hard " +
+  "kill, a node that failed, or a Supervisor that gave up on a node. The " +
+  "next launch resumes each node from its last checkpoint and its input " +
+  "log, and what the FIFOs held may have been lost.";
+
 // What a hard kill leaves, said both when the user is asked to confirm
 // "Kill program" and when an orderly stop falls back to it.
 export const HARD_KILL_CONSEQUENCES =

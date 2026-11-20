@@ -21,6 +21,9 @@ import {
   restartNodeWarning,
   restartsWithBothEnds,
   snapshotOutcome,
+  STOPPED_ABRUPTLY,
+  STOPPED_IN_ORDER,
+  stoppedInOrder,
 } from "../../src/models/residentRun";
 import type { TalkCandidate } from "../../src/models/residentTalk";
 import { entryText, talkCandidates } from "../../src/models/residentTalk";
@@ -534,6 +537,26 @@ async function processStatuses(
   }
 }
 
+// How a stopped resident program stopped, as the indicator of the web UI
+// says it, and, after an abrupt stop, where to read why: a hard kill leaves
+// no cause in the output of the processes it killed, and the Supervisor
+// names the node it gave up on and keeps the tail of the output of each
+// node it relaunched.
+function stoppedHow(statuses: Record<string, string>, supervised: boolean): string {
+  if (stoppedInOrder(statuses)) {
+    return STOPPED_IN_ORDER;
+  }
+  const unfinished = Object.entries(statuses).filter(([, status]) => status !== "FINISHED").map(([name]) => name);
+  const where = supervised
+    ? "Read first the scheduler output of the Supervisor (get_process_output, kind: scheduler): it names a node " +
+      "it gave up on, whether the stop was forced, and the last lines of the scheduler output of each node it " +
+      "relaunched after a crash. A node that failed by itself left the cause in its own scheduler output."
+    : "A node that failed left the cause in its own scheduler output (get_process_output, kind: scheduler); " +
+      "after a hard kill, the processes killed left no cause there, since they were killed from outside.";
+  return `${STOPPED_ABRUPTLY} Not finished: ${unfinished.join(", ")}. ${where} ` +
+    "Read them before launching the program again, which rewrites them.";
+}
+
 function statusLines(statuses: Record<string, string>): string[] {
   return Object.entries(statuses).map(([name, status]) => `  ${name}: ${status}`);
 }
@@ -668,7 +691,7 @@ const runningTools = [
 
   tool(
     "get_status",
-    "The run of the program in its output directory: its phase and the status of each process, and, for a resident program, the notices of its nodes.",
+    "The run of the program in its output directory: its phase and the status of each process, and, for a resident program, the notices of its nodes and, once stopped, whether it stopped in order or abruptly, with where to read the cause.",
     { home_dir: schemas.homeDir, lines },
     READS,
     async (backend, { home_dir, lines: count }) => {
@@ -676,8 +699,10 @@ const runningTools = [
       const { statuses, hasProgramState, notices, output } = await backend.getProcessStatuses(program);
       const lines = statusLines(statuses);
       if (program.programType === "resident") {
+        const phase = residentRunPhase(statuses, hasProgramState, null);
         return [
-          `Run phase: ${residentRunPhase(statuses, hasProgramState, null)}`,
+          `Run phase: ${phase}`,
+          ...(phase === "stopped" ? [stoppedHow(statuses, hasSupervisor(program.processes))] : []),
           ...(lines.length > 0 ? ["Processes:", ...lines] : []),
           ...notices.map(notice =>
             `Notice of ${notice.process}${notice.task === null ? "" : `:${notice.task}`}: ${notice.level}: ${notice.text}`
@@ -849,7 +874,7 @@ const residentTools = [
 
   tool(
     "restart_node",
-    "Kills a node of a live resident program, as in a crash, and has it relaunched from its last checkpoint. Needs confirm.",
+    "Kills a node of a live resident program, as in a crash, and has it relaunched from its last checkpoint. Needs confirm. Without a Supervisor, the relaunch rewrites the scheduler output of the node: read it first if it matters (get_process_output, kind: scheduler).",
     { home_dir: schemas.homeDir, process: schemas.processName, confirm },
     DELETES,
     async (backend, { home_dir, process, confirm: confirmed }) => {
@@ -874,7 +899,7 @@ const residentTools = [
 
   tool(
     "relaunch_node",
-    "Relaunches the tasks of a node that are down, in a resident program without a Supervisor.",
+    "Relaunches the tasks of a node that are down, in a resident program without a Supervisor. The relaunch rewrites the scheduler output of each task, where the cause of its crash is: read it first with get_process_output (kind: scheduler).",
     { home_dir: schemas.homeDir, process: schemas.processName },
     EDITS,
     async (backend, { home_dir, process }) => {

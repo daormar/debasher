@@ -248,7 +248,9 @@ A node redefines four methods, its *hooks*, which the framework calls:
 The options of the process are available in ``self.opts``, a
 dictionary from the name of each option, without its dash, to its
 value; ``self.log`` is a logger that writes to the standard error of
-the process, which ``debasher_get_sched_out`` shows. A node that
+the process, which ``debasher_get_sched_out`` shows for the latest
+launch of the node (the ``Supervisor`` keeps the last lines of the
+earlier ones in its own log, see `The Supervisor`_ below). A node that
 receives on several input ports and needs messages from more than one
 of them keeps what it has received in its node state, and decides in
 ``process_data`` when it has enough: the framework delivers each
@@ -362,7 +364,16 @@ its ``Supervisor``, turns it off.
 
 The ``Supervisor`` declares a node down when its heartbeats stop for
 ``HEARTBEAT_TIMEOUT_SECS`` (30 seconds by default), or at once when its
-process is gone, and relaunches it. A node that goes down again after
+process is gone, and relaunches it. The relaunch rewrites the scheduler
+output of the node, so the warning that the ``Supervisor`` logs when it
+relaunches a node carries the last 20 lines of that output, where the
+cause of the crash usually is.
+``debasher_get_sched_out -d <outdir> -p <supervisor process>`` shows
+them, attempt after attempt, until the next launch of the program,
+which rewrites it. A node relaunched by hand
+(``debasher_launch_process``, or "Relaunch node" in the web interface,
+in a program without a ``Supervisor``) keeps nothing: read its
+scheduler output before. A node that goes down again after
 ``MAX_RELAUNCH_ATTEMPTS`` relaunches (three by default) with no
 heartbeat in between is given up on: the ``Supervisor`` kills it, if it
 still runs, and stops the rest of the program in order with

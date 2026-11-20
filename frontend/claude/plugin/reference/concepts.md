@@ -497,30 +497,38 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   drops any other type with a warning in the scheduler output, and the node
   ignores a `CLOSE` written there. A Supervisor that fails (a thread of its own
   died) leaves its traceback in its scheduler output; the nodes go on running
-  unsupervised: stop the program and launch it again. A node still down after
+  unsupervised: stop the program and launch it again. A relaunch rewrites the
+  scheduler output of the node, so the cause of a crash after which the
+  Supervisor relaunched a node is in the scheduler output of the Supervisor:
+  "node '<node>' is down (attempt <n>/3), relaunching; the last lines of its
+  scheduler output:", followed by its last 20 lines. A node still down after
   `MAX_RELAUNCH_ATTEMPTS` (3) relaunches is given up on: the Supervisor kills it
   if it still runs and stops the rest of the program in order. Its scheduler
   output (`get_process_output`, `kind: scheduler`, on the Supervisor) then says
   "node '<node>' exceeded 3 relaunch attempts, giving up", with the command that
-  shows the cause in the scheduler output of that node; if that stop did not
-  end within 60 s, every process was killed and it ends with "forcing
-  debasher_stop", and what the FIFOs held may be lost. Fix the node given up on,
-  then launch the program again.
+  shows the cause in the scheduler output of that node; if that stop did not end
+  within 60 s, every process was killed and it ends with "forcing
+  debasher_stop", and what the FIFOs held may be lost. Read those outputs first,
+  since a launch rewrites them; fix the node given up on, then launch the
+  program again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the launch
   and resumes the saved program state; `stop_program` stops in order;
   `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
   its state. `reset_output_dir` is refused on a resident program: start afresh
-  with `reset_program_state`, which sets the program state aside (or deletes
-  it with `delete`). The batch runs of a launcher node go on after
-  `stop_program`, and `reset_program_state` refuses while one runs, naming its
-  run directory: follow them with `inspect_node` (`what: runs`) until they end,
-  or offer the user to stop each one with `debasher_stop -d <run directory>`.
-  `restart_node` kills a live node, as in a crash, and has it relaunched from
-  its last checkpoint; `relaunch_node` relaunches a node that is down in a
-  program without a Supervisor. Every node runs at once: when the `cpus` or
-  `mem` of all the nodes together exceed `builtinSchedCpus` or
-  `builtinSchedMem`, the launch is refused before any node starts; raise those
-  limits, leave them empty, or lower the specifications of the nodes.
+  with `reset_program_state`, which sets the program state aside (or deletes it
+  with `delete`). The batch runs of a launcher node go on after `stop_program`,
+  and `reset_program_state` refuses while one runs, naming its run directory:
+  follow them with `inspect_node` (`what: runs`) until they end, or offer the
+  user to stop each one with `debasher_stop -d <run directory>`. `restart_node`
+  kills a live node, as in a crash, and has it relaunched from its last
+  checkpoint; `relaunch_node` relaunches a node that is down in a program
+  without a Supervisor; it rewrites the scheduler output of each task, where the
+  cause of its crash is, so read that first (`get_process_output`,
+  `kind: scheduler`), as before `restart_node` without a Supervisor. Every node
+  runs at once: when the `cpus` or `mem` of all the nodes together exceed
+  `builtinSchedCpus` or `builtinSchedMem`, the launch is refused before any node
+  starts; raise those limits, leave them empty, or lower the specifications of
+  the nodes.
 - **Notices of a live program.** `get_status` lists the notices of the
   nodes, and `inspect_node` (`summary`) the one of a node. The canvas marks
   a node that has one, an "i" in a blue circle for `info` and an "!" in an
