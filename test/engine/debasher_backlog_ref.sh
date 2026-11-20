@@ -53,7 +53,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Src(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         self.send_data("outsink", packet)
@@ -104,7 +104,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass

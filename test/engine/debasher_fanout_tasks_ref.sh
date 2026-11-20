@@ -60,7 +60,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Start(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def __init__(self):
         super().__init__()
@@ -139,7 +139,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Worker(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         self.send_data("outf", packet)
@@ -195,7 +195,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Collect(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def __init__(self):
         super().__init__()
@@ -263,7 +263,7 @@ from debasher_runtime_lib import Supervisor
 
 class Sup(Supervisor):
     HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
-    # Comfortably above the nodes' HEARTBEAT_INTERVAL_SECONDS (0.2 s), so
+    # Comfortably above the nodes' HEARTBEAT_INTERVAL_SECS (0.2 s), so
     # that a relaunched node has time to start before its first heartbeat
     # is due.
     HEARTBEAT_TIMEOUT_SECS = 3

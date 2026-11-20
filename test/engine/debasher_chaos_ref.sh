@@ -64,7 +64,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Fanin(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def __init__(self):
         super().__init__()
@@ -144,7 +144,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Loop(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         self.send_data("outfanin", packet)
@@ -195,7 +195,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass
@@ -256,14 +256,14 @@ from debasher_runtime_lib import Supervisor
 
 class Sup(Supervisor):
     HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
-    # Comfortably above HEARTBEAT_INTERVAL_SECONDS (0.2s on every node),
+    # Comfortably above HEARTBEAT_INTERVAL_SECS (0.2s on every node),
     # not equal to it: a relaunched node's heartbeat thread only sends
     # its first heartbeat after waiting one full interval from
     # start_threads(), on top of its own real startup and replay time,
     # so a timeout with no margin over that interval falsely declares a
     # healthy, freshly relaunched node down again before it ever gets
     # the chance to prove itself (reproduced with a real debasher_exec
-    # run: HEARTBEAT_TIMEOUT_SECS == HEARTBEAT_INTERVAL_SECONDS made a
+    # run: HEARTBEAT_TIMEOUT_SECS == HEARTBEAT_INTERVAL_SECS made a
     # perfectly healthy relaunched sink loop through "down, relaunching"
     # until it exceeded MAX_RELAUNCH_ATTEMPTS, and the Supervisor never
     # resolved).

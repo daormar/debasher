@@ -56,7 +56,7 @@ from debasher_runtime_lib import DirectoryWatcher
 
 class Watch(DirectoryWatcher):
     PATTERN = "*.bam"
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
     OBSERVE_INTERVAL_SECS = 0.3
 
     def request_for(self, path):
@@ -106,7 +106,7 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
     OBSERVE_INTERVAL_SECS = 0.2
 
 
@@ -146,7 +146,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass

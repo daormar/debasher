@@ -713,7 +713,7 @@ def test_all_threads_alive_is_true_with_no_declared_ports():
 class _Supervised(lib.FBPProcess):
     OUTPUT_PORTS = ["out"]
     SUPERVISOR_PORT = "out"
-    HEARTBEAT_INTERVAL_SECONDS = 0.05
+    HEARTBEAT_INTERVAL_SECS = 0.05
 
 
 def test_heartbeat_thread_sends_to_supervisor_port_when_healthy(fifo_path):
@@ -733,7 +733,7 @@ def test_heartbeat_thread_sends_to_supervisor_port_when_healthy(fifo_path):
 def test_heartbeat_thread_sends_nothing_without_a_supervisor_port(fifo_path):
     class _Unsupervised(lib.FBPProcess):
         OUTPUT_PORTS = ["out"]
-        HEARTBEAT_INTERVAL_SECONDS = 0.05
+        HEARTBEAT_INTERVAL_SECS = 0.05
 
     proc = _Unsupervised(opts={"out": fifo_path})
     proc.start_threads()
@@ -755,7 +755,7 @@ def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
     class Slow(lib.FBPProcess):
         OUTPUT_PORTS = ["out"]
         SUPERVISOR_PORT = "out"
-        HEARTBEAT_INTERVAL_SECONDS = 0.5
+        HEARTBEAT_INTERVAL_SECS = 0.5
 
     proc = Slow(opts={"out": "/dev/null"})
     proc._are_all_threads_alive = lambda: True
@@ -775,7 +775,7 @@ def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
         proc._heartbeat_stop.set()
         thread.join(timeout=2)
 
-    assert sent and sent[0] - started >= Slow.HEARTBEAT_INTERVAL_SECONDS
+    assert sent and sent[0] - started >= Slow.HEARTBEAT_INTERVAL_SECS
 
 
 def test_heartbeat_thread_stops_sending_once_a_thread_has_died():

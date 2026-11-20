@@ -62,7 +62,7 @@ Class attributes
 
 .. autoattribute:: debasher_runtime_lib.FBPProcess.OBSERVE_INTERVAL_SECS
 
-.. autoattribute:: debasher_runtime_lib.FBPProcess.HEARTBEAT_INTERVAL_SECONDS
+.. autoattribute:: debasher_runtime_lib.FBPProcess.HEARTBEAT_INTERVAL_SECS
 
 .. autoattribute:: debasher_runtime_lib.FBPProcess.INPUT_LOG_MAX_BYTES
 

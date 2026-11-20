@@ -856,7 +856,7 @@ def test_a_resident_program_survives_the_round_trip(tmp_path):
         nodeCode=NodeCode(
             preamble="import json\n\n# The step of the count\nSTEP = 1",
             classBody=(
-                "HEARTBEAT_INTERVAL_SECONDS = 1\n\ndef __init__(self):\n    super().__init__()\n"
+                "HEARTBEAT_INTERVAL_SECS = 1\n\ndef __init__(self):\n    super().__init__()\n"
                 "    self.count = 0\n\ndef _limit(self):\n    return int(self.opts[\"limit\"])"
             ),
             processData=(

@@ -436,7 +436,9 @@ to it.
   if so, sends the `Supervisor` an `INTERACT` `heartbeat`. An unhealthy node
   simply stops sending. At every tick it also writes the node info file.
 - **checker thread**: the thread of the `Supervisor`, not of a node, that
-  decides on a timer which nodes are down or done (see "Failure detection").
+  decides which nodes are down or done. It wakes every
+  `HEARTBEAT_CHECK_INTERVAL_SECS`, the check interval of the `Supervisor` (see
+  "Failure detection").
 - **observation thread**: only in a node whose class defines `observe()`. It
   runs `observe()` every `OBSERVE_INTERVAL_SECS`, which looks at the outside
   world and brings what it sees into the node with `inject()`, under the name of
@@ -474,14 +476,15 @@ to it.
   relaunched. A **global rollback** would instead rewind every node to the last
   consistent cut; it is future work.
 - **heartbeat**: the `INTERACT` command that a healthy node sends the
-  `Supervisor` every `HEARTBEAT_INTERVAL_SECONDS` from the moment its threads
+  `Supervisor` every `HEARTBEAT_INTERVAL_SECS` from the moment its threads
   start. The `Supervisor` declares a node down when they stop for
   `HEARTBEAT_TIMEOUT_SECS`, or for its startup deadline before the first one, or
-  at once if the node's PID is gone and its `.finished` file is absent.
+  at the next tick of the checker thread if the node's PID is gone and its
+  `.finished` file is absent.
 - **startup deadline**: how long a node has, from each launch, to send its first
   heartbeat, which comes only once it has restored its checkpoint, run
   `initialize_runtime()` and replayed its input log, and then run for one
-  `HEARTBEAT_INTERVAL_SECONDS`. Never shorter than `HEARTBEAT_TIMEOUT_SECS` (see
+  `HEARTBEAT_INTERVAL_SECS`. Never shorter than `HEARTBEAT_TIMEOUT_SECS` (see
   "Failure detection").
 - **down, done, given up**: the states of a node in the `Supervisor`. Down:
   declared down and relaunched. Done: its `.finished` file appeared (it exited
@@ -755,11 +758,15 @@ guarantee in words and never cite these numbers, which may change.
   checkpoint and replays from its input log only what it processed after
   capturing it. A crash during a round aborts it at the node that crashed
   (see "A crash while a round is open" in the limits below).
-- **G7, bounded detection**: a crashed node is noticed within
-  `HEARTBEAT_CHECK_INTERVAL_SECS` when its PID is verifiably gone, and within
-  `HEARTBEAT_TIMEOUT_SECS` when it is alive but unhealthy (one of its reader,
-  writer or brain threads died). It is then relaunched up to
-  `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
+- **G7, bounded detection**: a node whose process is verifiably gone is
+  noticed within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy
+  (one of its reader, writer, brain or observation threads died) is noticed
+  within `HEARTBEAT_TIMEOUT_SECS` plus one `HEARTBEAT_CHECK_INTERVAL_SECS`,
+  since the checker thread of the `Supervisor` looks at it once per tick.
+  Before its first heartbeat, a node has its startup deadline instead of
+  `HEARTBEAT_TIMEOUT_SECS`. These bounds hold while the `Supervisor` itself
+  runs on time (see "Failure detection"). Once noticed, a node is relaunched
+  up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept (a gap in a
   channel's sequence numbers, a marker or a `CLOSE` that follows messages that
   never arrived, a fragment that no `HELLO` follows, a checkpoint with another
@@ -3204,7 +3211,12 @@ with it the trace is exact.
 The `Supervisor` decides which nodes are down in a single thread of its own, the
 checker thread. It wakes every `HEARTBEAT_CHECK_INTERVAL_SECS` and, for each
 node not yet resolved (see "Clean-completion detection"), compares the time
-since its last heartbeat with `HEARTBEAT_TIMEOUT_SECS`. One thread does a cheap
+since its last heartbeat with `HEARTBEAT_TIMEOUT_SECS`. The check interval is a
+class attribute of the `Supervisor`, 5 seconds by default, and no computational
+specification sets it, so only a subclass changes it. It bounds three things:
+the time to notice a node whose PID is gone or whose `.finished` has appeared;
+how long past `HEARTBEAT_TIMEOUT_SECS` a node alive but unhealthy may go
+unnoticed; and when a tick counts as late (see below). One thread does a cheap
 comparison per node at each tick, so the number of threads stays the same
 whatever the number of nodes; a `threading.Timer` per node would instead take a
 thread of the operating system per node, and a new one at every heartbeat, since
@@ -3212,16 +3224,16 @@ a `Timer` that has fired or been cancelled cannot be reused. The time of the
 last heartbeat of each node, `_last_heartbeat[node]`, is written by the brain
 thread when it dispatches an `INTERACT` `heartbeat`, and read and moved forward
 by the checker thread, so a lock guards it. A program sets the timeout of its
-`Supervisor` with the computational specification `heartbeat_timeout_s` of that
-process, in seconds, in the same way as the limits of a node (see "Computational
-specifications of a resident process").
+`Supervisor`, 30 seconds by default, with the computational specification
+`heartbeat_timeout_s` of that process, in seconds, in the same way as the limits
+of a node (see "Computational specifications of a resident process").
 
 From each launch of a node until its first heartbeat, the silence of the node is
 measured against its startup deadline (see the Glossary) instead: the node is
 kept in `_starting`, and `_get_silence_limit` gives the limit. A node restores
 its checkpoint, runs `initialize_runtime()` and replays its input log before its
 heartbeat thread starts, which can take much longer than the interval between
-two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECONDS`
+two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECS`
 after the threads start, not at once: it resets the relaunch budget (see
 "Relaunching a downed node"), so it has to show that the node has run healthy
 for a while, not only that it started. Sent at once, it would reset the budget
@@ -3270,9 +3282,9 @@ more than one `HEARTBEAT_CHECK_INTERVAL_SECS` late, it moves the
 against any node. A node whose process is gone is still declared down at once,
 by its PID, which does not depend on the time elapsed. The other way round, a
 node that is itself starved of CPU for longer than `HEARTBEAT_TIMEOUT_SECS`, or
-its startup deadline, is declared down,
-since from outside it cannot be told from one that is stuck: a program where
-that is expected gives its `Supervisor` a longer `heartbeat_timeout_s`.
+its startup deadline, is declared down, since from outside it cannot be told
+from one that is stuck: a program where that is expected gives its `Supervisor`
+a longer `heartbeat_timeout_s`.
 
 Nothing supervises the `Supervisor` (see "Failure model"), so it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread

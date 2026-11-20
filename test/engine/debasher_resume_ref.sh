@@ -48,7 +48,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Solo(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass

@@ -56,7 +56,7 @@ from debasher_runtime_lib import ProgramLauncher
 
 
 class Launch(ProgramLauncher):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
     OBSERVE_INTERVAL_SECS = 0.2
     STATUS_CHECK_INTERVAL_SECS = 0.5
 
@@ -97,7 +97,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass

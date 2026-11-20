@@ -52,7 +52,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Slow(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
     # The work each message takes, live and in a replay alike.
     WORK_SECS = 0.5
 

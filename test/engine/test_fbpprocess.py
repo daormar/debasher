@@ -92,7 +92,7 @@ _FANIN_OPTS = {
 
 
 class _Undeclared(lib.FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
 
 def test_a_node_run_by_the_engine_takes_its_ports_from_it(monkeypatch):

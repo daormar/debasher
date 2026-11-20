@@ -89,7 +89,7 @@ def test_the_node_info_file_is_written_when_the_threads_start(execdir, fifo_opts
 
     assert info["runtime_class"] == "FBPProcess"
     assert before <= info["started_at"] <= info["updated_at"]
-    assert info["heartbeat_interval_secs"] == lib.FBPProcess.HEARTBEAT_INTERVAL_SECONDS
+    assert info["heartbeat_interval_secs"] == lib.FBPProcess.HEARTBEAT_INTERVAL_SECS
     assert info["limits"] == {
         "input_log_max_bytes": 2 * 1024 * 1024,
         "out_backlog_max_bytes": lib.FBPProcess.OUT_BACKLOG_MAX_BYTES,
@@ -113,7 +113,7 @@ def test_a_task_of_an_array_writes_a_file_of_its_own(execdir, monkeypatch):
 
 def test_every_heartbeat_tick_writes_it_again(execdir):
     class Quick(_Fork):
-        HEARTBEAT_INTERVAL_SECONDS = 0.05
+        HEARTBEAT_INTERVAL_SECS = 0.05
 
     proc = _started(Quick(opts=_OPTS))
     try:
@@ -129,7 +129,7 @@ def test_every_heartbeat_tick_writes_it_again(execdir):
 
 def test_a_tick_reports_a_dead_thread(execdir, fifo_opts):
     class Quick(_Fork):
-        HEARTBEAT_INTERVAL_SECONDS = 0.05
+        HEARTBEAT_INTERVAL_SECS = 0.05
 
     proc = _started(Quick(opts=fifo_opts))
     try:
@@ -190,7 +190,7 @@ def test_the_backlog_restored_from_a_checkpoint_is_counted(execdir):
 
 def test_a_file_that_cannot_be_written_does_not_stop_the_heartbeats(execdir, caplog):
     class Quick(_Fork):
-        HEARTBEAT_INTERVAL_SECONDS = 0.05
+        HEARTBEAT_INTERVAL_SECS = 0.05
 
     proc = _started(Quick(opts=_OPTS))
     proc.log.addHandler(caplog.handler)

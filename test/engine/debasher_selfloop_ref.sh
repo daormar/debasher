@@ -58,7 +58,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Counter(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
     # The pace of the loop: long enough for a test to kill counter while it
     # counts. sleep() does not wait while counter replays its log.
     STEP_SECS = 0.01
@@ -125,7 +125,7 @@ from debasher_runtime_lib import FBPProcess
 
 
 class Sink(FBPProcess):
-    HEARTBEAT_INTERVAL_SECONDS = 0.2
+    HEARTBEAT_INTERVAL_SECS = 0.2
 
     def process_data(self, port_name, packet):
         pass
@@ -181,7 +181,7 @@ from debasher_runtime_lib import Supervisor
 
 class Sup(Supervisor):
     HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
-    # Comfortably above the nodes' HEARTBEAT_INTERVAL_SECONDS (0.2 s), so
+    # Comfortably above the nodes' HEARTBEAT_INTERVAL_SECS (0.2 s), so
     # that a relaunched node has time to start before its first heartbeat
     # is due.
     HEARTBEAT_TIMEOUT_SECS = 3

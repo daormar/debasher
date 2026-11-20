@@ -214,7 +214,7 @@ class FBPProcess(_PortWorker):
 
     #: How often, in seconds, the node tells the Supervisor of the program
     #: that it is alive.
-    HEARTBEAT_INTERVAL_SECONDS = 5
+    HEARTBEAT_INTERVAL_SECS = 5
 
     # The observation of the outside world (see observe()): the name of the
     # port under which what the node observes reaches process_data, which is
@@ -705,7 +705,7 @@ class FBPProcess(_PortWorker):
         info = {
             "runtime_class": self._RUNTIME_CLASS,
             "started_at": self._started_at,
-            "heartbeat_interval_secs": self.HEARTBEAT_INTERVAL_SECONDS,
+            "heartbeat_interval_secs": self.HEARTBEAT_INTERVAL_SECS,
             "limits": {
                 "input_log_max_bytes": self.INPUT_LOG_MAX_BYTES,
                 "out_backlog_max_bytes": self.OUT_BACKLOG_MAX_BYTES,
@@ -1292,7 +1292,7 @@ class FBPProcess(_PortWorker):
         # for a while, not only that it started. A node whose reader fails on
         # the first live message after every relaunch (a gap in the sequence
         # numbers that no relaunch can fill) must use up its budget.
-        while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECONDS):
+        while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECS):
             healthy = self._are_all_threads_alive()
             self.log.debug("heartbeat tick, healthy=%s", healthy)
             # Only ever reports "alive" if every thread still is (passive

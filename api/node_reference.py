@@ -28,7 +28,7 @@ _CLASSES = {
         ("process_data", "capture_node_state", "restore_node_state", "initialize_runtime", "observe"),
         ("send_data", "sleep", "inject", "observe_now", "set_notice", "clear_notice"),
         (
-            "OBSERVE_PORT", "OBSERVE_INTERVAL_SECS", "HEARTBEAT_INTERVAL_SECONDS",
+            "OBSERVE_PORT", "OBSERVE_INTERVAL_SECS", "HEARTBEAT_INTERVAL_SECS",
             "INPUT_LOG_MAX_BYTES", "OUT_BACKLOG_MAX_BYTES", "OUT_BACKLOG_FAIL_BYTES",
             "GIL_SWITCH_INTERVAL_SECS", "NOTICE_MAX_CHARS",
         ),

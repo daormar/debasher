@@ -277,7 +277,7 @@ def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failu
     relaunch, SIGSTOP first (before SIGKILL) so it can never send a
     heartbeat in between and accidentally reset its own relaunch budget
     (a relaunched node's heartbeat thread waits one full
-    HEARTBEAT_INTERVAL_SECONDS from start_threads() before its first
+    HEARTBEAT_INTERVAL_SECS from start_threads() before its first
     send, per the reference program's own Sup class comment; freezing it
     first removes the race rather than trying to outrun it).
 
@@ -304,7 +304,7 @@ def test_supervisor_escalation_stops_the_reachable_graph_after_a_permanent_failu
         # A tight poll interval, and no wait between detecting a fresh
         # relaunch and freezing it: the race this loop is trying to win
         # (SIGSTOP landing before the relaunch's own first heartbeat,
-        # sent one HEARTBEAT_INTERVAL_SECONDS after its start_threads())
+        # sent one HEARTBEAT_INTERVAL_SECS after its start_threads())
         # is won or lost within a few hundred ms, so any extra delay this
         # loop itself adds between iterations just hands it back.
         new_pid = wait_for_relaunch(outdir, "sink", pid, timeout=15.0, interval=0.01)

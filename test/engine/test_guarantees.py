@@ -426,8 +426,8 @@ def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdi
 def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdir):
     """
     Bounded detection: a node that is alive but unhealthy, because one
-    of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS, and
-    then relaunched. A line that is not JSON, followed by one that is not
+    of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS plus one
+    HEARTBEAT_CHECK_INTERVAL_SECS, and then relaunched. A line that is not JSON, followed by one that is not
     a HELLO, stops the reader thread of fanin's ext port (see the resync
     line in the design doc) while the process and its other threads go
     on.
