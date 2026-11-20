@@ -207,6 +207,18 @@ def test_recover_refuses_a_log_that_ends_below_the_position_of_a_checkpoint(tmp_
         _new_log(tmp_path, must_reach=10)
 
 
+def test_recover_refuses_a_last_segment_that_ends_below_the_position_it_is_named_for(tmp_path):
+    # Its name says where the next position goes, so a wrong one would
+    # renumber the records that follow
+    log = _new_log(tmp_path)
+    _fill(log, 3)
+    log.close()
+    os.rename(tmp_path / "log" / _segments(tmp_path)[0], tmp_path / "log" / "5.log")
+
+    with pytest.raises(ValueError, match="is named for position 5 but ends at 3"):
+        _new_log(tmp_path)
+
+
 def test_recover_can_only_run_once_and_before_any_append(tmp_path):
     log = _new_log(tmp_path)
     _fill(log, 1)

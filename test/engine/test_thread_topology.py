@@ -473,6 +473,40 @@ def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_pa
         proc.stop_threads(timeout=2)
 
 
+class _FailsOnFirst(_ReaderOnly):
+    def process_data(self, port_name, packet):
+        if not self.received:
+            self.received.append((port_name, packet))
+            raise RuntimeError("a fault of the module")
+        self.received.append((port_name, packet))
+
+
+def test_an_exception_of_process_data_ends_the_brain_thread_and_not_the_node(fifo_path):
+    # The brain thread is expected to die here; the test asserts on the
+    # state it leaves, as the test above does for a reader
+    proc = _FailsOnFirst(opts={"inf": fifo_path})
+    proc.start_threads()
+    try:
+        with open(fifo_path, "w") as w:
+            w.write(lib.encode_data(1) + "\n")
+            w.flush()
+            assert _wait_until(lambda: not proc._brain_thread.is_alive())
+
+            # Unhealthy, so the heartbeat thread stops sending, but the
+            # reader goes on taking what arrives into the input log
+            assert proc._are_all_threads_alive() is False
+            assert proc._reader_threads["inf"].is_alive()
+            w.write(lib.encode_data(2) + "\n")
+            w.flush()
+
+        assert _wait_until(
+            lambda: [r.envelope.payload for r in proc._input_log.replay(0)] == [1, 2]
+        )
+        assert proc.received == [("inf", 1)]
+    finally:
+        proc.stop_threads(timeout=2)
+
+
 def test_reader_thread_dies_on_two_unparsable_lines_in_a_row(fifo_path):
     proc = _ReaderOnly(opts={"inf": fifo_path})
     proc.start_threads()

@@ -411,6 +411,19 @@ def test_node_pid_alive_reads_the_pid_of_an_id_with_its_start_time(execdir):
     assert proc._is_node_pid_alive("b") is False
 
 
+def test_node_pid_alive_true_for_a_pid_that_another_user_owns(execdir, monkeypatch):
+    # A PID reused by a process of another user proves no death: the
+    # heartbeat still judges the node
+    _node_dir(execdir, "a").joinpath("a.id").write_text("4242@Sun_Oct_11_10:00:00_2026")
+
+    def kill(pid, sig):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "kill", kill)
+    proc = _Sup(opts=_FAKE_OPTS)
+    assert proc._is_node_pid_alive("a") is True
+
+
 def test_node_pid_alive_true_for_malformed_id_file(execdir):
     _node_dir(execdir, "a").joinpath("a.id").write_text("not-a-pid")
     proc = _Sup(opts=_FAKE_OPTS)

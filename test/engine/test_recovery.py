@@ -146,6 +146,26 @@ def test_a_message_that_was_still_waiting_in_the_queue_when_the_node_crashed_is_
     assert relaunched.seen == [("a", 1), ("b", 2), ("a", 3), ("b", 4), ("a", 5)]
 
 
+class _FailsOnThree(_Fanin):
+    def process_data(self, port_name, packet):
+        if packet == 3:
+            raise RuntimeError("a fault of the module on 3")
+        super().process_data(port_name, packet)
+
+
+def test_an_exception_of_process_data_comes_back_in_the_replay_and_ends_the_startup(tmp_path):
+    # process_data is deterministic, so a message on which it raised raises
+    # again when a relaunch replays it, in the main thread: every relaunch
+    # dies in its startup, until the Supervisor gives the node up
+    live = _Fanin(opts=_opts(tmp_path))
+    for item in (_data("a", 1), _data("b", 3), _data("a", 5)):
+        _arrive(live, *item)
+    _crash(live)
+
+    with pytest.raises(RuntimeError, match="a fault of the module on 3"):
+        _relaunch(tmp_path, cls=_FailsOnThree)
+
+
 def test_a_message_processed_after_the_snapshot_and_before_the_round_closes_is_recovered(tmp_path):
     live = _Fanin(opts=_opts(tmp_path))
     _process(

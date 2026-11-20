@@ -364,6 +364,9 @@ class _InputLog:
         after `after` needs.
         """
         if last_pos is None:
+            # Defensive: _start_segment and the check that a segment starts
+            # at the position it is named for already refuse this, and it
+            # guards the replay if either of them changes
             if pos > after + 1:
                 raise ValueError(
                     f"the input log starts at position {pos}, but replaying after "

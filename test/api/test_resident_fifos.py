@@ -4,8 +4,10 @@ FIFOs: what is written is a whole DATA envelope or nothing, and a read takes
 one line and nothing after it.
 """
 
+import importlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -208,6 +210,53 @@ def test_a_line_that_its_writer_leaves_unfinished_is_reported(fifo, monkeypatch)
 
         with pytest.raises(FifoError, match="A line was cut"):
             resident_fifos.read_envelope(fifo, timeout_secs=0.3)
+    finally:
+        os.close(writer)
+        os.close(reader)
+
+
+# --- the format of the runtime ------------------------------------------------
+#
+# The API writes and reads envelopes with its own copy of the format of
+# the runtime; these tests keep the two in step.
+
+
+@pytest.fixture
+def runtime_envelope(monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "engine"))
+    return importlib.import_module("debasher_runtime_envelope")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [7, "text", "a non-ASCII text: café, 日本", {"nested": {"list": [1, 2.5, None]}}, None],
+    ids=["number", "string", "non-ascii", "nested", "none"],
+)
+def test_what_the_api_writes_is_a_data_envelope_that_the_runtime_decodes(runtime_envelope, payload):
+    envelope = runtime_envelope.decode_envelope(resident_fifos.data_line(payload).decode("utf-8"))
+
+    assert (envelope.type, envelope.seq, envelope.payload) == ("DATA", None, payload)
+
+
+def test_the_api_reads_what_the_runtime_writes(runtime_envelope, fifo):
+    reader = _reader(fifo)
+    writer = _writer(fifo, reader)
+    try:
+        lines = [
+            runtime_envelope.encode_hello(),
+            runtime_envelope.encode_data({"x": "é"}, seq=4),
+            runtime_envelope.encode_barrier(2, halt=True, last_seq=4),
+            runtime_envelope.encode_close(4),
+        ]
+        os.write(writer, "".join(line + "\n" for line in lines).encode("utf-8"))
+
+        read = [resident_fifos.read_envelope(fifo) for _ in range(3)]
+
+        assert [(e.type, e.seq, e.payload) for e in read] == [
+            ("DATA", 4, {"x": "é"}),
+            ("BARRIER", None, {"epoch": 2, "halt": True, "last_seq": 4}),
+            ("CLOSE", None, {"last_seq": 4}),
+        ]
     finally:
         os.close(writer)
         os.close(reader)
