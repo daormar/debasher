@@ -74,12 +74,11 @@ name, as here.
 The precise meaning of the words this document uses, in the order in which they
 build on each other. Identifiers in backticks are names that exist in the code
 or that have been decided. The vocabulary of the guarantees (deterministic,
-idempotent, chaos test, mutation check, durability level) is defined in the
-Contract, where it is used. Terms of the engine that this glossary does not
-list, such as task, option list, output directory, process script or completion
-marker, have the meaning that the design of the engine
-(`doc/design_doc_engine.md`) gives them, and so do the entries below that refer
-to it.
+idempotent, chaos test, durability level) is defined in the Contract, where it
+is used. Terms of the engine that this glossary does not list, such as task,
+option list, output directory, process script or completion marker, have the
+meaning that the design of the engine (`doc/design_doc_engine.md`) gives them,
+and so do the entries below that refer to it.
 
 ## Program and topology
 
@@ -923,24 +922,30 @@ change.
    (`FBPProcess` or a class derived from it, or `Supervisor`), although nothing
    on the wire depends on Python (see "Nodes in a compiled language" in Future
    work).
-8. **`--mirror`** (the mirror tap of a fifo, the debugging aid behind the
-   frontend's "Watch FIFO") is not available in resident programs: declaring it
-   aborts the load of the program, before anything is launched. Resident
-   processes keep their own input log.
-9. **A node that has finished for good** takes no part in later rounds, so the
-   consistent cut of an epoch that starts after it finished has no checkpoint of
-   that node: its channel to the others is empty and its last state is its final
-   one. Localized recovery does not need it; a global rollback would have to
-   treat it (see Future work).
-10. **A round that a newer one replaces** leaves the nodes that had not closed
-    it without a checkpoint for its epoch, so that epoch has no complete cut.
-    The round that replaced it does complete, at every node it reaches, and that
-    is the cut that counts; localized recovery never uses a cut. It holds if the
-    initiators start the same epoch (see numbered trigger in the Glossary).
-    Rounds started closer together than they take to complete keep replacing
-    each other, and none completes until they stop, so whatever starts rounds
-    periodically has to leave more time between them than a round takes.
-11. **A crash while a round is open.** A node that crashes while a round is open
+8. **No mirror tap on a channel.** A channel of a resident program cannot be
+   watched live through a mirror log: the engine refuses `--mirror` when the
+   program is loaded, and the web UI does not offer "Watch FIFO".
+   - Why. The tap would sit between the two endpoints of the channel, and the
+     reconnection after a node failure needs each endpoint to hold the FIFO
+     itself (ghost connections, see "Why the log is not built on the mirror
+     tap").
+   - A channel read inside the program. The input log of its reader takes the
+     place of the mirror log. It holds what arrived on the channel, and reading
+     it takes nothing from the channel (the `log` command of
+     `debasher_inspect_resident`, "Show node state" in the web UI).
+   - A channel read outside the program. What a node writes into it is
+     recorded nowhere. Only reading the FIFO shows it ("Talk to FIFOs" in the
+     web UI), and reading takes it from the channel (see "Observing and
+     talking to a live program" in `doc/design_doc_webui.md`).
+9. **A round that a newer one replaces** leaves the nodes that had not closed it
+   without a checkpoint for its epoch, so that epoch has no complete cut. The
+   round that replaced it does complete, at every node it reaches, and that is
+   the cut that counts; localized recovery never uses a cut. It holds if the
+   initiators start the same epoch (see numbered trigger in the Glossary).
+   Rounds started closer together than they take to complete keep replacing each
+   other, and none completes until they stop, so whatever starts rounds
+   periodically has to leave more time between them than a round takes.
+10. **A crash while a round is open.** A node that crashes while a round is open
     comes back with no round open. The markers it had received for that round
     are not replayed: the replay brings back only `DATA` and `CLOSE`. Making the
     case recoverable would need a round's partial progress to be durable, which
@@ -959,10 +964,10 @@ change.
       reason a halted marker never goes past its baseline. Then the tool falls
       back to the hard kill of `debasher_stop`, and reports it with its own exit
       code (see "Failing loudly instead of retrying").
-12. **A node that crashes again right after every relaunch** is not retried
+11. **A node that crashes again right after every relaunch** is not retried
     forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
     the escalation applies.
-13. **The cause of a crash outside the output of the `Supervisor`.** The
+12. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
     log (see "Relaunching a downed node"). Three cases fall outside that output.
@@ -1056,19 +1061,6 @@ Besides the chaos test, each guarantee gets its own focused end-to-end test,
 written in the guarantee's words (for the no-silent-loss guarantee: "send 5 and
 then 7 through a fan-in node while a round is open: `process_data` receives
 both").
-
-Every piece of the implementation also gets a **mutation check**, because a test
-that passes on the correct code does not show that it would fail on broken code.
-On a scratch copy of the code, never in the repository, one specific fault that
-the new tests are meant to catch is put back on purpose (the reader ends at
-`CLOSE` again, a flag is ignored, a condition is inverted) and the suite is run:
-at least one test must fail, and the faulty copy, the mutant, is then said to be
-killed. If the suite still passes, the mutant survived: either the tests do not
-really protect that behavior, or the mutant was not the fault it was meant to
-be, and whichever it is gets fixed before the piece counts as done. It is done
-by hand, with a handful of mutants per piece chosen among the ways the code
-could plausibly be wrong; it is not an automated mutation-testing tool and it
-does not measure coverage.
 
 ## The tests of the Contract
 
@@ -4843,7 +4835,9 @@ yet, or stopped, does not count: with the program stopped, nothing launches it.
     readers already assume, but a consistent cut of a later epoch, to inspect
     the state of the program or for a global rollback (see "Global
     (coordinated) rollback" above), needs its state: a checkpoint saved when it
-    finishes, valid for every later epoch.
+    finishes, valid for every later epoch. Its channels to the others are
+    empty in such a cut, and its last state is its final one. Localized
+    recovery does not need that checkpoint.
   - Files. A node stopped by a halt and one that finished for good would
     leave the same `.finished`. The `Supervisor` counts both as done, but a
     resume launches every node again, so a node that finished for good needs
