@@ -377,3 +377,21 @@ _write_node_state() {
     [ "$(debasher::_resident_tool_get_free_reset_dir "${resets}" 20261121_101010)" = "${resets}/20261121_101010_2" ]
 }
 
+
+# --- debasher::_resident_tool_split_csv ------------------------------------
+
+@test "a comma-separated list splits into its names, in their order, and an empty one into none" {
+    local -a names=(left over)
+    debasher::_resident_tool_split_csv "" names
+    [ "${#names[@]}" -eq 0 ]
+    debasher::_resident_tool_split_csv "arr:1,solo" names
+    [ "${names[*]}" = "arr:1 solo" ]
+}
+
+@test "splitting a list leaves the separator of the words as it was" {
+    local -a names=()
+    debasher::_resident_tool_split_csv "a,b" names
+    # With a comma left in IFS, the spaces would no longer split the words
+    local -a words=($(echo "x y z"))
+    [ "${#words[@]}" -eq 3 ]
+}

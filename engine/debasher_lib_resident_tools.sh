@@ -200,6 +200,51 @@ debasher::_resident_tool_list_nodes_of_process()
 }
 
 ########
+# Fills the array named $2 with the names of the comma-separated list $1, in
+# their order; empty for an empty list.
+debasher::_resident_tool_split_csv()
+{
+    local csv=$1
+    local -n split_ref=$2
+
+    split_ref=()
+    [ -n "${csv}" ] || return 0
+    # IFS=... read, not "local IFS=,": local only scopes a variable to this
+    # function, not to the one statement that needs the comma as a
+    # separator, and a leaked IFS of "," broke word-splitting in every
+    # function called afterwards, debasher::_classify_resident_process_role
+    # among them
+    IFS=',' read -ra split_ref <<< "${csv}"
+}
+
+########
+# Appends to the array named $5 the nodes of the process $2, of the program
+# whose output directory is $1, that the associative array named $4 does not
+# leave out: a key <process> leaves out every task of the process, a key
+# <process>:<idx> one task. Waits for the script of the process until the
+# deadline $3. Returns 1, with an error, on a script that does not come in
+# time.
+debasher::_resident_tool_add_nodes_of_process()
+{
+    local absdirname=$1
+    local processname=$2
+    local deadline=$3
+    local -n add_excluded_ref=$4
+    local -n add_nodes_ref=$5
+
+    if [ -n "${add_excluded_ref[${processname}]+x}" ]; then
+        return 0
+    fi
+    local process_nodes node
+    process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
+    while IFS= read -r node; do
+        if [ -z "${add_excluded_ref[${node}]+x}" ]; then
+            add_nodes_ref+=("${node}")
+        fi
+    done <<< "${process_nodes}"
+}
+
+########
 # Resolves the comma-separated names $2, each <process> (every task of it)
 # or <process>:<idx> (one task of a process of several), against the nodes
 # of the program whose output directory is $1, into the array named $4.
@@ -215,10 +260,8 @@ debasher::_resident_tool_resolve_node_names()
     local -n resolved_nodes_ref=$4
 
     resolved_nodes_ref=()
-    [ -n "${names_csv}" ] || return 0
-
     local -a names=()
-    IFS=',' read -ra names <<< "${names_csv}"
+    debasher::_resident_tool_split_csv "${names_csv}" names
     local name processname role process_nodes node num_found
     for name in "${names[@]}"; do
         processname=$(debasher::_resident_tool_get_node_processname "${name}")
@@ -263,25 +306,18 @@ debasher::_resident_tool_find_supervisor_and_nodes()
     local -n found_supervisor_ref=$4
     local -n found_nodes_ref=$5
 
+    local -a excluded_names=()
+    debasher::_resident_tool_split_csv "${excluded_csv}" excluded_names
     local -A excluded=()
-    if [ -n "${excluded_csv}" ]; then
-        # IFS=... read, not "local IFS=,": local only scopes a variable to
-        # this function, not to the one statement that needs the comma as
-        # a separator, and a leaked IFS of "," broke word-splitting in
-        # every function called afterwards, including
-        # debasher::_classify_resident_process_role below.
-        local -a names=()
-        IFS=',' read -ra names <<< "${excluded_csv}"
-        local name
-        for name in "${names[@]}"; do
-            excluded["${name}"]=1
-        done
-    fi
+    local name
+    for name in "${excluded_names[@]}"; do
+        excluded["${name}"]=1
+    done
 
     found_supervisor_ref=""
     found_nodes_ref=()
 
-    local processname role process_nodes node
+    local processname role
     for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
         # The classifier of debasher::_validate_resident_program_processes
         role=$(debasher::_classify_resident_process_role "${processname}") || {
@@ -297,17 +333,7 @@ debasher::_resident_tool_find_supervisor_and_nodes()
                 found_supervisor_ref="${processname}"
                 ;;
             fbpprocess)
-                # -x <process> leaves out every task of the process
-                if [ -n "${excluded[${processname}]+x}" ]; then
-                    continue
-                fi
-                process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" "${deadline}") || return 1
-                while IFS= read -r node; do
-                    # -x <process>:<idx> leaves out one task
-                    if [ -z "${excluded[${node}]+x}" ]; then
-                        found_nodes_ref+=("${node}")
-                    fi
-                done <<< "${process_nodes}"
+                debasher::_resident_tool_add_nodes_of_process "${absdirname}" "${processname}" "${deadline}" excluded found_nodes_ref || return 1
                 ;;
             *)
                 echo "Error: process ${processname} does not derive from FBPProcess or Supervisor" >&2
