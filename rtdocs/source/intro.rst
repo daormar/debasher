@@ -1,14 +1,20 @@
 Introduction
 ============
 
-DeBasher is a workflow system whose processes are Unix programs. Each
-process is written in the language its author prefers (Bash, Python,
-R, Perl or Groovy), takes its inputs and gives its outputs through
-named options, and the way options connect across processes defines
-the dependency graph that DeBasher schedules and runs, on one machine
-or on a Slurm cluster. Programs are built in a visual editor, with the
-help of an AI assistant, written by hand as Bash modules, or described
-in Python with the SDK.
+DeBasher generalizes the shell pipeline: from a line of programs joined
+by ``|`` to a graph of programs, in any language, joined by named
+options, which carry a value, a file or a pipe, run on one machine or
+on a Slurm cluster, and can keep state and survive a crash. The pipe is
+a primitive of Unix; the pipeline, which composes programs in one line,
+is how the shell uses it. The pipeline is what DeBasher generalizes,
+and the shell in its name is the shell of the pipeline.
+
+DeBasher is a workflow system whose processes are Unix programs,
+written in Bash, Python, R, Perl or Groovy. The way the options of the
+processes connect defines the dependency graph that DeBasher schedules
+and runs. Programs are built in a visual editor, with the help of an AI
+assistant, written by hand as Bash modules, or described in Python with
+the SDK.
 
 DeBasher follows `flow-based programming
 <https://en.wikipedia.org/wiki/Flow-based_programming>`_, which
@@ -19,10 +25,12 @@ combines `data flow programming
 a program is a network of black box processes, each showing the rest
 only its inputs and outputs, so that the program exploits the
 parallelism that its data dependencies allow and its processes can be
-reused elsewhere. A pipeline, a series of steps where each one waits
-for the data of the previous ones, is the typical case, but not the
-only one: a DeBasher program may have cycles, and processes that never
-end.
+reused elsewhere. The shell pipeline is flow-based programming in one
+dimension, a line; DeBasher gives it the second, the graph. A pipeline,
+a series of steps where
+each one waits for the data of the previous ones, is the typical case,
+but not the only one: a DeBasher program may have cycles, and processes
+that never end.
 
 Flow-based programming is language agnostic by nature, and so is
 DeBasher: a process is a black box with a command-line interface, so

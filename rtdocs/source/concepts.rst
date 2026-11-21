@@ -11,6 +11,28 @@ written by hand, in Bash or in Python, and the :ref:`exec` Section how a
 program is run from the command line. Nothing here requires reading any
 code.
 
+From the pipeline to the graph
+------------------------------
+
+The shell pipeline is the first DeBasher program. In ``a | b | c``
+three commands run at once and two anonymous pipes join them: what
+``a`` writes on its standard output, ``b`` reads on its standard input.
+Give the pipes a name, and a command is no longer limited to one input
+and one output: it can read from several named pipes and write to
+several, and the line becomes a graph. Let what passes between two
+commands be a file as well as a pipe, and the graph knows when to wait:
+a command that reads a file starts when the command that writes it has
+ended, where the two ends of a pipe run together. Let a command run as
+many copies as there are items to process, and the graph has arrays of
+tasks. Add a scheduler that places each command on a machine of a
+cluster, and a graph whose connections are files runs on Slurm; the two
+ends of a pipe have to share a machine, so a graph with pipes runs on
+one. That is the whole of a DeBasher program, and the rest of this
+section names its pieces: the commands are **processes**, the named
+pipes and the files are the values of **options**, the graph is what
+the **connections** between options define, the copies are the
+**tasks** of a process, and the cluster is the work of a **scheduler**.
+
 Programs and processes
 ----------------------
 

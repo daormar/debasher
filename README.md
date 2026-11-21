@@ -9,14 +9,16 @@
 
 # DeBasher
 
-DeBasher is a workflow system whose processes are Unix programs. Each
-process is written in the language its author prefers (Bash, Python, R,
-Perl or Groovy), takes its inputs and gives its outputs through named
-options, and the way options connect across processes defines the
-dependency graph that DeBasher schedules and runs, on one machine or on a
-Slurm cluster. Programs are built in a visual editor, with the help of an
-AI assistant, written by hand as Bash modules, or described in Python
-with the SDK.
+DeBasher generalizes the shell pipeline: from a line of programs joined
+by `|` to a graph of programs, in any language, joined by named options,
+which carry a value, a file or a pipe, run on one machine or on a Slurm
+cluster, and can keep state and survive a crash.
+
+DeBasher is a workflow system whose processes are Unix programs, written
+in Bash, Python, R, Perl or Groovy. The way the options of the processes
+connect defines the dependency graph that DeBasher schedules and runs.
+Programs are built in a visual editor, with the help of an AI assistant,
+written by hand as Bash modules, or described in Python with the SDK.
 
 <p align="center">
   <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"
