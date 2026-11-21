@@ -146,12 +146,12 @@ and so do the entries below that refer to it.
   other node through the channels; a program made of independent subgraphs needs
   one initiator per subgraph.
 - **trigger**: the `INTERACT` command, `start_snapshot` or `shutdown`, that
-  makes a node start a round. It reaches an initiator from the `Supervisor`, or
-  from an actor outside the program that writes it into a FIFO of the initiator,
-  such as `debasher_snapshot_resident` and `debasher_stop_resident` (a snapshot
-  timer of the initiator's own is not built, see "Periodic snapshots from a
-  node's own timer" in Future work). It may carry the epoch of the round it
-  starts (see numbered trigger).
+  makes a node start a round. It reaches an initiator from the `Supervisor`
+  (which has no timer of its own, see "Periodic rounds from a timer of the
+  `Supervisor`" in Future work), or from an actor outside the program that
+  writes it into a FIFO of the initiator, such as `debasher_snapshot_resident`
+  and `debasher_stop_resident`. It may carry the epoch of the round it starts
+  (see numbered trigger).
 - **numbered trigger**: a trigger whose `args` carry the epoch of the round it
   starts, the same for every initiator it reaches. An initiator handles it like
   a marker of that epoch that counts no port as arrived: it is ignored if that
@@ -212,6 +212,13 @@ and so do the entries below that refer to it.
   recovery of a node (the input log, its replay, the sequence numbers), rounds
   and checkpoints, and supervision (the `Supervisor`). See "Layers of the
   design".
+- **durability**: what two layers give together, the recovery of a node and
+  rounds and checkpoints: a node that comes back from a crash or a stop with
+  the state it had. The durability level says which failures it survives (see
+  "Failure model").
+- **memo**: a file in which a node keeps the answer to a call that is not
+  deterministic, with a key that comes from the message, so that a replay
+  reads it instead of calling again (see "Calls that are not deterministic").
 
 ## Messages
 
@@ -655,7 +662,8 @@ which layer needs each of them.
   the holding off. Without a `Supervisor`, a node is relaunched only by hand.
 
 Of the four layers, only supervision is optional. A program with the base
-alone, without the input log and checkpoints, is not possible today.
+alone, without the input log and checkpoints, is not possible today (see "A
+mode without durability" in Future work).
 
 ## Failure model
 
@@ -746,9 +754,11 @@ The obligations themselves, and when each applies:
   counter in the node state, never by the load of its readers. It must not
   depend on wall-clock time, randomness, thread timing, or external reads,
   unless whatever it reads is part of the captured state or of the message
-  stream. Recovery re-executes it, so a non-deterministic `process_data`
-  silently diverges from what it did before the crash. It matters wherever a
-  replay runs: at every start over an output directory that holds state, unless
+  stream, or a memo of the answers to its calls (see "Calls that are not
+  deterministic").
+  Recovery re-executes it, so a non-deterministic `process_data` silently
+  diverges from what it did before the crash. It matters wherever a replay runs:
+  at every start over an output directory that holds state, unless
   `debasher_reset_resident` ran first.
 - **A node sends only inside `process_data`**, in reaction to a message that it
   receives. The framework enforces it: `send_data` raises `RuntimeError` when it
@@ -787,6 +797,40 @@ The obligations themselves, and when each applies:
   takes it for a mistake (a reader with fewer tasks than the array, for
   instance) and refuses the program when it is loaded (see "Declaring and owning
   a FIFO" in `doc/design_doc_engine.md`).
+
+### Calls that are not deterministic
+
+A node may need a call whose answer can change from one call to the next, such
+as one to a language model. A replay would make the call again and could get
+another answer. Three patterns keep `process_data` deterministic over what the
+node has recorded, with nothing added to the framework:
+
+- The call in `observe()`. `process_data` records the request in the node
+  state, so that a relaunch finds it, and hands it to `observe()` through a
+  queue of the class, the one thing that the two threads share;
+  `restore_node_state` puts the pending requests back in that queue.
+  `observe()` makes the call and brings the answer in with `inject()`, with the
+  identifier of its request, so the input log records it as an input, which
+  the replay finds there (see "Observing the outside world"). An observation
+  may enter more than once, so `process_data` acts on the first answer to a
+  request and drops the others.
+- The call in a node of its own. The request goes out on a FIFO, and the
+  answer comes back on another, through a cycle. The reader of the answer logs
+  it as any message. The node that calls is a process that is not resident,
+  or a resident node whose replay sends its answers again, which the reader
+  drops as duplicates (G5).
+- A memo of the node. `process_data` keeps each answer in a file of its own,
+  and reads it there before it calls again. Four conditions make it hold:
+  - the file is outside the node state, which survives only as of a
+    checkpoint;
+  - it is written before any `send_data` that depends on the answer, so that a
+    crash in between leaves nothing sent;
+  - its key comes from the message, such as the identifier of a request, so
+    that a replay finds it;
+  - it is under the output directory of the process, so that
+    `debasher_reset_resident` takes it away with the rest of the state.
+
+  The memo grows with the requests, and pruning it is left to the module.
 
 ## Guarantees
 
@@ -949,10 +993,27 @@ change.
      only if the FIFO outlives the stop, as on an external port whose source
      keeps it open: the reader of the next incarnation finds it as a fragment
      that no `HELLO` follows, which stops that reader.
-4. **Stuck but alive.** A node whose brain thread is alive but blocked (infinite
-   loop, deadlock) is not detected today: the heartbeat proves that its threads
-   are alive, not that they make progress. Not a goal for now (see "Progress in
-   the heartbeat" in Future work).
+4. **Stuck but alive.** A node that is alive and whose work makes no progress is
+   not detected, whether a thread of it is blocked (an endless loop, a
+   deadlock) or what it observes outside has stopped.
+   - Why. The heartbeat proves that the threads of the node are alive, not that
+     they make progress.
+   - What a module can do today, for what it observes outside. An `observe()`
+     that raises when what it watches has not moved for a while ends the
+     observation thread. The node is then no longer healthy, and the
+     `Supervisor` relaunches it. The cause is in the traceback, which the log
+     of the `Supervisor` copies (see "Relaunching a downed node"). Other
+     threads of the node that log a lot can push it out of the lines copied.
+     Only the module knows when silence is a failure, such as when a sequencer
+     stops sending data during a scan of its pores.
+   - A relaunch that never ends. The relaunched node sends a heartbeat, which
+     sets its count of relaunches back to 0. If what it watches is still
+     stopped, `observe()` raises again after the same while, and the node is
+     relaunched for ever, with no escalation. A module that wants a bound
+     counts its own attempts in a file of its output directory and, once
+     they are over it, stops raising and sets a notice instead.
+   - A blocked brain thread. Nothing detects it today (see "A check that the
+     brain thread makes progress" in Future work).
 5. **A long call that keeps the GIL looks like a dead node.** While
    `process_data` or `observe()` is inside a call of a C extension that does not
    release the GIL, no other thread of the node runs, the heartbeat thread
@@ -1028,7 +1089,8 @@ change.
       code (see "Failing loudly instead of retrying").
 11. **A node that crashes again right after every relaunch** is not retried
     forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
-    the escalation applies.
+    the escalation applies, unless it sends a heartbeat between its crashes
+    (see "Stuck but alive").
 12. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
@@ -1045,6 +1107,16 @@ change.
       launch of the program, rewrites the `.sched_out` of the `Supervisor` too,
       with the tails it held (see "What the `Supervisor` knows of each node, on
       disk" in Future work).
+13. **Durability cannot be turned off.** No setting removes the input log and
+    its replay (see "Layers of the design"). Rounds and checkpoints are avoided
+    only by starting none, a stop in order needs one, and with a `Supervisor`
+    its escalation starts a halt round.
+    - The closest today. Start no snapshot, raise `input_log_max_mb`, stop with
+      `debasher_stop` rather than `debasher_stop_resident`, and reset the
+      program before each launch (see "`debasher_reset_resident`: a clean
+      start"). A crash still replays the whole input log, so the obligations of
+      determinism remain.
+    - Beyond it. See "A mode without durability" in Future work.
 
 ## Acceptance: how reliability is shown
 
@@ -1739,8 +1811,8 @@ node test builds a node without the engine to check its business logic.
   a safety net and becomes the normal way the program fails.
   `debasher_snapshot_resident --every` is what triggers rounds regularly, with
   or without a `Supervisor` (see "`debasher_snapshot_resident`: rounds from
-  outside the program"); a timer of the initiator's own is not built (see
-  "Periodic snapshots from a node's own timer" in Future work).
+  outside the program"); a timer of the `Supervisor` is not built (see
+  "Periodic rounds from a timer of the `Supervisor`" in Future work).
 
 ## Defining a node
 
@@ -2691,10 +2763,9 @@ log" in the Contract's limits). The version of `_PortWorker`, which the
 envelope, with no position.
 
 Every queued envelope gets a position, starting at 1; `HELLO` never reaches the
-queue. Whatever starts a round from inside the node, such as a snapshot timer
-(see "Periodic snapshots from a node's own timer" in Future work), has to go
-through the same hook, so that `capture_pos` (see the Glossary) is always
-defined; 0 means that nothing had been processed yet.
+queue. A trigger arrives as an envelope through `_on_arrivals`, so that
+`capture_pos` (see the Glossary) is always defined; 0 means that nothing had
+been processed yet.
 
 ## Recovery: startup and replay
 
@@ -3238,9 +3309,7 @@ The initiator ports are a convenience, not the only way to open a round. Anyone
 outside the program can write an `INTERACT` straight into a control port of an
 initiator, whether or not the program has a `Supervisor` and however it is
 configured: through "Talk to FIFOs", or with `debasher_snapshot_resident`, which
-writes into the control ports of every node; and so could a snapshot timer of
-the initiator's own, which is not built (see "Periodic snapshots from a node's
-own timer" in Future work).
+writes into the control ports of every node.
 
 ## Manual trigger channel
 
@@ -4909,6 +4978,31 @@ refuse for it (see "Launching from the queue on disk").
   of the input log every few messages (group commit), which also protects the
   work since that snapshot, at a cost in throughput. Neither is designed nor
   built.
+- **A mode without durability.** A program would run with the base and
+  supervision alone, with no input log, rounds or checkpoints (see "Layers of
+  the design").
+  - What it gives. No obligation of determinism, idempotence or capture and
+    restore. A crash loses the state of the node and what was in transit, and
+    the `Supervisor` relaunches it with an empty state.
+  - Its form. A switch of the run, with a default of the program and an option
+    of the launch, recorded in `command_line.sh`, as the scheduler of the run
+    is. A node is written the same way in both modes.
+  - A change of mode. Only over a clean output directory: a launch over the
+    state of a run in the other mode is refused.
+  - Where the switches go. A null input log, the load and the save of a
+    checkpoint, the rounds (a snapshot refused, a halt that drains the
+    channels with no checkpoint), the filter of duplicates of a reader, and
+    `ProgramLauncher`.
+  - Two points of design. One is a new incarnation of a writer, announced by its
+    `HELLO`, which would restart the numbers of its channels, a thing that must
+    never happen in a program with durability. The other is what an ordered stop
+    promises with no checkpoint.
+  - Its cost. Mostly around the runtime: the engine, the tools, the web UI, a
+    second contract, rtdocs, the guidance of an AI, and tests in both modes.
+  - The need first. Before it is built, the need it serves has to be named:
+    one that neither a general program of processes joined by FIFOs nor the
+    closest approach of today (see "Durability cannot be turned off" in the
+    Contract's limits) meets.
 - **A hook for the module to learn that a port closed.** Today only the engine
   records a `CLOSE`: the barrier will use it and it is stored in `closed_ports`,
   but `capture_node_state()` and `restore_node_state()` never see it, so a
@@ -4957,36 +5051,48 @@ refuse for it (see "Launching from the queue on disk").
     it could release the FIFOs of that node's input channels at once.
 
   Not designed.
-- **Periodic snapshots from a node's own timer.** A node never starts a round on
-  its own: rounds come from the `Supervisor` or from outside the program, where
-  `debasher_snapshot_resident --every` starts them regularly (see
-  "`debasher_snapshot_resident`: rounds from outside the program"). That tool is
-  a process outside the program, which has to be started again whenever the
-  program is resumed. A timer in the node would make a program take its own
-  checkpoints with no actor outside it. The idea is an opt-in timer thread in
-  `FBPProcess`, gated by a `SNAPSHOT_INTERVAL_SECS` class attribute or option
-  (`None`, disabled, by default), that enters the same logic as a
-  `start_snapshot` trigger directly, as an in-process call and not as a message.
-  The module author would enable it only on a node that is a valid initiator
-  (see "Chandy-Lamport barrier propagation"), and it would work the same with or
-  without a `Supervisor`, which could still trigger rounds on demand. Points to
-  settle: the timer has to start its round through the same hook as an envelope
-  that arrives, so that the round has a `capture_pos` (see "Arrival and
-  positions"); its period has to be longer than a round, or rounds keep
-  replacing each other (see "A round that a newer one replaces" in the
-  Contract's limits); and the timers of several initiators would open rounds of
-  different epochs, which a node that both reach waits for separately, so they
-  need a common numbering, like that of a numbered trigger (see the Glossary).
-  Not built.
-- **Progress in the heartbeat.** A node whose brain thread is alive but
-  blocked is not detected (see "Stuck but alive" in the Contract's limits):
-  the heartbeat says that its threads are alive, not that they make progress.
-  A counter of the envelopes the brain thread has processed, sent with each
-  heartbeat, would let the `Supervisor` notice a node whose counter does not
-  move. Telling that apart from a healthy node needs care: a node with
-  nothing to process makes no progress either, and a long `process_data` call
-  is not a failure (the Introduction asks for no false positives when a
-  process is busy). Not designed.
+- **Periodic rounds from a timer of the `Supervisor`.** The `Supervisor` would
+  start a round every given period, as if a trigger had reached its manual
+  trigger port.
+  - Why there. It already numbers the triggers of its manual trigger port and
+    relays them to every initiator, so one source numbers the rounds of the
+    timer, whatever the number of initiators.
+  - Why not outside. `debasher_snapshot_resident --every` is a process outside
+    the program, started again at every resume; the timer resumes with the
+    program.
+  - How it is set. A computational specification of the `Supervisor`, for
+    instance `snapshot_interval_s`, with no timer by default.
+  - To settle. The period has to be longer than a round (see "A round that a
+    newer one replaces" in the Contract's limits), the timer has to live with
+    a manual trigger and with `--every`, and a `Supervisor` with a timer needs
+    initiator ports.
+  - Without a `Supervisor`. A program still needs `--every`.
+  - A timer in a node instead. Left out: the timers of several initiators would
+    need a common numbering of their rounds.
+- **A check that the brain thread makes progress.** A computational
+  specification of a node, for instance `progress_timeout_s`, off by default:
+  the node is not healthy when its inbound queue holds messages and its brain
+  thread has taken none for that long (see "Stuck but alive" in the Contract's
+  limits).
+  - What it covers. A brain thread blocked in an endless loop, a deadlock or a
+    call that never returns. What the node observes outside is left to its
+    `observe()`, which alone knows when silence is a failure.
+  - No false positive for a quiet node. A node with an empty inbound queue is
+    never flagged.
+  - A long `process_data`. As for the GIL (see "A long call that keeps the
+    GIL looks like a dead node" in the Contract's limits), the timeout goes
+    above the longest call.
+  - When to build it. Only if a blocked brain thread turns out to be a case
+    that a program meets.
+- **A dead thread ends the process.** When a thread of a node has died, the
+  heartbeat thread would log the cause and end the process with an error, so
+  that an exception and a crash were the same (see "A node with a dead thread
+  and no `Supervisor`" in the Contract's limits).
+  - What it gives. Without a `Supervisor`, the status `FAILED` instead of an
+    `IN-PROGRESS` that does nothing. With one, detection by the PID within
+    `HEARTBEAT_CHECK_INTERVAL_SECS`.
+  - What it costs. G7 and G8 change, the exit must not lose the logs, and it
+    needs new unit and real-run tests.
 - **Supervising the `Supervisor`.** If the `Supervisor` dies, the nodes keep
   running, but nobody relaunches a crashed node, and no FIFO is held, until the
   `Supervisor` is relaunched by hand (see the Contract's failure model). It
