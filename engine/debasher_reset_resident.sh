@@ -103,44 +103,6 @@ check_pars()
     fi
 }
 
-########
-# Prints, one per line, the paths that hold the state of the nodes of process
-# $2: in the process's __exec__ directory, the checkpoints, the input log, the
-# halted marker and the notice of each task, named as the node's runtime names
-# them (see _get_execdir_entry in engine/debasher_runtime_transport.py), and the
-# output directory of the process unless it is empty. Only the paths that
-# exist.
-list_state_paths_of_process()
-{
-    local absdirname=$1
-    local processname=$2
-
-    # A process never launched has no script and no state in its execdir,
-    # but it may still have its output directory
-    local script_file=$(debasher::_get_script_filename "${absdirname}" "${processname}")
-    if [ -f "${script_file}" ]; then
-        local process_nodes node name path
-        # No wait: the script is there
-        process_nodes=$(debasher::_resident_tool_list_nodes_of_process "${absdirname}" "${processname}" 0) || return 1
-        while IFS= read -r node; do
-            # node_info and control_ports are left: nothing reads them back,
-            # and every incarnation writes them again
-            for name in checkpoints log halted notice; do
-                path=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" "${name}")
-                if [ -e "${path}" ]; then
-                    echo "${path}"
-                fi
-            done
-        done <<< "${process_nodes}"
-    fi
-
-    # An empty output directory is left, as the reset itself leaves it, so
-    # that a program with nothing left to reset says so
-    local outdir=$(debasher::_get_process_outdir_given_dirname "${absdirname}" "${processname}")
-    if [ -d "${outdir}" ] && [ -n "$("${FIND}" "${outdir}" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
-        echo "${outdir}"
-    fi
-}
 
 ########
 # Returns 1, with an error, if some process of the program is running.
@@ -201,26 +163,6 @@ ensure_no_batch_run_is_running()
     fi
 }
 
-########
-# Sets aside, or deletes if $4 (delete_state) is 1, what $2 names: a path in
-# the program's output directory $1. Set aside, it keeps its path relative to
-# $1 under $3. Returns 1 if it cannot.
-reset_path()
-{
-    local absdirname=$1
-    local path=$2
-    local reset_dir=$3
-    local delete_state=$4
-
-    if [ ${delete_state} -eq 1 ]; then
-        "${RM}" -rf "${path}"
-        return
-    fi
-
-    local target="${reset_dir}/${path#${absdirname}/}"
-    "${MKDIR}" -p "${target%/*}" || return 1
-    "${MV}" "${path}" "${target}"
-}
 
 ########
 # Resets the resident program whose output directory is $1: sets aside the
@@ -257,13 +199,8 @@ reset_resident_program()
 
     local stamp
     printf -v stamp '%(%Y%m%d_%H%M%S)T' -1
-    local reset_dir="${absdirname}/${DEBASHER_RESET_RESIDENT_DIRNAME}/${stamp}"
-    # A second reset within the same second gets a directory of its own
-    local num_same_stamp=0
-    while [ -e "${reset_dir}" ]; do
-        num_same_stamp=$((num_same_stamp + 1))
-        reset_dir="${absdirname}/${DEBASHER_RESET_RESIDENT_DIRNAME}/${stamp}_${num_same_stamp}"
-    done
+    local reset_dir
+    reset_dir=$(debasher::_resident_tool_get_free_reset_dir "${absdirname}/${DEBASHER_RESET_RESIDENT_DIRNAME}" "${stamp}")
 
     local where=" (in ${reset_dir})"
     if [ ${delete_state} -eq 1 ]; then
@@ -278,12 +215,12 @@ reset_resident_program()
             [ -n "${path}" ] || continue
             # Nothing is undone: running the tool again moves what is left
             # and does not find what it already moved
-            reset_path "${absdirname}" "${path}" "${reset_dir}" "${delete_state}" || {
+            debasher::_resident_tool_reset_path "${absdirname}" "${path}" "${reset_dir}" "${delete_state}" || {
                 echo "Error: could not reset ${path}; what came before it is already reset${where}: run debasher_reset_resident again once the cause is fixed" >&2
                 return 1
             }
             num_paths=$((num_paths + 1))
-        done < <(list_state_paths_of_process "${absdirname}" "${processname}")
+        done < <(debasher::_resident_tool_list_state_paths_of_process "${absdirname}" "${processname}")
     done
 
     # The output directory of every process is left there empty, as the

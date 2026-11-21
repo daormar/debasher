@@ -21,6 +21,10 @@ setup() {
     SLEEP="$(command -v sleep)"
     CAT="$(command -v cat)"
     TIMEOUT="$(command -v timeout)"
+    FIND="$(command -v find)"
+    RM="$(command -v rm)"
+    MKDIR="$(command -v mkdir)"
+    MV="$(command -v mv)"
 
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
     source "${ENGINE_BUILDDIR}/debasher_lib_resident_tools.sh"
@@ -266,3 +270,110 @@ _set_up_program() {
         [[ "${output}" == *"${name} is not a node of the program"* ]]
     done
 }
+
+# --- what debasher_reset_resident takes away, and where ---------------------
+
+# The state of a node of process $1 (task $2 of an array, if given): a
+# checkpoint, an input log, a halted marker and a notice, and the node info
+# file, which a reset leaves
+_write_node_state() {
+    local process=$1 suffix=${2:+_$2}
+    mkdir -p "${outdir}/__exec__/${process}/checkpoints${suffix}" "${outdir}/__exec__/${process}/log${suffix}"
+    echo 7 > "${outdir}/__exec__/${process}/halted${suffix}"
+    echo '{"level": "info", "text": "hi"}' > "${outdir}/__exec__/${process}/notice${suffix}"
+    echo '{}' > "${outdir}/__exec__/${process}/node_info${suffix}"
+}
+
+@test "the state of a node is its checkpoints, input log, halted marker and notice, and the output of its process" {
+    _set_up_program
+    _write_node_state solo
+    mkdir -p "${outdir}/solo"
+    echo result > "${outdir}/solo/result.txt"
+
+    run debasher::_resident_tool_list_state_paths_of_process "${outdir}" solo
+    [ "${status}" -eq 0 ]
+    [ "$(printf '%s\n' "${lines[@]}" | sort | tr '\n' ' ')" = "${outdir}/__exec__/solo/checkpoints ${outdir}/__exec__/solo/halted ${outdir}/__exec__/solo/log ${outdir}/__exec__/solo/notice ${outdir}/solo " ]
+}
+
+@test "the state of an array is that of each of its tasks" {
+    _set_up_program
+    _write_node_state arr 0
+    _write_node_state arr 2
+
+    run debasher::_resident_tool_list_state_paths_of_process "${outdir}" arr
+    [ "${status}" -eq 0 ]
+    [ "${#lines[@]}" -eq 8 ]
+    [[ " ${lines[*]} " == *" ${outdir}/__exec__/arr/checkpoints_2 "* ]]
+    [[ " ${lines[*]} " != *"node_info"* ]]
+}
+
+@test "a process never launched has no state in its execdir, only its output if any" {
+    _set_up_program solo never
+    mkdir -p "${outdir}/never"
+    echo left > "${outdir}/never/left.txt"
+
+    run debasher::_resident_tool_list_state_paths_of_process "${outdir}" never
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "${outdir}/never" ]
+}
+
+@test "an empty output directory is no state" {
+    _set_up_program
+    mkdir -p "${outdir}/solo"
+
+    run debasher::_resident_tool_list_state_paths_of_process "${outdir}" solo
+    [ "${status}" -eq 0 ]
+    [ -z "${output}" ]
+}
+
+@test "what is set aside keeps its path relative to the output directory" {
+    _write_node_state solo
+    local reset_dir="${outdir}/__reset__/20261121_101010"
+
+    debasher::_resident_tool_reset_path "${outdir}" "${outdir}/__exec__/solo/checkpoints" "${reset_dir}" 0
+
+    [ -d "${reset_dir}/__exec__/solo/checkpoints" ]
+    [ ! -e "${outdir}/__exec__/solo/checkpoints" ]
+}
+
+@test "an output directory with glob characters in its path is stripped as it is spelt" {
+    # Unquoted, the pattern [1] matches the character 1, not the text [1]
+    outdir="${BATS_TEST_TMPDIR}/run[1]/out"
+    mkdir -p "${outdir}/__exec__/solo"
+    _write_node_state solo
+    local reset_dir="${outdir}/__reset__/20261121_101010"
+
+    debasher::_resident_tool_reset_path "${outdir}" "${outdir}/__exec__/solo/log" "${reset_dir}" 0
+
+    [ -d "${reset_dir}/__exec__/solo/log" ]
+}
+
+@test "with --delete what is taken away is deleted, not set aside" {
+    _write_node_state solo
+    local reset_dir="${outdir}/__reset__/20261121_101010"
+
+    debasher::_resident_tool_reset_path "${outdir}" "${outdir}/__exec__/solo/checkpoints" "${reset_dir}" 1
+
+    [ ! -e "${outdir}/__exec__/solo/checkpoints" ]
+    [ ! -e "${reset_dir}" ]
+}
+
+@test "a path that cannot be set aside is an error, and stays where it was" {
+    _write_node_state solo
+    local resets="${outdir}/__reset__"
+    mkdir -p "${resets}"
+    chmod a-w "${resets}"
+
+    run debasher::_resident_tool_reset_path "${outdir}" "${outdir}/__exec__/solo/checkpoints" "${resets}/20261121_101010" 0
+    chmod u+w "${resets}"
+    [ "${status}" -ne 0 ]
+    [ -d "${outdir}/__exec__/solo/checkpoints" ]
+}
+
+@test "a second reset within the same second gets a directory of its own" {
+    local resets="${outdir}/__reset__"
+    [ "$(debasher::_resident_tool_get_free_reset_dir "${resets}" 20261121_101010)" = "${resets}/20261121_101010" ]
+    mkdir -p "${resets}/20261121_101010" "${resets}/20261121_101010_1"
+    [ "$(debasher::_resident_tool_get_free_reset_dir "${resets}" 20261121_101010)" = "${resets}/20261121_101010_2" ]
+}
+
