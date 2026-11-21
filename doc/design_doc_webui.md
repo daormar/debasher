@@ -2882,7 +2882,13 @@ it; a class with a decorator, more than one base or a keyword such as
 `metaclass=`, or with its body on the line of its declaration; and a statement
 of the class body that uses a hook it follows, such as `handler = process_data`,
 which would come before the hook once script generation writes the hooks after
-the rest of the class body. A process with additional specifications or
+the rest of the class body. So is a heredoc with a part whose string of several
+lines would change when script generation writes the part back, with 4 spaces
+per level: a line of the string less indented than its code, code not indented
+with 4 spaces per level, or a line of the string that holds only spaces. Import
+finds the bounds of each part from the syntax of the code, not from the
+indentation of its lines; only the comments that follow a part are placed by
+their column. A process with additional specifications or
 additional methods, which a resident program does not offer (see "The program
 model of a resident program"), is refused too, as is one whose code is not a
 Python heredoc. Import then refuses the whole program and lists every node that

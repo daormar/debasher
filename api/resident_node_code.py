@@ -12,7 +12,9 @@ why the heredoc does not fit them.
 """
 
 import ast
+import io
 import textwrap
+import tokenize
 from dataclasses import dataclass
 
 from .models import NodeCode, ProgramProcess
@@ -224,19 +226,6 @@ def _start_line(statement: ast.stmt) -> int:
     return min([statement.lineno, *(decorator.lineno for decorator in decorators)])
 
 
-def _header_end(lines: list[str], statement: ast.stmt) -> int:
-    """The line where the header of a class or a function ends, with its
-    colon."""
-    line = statement.lineno
-    while not lines[line - 1].split("#", 1)[0].rstrip().endswith(":"):
-        line += 1
-    return line
-
-
-def _indentation(line: str) -> int:
-    return len(line) - len(line.lstrip())
-
-
 def _loaded_names(statement: ast.stmt) -> set[str]:
     """The names that a statement of a class body reads when the class is
     created: not those of the bodies of the functions and classes that it
@@ -282,6 +271,41 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
             None, None, [Misfit(exc.lineno, f"the code is not valid Python ({exc.msg})", "fix the syntax error")]
         )
 
+    found = _find_node_class(tree)
+    if isinstance(found, Misfit):
+        return DecomposedHeredoc(None, None, [found])
+    index, cls, kind = found
+    lines = source.split("\n")
+    misfits = _check_class_declaration(tree, index, cls, kind)
+    preamble = _get_preamble(lines, tree, index, cls, kind)
+
+    if kind == "Supervisor":
+        return DecomposedHeredoc(kind, None, misfits + _check_supervisor_code(cls, preamble))
+
+    if cls.body[0].lineno == cls.lineno:
+        misfits.append(
+            Misfit(
+                cls.lineno,
+                "the class body is on the line of the class declaration",
+                "write the class body on the lines below the declaration",
+            )
+        )
+        return DecomposedHeredoc(kind, None, misfits)
+
+    layout = _SourceLayout(source)
+    class_body, hooks, body_misfits = _split_class(lines, layout, tree, index, cls)
+    code = NodeCode(
+        preamble=preamble,
+        classBody=class_body,
+        **{_HOOK_FIELDS[hook]: body for hook, body in hooks.items()},
+    )
+    return DecomposedHeredoc(kind, code, misfits + body_misfits)
+
+
+def _find_node_class(tree: ast.Module):
+    """(index in the module, class, node kind) of the one class that derives
+    from a class of the runtime library, or the Misfit of a module with
+    none or several."""
     aliases = _runtime_aliases(tree)
     node_classes = [
         (index, statement, kind)
@@ -291,21 +315,17 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
         if kind is not None
     ]
     if len(node_classes) != 1:
-        return DecomposedHeredoc(
+        return Misfit(
             None,
-            None,
-            [
-                Misfit(
-                    None,
-                    f"the code defines {len(node_classes)} classes that derive from a class of the runtime library",
-                    "define exactly one, the class of the node",
-                )
-            ],
+            f"the code defines {len(node_classes)} classes that derive from a class of the runtime library",
+            "define exactly one, the class of the node",
         )
-    index, cls, kind = node_classes[0]
-    lines = source.split("\n")
-    misfits = []
+    return node_classes[0]
 
+
+def _check_class_declaration(tree: ast.Module, index: int, cls: ast.ClassDef, kind: str) -> list[Misfit]:
+    """The misfits of the declaration of the class and of what follows it."""
+    misfits = []
     if cls.decorator_list:
         misfits.append(
             Misfit(
@@ -334,11 +354,13 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
                     f"a node is started only by the line {cls.name}().run()",
                 )
             )
+    return misfits
 
-    # The preamble: what comes before the class, less the import of its
-    # node kind when it has exactly the form that script generation writes.
-    class_start = _start_line(cls)
-    preamble_lines = lines[: class_start - 1]
+
+def _get_preamble(lines: list[str], tree: ast.Module, index: int, cls: ast.ClassDef, kind: str) -> str:
+    """What comes before the class, less the import of its node kind when it
+    has exactly the form that script generation writes."""
+    preamble_lines = lines[: _start_line(cls) - 1]
     for statement in tree.body[:index]:
         if (
             isinstance(statement, ast.ImportFrom)
@@ -351,66 +373,143 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
             for line in range(statement.lineno, statement.end_lineno + 1):
                 preamble_lines[line - 1] = None
             break
-    preamble = normalized_part("\n".join(line for line in preamble_lines if line is not None))
+    return normalized_part("\n".join(line for line in preamble_lines if line is not None))
 
-    if kind == "Supervisor":
-        own_code = [
-            statement
-            for statement in cls.body
-            if not isinstance(statement, ast.Pass)
-            and not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))
-        ]
-        for statement in own_code:
-            misfits.append(
-                Misfit(
-                    _start_line(statement),
-                    "the Supervisor has code of its own, which the web UI does not edit and has "
-                    "nowhere to keep",
-                    "remove it: the web UI writes the whole Supervisor, with the body pass",
-                )
-            )
-        if preamble:
-            misfits.append(
-                Misfit(
-                    1,
-                    "the Supervisor has code of its own before its class, which the web UI does "
-                    "not edit and has nowhere to keep",
-                    f"leave only the line from {_RUNTIME_MODULE} import Supervisor before the class",
-                )
-            )
-        return DecomposedHeredoc(kind, None, misfits)
 
-    if cls.body[0].lineno == cls.lineno:
+def _check_supervisor_code(cls: ast.ClassDef, preamble: str) -> list[Misfit]:
+    """The misfits of a Supervisor with code of its own, in its class or
+    before it."""
+    own_code = [
+        statement
+        for statement in cls.body
+        if not isinstance(statement, ast.Pass)
+        and not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))
+    ]
+    misfits = [
+        Misfit(
+            _start_line(statement),
+            "the Supervisor has code of its own, which the web UI does not edit and has nowhere to keep",
+            "remove it: the web UI writes the whole Supervisor, with the body pass",
+        )
+        for statement in own_code
+    ]
+    if preamble:
         misfits.append(
             Misfit(
-                cls.lineno,
-                "the class body is on the line of the class declaration",
-                "write the class body on the lines below the declaration",
+                1,
+                "the Supervisor has code of its own before its class, which the web UI does not edit "
+                "and has nowhere to keep",
+                f"leave only the line from {_RUNTIME_MODULE} import Supervisor before the class",
             )
         )
-        return DecomposedHeredoc(kind, None, misfits)
+    return misfits
 
-    # The lines of the class, up to its last indented line before the next
-    # statement of the module.
-    first = _header_end(lines, cls) + 1
-    last = _start_line(tree.body[index + 1]) - 1 if index + 1 < len(tree.body) else len(lines)
-    while last >= first and (not lines[last - 1].strip() or _indentation(lines[last - 1]) == 0):
-        last -= 1
+
+class _SourceLayout:
+    """What the tokens of a source say of its lines, which ast does not keep:
+    where a header ends, which lines hold only a comment, and where the
+    strings of several lines are."""
+
+    def __init__(self, source: str):
+        self.colons = []
+        self.comments = {}
+        self.multiline_strings = []
+        code_lines = set()
+        trivial = (tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT, tokenize.DEDENT, tokenize.ENDMARKER)
+        fstring_start = getattr(tokenize, "FSTRING_START", None)
+        fstring_end = getattr(tokenize, "FSTRING_END", None)
+        open_fstrings = []
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            (start_line, start_col), (end_line, _) = token.start, token.end
+            if token.type == tokenize.OP and token.string == ":":
+                self.colons.append(token.start)
+            if token.type == tokenize.COMMENT:
+                self.comments[start_line] = start_col
+            if token.type not in trivial:
+                code_lines.update(range(start_line, end_line + 1))
+            if token.type == tokenize.STRING and end_line > start_line:
+                self.multiline_strings.append((start_line, end_line))
+            # Since Python 3.12 an f-string comes as several tokens
+            if token.type == fstring_start:
+                open_fstrings.append(start_line)
+            if token.type == fstring_end and open_fstrings:
+                first = open_fstrings.pop()
+                if end_line > first:
+                    self.multiline_strings.append((first, end_line))
+        # A line whose only token is a comment: never part of a string
+        self.comment_lines = {line: col for line, col in self.comments.items() if line not in code_lines}
+
+    def get_header_end(self, statement: ast.stmt) -> int:
+        """The line of the colon that ends the header of a class or a function
+        whose body starts on a line of its own."""
+        # From the first line of the first statement, its decorators
+        # included, whose colons are not those of the header
+        body_start = (_start_line(statement.body[0]), 0)
+        return max(line for line, col in self.colons if (statement.lineno, 0) <= (line, col) < body_start)
+
+    def get_block_end(self, statement: ast.stmt, limit: int, lines: list[str], blanks: bool) -> int:
+        """The last line of a class or a function: that of its last statement,
+        and then the lines below it, up to `limit`, that hold only a comment
+        indented more than its header, and, with `blanks`, the blank lines
+        among and after them."""
+        end = statement.end_lineno
+        for line in range(end + 1, limit + 1):
+            col = self.comment_lines.get(line)
+            if col is not None and col > statement.col_offset:
+                end = line
+            elif col is not None:
+                break
+            # Past the last statement, so never inside a string
+            elif not lines[line - 1].strip():
+                if blanks:
+                    end = line
+            else:
+                break
+        return end
+
+    def find_changed_string(self, lines: list[str], part_lines: list[int], indent: str) -> int | None:
+        """
+        The first line of a string of several lines, among the lines
+        `part_lines` of a part, that would change when the part is written
+        back with `indent`: because the indentation that the part loses to
+        normalized_part and the one it gets back differ, or because a line of
+        the string holds only spaces, which both empty.
+        """
+        in_part = set(part_lines)
+        strings = [(start, end) for start, end in self.multiline_strings if start in in_part and end in in_part]
+        if not strings:
+            return None
+        text = "\n".join(lines[line - 1] for line in part_lines)
+        removed = next(
+            (len(a) - len(b) for a, b in zip(text.splitlines(), textwrap.dedent(text).splitlines()) if a.strip()),
+            len(indent),
+        )
+        for start, end in strings:
+            spaces_only = any(lines[line - 1] and not lines[line - 1].strip() for line in range(start + 1, end + 1))
+            if removed != len(indent) or spaces_only:
+                return start
+        return None
+
+
+def _split_class(lines, layout, tree, index, cls):
+    """The class body and the body of each hook, normalized, and the misfits of
+    the class: a statement that uses a hook it follows, and a part with a
+    string that writing it back would change."""
+    first = layout.get_header_end(cls) + 1
+    limit = _start_line(tree.body[index + 1]) - 1 if index + 1 < len(tree.body) else len(lines)
+    last = layout.get_block_end(cls, limit, lines, blanks=False)
+    misfits = []
 
     class_lines = {line: lines[line - 1] for line in range(first, last + 1)}
     hooks: dict[str, str] = {}
     hooks_seen: set[str] = set()
     for position, statement in enumerate(cls.body):
         if _is_hook(statement) and statement.name not in hooks:
-            body_start = _header_end(lines, statement) + 1
-            body_end = body_start
-            following = _start_line(cls.body[position + 1]) if position + 1 < len(cls.body) else last + 1
-            for line in range(body_start, following):
-                text = lines[line - 1]
-                if text.strip() and _indentation(text) <= statement.col_offset:
-                    break
-                body_end = line
+            following = _start_line(cls.body[position + 1]) - 1 if position + 1 < len(cls.body) else last
+            body_start = layout.get_header_end(statement) + 1
+            body_end = layout.get_block_end(statement, following, lines, blanks=True)
             hooks[statement.name] = normalized_part("\n".join(lines[body_start - 1 : body_end]))
+            misfits += _check_written_back(lines, layout, list(range(body_start, body_end + 1)), INDENT * 2)
             for line in range(statement.lineno, body_end + 1):
                 class_lines.pop(line, None)
             hooks_seen.add(statement.name)
@@ -426,10 +525,27 @@ def decompose_heredoc(source: str) -> DecomposedHeredoc:
                     f"move the statement above def {hook}, or refer to the method some other way",
                 )
             )
+    # As one text, since normalized_part takes the indentation of the whole
+    # class body
+    misfits += _check_written_back(lines, layout, sorted(class_lines), INDENT)
+    misfits.sort(key=lambda misfit: misfit.line or 0)
+    return normalized_part("\n".join(class_lines.values())), hooks, misfits
 
-    code = NodeCode(
-        preamble=preamble,
-        classBody=normalized_part("\n".join(class_lines.values())),
-        **{_HOOK_FIELDS[hook]: body for hook, body in hooks.items()},
-    )
-    return DecomposedHeredoc(kind, code, misfits)
+
+def _check_written_back(lines, layout, part_lines, indent) -> list[Misfit]:
+    """The misfit of the lines `part_lines` of a part that script generation,
+    which writes it back with `indent`, would not give again."""
+    line = layout.find_changed_string(lines, part_lines, indent)
+    if line is None:
+        return []
+    return [
+        Misfit(
+            line,
+            "the web UI would not write this part of the code back as it is: it writes each part "
+            "with 4 spaces per level, which would change this string of several lines (a line of "
+            "it is less indented than the code, the code is not indented with 4 spaces per level, "
+            "or a line of it holds only spaces)",
+            "write the line breaks of the string as \\n, or indent the code with 4 spaces per level "
+            "and the lines of the string with it, and take textwrap.dedent of the string",
+        )
+    ]

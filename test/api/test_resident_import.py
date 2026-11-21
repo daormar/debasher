@@ -137,6 +137,87 @@ def test_what_the_parts_of_a_node_cannot_hold_is_a_misfit_with_its_line(source, 
     assert misfits[0].fix
 
 
+_HEAD = "from debasher_runtime_lib import FBPProcess\n\n\nclass Counter(FBPProcess):\n"
+_TAIL = "\n\nCounter().run()\n"
+
+
+@pytest.mark.parametrize(
+    "body, line",
+    [
+        ('    def process_data(self, port_name, packet):\n        text = """\nfirst\nsecond"""\n'
+         '        self.send_data("out", text)\n', 6),
+        ('    TEXT = """\nfirst\n"""\n', 5),
+        ('    def initialize_runtime(self):\n        pass\n\n'
+         '    def process_data(self, port_name, packet):\n        self.text = """\nat the end"""\n', 9),
+    ],
+    ids=["in-a-hook", "in-the-class-body", "at-the-end-of-the-last-hook"],
+)
+def test_a_string_that_the_web_ui_would_indent_again_is_a_misfit(body, line):
+    # Its lines at column 0 would get the indentation of the class or of
+    # the hook, which changes the string
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert [misfit.line for misfit in result.misfits] == [line]
+    assert "would not write this part of the code back as it is" in result.misfits[0].problem
+    assert "textwrap.dedent" in result.misfits[0].fix
+
+
+def test_a_decorator_with_a_colon_on_the_first_method_is_kept():
+    body = ("    @register(key=lambda s: s)\n    def helper(self):\n        return 1\n\n"
+            "    def process_data(self, port_name, packet):\n        x = 1\n")
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert result.misfits == []
+    assert result.code.classBody == "@register(key=lambda s: s)\ndef helper(self):\n    return 1"
+
+
+def test_a_string_of_the_class_body_is_checked_with_the_whole_class_body():
+    # The comment at column 0 between the hooks takes the indentation of
+    # the whole class body to 0, so the string would move
+    body = ('    X = """\n    a\n    """\n\n    def process_data(self, port_name, packet):\n        x = 1\n\n'
+            "# section\n\n    def initialize_runtime(self):\n        pass\n")
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert [misfit.line for misfit in result.misfits] == [5]
+
+
+def test_a_string_with_a_line_of_spaces_is_a_misfit():
+    # Writing the part back empties that line of the string
+    body = ('    def process_data(self, port_name, packet):\n        t = """\n        a\n    \n'
+            '        b"""\n')
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert [misfit.line for misfit in result.misfits] == [6]
+
+
+def test_an_indented_string_of_several_lines_is_kept_as_it_is():
+    body = ('    def process_data(self, port_name, packet):\n        text = """\n        first\n'
+            '        second"""\n        self.send_data("out", text)\n')
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert result.misfits == []
+    assert result.code.processData == 'text = """\nfirst\nsecond"""\nself.send_data("out", text)'
+
+
+def test_a_hook_whose_header_takes_several_lines_keeps_its_body():
+    body = ("    def process_data(\n        self, port_name, packet\n    ):\n"
+            "        self.send_data(\"out\", packet)\n")
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert result.misfits == []
+    assert result.code.processData == 'self.send_data("out", packet)'
+    assert result.code.classBody == ""
+
+
+def test_a_comment_after_the_last_statement_of_a_hook_stays_in_the_hook():
+    body = ('    def process_data(self, port_name, packet):\n        self.send_data("out", packet)\n'
+            "        # nothing else to do\n\n    def initialize_runtime(self):\n        pass\n")
+    result = decompose_heredoc(_HEAD + body + _TAIL)
+
+    assert result.code.processData == 'self.send_data("out", packet)\n# nothing else to do'
+    assert result.code.initializeRuntime == "pass"
+
+
 def test_code_after_the_class_is_told_how_a_node_is_started():
     source = (
         "from debasher_runtime_lib import FBPProcess\n\n\nclass Counter(FBPProcess):\n    pass\n\n\n"
