@@ -12,19 +12,27 @@ guarantees it gives.
 
 # Introduction
 
-DeBasher is a flow-based programming extension for Bash. Flow-based programming
-builds a program as a network of components that exchange data through
-connections defined outside them: the order in which the components run follows
-from the flow of data between them, not from an order written by hand, and
-components that do not depend on each other run in parallel. In DeBasher a
-component is a process, a set of functions with named input and output options,
-which can be written in Bash, Python, R, Perl or Groovy and mixed in a single
-program; a connection is an input option that takes the value of an output
-option of another process; and a program is the set of processes that a module
-adds. The engine infers the dependencies between processes from their
-connections, since a process that reads a file written by another waits for it.
-Data can also stream between two processes through a FIFO while both run, which
-lets a program hold cycles that the dependency graph never sees.
+DeBasher generalizes the shell pipeline: from a line of programs joined by `|`
+to a graph of processes, each a program in any language, joined by named options
+that carry a value, a file or a pipe. The graph runs on one machine or on a
+cluster; a run that stops resumes from the processes that finished, and a
+resident program keeps its state across a crash (see
+`doc/design_doc_resident.md`). The pipe is a primitive of Unix; the pipeline,
+which composes programs in one line, is how the shell uses it. What results from
+generalizing it is flow-based programming planted in the shell with no new
+language. Flow-based programming builds a program as a network of components
+that exchange data through connections defined outside them: the order in which
+the components run follows from the flow of data between them, not from an order
+written by hand, and components that do not depend on each other run in
+parallel. In DeBasher a component is a process, a set of functions with named
+input and output options, which can be written in Bash, Python, R, Perl or
+Groovy and mixed in a single program; a connection is an input option that takes
+the value of an output option of another process; and a program is the set of
+processes that a module adds. The engine infers the dependencies between
+processes from their connections, since a process that reads a file written by
+another waits for it. Data can also stream between two processes through a FIFO
+while both run, which lets a program hold cycles that the dependency graph never
+sees.
 
 The engine is language agnostic. Bash is the language in which processes are
 declared and connected, but the code of a process can be in another language,
