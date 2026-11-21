@@ -191,23 +191,35 @@ def _get_registrations_dir_of(process_outdir):
 
 
 def _read_registrations(registrations_dir):
-    """The batch runs registered in `registrations_dir`, (position, run), in
-    the order of their positions; none if it does not exist."""
+    """
+    The batch runs registered in `registrations_dir`, as (registrations,
+    unreadable): the (position, run) of each, in the order of their
+    positions, and the names of the files that end in .json and cannot be
+    read as one. Both empty if the directory does not exist.
+    """
     try:
         names = os.listdir(registrations_dir)
     except FileNotFoundError:
-        return []
+        return [], []
     registrations = []
+    unreadable = []
     for name in names:
+        # A .json.tmp is a registration that a crash left half written,
+        # before its rename: it was never registered
         if not name.endswith(".json"):
             continue
         try:
             pos = int(name[: -len(".json")])
             run = _read_json(os.path.join(registrations_dir, name))["run"]
-        except (ValueError, KeyError, OSError):
+        except (ValueError, KeyError, TypeError, OSError):
+            unreadable.append(name)
+            continue
+        # The run directory of a batch run, as _register writes it
+        if not isinstance(run, str) or not run:
+            unreadable.append(name)
             continue
         registrations.append((pos, run))
-    return sorted(registrations)
+    return sorted(registrations), sorted(unreadable)
 
 
 def _read_launch_pos(run_dir):
@@ -403,6 +415,9 @@ class ProgramLauncher(FBPProcess):
         # The registered batch runs whose launch.json is gone, already
         # logged by this incarnation, so that each is logged once.
         self._missing_runs = set()
+        # The names of the registrations that cannot be read, already
+        # logged by this incarnation, likewise.
+        self._unreadable_registrations = set()
 
     # -- paths --
 
@@ -646,8 +661,21 @@ class ProgramLauncher(FBPProcess):
 
     def _list_registrations(self):
         """The registered batch runs, (position, run), in the order of their
-        positions."""
-        return _read_registrations(_get_registrations_dir_of(self._get_outdir()))
+        positions. Logs once in this incarnation each registration that
+        cannot be read."""
+        registrations_dir = _get_registrations_dir_of(self._get_outdir())
+        registrations, unreadable = _read_registrations(registrations_dir)
+        # Registrations are written atomically, so only a crash of the
+        # machine or a hand edit leaves one that cannot be read: its batch
+        # run is unknown to the node, and to the check of a reset
+        for name in unreadable:
+            if name not in self._unreadable_registrations:
+                self._unreadable_registrations.add(name)
+                self.log.warning(
+                    "skipping a batch run: cannot read the registration %s",
+                    os.path.join(registrations_dir, name),
+                )
+        return registrations
 
     def _check_runs(self):
         """

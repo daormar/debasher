@@ -290,7 +290,9 @@ def _list_batch_runs(launcher, process_outdir, debasher_status):
     `launcher`, in the order of their positions, each with its state."""
     single_process = launcher["process"] is not None
     result = []
-    for pos, run in _read_registrations(_get_registrations_dir_of(process_outdir)):
+    # A registration that cannot be read is no batch run, as for the node
+    registrations, _ = _read_registrations(_get_registrations_dir_of(process_outdir))
+    for pos, run in registrations:
         run_dir = os.path.join(launcher["runs_root"], run)
         # As the node does: a registration whose run directory is gone, or
         # that a later request replaced, is no batch run

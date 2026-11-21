@@ -4530,10 +4530,12 @@ goes on from there. When a batch run is launched is not part of the node state.
 It does not need to be the same in a replay, since the node sends nothing when
 it launches.
 
-A registration counts only while the `launch.json` of its run directory records
-the position of the registration. The node and `debasher_inspect_resident` apply
-the same rule. The node writes `launch.json` before the registration, so only a
-change by hand under the runs root makes a registration stop counting:
+A registration counts only while it can be read and the `launch.json` of its
+run directory records its position. The node and `debasher_inspect_resident`
+apply the same rule. The node writes `launch.json` before the registration, and
+renames each into place (see "The run directory and who owns it"), so a crash
+of the node leaves either none or a whole one. Only a change by hand, or a
+failure of the machine, makes a registration stop counting:
 
 - A run directory removed by hand, while its registration stays, leaves no
   `launch.json`. `observe()` skips that batch run, and logs it as an error once
@@ -4544,11 +4546,19 @@ change by hand under the runs root makes a registration stop counting:
   `launch.json`, so it registers the directory with its own position. The old
   registration then no longer counts, and the directory is the batch run of the
   new request, launched once.
+- A registration that cannot be read (its name is not a position, or its
+  content is not a registration) comes only from a failure of the machine, such
+  as a power loss, or from a hand edit. A `.json.tmp` that a crash left before
+  its rename is not a registration at all. `observe()` skips a registration that
+  cannot be read, and logs a warning once in each incarnation. Its batch run is
+  not launched, and no end is reported for it.
 
 Only a request after the last checkpoint is processed again by a replay (see
 "Recovery: startup and replay"). With no `launch.json`, such a request owns the
 directory again, and its batch run is launched again. A request up to the
-checkpoint is not processed again, so its registration stays skipped.
+checkpoint is not processed again, so its registration stays skipped. The same
+holds for a registration that cannot be read: the replay of its request writes
+it again.
 
 ## The end of a batch run as an input event
 
@@ -4690,6 +4700,8 @@ state is `running` (see "Launching from the queue on disk"). The reset names the
 run directory of each one. Those batch runs have to end first, or be stopped
 with `debasher_stop -d <run directory>`. A batch run registered and not launched
 yet, or stopped, does not count: with the program stopped, nothing launches it.
+A batch run whose registration cannot be read is not seen, so the reset does not
+refuse for it (see "Launching from the queue on disk").
 
 # Future work
 

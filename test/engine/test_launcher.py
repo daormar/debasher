@@ -842,3 +842,52 @@ def test_a_launcher_without_an_input_port_says_so(outdir):
 
     assert _node(_NotifyingLauncher, {"requests": "/dev/null", "outdone": "/dev/null"})._find_wiring_problem() is None
     assert Unwired(opts={"pfile": "pipeline.sh"})._find_wiring_problem().startswith("no input port")
+
+
+# --- registrations that cannot be read ------------------------------------------
+
+
+def _write_registration(outdir, name, text):
+    registrations = outdir / ".launcher" / "registrations"
+    registrations.mkdir(parents=True, exist_ok=True)
+    (registrations / name).write_text(text)
+
+
+def test_a_registration_that_cannot_be_read_is_skipped_with_one_warning(outdir, caplog):
+    # Written atomically, so only a crash of the machine or a hand edit
+    # leaves one: its batch run is unknown to the node and to the reset
+    _write_registration(outdir, "x.json", '{"run": "a"}')
+    _write_registration(outdir, "5.json", "not json")
+    node = _node()
+
+    for _ in range(3):
+        assert node._list_registrations() == []
+
+    assert caplog.text.count("cannot read the registration") == 2
+    assert "x.json" in caplog.text and "5.json" in caplog.text
+
+
+@pytest.mark.parametrize("text", ["[1]", '"x"', "5", '{"run": null}', '{"run": 5}', '{"run": ""}'])
+def test_a_registration_whose_content_is_not_one_is_skipped(outdir, caplog, text):
+    # JSON, but not an object with the run directory of a batch run
+    _write_registration(outdir, "5.json", text)
+    node = _node()
+
+    assert node._list_registrations() == []
+    assert "cannot read the registration" in caplog.text
+
+
+def test_a_registration_left_half_written_by_a_crash_is_not_one(outdir, caplog):
+    _write_registration(outdir, "5.json.tmp", '{"ru')
+    node = _node()
+
+    assert node._list_registrations() == []
+    assert "cannot read the registration" not in caplog.text
+
+
+def test_the_registrations_that_cannot_be_read_are_given_apart():
+    # debasher_inspect_node ignores them, as the node does
+    import debasher_runtime_launcher as launcher_mod
+
+    registrations, unreadable = launcher_mod._read_registrations("/nonexistent")
+    assert (registrations, unreadable) == ([], [])
