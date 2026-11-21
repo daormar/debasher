@@ -6,8 +6,9 @@
 #
 # Tests that a runner cannot run skip themselves: those that need Slurm
 # (no sbatch here), the real runs of resident programs (only with
-# DEBASHER_RUN_CHAOS_TEST set), and, in make installcheck, the examples of
-# conda and Docker when these are not available.
+# DEBASHER_RUN_CHAOS_TEST set, which the workflow real-runs.yml does, when
+# launched by hand), and, in make installcheck, the examples of conda and
+# Docker when these are not available.
 
 name: CI
 

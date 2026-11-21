@@ -1,0 +1,83 @@
+# Runs every test of test/engine that drives a real run of debasher_exec,
+# the tests of the Contract of resident programs among them (real_run in
+# test/engine/resident_run.py skips each unless DEBASHER_RUN_CHAOS_TEST is
+# set), which make check and the CI of each push skip, since they take up
+# to 30 minutes. The other Python tests of test/engine run with them; the
+# cases that need Slurm skip, as in ci.yml. Linux only, and only when it is
+# launched by hand (gh workflow run real-runs.yml), as the tests depend on
+# timing and the runners are slower and less regular than a workstation.
+#
+# The real runs look for the installed engine under bin/ of the checkout,
+# so it is installed with the checkout as its prefix.
+
+name: Real runs of resident programs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A second launch waits: cancelling a run 30 minutes in would lose its logs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  real-runs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake make git graphviz \
+            python3 python3-venv bats
+
+      # The Node.js of Ubuntu is older than the 22.12 that the frontend needs
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Create the virtual environment of the API
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -r api/requirements-dev.txt
+
+      - name: Configure
+        run: |
+          ./reconf
+          ./configure --prefix="$PWD" PYTEST="$PWD/.venv/bin/pytest"
+
+      - name: Build
+        run: make
+
+      - name: Install
+        run: make install
+
+      # A timeout of the step, under that of the job, fails the step, so
+      # that the logs of a run that hangs are still collected
+      - name: Run the real runs
+        timeout-minutes: 75
+        env:
+          DEBASHER_RUN_CHAOS_TEST: "1"
+        run: .venv/bin/pytest -v test/engine
+
+      # The regular files only: the output directories of the runs hold
+      # FIFOs, which an upload would block on
+      - name: Collect the logs
+        if: failure() || cancelled()
+        run: |
+          find /tmp -path '*pytest-of-*' -type f -print0 2>/dev/null |
+            tar --null -czf "$RUNNER_TEMP/logs.tar.gz" -T - || true
+
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-real-runs
+          path: ${{ runner.temp }}/logs.tar.gz
+          if-no-files-found: ignore

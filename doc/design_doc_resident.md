@@ -1062,6 +1062,15 @@ written in the guarantee's words (for the no-silent-loss guarantee: "send 5 and
 then 7 through a fan-in node while a round is open: `process_data` receives
 both").
 
+The chaos test and the focused tests are real runs. They use the engine that
+`make install` puts under `bin/` of the checkout, which is therefore installed
+with the checkout as its prefix. Together they take up to 30 minutes, so they
+run only when `DEBASHER_RUN_CHAOS_TEST` is set. `make check` and the continuous
+integration (CI) that runs on each push skip them. A workflow launched by hand,
+`.github/workflows/real-runs.yml`, runs them on Linux, with the other Python
+tests of `test/engine`. So a change can break a guarantee and pass the CI of
+each push: the break shows only when they run, by hand or by that workflow.
+
 ## The tests of the Contract
 
 This section says how the tests of "Acceptance" are built, for a reader who
