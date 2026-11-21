@@ -3,11 +3,11 @@ Introduction
 
 DeBasher generalizes the shell pipeline: from a line of programs joined
 by ``|`` to a graph of programs, in any language, joined by named
-options, which carry a value, a file or a pipe, run on one machine or
-on a cluster, and can keep state and survive a crash. The pipe is
-a primitive of Unix; the pipeline, which composes programs in one line,
-is how the shell uses it. The pipeline is what DeBasher generalizes,
-and the shell in its name is the shell of the pipeline.
+options that carry a value, a file or a pipe. The graph runs on one
+machine or on a cluster, and its programs may be long-lived, with state
+that survives a crash. The pipe is a primitive of Unix; the pipeline,
+which composes programs in one line, is how the shell uses it, and the
+shell in the name of DeBasher is the shell of the pipeline.
 
 DeBasher is a workflow system whose processes are Unix programs,
 written in Bash, Python, R, Perl or Groovy. The way the options of the

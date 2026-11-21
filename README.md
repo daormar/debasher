@@ -10,9 +10,10 @@
 # DeBasher
 
 DeBasher generalizes the shell pipeline: from a line of programs joined
-by `|` to a graph of programs, in any language, joined by named options,
-which carry a value, a file or a pipe, run on one machine or on a
-cluster, and can keep state and survive a crash.
+by `|` to a graph of programs, in any language, joined by named options
+that carry a value, a file or a pipe. The graph runs on one machine or
+on a cluster, and its programs may be long-lived, with state that
+survives a crash.
 
 DeBasher is a workflow system whose processes are Unix programs, written
 in Bash, Python, R, Perl or Groovy. The way the options of the processes
