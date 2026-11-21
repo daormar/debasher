@@ -437,3 +437,56 @@ def test_inject_from_process_data_still_raises_under_the_harness():
 
     with pytest.raises(RuntimeError, match="inject"):
         node.feed("seen", {"item": "x"})
+
+
+# --- check_replay: what a replay needs of process_data ------------------------
+
+
+_FEEDS = [("numbers", 3), ("numbers", 4), ("numbers", 5)]
+
+
+def test_a_deterministic_node_gives_the_same_results_with_and_without_a_restart():
+    _node(ACCUMULATE).check_replay(_FEEDS, capture_after=1)
+
+
+def test_a_restart_at_either_end_of_the_feeds_is_accepted():
+    node = _node(ACCUMULATE)
+    node.check_replay(_FEEDS, capture_after=0)
+    node.check_replay(_FEEDS, capture_after=len(_FEEDS))
+
+
+def test_a_node_that_depends_on_what_its_state_leaves_out_is_reported():
+    # A count kept beside the node state comes back at 0 after a restart,
+    # as it would after a relaunch
+    source = ACCUMULATE.replace(
+        "        self.total += packet\n        self.send_data(\"outsum\", self.total)",
+        "        self.total += packet\n        self.calls = getattr(self, \"calls\", 0) + 1\n"
+        "        self.send_data(\"outsum\", [self.total, self.calls])",
+    )
+    with pytest.raises(AssertionError, match=r"check_replay: on 'outsum'"):
+        _node(source).check_replay(_FEEDS, capture_after=1)
+
+
+def test_a_node_whose_state_after_the_replay_differs_is_reported():
+    # It sends the same, but keeps in its state a number from outside the
+    # messages, a counter of the module, which a replay does not give again
+    source = ACCUMULATE.replace(
+        "from debasher_runtime_lib import FBPProcess\n",
+        "import itertools\n\nfrom debasher_runtime_lib import FBPProcess\n\nTICKS = itertools.count()\n",
+    ).replace(
+        'return {"total": self.total}',
+        'return {"total": self.total, "tick": getattr(self, "tick", None)}',
+    ).replace(
+        'self.total = node_state["total"]',
+        'self.total = node_state["total"]\n        self.tick = node_state["tick"]',
+    ).replace(
+        "        self.total += packet\n",
+        "        self.total += packet\n        self.tick = next(TICKS)\n",
+    )
+    with pytest.raises(AssertionError, match="check_replay: the node state"):
+        _node(source).check_replay(_FEEDS, capture_after=1)
+
+
+def test_check_replay_refuses_a_restart_outside_the_feeds():
+    with pytest.raises(ValueError, match="capture_after"):
+        _node(ACCUMULATE).check_replay(_FEEDS, capture_after=4)

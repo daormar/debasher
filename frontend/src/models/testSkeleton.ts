@@ -75,7 +75,7 @@ export function testSkeletonSummary(program: Program, process: ProgramProcess): 
       ? `a process test (bats) that runs ${process.name} with placeholders for its options`
       : process.nodeKind === "DirectoryWatcher"
         ? `a node test (pytest) that builds ${process.name} and observes a directory for it to watch`
-        : `a node test (pytest) that builds ${process.name}, feeds it a packet${observesOutside(process) ? " and observes" : ""}`;
+        : `a node test (pytest) that builds ${process.name}, feeds it a packet${observesOutside(process) ? " and observes" : ""}, restarts it and checks a replay`;
   return (
     `Writes a first test for ${process.name}: ${what}. Its tests fail on purpose until you fill in its TODOs, ` +
     'real values and checks, and remove the line that makes them fail. "Run tests" runs it with the other ' +
@@ -219,6 +219,7 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
             ...node.sentCheck,
             ...node.fail,
           ],
+          ...(inputs.length > 0 ? [replayTest(node, inputs[0])] : []),
           ...(observesOutside(process) ? [observeTest(node)] : []),
         ];
   for (const test of tests) {
@@ -235,6 +236,19 @@ interface NodeSkeleton {
   feed: string[];
   sentCheck: string[];
   fail: string[];
+}
+
+// The test of what a replay needs of a node: check_replay feeds the same
+// messages to a node and to one restarted partway, and fails unless both send
+// the same and end in the same node state.
+function replayTest(node: NodeSkeleton, input: string): string[] {
+  return [
+    `def test_${node.name}_gives_the_same_after_a_replay():`,
+    "    # TODO: the messages that the node receives, in order",
+    `    feeds = [(${JSON.stringify(input)}, "TODO"), (${JSON.stringify(input)}, "TODO")]`,
+    "    node().check_replay(feeds, capture_after=1)",
+    ...node.fail,
+  ];
 }
 
 // The test of what an FBPProcess that observes the outside world brings in:

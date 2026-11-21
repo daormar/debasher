@@ -207,6 +207,11 @@ and so do the entries below that refer to it.
   `FBPProcess` that a module can redefine and that the computational
   specifications of a process can set for that process of a program (see
   "Computational specifications of a resident process").
+- **layer**: one of the four parts in which the design is built, each resting
+  on the ones before it: the base (nodes, channels, envelopes, threads), the
+  recovery of a node (the input log, its replay, the sequence numbers), rounds
+  and checkpoints, and supervision (the `Supervisor`). See "Layers of the
+  design".
 
 ## Messages
 
@@ -610,11 +615,47 @@ by at least one end-to-end test that states it in the same words (see
 "Acceptance").
 
 This section states what it assumes, what it promises and where the promise
-ends: the failures it tolerates ("Failure model"), what the code of a module
+ends: the layers that give the guarantees ("Layers of the design"), the
+failures it tolerates ("Failure model"), what the code of a module
 must do in return ("Obligations of module authors"), the guarantees themselves
 ("Guarantees"), where they stop ("Limits and non-goals"), how they are shown to
 hold ("Acceptance"), and how the tests that show them are built ("The tests of
 the Contract").
+
+## Layers of the design
+
+The design is built in four layers (see the Glossary), each resting on the
+ones before it. This section says what each layer gives and whether a program
+can do without it today. The obligations of module authors, further on, say
+which layer needs each of them.
+
+- **The base.** Nodes, the channels between them and the envelopes on those
+  channels, and the threads of a node (see "Overview of the class"). It runs a
+  program of long-lived processes that talk through FIFOs, with control ports,
+  `observe()` and notices.
+- **The recovery of a node.** Each node logs what it receives before it
+  processes it (see "Input log"), and a node that starts over an output
+  directory that holds state replays its log. The sequence numbers let a
+  receiver drop what a replay sends again, and notice a loss. `HELLO` lets a
+  reader drop the fragment of a writer that died in the middle of a message
+  (see "Reconnecting after a node failure"). The replay runs at every start
+  over an output directory that holds state, unless `debasher_reset_resident`
+  ran first. With no round to prune it, the input log grows until
+  `INPUT_LOG_MAX_BYTES` stops the reader that reaches it.
+- **Rounds and checkpoints.** A round saves a checkpoint at every node (see
+  "Chandy-Lamport barrier propagation"). The checkpoint prunes the input log
+  and bounds the replay, and a halt round gives an ordered stop and its
+  resume. Rounds run only when something starts them. `debasher_stop_resident`
+  stops with a halt round, and so does the escalation of the `Supervisor`, so a
+  program that is ever stopped in order uses them.
+- **Supervision.** The `Supervisor` notices a node down and relaunches it (see
+  "`Supervisor` class"). It also holds the business channels, so that what a
+  FIFO holds outlives both its endpoints (see "Holding the business
+  channels"). A program may have no `Supervisor`, and `-no-hold-fifos` turns
+  the holding off. Without a `Supervisor`, a node is relaunched only by hand.
+
+Of the four layers, only supervision is optional. A program with the base
+alone, without the input log and checkpoints, is not possible today.
 
 ## Failure model
 
@@ -679,11 +720,24 @@ Future work (see "Durability against machine failure (`fsync`)").
 ## Obligations of module authors
 
 The guarantees hold only if the module code keeps its side of the bargain. The
-first four obligations concern the code of a node: what `process_data` does,
-when it sends, what its state captures, and its effects outside the graph; the
-others concern the messages and how the program declares its fifos. The
-framework enforces some of them, and their entries say how; for the rest, the
-chaos test (see "Acceptance") is what exposes a violation.
+obligations do not all apply for the same reason, and they are not all checked
+the same way. Some are enforced: by the framework when the node runs, or by the
+engine when the program is loaded. The others, which the recovery of a node and
+the checkpoints need, are not checked when the program runs. The tests of the
+program can check two of them with the node harness (see "Testing a node without
+the engine"). The idempotence of effects outside the graph is left to the author
+alone.
+
+| Obligation | Needed by | Who checks it |
+|---|---|---|
+| A node sends only inside `process_data` | the recovery of a node | the framework, when the node runs (`send_data` raises) |
+| Messages are strict JSON, of bounded size | the base | the framework, when the node runs (`send_data` raises) |
+| The two rules of the fifos | the base | the engine, when the program is loaded |
+| `process_data` is deterministic | the recovery of a node | the tests of the program, with `check_replay` |
+| A complete `capture_node_state()` and an exact `restore_node_state()` | rounds and checkpoints | the tests of the program, with `restart()` (the round trip) and `check_replay` |
+| Effects outside the graph are idempotent | the recovery of a node | the author alone |
+
+The obligations themselves, and when each applies:
 
 - **`process_data` is deterministic**: given the same starting state and the
   same sequence of received messages, it produces the same new state and the
@@ -693,20 +747,28 @@ chaos test (see "Acceptance") is what exposes a violation.
   depend on wall-clock time, randomness, thread timing, or external reads,
   unless whatever it reads is part of the captured state or of the message
   stream. Recovery re-executes it, so a non-deterministic `process_data`
-  silently diverges from what it did before the crash.
+  silently diverges from what it did before the crash. It matters wherever a
+  replay runs: at every start over an output directory that holds state, unless
+  `debasher_reset_resident` ran first.
 - **A node sends only inside `process_data`**, in reaction to a message that it
-  receives. Unlike the others, the framework enforces this one: `send_data`
-  raises when it is called anywhere else, or from a thread other than the one
-  running `process_data`. What starts the activity of a program is written
-  into an input port from outside (see "source" in the Glossary).
+  receives. The framework enforces it: `send_data` raises `RuntimeError` when it
+  is called anywhere else, or from a thread other than the one running
+  `process_data`. What starts the activity of a program is written into an input
+  port from outside (see "source" in the Glossary).
 - **`capture_node_state()` is complete and `restore_node_state()` exact**:
-  everything that influences future behavior round-trips through them.
+  everything that influences future behavior round-trips through them. It
+  matters as soon as a round runs, and `debasher_stop_resident` always runs
+  one, the halt, whose checkpoint the resume restores. A relaunch restores the
+  latest checkpoint too.
 - **Effects outside the graph are idempotent**: replay re-executes
   `process_data`, so anything it does outside the FIFOs (writing a file
-  elsewhere, calling a service) can happen more than once.
+  elsewhere, calling a service) can happen more than once. It matters wherever
+  a replay runs, as determinism does, and no test can check it in general.
 - **Messages are serializable as strict JSON, of any size up to
   `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`), measured on the encoded
-  line.** A message larger
+  line.** The framework enforces it: `send_data` raises `ValueError` for a NaN
+  or an infinity, and `RuntimeError` for a message over
+  `OUT_BACKLOG_FAIL_BYTES`. A message larger
   than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes
   can leave a truncated fragment in the FIFO. The reader drops it thanks to the
   resync line (see the Glossary) that every writer incarnation sends first,
@@ -2359,14 +2421,14 @@ does not fit.
 
 A node test (see "Business tests of a program" in `doc/design_doc_engine.md`)
 checks the business logic of a node: what it sends for what it receives, what it
-brings in when it observes the outside world, and that its node state brings it
-back to where it was. None of that needs FIFOs, envelopes, rounds or a
-`Supervisor`, so the test builds the class of the node in its own Python
-process, without the engine, and calls its hooks directly. The node harness, the
-module `debasher_runtime_testing` of the runtime library, does that for it. For
-the node `Accumulate` of the program `webui_running_sum`, which keeps the
-running sum of the numbers that arrive on its port `numbers` and sends each new
-sum on `outsum`:
+brings in when it observes the outside world, that its node state brings it back
+to where it was, and that a replay gives what it gave the first time. None of
+that needs FIFOs, envelopes, rounds or a `Supervisor`, so the test builds the
+class of the node in its own Python process, without the engine, and calls its
+hooks directly. The node harness, the module `debasher_runtime_testing` of the
+runtime library, does that for it. For the node `Accumulate` of the program
+`webui_running_sum`, which keeps the running sum of the numbers that arrive on
+its port `numbers` and sends each new sum on `outsum`:
 
 ```python
 from debasher_runtime_testing import load_node
@@ -2385,6 +2447,12 @@ def test_restart_keeps_the_sum():
     node = node.restart()
     node.feed("numbers", 4)
     assert node.sent("outsum") == [7]
+
+
+def test_a_replay_gives_the_same_sums():
+    node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+    feeds = [("numbers", 3), ("numbers", 4), ("numbers", 5)]
+    node.check_replay(feeds, capture_after=1)
 ```
 
 `load_node(process, opts=None, inputs=(), outputs=())` builds a node under
@@ -2482,6 +2550,15 @@ A node under test offers:
   and returns the new node, whose `sent` starts empty. It raises when the new
   node captures a node state other than the one it was restored from, since
   recovery relies on that round trip.
+- `check_replay(feeds, capture_after)`: checks what a replay needs of the node.
+  It feeds the `(port, packet)` pairs of `feeds` to a new node, and the same to
+  another new node restarted (as `restart()` does) after the first
+  `capture_after` of them. Both must send the same on every port and end in the
+  same node state. It raises at the first port, or at the node state, that
+  differs, and `ValueError` when `capture_after` is not between 0 and the
+  number of feeds; its restart raises as `restart()` does. So it checks that
+  `process_data` is deterministic over what it receives, and that the node
+  state holds everything that later messages depend on.
 - `node`: the instance itself, for a test that looks at its attributes.
 
 In a node under test, `sleep()` returns at once, as it does while a node
@@ -2494,6 +2571,14 @@ variables expanded by Bash when it is printed, in the shell of
 `debasher_get_node_source` rather than in that of the task. And the code
 before the class runs with the environment and the `argv` of pytest, since the
 harness gives the node its own only when it calls the node.
+
+`check_replay` runs both nodes in the process of the test, so it sees only the
+non-determinism that shows within one process. What changes only from one
+process to another is not seen: the order in which a `set` of strings is
+iterated depends on `PYTHONHASHSEED`, the same for both nodes, while a
+relaunch runs in a new process. A test therefore feeds the inputs on which a
+non-deterministic choice would show, and a node never lets the order of a
+`set` decide what it sends.
 
 The harness checks nothing of the framework: sequence numbers, rounds, the input
 log, `CLOSE`, the heartbeat and the limits of a node are left to the tests of

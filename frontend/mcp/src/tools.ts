@@ -1034,7 +1034,7 @@ const testTools = [
 
   tool(
     "add_test",
-    "Writes the test skeleton of a process, as \"Add test\" does, into the test directory: by default test/<process>.bats for a process of a general program and test/test_<process>.py for a node, or file_name. Fill in its TODOs, then remove the line that makes each test fail. Refused when the file exists.",
+    "Writes the test skeleton of a process, as \"Add test\" does, into the test directory: by default test/<process>.bats for a process of a general program and test/test_<process>.py for a node, or file_name. The skeleton of a node with an input includes a test of a replay with check_replay, which checks, for the messages it feeds, that process_data is deterministic and the node state complete (both runs in one process). Fill in its TODOs, then remove the line that makes each test fail. Refused when the file exists.",
     {
       home_dir: schemas.homeDir,
       process: schemas.processName,

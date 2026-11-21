@@ -94,6 +94,13 @@ describe("buildNodeCodePrompt", () => {
     expect(prompt).toContain("This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime`");
   });
 
+  it("says what a replay needs of the code, and how a node test checks it", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("so it is deterministic");
+    expect(prompt).toContain("A node test checks both with `check_replay` of the node harness, for the messages it feeds");
+    expect(prompt).toContain("such as that of a `set` of strings");
+  });
+
   it("carries the reference of the runtime library, or why it is missing", () => {
     expect(buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library))
       .toContain("from their own documentation:\n\n### FBPProcess\n\nThe base class of every node.");

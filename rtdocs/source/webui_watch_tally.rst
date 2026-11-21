@@ -29,8 +29,9 @@ The program carries node tests in its ``test`` directory, which
 ``debasher_test`` runs (see the :ref:`tools` Section): they put files
 in a temporary directory that ``Watch`` watches and call ``observe``
 to check which ones it requests, feed requests to ``Tally`` to check
-its count, and restart both nodes to check that nothing is requested
-twice and that the count goes on.
+its count, restart both nodes to check that nothing is requested twice
+and that the count goes on, and check that a replay of the requests
+gives the same count.
 
 .. literalinclude:: ../../data/webui_programs/webui_watch_tally/test/test_watch_tally.py
    :language: python

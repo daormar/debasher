@@ -24,3 +24,8 @@ def test_a_restarted_node_goes_on_from_its_sum():
     node = node.restart()
     node.feed("numbers", 4)
     assert node.sent("outsum") == [7]
+
+
+def test_a_replay_gives_the_same_sums():
+    feeds = [("numbers", 3), ("numbers", 4), ("numbers", 5)]
+    accumulate().check_replay(feeds, capture_after=1)

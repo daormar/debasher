@@ -110,7 +110,9 @@ the process ended with status 0 proves little. Aim for:
 - **Several tasks.** For a process in array or generator mode, run it as one
   task would be run, with the option values of that task.
 - **Nodes.** Feed a few packets and check what was sent; keep the restart
-  test of the skeleton, which checks that the node state is complete.
+  test and the replay test of the skeleton, and give `check_replay` feeds that
+  change the node state, with `capture_after` between two of them, so that it
+  checks that `process_data` is deterministic and the node state complete.
 - **Its own data.** Inputs written by the test under `${BATS_TEST_TMPDIR}`, or
   small files under `test/`, never files outside the home directory.
 

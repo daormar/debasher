@@ -78,7 +78,9 @@ its code. Offer to run the tests when what they do matters to a finding.
   a comment that only repeats the code, or one that the code contradicts?
 - **Its tests.** Is there a test? Does it check the outputs, the edges of the
   input and a failure, or only that the process ended? Are `TODO`s or the line
-  that makes a skeleton fail still there?
+  that makes a skeleton fail still there? For a node with an input, does it
+  keep a test with `check_replay`, with real feeds rather than the `TODO`s of
+  the skeleton?
 - **Readability**, last: names, dead code, what could be simpler. Mention it
   only when it is worth the user's time.
 

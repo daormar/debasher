@@ -231,7 +231,8 @@ class NodeUnderTest:
     """
     A node built by load_node: `feed` calls its process_data, `observe`
     its observe(), `sent` gives what it sent, `restart` builds it again
-    from its node state, and `node` is the instance itself.
+    from its node state, `check_replay` checks that a replay of its feeds
+    gives what it gave without one, and `node` is the instance itself.
     """
 
     def __init__(self, node_class, opts, inputs, outputs, module_dir=None):
@@ -389,6 +390,60 @@ class NodeUnderTest:
                 f"{node_state!r} and then captured {recaptured!r}"
             )
         return restarted
+
+    def check_replay(self, feeds, capture_after):
+        """
+        Checks that the node does what a replay needs of it: fed the
+        (port, packet) pairs of `feeds`, it sends the same and ends in the
+        same node state whether or not it is restarted (see restart) after
+        the first `capture_after` of them. Both runs use new nodes built as
+        this one was, in this process. Raises AssertionError at the first
+        port, or at the node state, that differs, and ValueError when
+        `capture_after` is not between 0 and the number of feeds.
+        """
+        if not 0 <= capture_after <= len(feeds):
+            raise ValueError(
+                f"check_replay: capture_after is {capture_after}: give a number "
+                f"from 0 to {len(feeds)}, the number of feeds"
+            )
+        straight = self._build_new()
+        for port, packet in feeds:
+            straight.feed(port, packet)
+        # A replay restores the latest checkpoint and processes again what
+        # came after its capture
+        before = self._build_new()
+        for port, packet in feeds[:capture_after]:
+            before.feed(port, packet)
+        after = before.restart()
+        for port, packet in feeds[capture_after:]:
+            after.feed(port, packet)
+
+        for port in self._outputs:
+            without = straight.sent(port)
+            with_restart = before.sent(port) + after.sent(port)
+            if without != with_restart:
+                raise AssertionError(
+                    f"check_replay: on {port!r}, {self._node_class.__name__} sent "
+                    f"{without!r} without a restart and {with_restart!r} with one "
+                    f"after {capture_after} feeds"
+                )
+        with straight._node_env():
+            state_without = _json_round_trip(straight.node.capture_node_state())
+        with after._node_env():
+            state_with = _json_round_trip(after.node.capture_node_state())
+        if state_without != state_with:
+            raise AssertionError(
+                f"check_replay: the node state of {self._node_class.__name__} is "
+                f"{state_without!r} without a restart and {state_with!r} with one "
+                f"after {capture_after} feeds"
+            )
+
+    def _build_new(self):
+        """A new node built as this one was, initialized as load_node does."""
+        new = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
+        with new._node_env():
+            new.node.initialize_runtime()
+        return new
 
 
 def _set_env(name, value):

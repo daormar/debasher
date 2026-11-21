@@ -275,11 +275,18 @@ of every node follows these rules:
   ``restore_node_state`` rebuilds it exactly.
 * **Effects outside the program are idempotent.** Whatever
   ``process_data`` does besides sending messages (writing a file
-  elsewhere, calling a service) may be done more than once.
+  elsewhere, calling a service) may be done more than once. No test can
+  check this in general.
 * **Messages are JSON.** What a node sends is any value that JSON can
   serialize, of any size, with no NaN or infinity among its numbers,
   which JSON does not have: ``send_data`` raises ``ValueError`` on one,
   and sends nothing.
+
+Nothing checks the first three rules when the program runs, while
+``send_data`` enforces the last. The tests of the program can catch
+breaches of the first two with ``check_replay`` of
+``debasher_runtime_testing``, and of the round trip of the node state
+with ``restart`` (see the :ref:`tools` Section).
 
 A node that has to wait between two steps calls ``self.sleep(seconds)``
 instead of ``time.sleep``: it does not wait during a replay, and it

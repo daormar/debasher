@@ -443,10 +443,11 @@ The "Run" menu of the toolbar runs the program and acts on its run:
   proposes one), says what it will write, and, once confirmed, writes a
   first test for that process and opens it in the program files panel:
   a test that runs the process with placeholders for its options, or,
-  for a node of a resident program, one that builds the node and feeds
-  it a packet, or observes for it. Every place to fill in is marked
-  with a ``TODO`` comment; fill them in, then remove the line that
-  makes each new test fail on purpose. A file that already exists is
+  for a node of a resident program, tests that build the node and feed
+  it a packet (or observe for it), restart it, and check with
+  ``check_replay`` that a replay gives the same. Every place to fill in
+  is marked with a ``TODO`` comment; fill them in, then remove the line
+  that makes each new test fail on purpose. A file that already exists is
   opened, never overwritten.
 * **Run program** saves the program and launches it with
   ``debasher_exec``. A program that the engine refuses is reported at

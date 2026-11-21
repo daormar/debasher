@@ -442,12 +442,13 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `self.send_data(port, payload)`, as strict JSON (a payload with NaN or an
   infinity raises ValueError, so a float result that can be one is sent as
   `None` or a string); `process_data` is deterministic; the node state is
-  complete and serializable as JSON, and `capture_node_state` may return the
-  node's own objects, which the runtime copies when a round opens; effects
-  outside the program are idempotent. Read options from `self.opts` (labels
-  without the dash), log with `self.log` (its lines, and the warnings of the
-  runtime, such as a dropped envelope, are in the scheduler output of the node:
-  `get_process_output` with `kind: scheduler`), wait with `self.sleep()`.
+  complete and serializable as JSON (a node test checks both with
+  `check_replay`), and `capture_node_state` may return the node's own objects,
+  which the runtime copies when a round opens; effects outside the program are
+  idempotent. Read options from `self.opts` (labels without the dash), log with
+  `self.log` (its lines, and the warnings of the runtime, such as a dropped
+  envelope, are in the scheduler output of the node: `get_process_output` with
+  `kind: scheduler`), wait with `self.sleep()`.
 - **Methods that a node calls**, on top of `send_data` and `sleep`:
   - `self.inject(payload)`, from `observe`: `observe` looks at the world
     outside (a directory, a queue) on a thread of its own, every
@@ -554,10 +555,15 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   in the home directory, run by `run_tests`, which saves the program first.
 - `add_test` writes a skeleton: in bats, it runs the process with
   `run debasher_process <name>` and checks its status; in pytest, it loads the
-  node with `load_node`, feeds it and checks what it sent. Its `TODO`s are to be
-  filled in with real checks, and the line under the comment "remove the line
-  below, which makes a skeleton fail" (`false`, or `pytest.fail(...)`) removed
-  once they are.
+  node with `load_node`, feeds it and checks what it sent, restarts it, and, for
+  a node with an input, checks a replay with
+  `check_replay(feeds, capture_after)`, which fails unless the node sends the
+  same and ends in the same node state with and without a restart after
+  `capture_after` feeds (both in one process, so the order of a `set` of
+  strings, which changes only between processes, is not seen). Its `TODO`s are
+  to be filled in with real checks, and the line under the comment "remove the
+  line below, which makes a skeleton fail" (`false`, or `pytest.fail(...)`)
+  removed once they are.
 - A sequential process is tested as a process is, in a bats file written with
   `write_program_file` (`add_test` writes skeletons for processes only):
   `run debasher_process <name> <args>` runs its function on its own, with the

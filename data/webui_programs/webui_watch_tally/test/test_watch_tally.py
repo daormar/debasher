@@ -57,3 +57,11 @@ def test_a_restarted_tally_goes_on_counting():
     node.feed("inrequests", {"opts": {"-infile": "/in/c.txt"}, "run": "c"})
 
     assert node.sent("outtally") == [{"run": "c", "seen": 2}]
+
+
+def test_a_replay_of_the_requests_gives_the_same_count():
+    feeds = [
+        ("inrequests", {"opts": {"-infile": "/in/a.txt"}, "run": "a"}),
+        ("inrequests", {"opts": {"-infile": "/in/c.txt"}, "run": "c"}),
+    ]
+    tally().check_replay(feeds, capture_after=1)

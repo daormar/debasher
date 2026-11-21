@@ -143,8 +143,14 @@ describe("the skeleton of a node test", () => {
     expect(skeleton).toContain("    under_test = under_test.restart()");
   });
 
+  it("checks that a replay gives what the node gave the first time", () => {
+    expect(skeleton).toContain("def test_Accumulate_gives_the_same_after_a_replay():");
+    expect(skeleton).toContain('    feeds = [("numbers", "TODO"), ("numbers", "TODO")]');
+    expect(skeleton).toContain("    node().check_replay(feeds, capture_after=1)");
+  });
+
   it("fails in each test until the user writes its checks", () => {
-    expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(2);
+    expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(3);
   });
 
   it("has no test of observe for a node that does not observe", () => {
@@ -161,6 +167,7 @@ describe("the skeleton of a node that observes the outside world", () => {
 
     expect(skeleton).toContain("def test_Poll_brings_in_what_it_observes():");
     expect(skeleton).toContain("    injected = under_test.observe()");
+    expect(skeleton).not.toContain("check_replay");
     expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(3);
   });
 
@@ -185,6 +192,7 @@ describe("the skeleton of a node that observes the outside world", () => {
     it("checks that after a restart it requests nothing twice", () => {
       expect(skeleton).toContain("def test_Watch_requests_nothing_twice_after_a_restart(tmp_path):");
       expect(skeleton).toContain("    under_test = under_test.restart()");
+      expect(skeleton).not.toContain("check_replay");
       expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(2);
     });
 

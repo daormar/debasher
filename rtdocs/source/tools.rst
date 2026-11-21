@@ -148,9 +148,17 @@ with ``load_node`` of the module ``debasher_runtime_testing``, naming
 the ports whose traffic it checks, gives it packets with ``feed`` and
 reads what it sent on a port with ``sent``. ``restart`` builds the node
 again from its node state, as recovery after a crash does, and fails
-when the restored node does not capture the same state. For example,
-for a node ``Accumulate`` that sends the running sum of the numbers it
-receives::
+when the restored node does not capture the same state.
+``check_replay(feeds, capture_after)`` checks what a replay needs: it
+feeds the ``(port, packet)`` pairs of ``feeds`` to a new node built as
+``load_node`` built this one, and to another one restarted after the
+first ``capture_after`` of them, and fails unless both send the same on
+the output ports named in ``load_node`` and end in the same node state.
+It raises ``ValueError`` when ``capture_after`` is not between 0 and the
+number of feeds. Both nodes run in the process of the test, so what
+changes only from one process to another, such as the order in which a
+``set`` of strings is iterated, is not seen. For example, for a node
+``Accumulate`` that sends the running sum of the numbers it receives::
 
     from debasher_runtime_testing import load_node
 
@@ -166,6 +174,11 @@ receives::
         node = node.restart()
         node.feed("numbers", 4)
         assert node.sent("outsum") == [7]
+
+    def test_a_replay_gives_the_same_sums():
+        node = load_node("Accumulate", inputs=["numbers"], outputs=["outsum"])
+        feeds = [("numbers", 3), ("numbers", 4), ("numbers", 5)]
+        node.check_replay(feeds, capture_after=1)
 
 ``load_node`` also takes ``opts``, the options of the node by name.
 A node that observes the outside world, such as a
