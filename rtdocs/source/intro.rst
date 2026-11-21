@@ -27,10 +27,9 @@ only its inputs and outputs, so that the program exploits the
 parallelism that its data dependencies allow and its processes can be
 reused elsewhere. The shell pipeline is flow-based programming in one
 dimension, a line; DeBasher gives it the second, the graph. A pipeline,
-a series of steps where
-each one waits for the data of the previous ones, is the typical case,
-but not the only one: a DeBasher program may have cycles, and processes
-that never end.
+a series of steps where each one waits for the data of the previous
+ones, is the typical case, but not the only one: a DeBasher program may
+have cycles, and processes that never end.
 
 Flow-based programming is language agnostic by nature, and so is
 DeBasher: a process is a black box with a command-line interface, so
@@ -59,3 +58,11 @@ into the program from outside, survive the crash of any of them,
 returning to the state they had, and can launch a general program for
 each request they receive (see the :ref:`resident` Section). Both
 types define their processes the same way.
+
+Like similar tools, DeBasher runs processes in parallel as their data
+dependencies allow, reruns only what failed or is pending, reproduces
+results through Conda environments and Docker containers, and runs on
+clusters. Unlike most of them, it streams data between processes,
+allows cycles, keeps processes with a state of their own, takes input
+from outside while a program runs, and launches programs from within
+programs.
