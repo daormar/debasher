@@ -30,6 +30,7 @@ import sys
 import tempfile
 import types
 
+from debasher_node_source import is_node_start, is_run_line
 from debasher_runtime_envelope import decode_envelope
 from debasher_runtime_fbp import FBPProcess
 from debasher_runtime_launcher import ProgramLauncher
@@ -124,9 +125,9 @@ def _node_class(process, source):
     filename = f"<heredoc of {process}>"
     tree = ast.parse(source, filename=filename)
     class_names = {stmt.name for stmt in tree.body if isinstance(stmt, ast.ClassDef)}
-    tree.body = [stmt for stmt in tree.body if not _is_run_line(stmt, class_names)]
+    tree.body = [stmt for stmt in tree.body if not is_run_line(stmt, class_names)]
     for stmt in tree.body:
-        if _starts_a_node(stmt):
+        if is_node_start(stmt):
             raise ValueError(
                 f"load_node: the heredoc of {process!r} starts its node at line "
                 f"{stmt.lineno} in a form the harness does not recognize: end it "
@@ -164,61 +165,6 @@ def _node_class(process, source):
                 "builds a subclass of FBPProcess or of DirectoryWatcher"
             )
     return node_class
-
-
-def _is_run_line(stmt, class_names):
-    """Whether `stmt` is the line <Name>().run() of a class of the heredoc."""
-    if not isinstance(stmt, ast.Expr) or not isinstance(stmt.value, ast.Call):
-        return False
-    call = stmt.value
-    return (
-        not call.args
-        and not call.keywords
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "run"
-        and isinstance(call.func.value, ast.Call)
-        and isinstance(call.func.value.func, ast.Name)
-        and call.func.value.func.id in class_names
-        and not call.func.value.args
-        and not call.func.value.keywords
-    )
-
-
-def _is_main_guard(stmt):
-    """Whether `stmt` is if __name__ == "__main__":, which a module of
-    the harness never runs."""
-    test = getattr(stmt, "test", None)
-    return (
-        isinstance(stmt, ast.If)
-        and isinstance(test, ast.Compare)
-        and isinstance(test.left, ast.Name)
-        and test.left.id == "__name__"
-        and len(test.ops) == 1
-        and isinstance(test.ops[0], ast.Eq)
-        and len(test.comparators) == 1
-        and isinstance(test.comparators[0], ast.Constant)
-        and test.comparators[0].value == "__main__"
-    )
-
-
-def _starts_a_node(stmt):
-    """
-    Whether the top-level statement `stmt` calls a method run() with no
-    arguments, as a node is started, outside a definition and outside
-    if __name__ == "__main__":, which would start a node while the harness
-    runs the heredoc. A call with arguments, such as subprocess.run([...]),
-    starts no node.
-    """
-    if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) or _is_main_guard(stmt):
-        return False
-    return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "run"
-        and not node.args
-        and not node.keywords
-        for node in ast.walk(stmt)
-    )
 
 
 def _json_round_trip(value):

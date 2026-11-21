@@ -17,7 +17,7 @@ python_PYTHON= debasher_runtime_lib.py debasher_runtime_envelope.py	\
 debasher_runtime_transport.py debasher_runtime_inputlog.py		\
 debasher_runtime_fbp.py debasher_runtime_supervisor.py			\
 debasher_runtime_launcher.py debasher_runtime_watcher.py		\
-debasher_runtime_testing.py debasher_prg_lib.py
+debasher_runtime_testing.py debasher_node_source.py debasher_prg_lib.py
 
 mypkglibdir = $(libdir)/@PACKAGE@
 mypkglib_DATA = debasher_lib debasher_lib_utils debasher_lib_sched	\

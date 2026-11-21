@@ -191,8 +191,8 @@ export function inheritedHookNote(kind: NodeKind, name: string, signature: strin
 // The classes of the runtime library, which the class of a node may not
 // hide, and the Python builtins whose names a class named in CamelCase can
 // take (those that start with a capital letter): the engine refuses a node
-// whose class hides either (see debasher::_resident_class_name_checker_src
-// in engine/debasher_lib_resident.sh).
+// whose class hides either (see check_class_name in
+// engine/debasher_node_source.py).
 const RUNTIME_CLASSES = ["FBPProcess", "Supervisor", "ProgramLauncher", "DirectoryWatcher"];
 
 const CAPITALIZED_PYTHON_BUILTINS = [

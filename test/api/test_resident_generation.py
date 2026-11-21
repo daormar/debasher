@@ -9,8 +9,8 @@ with debasher_exec --validate, which loads a resident program and validates it
 without launching anything.
 """
 
+import ast
 import importlib
-import re
 import subprocess
 from pathlib import Path
 
@@ -29,7 +29,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api import paths
+from api import paths, resident_node_code
 from api.models import (
     AdditionalSpecs,
     ComputationalSpecs,
@@ -235,34 +235,57 @@ def test_the_class_of_a_node_is_named_after_its_process():
     assert node_class_name("org.ns.count_words") == "OrgNsCountWords"
 
 
-def _embedded_python(function):
-    """Loads the Python program that a function of the Bash library embeds."""
-    source = (Path(__file__).resolve().parents[2] / "engine" / "debasher_lib_resident.sh").read_text()
-    match = re.search(rf"^debasher::{function}\(\)\n\{{\n    cat <<'EOF'\n(.*?)^EOF$", source, re.S | re.M)
-    namespace = {"__name__": "embedded"}
-    exec(match.group(1), namespace)
-    return namespace
+def _node_source_module(monkeypatch):
+    """The module of the engine that reads the source of a node, which the API
+    never imports and keeps a copy of."""
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "engine"))
+    return importlib.import_module("debasher_node_source")
 
 
 @pytest.mark.parametrize("name", ["counter", "Counter", "org.ns.count_words", "a__b", "_x", "x_", "a.b_c.d"])
-def test_the_engine_and_the_api_name_the_class_of_a_node_alike(name):
-    checker = _embedded_python("_resident_class_name_checker_src")
-    assert checker["camel_case"](name) == node_class_name(name)
+def test_the_engine_and_the_api_name_the_class_of_a_node_alike(name, monkeypatch):
+    assert _node_source_module(monkeypatch).get_node_class_name(name) == node_class_name(name)
 
 
-def test_the_engine_and_the_api_know_the_same_classes_of_the_runtime_library():
-    checker = _embedded_python("_resident_class_name_checker_src")
-    classifier = _embedded_python("_resident_role_classifier_src")
-    assert set(checker["RUNTIME_CLASSES"]) == set(RUNTIME_CLASSES) == set(classifier["BASE_ROLES"])
+def test_the_engine_and_the_api_know_the_same_classes_of_the_runtime_library(monkeypatch):
+    engine = _node_source_module(monkeypatch)
+    assert set(engine.RUNTIME_CLASSES) == set(RUNTIME_CLASSES) == set(engine.BASE_ROLES)
+
+
+_SOURCES_OF_A_NODE = [
+    "from debasher_runtime_lib import FBPProcess\n\nclass A(FBPProcess):\n    pass\n\nA().run()\n",
+    "from debasher_runtime_lib import FBPProcess as Base\n\nclass A(Base):\n    pass\n\nA().run()\n",
+    "import debasher_runtime_lib\n\nclass A(debasher_runtime_lib.DirectoryWatcher):\n    pass\n\nA().run(1)\n",
+    "from debasher_runtime_lib import Supervisor as S, ProgramLauncher\n\nclass A(S):\n    pass\n\n"
+    "class B(ProgramLauncher, Mixin):\n    pass\n\nB().run()\nA.run()\n",
+    "from other import FBPProcess\n\nclass A(Thing[0]):\n    pass\n\nA(1).run()\n",
+]
+
+
+@pytest.mark.parametrize("source", _SOURCES_OF_A_NODE)
+def test_the_engine_and_the_api_read_the_source_of_a_node_alike(source, monkeypatch):
+    # What the two copies share: the aliases of the runtime library, the
+    # base of a class and the line that runs a node
+    engine = _node_source_module(monkeypatch)
+    tree = ast.parse(source)
+    aliases = engine.get_runtime_aliases(tree)
+    assert resident_node_code._runtime_aliases(tree) == aliases
+    for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
+        for base in cls.bases:
+            name = engine.get_base_name(base)
+            kind = aliases.get(name, name)
+            assert resident_node_code._base_kind(base, aliases) == (kind if kind in engine.RUNTIME_CLASSES else None)
+        for statement in tree.body:
+            assert resident_node_code._is_run_call(statement, cls.name) == engine.is_run_line(statement, {cls.name})
 
 
 @pytest.mark.parametrize("kind", ["FBPProcess", "DirectoryWatcher"])
 def test_the_heredoc_that_the_api_writes_passes_the_engine_and_the_harness(kind, monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2] / "engine"))
+    _node_source_module(monkeypatch)
     testing = importlib.import_module("debasher_runtime_testing")
     heredoc = node_heredoc(_process("org.ns.count_words", kind))
 
-    assert _embedded_python("_resident_class_name_checker_src")["check"]("org.ns.count_words", heredoc) is None
+    assert _node_source_module(monkeypatch).check_class_name("org.ns.count_words", heredoc) is None
     assert testing._node_class("org.ns.count_words", heredoc).__name__ == "OrgNsCountWords"
 
 

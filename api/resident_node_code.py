@@ -143,6 +143,13 @@ _HOOK_FIELDS = {hook: field for field, hook, _ in NODE_HOOKS}
 _RUNTIME_MODULE = "debasher_runtime_lib"
 
 
+# What the engine reads of the source of a node is in debasher_node_source.py
+# of the runtime library. The API keeps a copy of the part it needs, since it
+# parses the runtime library and never imports it, and a test keeps the two in
+# step. The rules of this copy are stricter where the web UI has to write the
+# code back: the line that starts the node is alone, after the class.
+
+
 def _runtime_aliases(tree: ast.Module) -> dict[str, str]:
     """The names under which the heredoc imports the classes of the runtime
     library, as the engine resolves them."""

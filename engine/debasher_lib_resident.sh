@@ -59,95 +59,11 @@ debasher::_get_resident_process_source()
 }
 
 ########
-# Echoes the source of the (small, self-contained) Python program that
-# classifies a resident process's role from its source, read from
-# stdin: prints exactly one of "supervisor", "fbpprocess" or "unknown"
-# to stdout. It looks for a top-level class definition whose bases
-# resolve (following plain "import"/"from ... import ... as ..."
-# aliasing) to the literal names "Supervisor" or "FBPProcess" (the
-# two base classes of the engine for resident processes), or
-# "ProgramLauncher" or "DirectoryWatcher", nodes of the runtime library
-# that derive from FBPProcess (one launches a general program for each
-# request, the other sends a request for each file that arrives). This
-# is a static check: ast.parse never imports or executes the given
-# source, unlike a real "issubclass" check, which is not used here
-# since it would need to run
-# inside each process's own conda/docker environment just to answer a
-# type question, before the program has even been launched.
-debasher::_resident_role_classifier_src()
-{
-    cat <<'EOF'
-import ast
-import sys
-
-BASE_ROLES = {
-    "Supervisor": "supervisor",
-    "FBPProcess": "fbpprocess",
-    "ProgramLauncher": "fbpprocess",
-    "DirectoryWatcher": "fbpprocess",
-}
-
-
-def resolved_base_names(tree):
-    """Local name -> canonical base name, following import aliasing."""
-    aliases = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name in BASE_ROLES:
-                    aliases[alias.asname or alias.name] = alias.name
-    return aliases
-
-
-def base_identifier(base_node):
-    if isinstance(base_node, ast.Name):
-        return base_node.id
-    if isinstance(base_node, ast.Attribute):
-        return base_node.attr
-    return None
-
-
-def classify(source):
-    tree = ast.parse(source)
-
-    aliases = resolved_base_names(tree)
-    found_role = None
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef):
-            continue
-        for base in node.bases:
-            name = base_identifier(base)
-            if name is None:
-                continue
-            canonical = aliases.get(name, name)
-            role = BASE_ROLES.get(canonical)
-            if role == "supervisor":
-                return "supervisor"
-            if role == "fbpprocess" and found_role is None:
-                found_role = "fbpprocess"
-    return found_role or "unknown"
-
-
-def main():
-    try:
-        print(classify(sys.stdin.read()))
-    except SyntaxError as exc:
-        print(f"Error: invalid Python source ({exc})", file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
-EOF
-}
-
-########
-# Classifies a resident program's process as "supervisor",
-# "fbpprocess" or "unknown" by running debasher::_resident_role_classifier_src
-# against the process's Python heredoc source (see
-# debasher::_get_resident_process_source). Returns 1, with an error on
-# stderr, if the process is not a Python heredoc process at all, or if
-# its source is not valid Python.
+# Classifies a resident program's process as "supervisor", "fbpprocess" or
+# "unknown", from the base of the classes of its Python heredoc source (see
+# debasher::_get_resident_process_source), with debasher_node_source.py of
+# the runtime library. Returns 1, with an error on stderr, if the process is
+# not a Python heredoc process at all, or if its source is not valid Python.
 debasher::_classify_resident_process_role()
 {
     local processname=$1
@@ -158,199 +74,19 @@ debasher::_classify_resident_process_role()
         return 1
     fi
 
-    printf '%s' "${source}" | "${PYTHON}" -c "$(debasher::_resident_role_classifier_src)"
+    printf '%s' "${source}" | "${PYTHON}" "${debasher_pythondir}/debasher_node_source.py" classify
 }
 
 ########
-# Echoes the source of the (small, self-contained) Python program that
-# checks the name of the class of a resident process, read from stdin,
-# with the name of the process as its only argument. The class that
-# derives from a class of the runtime library (resolved as
-# debasher::_resident_role_classifier_src resolves it) is the node, and
-# there is exactly one. It is named after its process, in CamelCase:
-# every part of the process name between dots and underscores, with its
-# first letter in upper case ("counter" -> "Counter", "org.ns.count_words"
-# -> "OrgNsCountWords"), so that the name, which the runtime also gives
-# to the logger of the node, follows from the process. And that name
-# hides nothing that the code of the node could need: a class of the
-# runtime library, a Python builtin, or a name that the heredoc binds at
-# its top level, such as an import of its preamble. Prints nothing and
-# The code also has the line that starts the node, <Name>().run(), at the
-# top level or under if __name__ == "__main__":. It exits 0 if the class
-# passes, or prints the first violation to stderr and exits 1. Like the
-# classifier, it only parses the source.
-debasher::_resident_class_name_checker_src()
-{
-    cat <<'EOF'
-import ast
-import builtins
-import sys
-
-RUNTIME_CLASSES = ("FBPProcess", "Supervisor", "ProgramLauncher", "DirectoryWatcher")
-
-# Nodes whose names live in a scope of their own, not in the module's
-SCOPES = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
-
-
-def camel_case(processname):
-    parts = processname.replace(".", "_").split("_")
-    return "".join(part[:1].upper() + part[1:] for part in parts if part)
-
-
-def runtime_aliases(tree):
-    aliases = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name in RUNTIME_CLASSES:
-                    aliases[alias.asname or alias.name] = alias.name
-    return aliases
-
-
-def base_identifier(base_node):
-    if isinstance(base_node, ast.Name):
-        return base_node.id
-    if isinstance(base_node, ast.Attribute):
-        return base_node.attr
-    return None
-
-
-def node_classes(tree):
-    aliases = runtime_aliases(tree)
-    classes = []
-    for node in tree.body:
-        if not isinstance(node, ast.ClassDef):
-            continue
-        for base in node.bases:
-            name = base_identifier(base)
-            if name is not None and aliases.get(name, name) in RUNTIME_CLASSES:
-                classes.append(node)
-                break
-    return classes
-
-
-def bindings(node):
-    """The names that `node`, a statement at the top level, binds in the module."""
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-        yield node.name, node.lineno
-        return
-    if isinstance(node, (ast.Import, ast.ImportFrom)):
-        for alias in node.names:
-            if alias.name != "*":
-                yield alias.asname or alias.name.split(".")[0], node.lineno
-        return
-    if isinstance(node, SCOPES):
-        return
-    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-        yield node.id, node.lineno
-    for child in ast.iter_child_nodes(node):
-        yield from bindings(child)
-
-
-def runs_the_node(statement, name):
-    """Whether `statement` is the line <name>().run()."""
-    if not isinstance(statement, ast.Expr) or not isinstance(statement.value, ast.Call):
-        return False
-    call = statement.value
-    return (
-        not call.args
-        and not call.keywords
-        and isinstance(call.func, ast.Attribute)
-        and call.func.attr == "run"
-        and isinstance(call.func.value, ast.Call)
-        and isinstance(call.func.value.func, ast.Name)
-        and call.func.value.func.id == name
-        and not call.func.value.args
-        and not call.func.value.keywords
-    )
-
-
-def is_main_guard(statement):
-    """Whether `statement` is if __name__ == "__main__":, which holds when the
-    engine runs the heredoc, as python3 -c runs it as the main module."""
-    if not isinstance(statement, ast.If) or not isinstance(statement.test, ast.Compare):
-        return False
-    test = statement.test
-    return (
-        isinstance(test.left, ast.Name)
-        and test.left.id == "__name__"
-        and len(test.ops) == 1
-        and isinstance(test.ops[0], ast.Eq)
-        and len(test.comparators) == 1
-        and isinstance(test.comparators[0], ast.Constant)
-        and test.comparators[0].value == "__main__"
-    )
-
-
-def starts_the_node(tree, name):
-    """Whether the heredoc has the line <name>().run(), at the top level or
-    under if __name__ == "__main__":."""
-    for statement in tree.body:
-        if runs_the_node(statement, name):
-            return True
-        if is_main_guard(statement) and any(runs_the_node(inner, name) for inner in statement.body):
-            return True
-    return False
-
-
-def check(processname, source):
-    tree = ast.parse(source)
-    expected = camel_case(processname)
-
-    if expected in RUNTIME_CLASSES:
-        return (f"the class of process {processname} is named {expected}, after the process, "
-                "which is a class of the runtime library that it would hide: rename the process")
-    if expected in dir(builtins):
-        return (f"the class of process {processname} is named {expected}, after the process, "
-                "which is a Python builtin that it would hide: rename the process")
-
-    classes = node_classes(tree)
-    if len(classes) != 1:
-        names = ", ".join(node.name for node in classes)
-        return (f"process {processname} defines {len(classes)} classes deriving from a class of "
-                f"the runtime library ({names}), but a node defines exactly one")
-    node_class = classes[0]
-    if node_class.name != expected:
-        return (f"process {processname} names its class {node_class.name}, but the class of a "
-                f"node is named after its process, in CamelCase: {expected}")
-
-    for statement in tree.body:
-        if statement is node_class:
-            continue
-        for name, line in bindings(statement):
-            if name == expected:
-                return (f"the class of process {processname}, {expected}, has the name of what "
-                        f"its code also defines on line {line}, which it would hide")
-
-    if not starts_the_node(tree, expected):
-        return (f"process {processname} has no line {expected}().run(), at the top level or "
-                'under if __name__ == "__main__":, which is how a node is started')
-    return None
-
-
-def main():
-    try:
-        violation = check(sys.argv[1], sys.stdin.read())
-    except SyntaxError as exc:
-        print(f"Error: invalid Python source ({exc})", file=sys.stderr)
-        sys.exit(1)
-    if violation is not None:
-        print(f"Error: {violation}", file=sys.stderr)
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
-EOF
-}
-
-########
-# Checks the name of the class of a resident program's process, and the
-# line that starts it, by running
-# debasher::_resident_class_name_checker_src against its Python heredoc
-# source (see debasher::_get_resident_process_source). Returns 1, with an
-# error on stderr, if the name breaks one of its rules, or if the process
-# is not a Python heredoc process at all.
+# Checks the name of the class of a resident program's process, and the line
+# that starts it, against its Python heredoc source (see
+# debasher::_get_resident_process_source), with debasher_node_source.py of
+# the runtime library: the class that derives from a class of the runtime
+# library is the node, there is exactly one, it is named after its process
+# in CamelCase and hides nothing that the code of the node could need, and
+# the code has the line <Name>().run(). Returns 1, with an error on stderr,
+# if the name breaks one of its rules, or if the process is not a Python
+# heredoc process at all.
 debasher::_check_resident_class_name()
 {
     local processname=$1
@@ -361,7 +97,7 @@ debasher::_check_resident_class_name()
         return 1
     fi
 
-    printf '%s' "${source}" | "${PYTHON}" -c "$(debasher::_resident_class_name_checker_src)" "${processname}"
+    printf '%s' "${source}" | "${PYTHON}" "${debasher_pythondir}/debasher_node_source.py" check-class-name "${processname}"
 }
 
 ########
