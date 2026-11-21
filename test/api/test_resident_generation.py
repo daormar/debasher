@@ -286,7 +286,7 @@ def test_the_heredoc_that_the_api_writes_passes_the_engine_and_the_harness(kind,
     heredoc = node_heredoc(_process("org.ns.count_words", kind))
 
     assert _node_source_module(monkeypatch).check_class_name("org.ns.count_words", heredoc) is None
-    assert testing._node_class("org.ns.count_words", heredoc).__name__ == "OrgNsCountWords"
+    assert testing._load_node_class("org.ns.count_words", heredoc).__name__ == "OrgNsCountWords"
 
 
 def test_a_process_name_already_in_camel_case_names_its_class_as_it_is():

@@ -85,15 +85,15 @@ def load_node(process, opts=None, inputs=(), outputs=()):
             "load_node: DEBASHER_TEST_PFILE is not set: run the tests with "
             "debasher_test, or set it to the program file"
         )
-    node_class = _node_class(process, _node_source(pfile, process))
+    node_class = _load_node_class(process, _get_node_source(pfile, process))
     module_dir = os.path.dirname(os.path.abspath(pfile))
     under_test = NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs), module_dir)
-    with under_test._node_env():
+    with under_test._use_node_env():
         under_test.node.initialize_runtime()
     return under_test
 
 
-def _node_source(pfile, process):
+def _get_node_source(pfile, process):
     """The text of the Python heredoc of `process`, as the engine runs it."""
     key = (pfile, process)
     if key not in _source_cache:
@@ -117,7 +117,7 @@ def _node_source(pfile, process):
     return _source_cache[key]
 
 
-def _node_class(process, source):
+def _load_node_class(process, source):
     """
     Runs the heredoc `source` as a module of its own, without the line
     that would start the node, and returns the class of the node.
@@ -167,7 +167,7 @@ def _node_class(process, source):
     return node_class
 
 
-def _json_round_trip(value):
+def _round_trip_through_json(value):
     """`value` as a JSON reader gets it: a tuple becomes a list, a number
     used as a key a string."""
     return json.loads(json.dumps(value))
@@ -192,7 +192,7 @@ class NodeUnderTest:
         self._tmpdir = tempfile.TemporaryDirectory(prefix="debasher_node_")
         self._sent = {port: [] for port in outputs}
 
-        with self._node_env(), self._argv():
+        with self._use_node_env(), self._use_node_argv():
             self.node = node_class()
         # The pace of a node is not business logic
         self.node.sleep = lambda seconds: None
@@ -205,7 +205,7 @@ class NodeUnderTest:
         )
 
     @contextlib.contextmanager
-    def _node_env(self):
+    def _use_node_env(self):
         """
         The environment that the engine gives a node, while the node runs
         code: its ports, its execdir, and neither computational
@@ -229,7 +229,7 @@ class NodeUnderTest:
                 _set_env(name, value)
 
     @contextlib.contextmanager
-    def _argv(self):
+    def _use_node_argv(self):
         """
         The argv from which the node parses its options, in the shape that
         the engine gives it: the class of a node takes no argument, and
@@ -267,8 +267,8 @@ class NodeUnderTest:
                 f"(inputs: {self._inputs}) nor its observe port ({observe_port})"
             )
         try:
-            with self._node_env():
-                self.node._run_process_data(port, _json_round_trip(packet))
+            with self._use_node_env():
+                self.node._run_process_data(port, _round_trip_through_json(packet))
         finally:
             self._collect_sent()
 
@@ -283,11 +283,11 @@ class NodeUnderTest:
         if not self.node._observes():
             raise ValueError(f"observe: {self._node_class.__name__} does not define observe()")
         self._injected.clear()
-        with self._node_env():
+        with self._use_node_env():
             self.node.observe()
         injected = list(self._injected)
         try:
-            with self._node_env():
+            with self._use_node_env():
                 for payload in injected:
                     self.node._run_process_data(self.node._get_observe_port(), payload)
         finally:
@@ -323,13 +323,13 @@ class NodeUnderTest:
         initialize_runtime(). Raises AssertionError when the new node
         captures a state other than the one it was restored from.
         """
-        with self._node_env():
-            node_state = _json_round_trip(self.node.capture_node_state())
+        with self._use_node_env():
+            node_state = _round_trip_through_json(self.node.capture_node_state())
         restarted = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
-        with restarted._node_env():
-            restarted.node.restore_node_state(_json_round_trip(node_state))
+        with restarted._use_node_env():
+            restarted.node.restore_node_state(_round_trip_through_json(node_state))
             restarted.node.initialize_runtime()
-            recaptured = _json_round_trip(restarted.node.capture_node_state())
+            recaptured = _round_trip_through_json(restarted.node.capture_node_state())
         if recaptured != node_state:
             raise AssertionError(
                 f"restart: {self._node_class.__name__} restored the node state "
@@ -373,10 +373,10 @@ class NodeUnderTest:
                     f"{without!r} without a restart and {with_restart!r} with one "
                     f"after {capture_after} feeds"
                 )
-        with straight._node_env():
-            state_without = _json_round_trip(straight.node.capture_node_state())
-        with after._node_env():
-            state_with = _json_round_trip(after.node.capture_node_state())
+        with straight._use_node_env():
+            state_without = _round_trip_through_json(straight.node.capture_node_state())
+        with after._use_node_env():
+            state_with = _round_trip_through_json(after.node.capture_node_state())
         if state_without != state_with:
             raise AssertionError(
                 f"check_replay: the node state of {self._node_class.__name__} is "
@@ -387,7 +387,7 @@ class NodeUnderTest:
     def _build_new(self):
         """A new node built as this one was, initialized as load_node does."""
         new = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
-        with new._node_env():
+        with new._use_node_env():
             new.node.initialize_runtime()
         return new
 

@@ -36,7 +36,7 @@ Accumulate().run()
 
 
 def _node(source, process="Accumulate", opts=None, inputs=("numbers",), outputs=("outsum",)):
-    node_class = testing._node_class(process, source)
+    node_class = testing._load_node_class(process, source)
     return testing.NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs))
 
 
@@ -58,7 +58,7 @@ def test_a_node_run_under_the_main_guard_is_built_without_starting():
 def test_a_node_started_in_another_form_is_refused():
     source = ACCUMULATE.replace("Accumulate().run()", "node = Accumulate()\nnode.run()")
     with pytest.raises(ValueError, match="form the harness does not recognize"):
-        testing._node_class("Accumulate", source)
+        testing._load_node_class("Accumulate", source)
 
 
 def test_a_call_to_run_with_arguments_in_the_preamble_is_not_refused():
@@ -72,7 +72,7 @@ def test_a_call_to_run_with_arguments_in_the_preamble_is_not_refused():
 def test_a_node_of_another_kind_is_refused(kind):
     source = f"from debasher_runtime_lib import {kind}\n\n\nclass Other({kind}):\n    pass\n\n\nOther().run()\n"
     with pytest.raises(ValueError, match=f"is a {kind}"):
-        testing._node_class("Other", source)
+        testing._load_node_class("Other", source)
 
 
 def test_the_methods_see_the_preamble_and_a_dataclass_of_it_works():
