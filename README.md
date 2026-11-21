@@ -11,7 +11,7 @@
 
 DeBasher generalizes the shell pipeline: from a line of programs joined
 by `|` to a graph of programs, in any language, joined by named options,
-which carry a value, a file or a pipe, run on one machine or on a Slurm
+which carry a value, a file or a pipe, run on one machine or on a
 cluster, and can keep state and survive a crash.
 
 DeBasher is a workflow system whose processes are Unix programs, written

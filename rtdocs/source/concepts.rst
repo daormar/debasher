@@ -25,9 +25,9 @@ a command that reads a file starts when the command that writes it has
 ended, where the two ends of a pipe run together. Let a command run as
 many copies as there are items to process, and the graph has arrays of
 tasks. Add a scheduler that places each command on a machine of a
-cluster, and a graph whose connections are files runs on Slurm; the two
-ends of a pipe have to share a machine, so a graph with pipes runs on
-one. That is the whole of a DeBasher program, and the rest of this
+cluster, and a graph whose connections are files runs on the cluster;
+the two ends of a pipe have to share a machine, so a graph with pipes
+runs on one. That is the whole of a DeBasher program, and the rest of this
 section names its pieces: the commands are **processes**, the named
 pipes and the files are the values of **options**, the graph is what
 the **connections** between options define, the copies are the

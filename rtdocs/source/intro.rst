@@ -4,7 +4,7 @@ Introduction
 DeBasher generalizes the shell pipeline: from a line of programs joined
 by ``|`` to a graph of programs, in any language, joined by named
 options, which carry a value, a file or a pipe, run on one machine or
-on a Slurm cluster, and can keep state and survive a crash. The pipe is
+on a cluster, and can keep state and survive a crash. The pipe is
 a primitive of Unix; the pipeline, which composes programs in one line,
 is how the shell uses it. The pipeline is what DeBasher generalizes,
 and the shell in its name is the shell of the pipeline.
