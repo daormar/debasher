@@ -261,3 +261,66 @@ def test_a_supervisor_or_a_process_that_is_not_a_node_is_not_reused():
 
     with pytest.raises(ResidentImportRefused, match="no node named"):
         reuse_node(processes, edges, "sup")
+
+
+# --- strip_wiring, on the program model ----------------------------------------
+
+
+def _wiring_option(option_id, label, direction, **fields):
+    from api.models import ProgramOption
+
+    defaults = {"id": option_id, "label": label, "direction": direction, "dataType": "string",
+                "description": label, "value": "", "commandLine": False, "channel": "fifo"}
+    return ProgramOption(**{**defaults, **fields})
+
+
+def _wiring_process(name, kind, options):
+    from api.models import AdditionalSpecs, ComputationalSpecs, OptionsHandler, Position, ProgramProcess
+
+    return ProgramProcess(id=name, name=name, description=name, position=Position(x=0, y=0), options=list(options),
+                          optionsHandler=OptionsHandler(mode="standard"), language="python", code="",
+                          computationalSpecs=ComputationalSpecs(), additionalSpecs=AdditionalSpecs(force=False),
+                          nodeKind=kind)
+
+
+def _wiring_edge(source, source_option, target, target_option):
+    from api.models import ProgramEdge
+
+    return ProgramEdge(id=f"{source}.{source_option}->{target}.{target_option}", sourceProcessId=source,
+                       sourceOptionId=source_option, targetProcessId=target, targetOptionId=target_option)
+
+
+def test_a_control_option_of_the_supervisor_that_is_no_wiring_is_one_problem():
+    from api.resident_supervisor_wiring import strip_wiring
+
+    sup = _wiring_process("sup", "Supervisor", [_wiring_option("odd", "-odd", "output", fifoTag="control")])
+    node = _wiring_process("n", "FBPProcess", [])
+
+    stripped = strip_wiring([sup, node], [])
+
+    assert [process for process, _ in stripped.problems] == ["sup"]
+    assert '"-odd"' in stripped.problems[0][1]
+
+
+def test_an_edge_whose_option_does_not_exist_is_kept():
+    from api.resident_supervisor_wiring import strip_wiring
+
+    sup = _wiring_process("sup", "Supervisor", [])
+    node = _wiring_process("n", "FBPProcess", [_wiring_option("out", "-outd", "output")])
+    edge = _wiring_edge("n", "missing", "sup", "hb")
+
+    stripped = strip_wiring([sup, node], [edge])
+
+    assert stripped.edges == [edge]
+
+
+def test_without_a_supervisor_a_control_input_fed_from_outside_makes_its_node_an_initiator():
+    from api.resident_supervisor_wiring import strip_wiring
+
+    node = _wiring_process("n", "FBPProcess", [_wiring_option("ctl", "-ctl", "input", fifoTag="control")])
+
+    stripped = strip_wiring([node], [])
+
+    assert stripped.initiators == {"n"}
+    assert stripped.removed_labels["n"] == {"-ctl"}
+    assert stripped.problems == []

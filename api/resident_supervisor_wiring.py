@@ -288,19 +288,40 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
     any other fifo tagged control, is a problem.
     """
     supervisor = next((p for p in processes if p.nodeKind == "Supervisor"), None)
-    by_id = {process.id: process for process in processes}
     removed: dict[str, set[str]] = {}
-    remaining_edges = []
-    initiators = set()
+    initiators: set[str] = set()
 
     def remove(process, option):
         removed.setdefault(process.name, set()).add(option.id)
+
+    remaining_edges = _strip_wiring_edges(processes, edges, supervisor, remove, initiators)
+    _strip_control_inputs_fed_from_outside(processes, edges, supervisor, remove, initiators)
+    problems = _strip_supervisor_options(supervisor, removed, remove)
+
+    removed_labels = {}
+    for process in processes:
+        ids = removed.get(process.name, set())
+        removed_labels[process.name] = {o.label for o in process.options if o.id in ids}
+        process.options = [o for o in process.options if o.id not in ids]
+    problems += _report_stray_control_options(processes, supervisor)
+
+    return StrippedWiring(remaining_edges, initiators, removed_labels, problems)
+
+
+def _strip_wiring_edges(processes, edges, supervisor, remove, initiators):
+    """
+    Removes the options of the edges that are Supervisor wiring, a heartbeat
+    channel or an initiator port, adding the node of each initiator port to
+    `initiators`, and returns the other edges.
+    """
+    by_id = {process.id: process for process in processes}
 
     def option_of(process_id, option_id):
         process = by_id.get(process_id)
         option = next((o for o in process.options if o.id == option_id), None) if process else None
         return process, option
 
+    remaining_edges = []
     for edge in edges:
         source, source_option = option_of(edge.sourceProcessId, edge.sourceOptionId)
         target, target_option = option_of(edge.targetProcessId, edge.targetOptionId)
@@ -308,17 +329,27 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
             remaining_edges.append(edge)
             continue
         is_fifo = source_option.channel == "fifo"
+        # A fifo without a tag that a node writes and the Supervisor reads
         if target is supervisor and source is not supervisor and is_fifo and not source_option.fifoTag:
             remove(source, source_option)
             remove(target, target_option)
             continue
+        # A fifo tagged control that the Supervisor writes and a node reads
         if source is supervisor and target is not supervisor and is_fifo and source_option.fifoTag == "control":
             remove(source, source_option)
             remove(target, target_option)
             initiators.add(target.name)
             continue
         remaining_edges.append(edge)
+    return remaining_edges
 
+
+def _strip_control_inputs_fed_from_outside(processes, edges, supervisor, remove, initiators):
+    """
+    Removes the inputs tagged control that no edge connects: the manual
+    trigger port of the Supervisor or, without a Supervisor, the control
+    port of an initiator, whose node it adds to `initiators`.
+    """
     connected = {(edge.sourceProcessId, edge.sourceOptionId) for edge in edges} | {
         (edge.targetProcessId, edge.targetOptionId) for edge in edges
     }
@@ -337,40 +368,55 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
                 if process is not supervisor:
                     initiators.add(process.name)
 
-    problems = []
-    if supervisor is not None:
-        removed_ids = removed.get(supervisor.name, set())
-        count_sources = {
-            option.countSourceOptionId
-            for option in supervisor.options
-            if option.id in removed_ids and option.countSourceOptionId
-        }
-        for option in supervisor.options:
-            if option.id in removed_ids:
-                continue
-            if option.label == NO_HOLD_FIFOS_LABEL and option.dataType == "None":
-                remove(supervisor, option)
-            elif option.id in count_sources and option.commandLine:
-                remove(supervisor, option)
-            else:
-                problems.append(
-                    (
-                        supervisor.name,
-                        f'the Supervisor has the option "{option.label}", which is none of the '
-                        "Supervisor wiring, and the web UI does not edit the options of the "
-                        "Supervisor: remove it",
-                    )
-                )
 
-    removed_labels = {}
+def _strip_supervisor_options(supervisor, removed, remove):
+    """
+    Removes the options of the Supervisor that are wiring but no channel
+    (-no-hold-fifos, the command line options that count its fanout
+    families), and returns a problem for each other option it has.
+    """
+    if supervisor is None:
+        return []
+    problems = []
+    removed_ids = removed.get(supervisor.name, set())
+    count_sources = {
+        option.countSourceOptionId
+        for option in supervisor.options
+        if option.id in removed_ids and option.countSourceOptionId
+    }
+    for option in supervisor.options:
+        if option.id in removed_ids:
+            continue
+        if option.label == NO_HOLD_FIFOS_LABEL and option.dataType == "None":
+            remove(supervisor, option)
+        elif option.id in count_sources and option.commandLine:
+            remove(supervisor, option)
+        else:
+            problems.append(
+                (
+                    supervisor.name,
+                    f'the Supervisor has the option "{option.label}", which is none of the '
+                    "Supervisor wiring, and the web UI does not edit the options of the "
+                    "Supervisor: remove it",
+                )
+            )
+    return problems
+
+
+def _report_stray_control_options(processes, supervisor):
+    """
+    A problem for each option tagged control that is left once the wiring is
+    removed, on a node: the options of the Supervisor are judged by
+    _strip_supervisor_options, so that none is reported twice.
+    """
+    problems = []
     for process in processes:
-        ids = removed.get(process.name, set())
-        removed_labels[process.name] = {o.label for o in process.options if o.id in ids}
-        process.options = [o for o in process.options if o.id not in ids]
+        if process is supervisor:
+            continue
         for option in process.options:
             if option.fifoTag != "control":
                 continue
-            if supervisor is not None and option.direction == "input" and process is not supervisor:
+            if supervisor is not None and option.direction == "input":
                 problems.append(
                     (
                         process.name,
@@ -388,5 +434,4 @@ def strip_wiring(processes: list[ProgramProcess], edges: list[ProgramEdge]) -> S
                         "Supervisor wiring",
                     )
                 )
-
-    return StrippedWiring(remaining_edges, initiators, removed_labels, problems)
+    return problems
