@@ -61,7 +61,7 @@ Things to try with it:
 * **A stall.** ``touch out/Acquire/stall`` stalls the stream. Five
   seconds later ``Acquire`` raises, and its process ends with an error.
   ``Sup`` sees that its process is gone at its next check and relaunches
-  it, some 5 to 15 s after the ``touch``. The new connection removes the
+  it, about 10 s after the ``touch``. The new connection removes the
   file, and the stream goes on. ``out/Acquire/connections`` counts the
   connections, and ``debasher_inspect_resident -d out notices`` shows
   the notice of the stall until the relaunch.
@@ -83,26 +83,26 @@ Things to try with it:
   the backlog is over ``out_backlog_max_mb``, and from the next round on
   ``Acquire`` writes no checkpoint, with a warning in its log. About
   20 s after the freeze it reaches ``out_backlog_fail_mb``: ``Acquire``
-  fails, its process ends, and ``Sup`` relaunches it a few seconds
-  later. Meanwhile ``Sup`` relaunches the frozen ``Tally`` too, once it
-  has sent no heartbeat for 30 s: to the ``Supervisor``, a frozen node
-  looks like a node whose whole process hangs. ``kill -CONT`` with the
-  same argument within those 20 s thaws ``Tally``, the backlog drains,
-  and nothing is relaunched.
+  fails, and its process ends 5 s later, once it gives up on its writer
+  to ``Tally``, which cannot write. ``Sup`` relaunches it at its next
+  check, about 30 s after the freeze, together with the frozen
+  ``Tally``, which has sent no heartbeat for 30 s: to the
+  ``Supervisor``, a frozen node looks like a node whose whole process
+  hangs. ``kill -CONT`` with the same argument within those 20 s thaws
+  ``Tally``, the backlog drains, and nothing is relaunched.
 * **The size cap of an input log.** Launched without the
   ``debasher_snapshot_resident`` line (or, from the web interface, with
   no snapshot period in its execution options), the program runs no
   rounds, and nothing prunes the input log of ``Tally``. The log reaches
   its cap a little over a minute after the start, and ``Tally`` stops
   with an error that says so, which ends its process. ``Sup`` relaunches
-  it, but only a round prunes the log: each relaunched ``Tally`` finds
-  it still full, and fails before its first heartbeat. Meanwhile
-  ``Tally`` reads nothing, so ``Acquire`` may reach its fail limit too
-  and be relaunched. After three relaunches of ``Tally``, ``Sup`` gives
-  up on it and stops what remains of the program, a stop that may fall
-  back to ``debasher_stop`` (the log of ``Sup`` then ends with a warning
-  that says ``forcing debasher_stop``). ``debasher_reset_resident`` then
-  takes it back to its first run.
+  it at its next check, but only a round prunes the log: each relaunched
+  ``Tally`` finds it still full, and fails before its first heartbeat.
+  After three relaunches, some 15 s after the first, ``Sup`` gives up on
+  ``Tally`` and stops what remains of the program in order: ``Acquire``
+  halts and stops, and the whole program is down less than half a minute
+  after the cap. ``debasher_reset_resident`` then takes it back to its
+  first run.
 * **Stopping, resuming, inspecting and resetting.**
   ``debasher_stop_resident -d out`` stops the program in order, and the
   next ``debasher_exec`` with the same output directory resumes it,
