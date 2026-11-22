@@ -1351,6 +1351,11 @@ interpreting `payload`):
 
 ## Fields of each type
 
+What an envelope carries beside its type depends on that type. The list below
+gives the fields type by type, `DATA`, `BARRIER`, `INTERACT`, `CLOSE` and
+`HELLO`, and then the field that no type has. The paragraph after it says how
+the reader thread checks them.
+
 - `DATA.seq`: the sender's per-channel sequence number (G5 in the Contract,
   see "Input log"), absent when the sender does not number what it sends.
 - `DATA.payload`: free-form, whatever the business logic wants;
@@ -1464,6 +1469,13 @@ launching anything, that the channels of a program can carry a round to every
 node; lets each node take its port lists from the engine instead of declaring
 them a second time; and gives the frontend what it needs to show and edit the
 channels of a resident program.
+
+This section first says how the direction of a channel follows from the fifo
+that creates it ("Direction: the owner writes") and how its kind follows from a
+tag ("Tags: `--control` and `--external`"). It then gives the checks that the
+engine makes when it loads the program ("Validation when the program is
+loaded"), how it gives each node its ports ("Ports from the engine"), and what
+the tags leave out ("What the fifo tags leave out").
 
 ## Direction: the owner writes
 
@@ -1650,6 +1662,9 @@ port.
 
 ## What the fifo tags leave out
 
+The tags and the check at load are about the channels of the program as it is
+declared. Two things lie outside them:
+
 - The check says which nodes can be initiators, not whether a trigger really
   reaches them: that depends on who writes into their control ports, a
   `Supervisor` whose `INITIATOR_PORTS` lists them or someone outside the
@@ -1694,151 +1709,175 @@ of that on top: the heartbeat thread, the barrier logic, the dispatch of
 thread), the checkpoints, and the startup sequence of `run()`, which restores
 the node and replays its log.
 
-The rest of this section starts with an overview of the class, then covers how
-a node is defined, its limits and how it observes the outside world, then the
-pieces that make a node recoverable: state capture, startup, barrier
-propagation, ordered shutdown and checkpoint persistence. It closes with how a
-node test builds a node without the engine to check its business logic.
+The rest of this section starts with an overview of the class. It then covers
+how a node is defined, its computational specifications, how it observes the
+outside world and how it leaves notices. Then come the pieces that make a node
+recoverable: state capture, startup, barrier propagation, ordered shutdown and
+checkpoint persistence. It closes with how a node test builds a node without the
+engine to check its business logic.
 
 ## Overview of the class
 
-- **Where the code lives**: `engine/debasher_runtime_lib.py` is the module that
-  a resident process's heredoc imports
-  (`from debasher_runtime_lib import FBPProcess`, or `Supervisor`), and no
-  source gets prepended into the heredoc itself. The code is split into modules
-  of their own, one layer each, where every module imports only from the ones
-  before it:
-  `debasher_runtime_envelope.py` (the wire format of "Control envelope"),
-  `debasher_runtime_transport.py` (argv parsing, the fifo endpoints and
-  `_PortWorker`), `debasher_runtime_inputlog.py` (`_InputLog`, "Input log"),
-  `debasher_runtime_fbp.py` (`FBPProcess`), `debasher_runtime_supervisor.py`
-  (`Supervisor`, see "`Supervisor` class"), `debasher_runtime_launcher.py`
-  (`ProgramLauncher`) and `debasher_runtime_watcher.py` (`DirectoryWatcher`).
-  `debasher_runtime_testing.py`, the node harness, comes on top of them, and
-  only tests import it. `debasher_runtime_lib.py` keeps
-  `DEBASHER_SHUTDOWN_TOKEN`, a Python mirror of the Bash constant, and
-  re-exports the names that a module and the tests use, so nothing that imports
-  it depends on the layout. All of them are `python_PYTHON`-installed per
-  `engine/Makefile.am`, in the same directory, which is the one that the
-  heredoc's `sys.path` line (see below) already adds.
-- **How a heredoc finds the library**: a heredoc runs as `python3 -c "<text>"`
-  (`debasher::_create_heredoc_func_body` in
-  `engine/debasher_lib_programs.sh`), which does not go through
-  `engine/Makefile.am`'s `.py:` suffix rule, the one that would otherwise
-  prepend `sys.path.append("$(pythondir)")`. So the text of a Python heredoc is
-  itself prefixed with that same call
-  (`debasher::_python_heredoc_sys_path_prelude`), ahead of the code of the
-  module author.
-- **Port declaration**: the ports of a node are lists of option names,
-  `INPUT_PORTS`/`OUTPUT_PORTS` (e.g. `["inf"]`), with `CONTROL_PORTS`,
-  `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node run
-  by the engine takes all five from it, and its class must not declare any (see
-  "Ports from the engine"); a node built without the engine, as the unit tests
-  build them, declares them as class attributes. `_PortWorker` parses `argv`
-  generically when the node is built, into a `self.opts` name -> value dict (the
-  engine's `-optname value` convention of the command line);
-  `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths to
-  open reader/writer threads on. Any other option (e.g. a plain `-threshold`
-  value, or one from the command line of the program) stays available in
-  `self.opts` with no special handling. A flag, an option given with no value
-  (`explain_flag`, `define_flag`), is listed in the class's `FLAGS`, by name
-  without the dash, since `argv` alone cannot tell it from an option whose value
-  starts with a dash; it is `True` in `self.opts` when it is given.
-  `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only commands (see
-  control port in the Glossary); `EXTERNAL_PORTS` names which are fed only from
-  outside the program (see external port in the Glossary); a name in either list
-  that is not an input port, or a `SUPERVISOR_PORT` that is not an output port,
-  is refused when the node is built.
-- **Threads**: one reader thread per `INPUT_PORTS` entry, each reading its
-  FIFO in blocks of up to `_READ_BLOCK_BYTES`, cutting them into lines and
-  handing all the envelopes of a block to `_on_arrivals`, which records them in
-  the input log and pushes each one onto a **shared inbound queue** as
-  `(pos, port_name, type, payload, seq)`; one writer thread per `OUTPUT_PORTS`
-  entry, each with **its own outbound queue** (the brain thread enqueues the
-  encoded line there instead of writing to the FIFO directly, so a slow/stalled
-  neighbor on one output port only blocks that port's writer thread, never the
-  rest of the process); a single brain thread consuming the shared inbound
-  queue; an independent heartbeat thread with its own timer; and, in a node
-  whose class defines `observe()`, the observation thread.
-- **Which threads keep the process alive**: a thread is a daemon exactly when it
-  cannot always be stopped. A daemon thread dies with the process, unwarned and
-  unjoined; a thread that is not a daemon keeps the process from ending until it
-  has returned. The reader, brain, heartbeat and observation threads can always
-  be stopped, each seeing the stop from where it waits: a reader at the end of
-  its wait for data, which lasts at most `_READER_POLL_MS` (200 ms), the brain
-  in the `_STOP` sentinel on its queue, the other two in an event. So they are
-  not daemons: `stop_threads` stops them and waits for them with no limit, and
-  each one finishes what it was doing, the brain thread the message in hand,
-  instead of being cut in the middle of it.
+This overview follows a node from its code to its run. It says where the code
+lives and how a heredoc finds it, how a node declares its ports, which threads
+it runs, which of them keep the process alive and how they report their health.
+It then names the hooks that a subclass redefines, says how the class handles
+markers and commands, describes its logging, and says that rounds come from
+outside the node, and what follows when nothing triggers them.
 
-  A writer thread cannot always be stopped. When its reader is down and the pipe
-  is full it stays blocked in `write()`, and the write does not even fail, since
-  the node holds both ends of the FIFO so that the channel outlives a crash. If
-  it were not a daemon, a node with a stalled neighbor would never end. So it is
-  one: `stop_threads` waits for it for `WRITER_STOP_TIMEOUT_SECS`, then abandons
-  it, and the process ends anyway. All it loses is its outbound queue, which the
-  checkpoint and the replay of the input log cover.
+**Where the code lives.** `engine/debasher_runtime_lib.py` is the module that
+the heredoc of a resident process imports
+(`from debasher_runtime_lib import FBPProcess`, or `Supervisor`). No source is
+prepended into the heredoc itself. The code is split into modules of their own,
+one layer each, and every module imports only from the ones before it:
 
-  The price of the threads that are not daemons is that the process cannot end
-  while one of them runs. `run()` therefore stops them when starting the
-  threads fails, and a `process_data` or an `observe` that never returns keeps
-  the node alive after SIGTERM (see "Stuck but alive" in "Limits and non-goals"
-  and the fallback to SIGKILL of `debasher_stop_resident`).
-- **Health reporting**: passive, not pushed; on its own timer, the heartbeat
-  thread polls `Thread.is_alive()` on every reader and writer thread, on the
-  brain thread and on the observation thread, and only reports "alive" to the
-  `Supervisor` if all of them still are (a Python thread that dies from an
-  uncaught exception does so silently, without crashing the process, which is
-  exactly what `is_alive()` catches).
-- **Subclass extension points**: `process_data(port_name, packet)`: `packet` is
-  the `DATA` envelope's `payload`, already deserialized, never the full envelope
-  (this method is only ever called for `DATA`; `BARRIER`/`INTERACT` dispatch is
-  handled generically and never reaches it); `capture_node_state()`,
-  `restore_node_state(state)` (logical state only), `initialize_runtime()`
-  (rebuilding external resources, see "Startup sequence: `run()`").
-- **Generic barrier logic** (valid for 1 or N input ports): on receiving the
-  first `BARRIER` marker for an epoch (on any input port, or as the initiator),
-  capture state and forward the marker on every output port; track the set of
-  input ports still pending (marker not yet received) for that epoch. While any
-  are pending: record a copy of the `DATA` arriving on those still-pending ports
-  (that recorded set is the state of that channel) and also process every
-  `DATA`, on any port, normally, as usual (what arrives after a port's marker
-  belongs to the next epoch). Once every input port's marker has arrived, or its
-  writer has said `CLOSE`, the node's part of the round is complete.
-- **`INTERACT` logic**: the initiator's inbound connection from the `Supervisor`
-  is not a special kind of port for reading; it is one more `INPUT_PORTS` entry,
-  handled by the same generic port-agnostic, type-based dispatch as everything
-  else, but it is also listed in `CONTROL_PORTS`, which is what keeps the
-  barrier from waiting for a marker that it will never carry.
-  `command: "start_snapshot"` enters the exact same generic barrier logic above
-  (capture state, forward markers, track own input ports as pending, including
-  the node's own port in a cycle) as receiving a peer's `BARRIER` would, just
-  triggered by `INTERACT` instead; `command: "shutdown"` is identical but
-  forwards with `halt=True`. An unrecognized `command` logs a warning and is
-  ignored, it never aborts the process (the command catalog, "Control envelope",
-  is deliberately open-ended).
-- **Logging**: `FBPProcess` exposes a preconfigured `self.log` (Python's stdlib
-  `logging`), which `_PortWorker` sets up as the `dispatch` process of
-  `data/programs/dynamic_fanout_dispatcher.py` sets up its own (stderr output,
-  format including thread name, useful here since the process is inherently
-  multi-threaded). The framework itself logs its own lifecycle events (thread
-  start/stop, barrier epoch open/close, checkpoint saved, heartbeat) with it.
-  Level is configurable via a plain `--log-level` option (the runtime drops the
-  leading dashes of a name, so `-log-level` works too), declared by the module
-  author in `_explain_opts`/`_define_opts` exactly like any other option (the
-  convention of `debasher_dynamic_fanout_fifos.sh`): the engine has no mechanism
-  for it, it is just another entry in `self.opts`; a sensible default applies if
-  the module does not declare it.
-- **Periodic snapshots come from outside the node**: a node never starts a
-  round on its own; every round starts with a trigger, relayed by the
-  `Supervisor` or written from outside the program. A program in which nothing
-  triggers `start_snapshot` regularly closes no epoch, and its input logs grow
-  until their size cap (see "Pruning and the size cap"), which then stops being
-  a safety net and becomes the normal way the program fails.
-  `debasher_snapshot_resident --every` is what triggers rounds regularly, with
-  or without a `Supervisor` (see "`debasher_snapshot_resident`: rounds from
-  outside the program"); a timer of the `Supervisor` is not built (see
-  "Periodic rounds from a timer of the `Supervisor`" in Future work).
+- `debasher_runtime_envelope.py`: the wire format of "Control envelope";
+- `debasher_runtime_transport.py`: the parsing of `argv`, the fifo endpoints and
+  `_PortWorker`;
+- `debasher_runtime_inputlog.py`: `_InputLog` (see "Input log");
+- `debasher_runtime_fbp.py`: `FBPProcess`;
+- `debasher_runtime_supervisor.py`: `Supervisor` (see "`Supervisor` class");
+- `debasher_runtime_launcher.py`: `ProgramLauncher`;
+- `debasher_runtime_watcher.py`: `DirectoryWatcher`.
+
+`debasher_runtime_testing.py`, the node harness, comes on top of them, and only
+tests import it. `debasher_runtime_lib.py` keeps `DEBASHER_SHUTDOWN_TOKEN`, a
+Python mirror of the Bash constant. It also re-exports the names that a module
+and the tests use, so nothing that imports it depends on the layout.
+`engine/Makefile.am` installs all of them (`python_PYTHON`) in the same
+directory, the one that the `sys.path` line of the heredoc already adds (see the
+next paragraph).
+
+**How a heredoc finds the library.** A heredoc runs as `python3 -c "<text>"`
+(`debasher::_create_heredoc_func_body` in `engine/debasher_lib_programs.sh`). It
+does not go through the `.py:` suffix rule of `engine/Makefile.am`, the one that
+would otherwise prepend `sys.path.append("$(pythondir)")`. So the text of a
+Python heredoc is itself prefixed with that same call
+(`debasher::_python_heredoc_sys_path_prelude`), ahead of the code of the module
+author.
+
+**Port declaration.** The ports of a node are lists of option names,
+`INPUT_PORTS` and `OUTPUT_PORTS` (e.g. `["inf"]`), with `CONTROL_PORTS`,
+`EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node run
+by the engine takes all five from the engine, and its class must not declare any
+(see "Ports from the engine"). A node built without the engine, as the unit
+tests build them, declares them as class attributes. `CONTROL_PORTS` names which
+of the `INPUT_PORTS` carry only commands (see control port in the Glossary).
+`EXTERNAL_PORTS` names which are fed only from outside the program (see external
+port in the Glossary). A name in either list that is not an input port, or a
+`SUPERVISOR_PORT` that is not an output port, is refused when the node is built.
+
+When the node is built, `_PortWorker` parses `argv` generically into
+`self.opts`, a dict from name to value (the engine's `-optname value` convention
+of the command line). `INPUT_PORTS` and `OUTPUT_PORTS` tell it which of those
+entries are FIFO paths, on which it opens reader and writer threads. Any other
+option (e.g. a plain `-threshold` value, or one from the command line of the
+program) stays available in `self.opts` with no special handling. A flag, an
+option given with no value (`explain_flag`, `define_flag`), is listed in the
+`FLAGS` of the class, by name without the dash, since `argv` alone cannot tell
+it from an option whose value starts with a dash. It is `True` in `self.opts`
+when it is given.
+
+**Threads.** A node runs one reader thread per entry of `INPUT_PORTS`. Each one
+reads its FIFO in blocks of up to `_READ_BLOCK_BYTES` and cuts them into lines.
+It hands all the envelopes of a block to `_on_arrivals`, which records them in
+the input log and pushes each one onto a **shared inbound queue**, as
+`(pos, port_name, type, payload, seq)`. A single brain thread consumes that
+queue. The node runs one writer thread per entry of `OUTPUT_PORTS`, each with
+**its own outbound queue**. The brain thread puts the encoded line there instead
+of writing to the FIFO directly. So a slow or stalled neighbor on one output
+port blocks only the writer thread of that port, never the rest of the process.
+An independent heartbeat thread runs on its own timer. A node whose class
+defines `observe()` also runs the observation thread.
+
+**Which threads keep the process alive.** A thread is a daemon exactly when it
+cannot always be stopped. A daemon thread dies with the process, unwarned and
+unjoined; a thread that is not a daemon keeps the process from ending until it
+has returned. The reader, brain, heartbeat and observation threads can always be
+stopped, each one seeing the stop from where it waits: a reader at the end of
+its wait for data, which lasts at most `_READER_POLL_MS` (200 ms), the brain in
+the `_STOP` sentinel on its queue, the other two in an event. So they are not
+daemons. `stop_threads` stops them and waits for them with no limit. Each one
+finishes what it was doing (the brain thread the message in hand) instead of
+being cut in the middle of it.
+
+A writer thread cannot always be stopped. When its reader is down and the pipe
+is full it stays blocked in `write()`, and the write does not even fail, since
+the node holds both ends of the FIFO so that the channel outlives a crash. If it
+were not a daemon, a node with a stalled neighbor would never end. So it is one:
+`stop_threads` waits for it for `WRITER_STOP_TIMEOUT_SECS`, then abandons it,
+and the process ends anyway. All it loses is its outbound queue, which the
+checkpoint and the replay of the input log cover.
+
+The price of the threads that are not daemons is that the process cannot end
+while one of them runs. `run()` therefore stops them when starting the threads
+fails. A `process_data` or an `observe` that never returns keeps the node alive
+after SIGTERM (see "Stuck but alive" in "Limits and non-goals" and the fallback
+to SIGKILL of `debasher_stop_resident`).
+
+**Health reporting.** It is passive, not pushed. On its own timer, the heartbeat
+thread polls `Thread.is_alive()` on every reader and writer thread, on the brain
+thread and on the observation thread. It reports "alive" to the `Supervisor`
+only if all of them still are. A Python thread that dies from an uncaught
+exception does so silently, without crashing the process, which is exactly what
+`is_alive()` catches.
+
+**Subclass extension points.** A subclass redefines
+`process_data(port_name, packet)`, where `packet` is the `payload` of the `DATA`
+envelope, already deserialized, never the full envelope. This method is called
+only for `DATA`: `BARRIER` and `INTERACT` are dispatched generically and never
+reach it. The other hooks are `capture_node_state()` and
+`restore_node_state(state)`, for the logical state only, and
+`initialize_runtime()`, which rebuilds external resources (see "Startup
+sequence: `run()`").
+
+**Generic barrier logic.** It holds for one input port or for many. On the first
+`BARRIER` marker of an epoch (on any input port, or as the initiator), the node
+captures its state and forwards the marker on every output port. It tracks the
+set of input ports still pending for that epoch, those whose marker has not
+arrived yet. While any is pending, it records a copy of the `DATA` that arrives
+on the pending ports: that recorded set is the state of the channel. It also
+processes every `DATA`, on any port, as usual; what arrives after the marker of
+a port belongs to the next epoch. Once the marker of every input port has
+arrived, or its writer has said `CLOSE`, the node has done its part in the
+round.
+
+**`INTERACT` logic.** The inbound connection of an initiator from the
+`Supervisor` is not a special kind of port for reading. It is one more entry of
+`INPUT_PORTS`, handled by the same generic dispatch as everything else, which
+goes by type, not by port. It is also listed in `CONTROL_PORTS`, which keeps the
+barrier from waiting for a marker that it will never carry.
+`command: "start_snapshot"` enters the same barrier logic as a `BARRIER` from a
+peer would, only triggered by `INTERACT`: it captures the state, forwards the
+markers and tracks its own input ports as pending, the port of the node itself
+in a cycle included. `command: "shutdown"` does the same, but forwards with
+`halt=True`. An unrecognized `command` logs a warning and is ignored. It never
+aborts the process, since the catalog of commands (see "Control envelope") is
+deliberately open-ended.
+
+**Logging.** `FBPProcess` exposes a preconfigured `self.log` (the `logging` of
+the Python standard library). `_PortWorker` sets it up the way the `dispatch`
+process of `data/programs/dynamic_fanout_dispatcher.py` sets up its own: output
+to stderr, and a format that includes the name of the thread, useful in a
+process with several threads. The framework logs its own lifecycle events with
+it: threads that start and stop, epochs that open and close, checkpoints saved,
+heartbeats. The level comes from a plain `--log-level` option (the runtime drops
+the leading dashes of a name, so `-log-level` works too). The module author
+declares it in `_explain_opts` and `_define_opts` like any other option, as
+`debasher_dynamic_fanout_fifos.sh` does. The engine has no mechanism for it: it
+is one more entry in `self.opts`, and a sensible default applies if the module
+does not declare it.
+
+**Periodic snapshots come from outside the node.** A node never starts a round
+on its own: every round starts with a trigger, relayed by the `Supervisor` or
+written from outside the program. A program in which nothing triggers
+`start_snapshot` regularly closes no epoch. Its input logs grow until their size
+cap (see "Pruning and the size cap"), which then stops being a safety net and
+becomes the normal way the program fails. `debasher_snapshot_resident --every`
+is what triggers rounds regularly, with or without a `Supervisor` (see
+"`debasher_snapshot_resident`: rounds from outside the program"). A timer of the
+`Supervisor` is not built (see "Periodic rounds from a timer of the
+`Supervisor`" in Future work).
 
 ## Defining a node
 
@@ -2314,8 +2353,10 @@ An ordered shutdown stops a resident program without losing anything that a
 resume cannot bring back. It takes two steps: a halt, a round with `halt` true,
 which leaves every node with a checkpoint of the same round (see "Checkpoint
 persistence") and a halted marker, and then a stop signal to every node, which
-ends its `run()`. This section describes the two steps, what `_halted` blocks
-and what it does not, and how a program is resumed.
+ends its `run()`. This section describes the halt, what `_halted` blocks and
+what it does not, and the stop signal that ends `run()`. It then says why no
+stop sends `CLOSE`, why the stop signal goes to the whole process group of a
+node, and how a program is resumed.
 
 A halt is a round like a snapshot, whose markers carry `halt=True` (see
 "Chandy-Lamport barrier propagation"). When it closes at a node,
@@ -2553,6 +2594,12 @@ def test_a_replay_gives_the_same_sums():
     feeds = [("numbers", 3), ("numbers", 4), ("numbers", 5)]
     node.check_replay(feeds, capture_after=1)
 ```
+
+The rest of the section says how `load_node` builds a node under test from the
+heredoc of a process, what the harness sets around each call to the node, and
+which ports a test names. It then lists what a node under test offers, says
+where the text that the harness runs differs from that of a run and what
+`check_replay` cannot see, and closes with what the harness does not check.
 
 `load_node(process, opts=None, inputs=(), outputs=())` builds a node under
 test:
@@ -3454,6 +3501,11 @@ by the checker thread, so a lock guards it. A program sets the timeout of its
 `Supervisor`, 30 seconds by default, with the computational specification
 `heartbeat_timeout_s` of that process, in seconds, in the same way as the limits
 of a node (see "Computational specifications of a resident process").
+
+The section then covers the silence of a node before its first heartbeat, the
+PID as the fast path to "down", two things that could make a live node look
+silent without being so, why the `Supervisor` must not live on without one of
+its threads, and a node that exits with an error on purpose.
 
 From each launch of a node until its first heartbeat, the silence of the node is
 measured against its startup deadline (see the Glossary) instead: the node is
