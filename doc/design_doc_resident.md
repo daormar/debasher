@@ -455,14 +455,19 @@ So do the entries below that refer to it.
   its input log (see "Ghost connections").
 - **writer thread**: one per output port, with its own **outbound queue**. It
   sends `HELLO` first and, when its node has finished for good (not at a halt),
-  `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it
-  is a daemon thread and `stop_threads()` gives up on it after a bounded wait.
+  `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so
+  `stop_threads()` gives up on it after a bounded wait.
 - **brain thread**: the only consumer of the **inbound queue** and the only
   thread that touches the node's state: it runs `process_data`, the barrier
   logic and the writing of checkpoints.
-- **heartbeat thread**: checks on a timer that every other thread is alive and,
-  if so, sends the `Supervisor` an `INTERACT` `heartbeat`. An unhealthy node
-  simply stops sending. At every tick it also writes the node info file.
+- **heartbeat thread**: sends the `Supervisor` an `INTERACT` `heartbeat` on a
+  timer, which says that the process of the node runs. At every tick it also
+  writes the node info file.
+- **dead thread**: a thread of a node or of the `Supervisor` that raised an
+  exception, or whose loop returned before its process was told to stop. It
+  ends its process with an error, after the other threads have stopped or
+  `DEAD_THREAD_STOP_TIMEOUT_SECS` (5 seconds) has passed, so it is a crash (see
+  "Overview of the class").
 - **checker thread**: the thread of the `Supervisor`, not of a node, that
   decides which nodes are down or done. It wakes every
   `HEARTBEAT_CHECK_INTERVAL_SECS`, the check interval of the `Supervisor` (see
@@ -493,10 +498,8 @@ So do the entries below that refer to it.
 
 - **crash**: the death of a node's process that is neither a halt nor a finish
   for good: `SIGKILL`, an out-of-memory kill, an exception in its main thread
-  during the startup (restore, `initialize_runtime`, replay), or a non-zero
-  exit. A deliberate error exit and a crash are treated the same. An exception
-  that ends another thread of a node other than the `Supervisor` is not a crash,
-  but the `Supervisor` treats it as one (see "Failure model").
+  during the startup (restore, `initialize_runtime`, replay), a dead thread, or
+  a non-zero exit. A deliberate error exit and a crash are treated the same.
 - **relaunch**: starting a new incarnation of a node, by the `Supervisor`
   (through `debasher_launch_process`) or by hand. It is the same operation as
   the first launch: there is no recovery mode.
@@ -512,9 +515,9 @@ So do the entries below that refer to it.
   threads. Localized recovery is the policy: only the downed node is relaunched.
   A **global rollback** would instead rewind every node to the last consistent
   cut; it is future work.
-- **heartbeat**: the `INTERACT` command that a healthy node sends the
-  `Supervisor` every `HEARTBEAT_INTERVAL_SECS` from the moment its threads
-  start. The `Supervisor` declares a node down when they stop for
+- **heartbeat**: the `INTERACT` command that a node sends the `Supervisor`
+  every `HEARTBEAT_INTERVAL_SECS` from the moment its threads start, until one
+  of them dies. The `Supervisor` declares a node down when they stop for
   `HEARTBEAT_TIMEOUT_SECS`, or for its startup deadline before the first one, or
   at the next tick of the checker thread if the node's PID is gone and its
   `.finished` file is absent.
@@ -698,22 +701,18 @@ section says which failures the guarantees survive, what they assume keeps
 working, and which failures they do not cover.
 
 - **Tolerated**: the crash of any process of a `resident` program (see crash in
-  the Glossary) and its relaunch, by the `Supervisor` or by hand. An exception
-  that ends another thread of a node other than the `Supervisor` (a reader,
-  writer, brain or observation thread) does not end its process. The node stays
-  alive but unhealthy, and its heartbeats stop. The `Supervisor` treats it as a
-  crash. It relaunches the node, which kills the earlier incarnation. For a
-  program without a `Supervisor`, see limit 6, "A node with a dead thread and no
-  `Supervisor`", in the Contract. The `Supervisor` itself ends with an error
-  when one of its own threads dies (see "Failure detection"). Any number of
-  nodes may crash at any time, including while other nodes are recovering, with
-  the exceptions listed under "Limits and non-goals". There is deliberately no
-  bound on how many nodes fail simultaneously: each node recovers from its own
-  checkpoint and input log, on stable storage, independently of the others, so
-  correctness does not depend on how many failed at once. (A bound on
-  simultaneous failures only buys something in designs whose redundancy lives in
-  other nodes' volatile memory, such as logging at the sender or replication
-  with quorums; this design has neither.)
+  the Glossary) and its relaunch, by the `Supervisor` or by hand. A thread that
+  dies (a dead thread, see the Glossary), whatever thread it is, ends its
+  process with an error, so it is a crash like any other. This holds for the
+  `Supervisor` too, which nothing relaunches (see "Failure detection"). Any
+  number of nodes may crash at any time, including while other nodes are
+  recovering, with the exceptions listed under "Limits and non-goals". There is
+  deliberately no bound on how many nodes fail simultaneously: each node
+  recovers from its own checkpoint and input log, on stable storage,
+  independently of the others, so correctness does not depend on how many failed
+  at once. (A bound on simultaneous failures only buys something in designs
+  whose redundancy lives in other nodes' volatile memory, such as logging at the
+  sender or replication with quorums; this design has neither.)
   - An exception that recurs. `process_data` is deterministic, so an exception
     it raises on a message comes back when the relaunch replays that message, in
     the main thread. Every relaunch then dies in its startup, until the
@@ -903,10 +902,13 @@ guarantee in words and never cite these numbers, which may change.
   After a halt, every node resumes in the state it had when it stopped: it loads
   its checkpoint and replays from its input log only what it processed after
   capturing it. A crash during a round aborts it at the node that crashed (see
-  limit 10, "A crash while a round is open", below).
+  limit 9, "A crash while a round is open", below).
 - **G7, bounded detection**: a node whose process is verifiably gone is noticed
-  within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy (one of its
-  reader, writer, brain or observation threads died) is noticed within
+  within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node with a dead thread is noticed
+  within `DEAD_THREAD_STOP_TIMEOUT_SECS` plus one
+  `HEARTBEAT_CHECK_INTERVAL_SECS` of the death, since its process ends within
+  the first. A node whose process runs but sends no heartbeat (suspended, kept
+  off the CPU, or inside a call that keeps the GIL) is noticed within
   `HEARTBEAT_TIMEOUT_SECS` plus one `HEARTBEAT_CHECK_INTERVAL_SECS`, since the
   checker thread of the `Supervisor` looks at it once per tick. Before its first
   heartbeat, a node has its startup deadline instead of
@@ -914,15 +916,16 @@ guarantee in words and never cite these numbers, which may change.
   on time (see "Failure detection"). Once noticed, a node is relaunched up to
   `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept, the node or
-  the `Supervisor` raises an error that stops the affected part, instead of
-  continuing with silently wrong state. Such a case is a gap in a channel's
-  sequence numbers, a marker or a `CLOSE` that follows messages that never
-  arrived, or a fragment that no `HELLO` follows. It is also a checkpoint with
-  another schema version, an input log over its size cap or one that does not
-  reach its latest checkpoint, or an exhausted relaunch budget. What happens
-  after that stop is manual. A global rollback to the last consistent cut is
-  future work (see "Global (coordinated) rollback, as a fallback to localized
-  recovery").
+  the `Supervisor` raises an error and stops, instead of continuing with
+  silently wrong state: the process that raised it ends, and an exhausted
+  relaunch budget stops the program (see "Escalation on a permanent node
+  failure"). Such a case is a gap in a channel's sequence numbers, a marker or a
+  `CLOSE` that follows messages that never arrived, or a fragment that no
+  `HELLO` follows. It is also a checkpoint with another schema version, an input
+  log over its size cap or one that does not reach its latest checkpoint, or an
+  exhausted relaunch budget. What happens after that stop is manual. A global
+  rollback to the last consistent cut is future work (see "Global (coordinated)
+  rollback, as a fallback to localized recovery").
 
 ## Limits and non-goals
 
@@ -1017,11 +1020,11 @@ comments state a limit in words and never cite these numbers, which may change.
 4. **Stuck but alive.** A node that is alive and whose work makes no progress is
    not detected, whether a thread of it is blocked (an endless loop, a deadlock)
    or what it observes outside has stopped.
-   - Why. The heartbeat proves that the threads of the node are alive, not that
-     they make progress.
+   - Why. The heartbeat proves that the process of the node runs, not that its
+     threads make progress.
    - What a module can do today, for what it observes outside. An `observe()`
      that raises when what it watches has not moved for a while ends the
-     observation thread. The node is then no longer healthy, and the
+     observation thread. That dead thread ends the process of the node, and the
      `Supervisor` relaunches it. The cause is in the traceback, which the log of
      the `Supervisor` copies (see "Relaunching a downed node"). Other threads of
      the node that log a lot can push it out of the lines copied. Only the
@@ -1046,27 +1049,12 @@ comments state a limit in words and never cite these numbers, which may change.
      such call (see "Failure detection"). A call that releases the GIL, as
      blocking I/O does, does not stop the heartbeat.
    - Beyond it. See "Python without the GIL" in Future work.
-6. **A node with a dead thread and no `Supervisor`.** In a program without a
-   `Supervisor`, a node one of whose threads died stays up, unhealthy and
-   `IN-PROGRESS`, until it is stopped.
-   - What stops. The part of the work of the dead thread stops, and nothing
-     replaces it. With a dead brain thread, the node processes nothing; with a
-     dead reader, nothing more of its port; with a dead observation thread,
-     nothing more of the outside world. With a dead writer, the outbound backlog
-     of its port fills until `send_data` raises `RuntimeError`.
-   - Its readers. They go on logging what arrives, until the input log reaches
-     `INPUT_LOG_MAX_BYTES`, where they stop with an error (G8).
-   - What shows it. The node info file says that the node is not healthy, and
-     the web UI shows it.
-   - A relaunch. Nothing relaunches it. The "Restart node" action of the web UI
-     kills it and relaunches it (see "Running a resident program" in
-     `doc/design_doc_webui.md`).
-7. **Python nodes only.** The engine refuses a process of a resident program
+6. **Python nodes only.** The engine refuses a process of a resident program
    whose code is not a Python heredoc of a class of the runtime library
    (`FBPProcess` or a class derived from it, or `Supervisor`). Nothing on the
    wire depends on Python, though (see "Nodes in a compiled language" in Future
    work).
-8. **No mirror tap on a channel.** A channel of a resident program cannot be
+7. **No mirror tap on a channel.** A channel of a resident program cannot be
    watched live through a mirror log: the engine refuses `--mirror` when the
    program is loaded, and the web UI does not offer "Watch FIFO".
    - Why. The tap would sit between the two endpoints of the channel, and the
@@ -1081,7 +1069,7 @@ comments state a limit in words and never cite these numbers, which may change.
      nowhere. Only reading the FIFO shows it ("Talk to FIFOs" in the web UI),
      and reading takes it from the channel (see "Observing and talking to a live
      program" in `doc/design_doc_webui.md`).
-9. **A round that a newer one replaces** leaves the nodes that had not closed it
+8. **A round that a newer one replaces** leaves the nodes that had not closed it
    without a checkpoint for its epoch, so that epoch has no complete cut. The
    round that replaced it does complete, at every node it reaches, and that is
    the cut that counts; localized recovery never uses a cut. It holds if the
@@ -1089,31 +1077,31 @@ comments state a limit in words and never cite these numbers, which may change.
    Rounds started closer together than they take to complete keep replacing each
    other, and none completes until they stop, so whatever starts rounds
    periodically has to leave more time between them than a round takes.
-10. **A crash while a round is open.** A node that crashes while a round is open
-    comes back with no round open. The markers it had received for that round
-    are not replayed: the replay brings back only `DATA` and `CLOSE`. Making the
-    case recoverable would need a round's partial progress to be durable, which
-    is not designed.
-    - A node that is not an initiator. The next marker of that round opens it
-      again, and the node waits for ever for the markers it had already
-      received. It writes no checkpoint for that epoch, and the next round
-      replaces it.
-    - An initiator whose round a trigger opened. It had received no marker, so
-      the round opens again when its own marker comes back round a cycle, and
-      closes there. Its capture is then later than the first, so that epoch is
-      not a consistent cut (see the global rollback in "Future work").
-    - A halt. It cannot wait for the next round, because a node that has halted
-      ignores every later trigger. So a node that is not an initiator and
-      crashes while its halt is open never halts, while every other node does.
-      The `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
-      reason a halted marker never goes past its baseline. Then the tool falls
-      back to the hard kill of `debasher_stop`, and reports it with its own exit
-      code (see "Failing loudly instead of retrying").
-11. **A node that crashes again right after every relaunch** is not retried for
+9. **A crash while a round is open.** A node that crashes while a round is open
+   comes back with no round open. The markers it had received for that round
+   are not replayed: the replay brings back only `DATA` and `CLOSE`. Making the
+   case recoverable would need a round's partial progress to be durable, which
+   is not designed.
+   - A node that is not an initiator. The next marker of that round opens it
+     again, and the node waits for ever for the markers it had already
+     received. It writes no checkpoint for that epoch, and the next round
+     replaces it.
+   - An initiator whose round a trigger opened. It had received no marker, so
+     the round opens again when its own marker comes back round a cycle, and
+     closes there. Its capture is then later than the first, so that epoch is
+     not a consistent cut (see the global rollback in "Future work").
+   - A halt. It cannot wait for the next round, because a node that has halted
+     ignores every later trigger. So a node that is not an initiator and
+     crashes while its halt is open never halts, while every other node does.
+     The `--timeout` of `debasher_stop_resident` bounds that wait, whatever the
+     reason a halted marker never goes past its baseline. Then the tool falls
+     back to the hard kill of `debasher_stop`, and reports it with its own exit
+     code (see "Failing loudly instead of retrying").
+10. **A node that crashes again right after every relaunch** is not retried for
     ever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
     the escalation applies, unless it sends a heartbeat between its crashes (see
     limit 4, "Stuck but alive").
-12. **The cause of a crash outside the output of the `Supervisor`.** The
+11. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
     log (see "Relaunching a downed node"). Three cases fall outside that output.
@@ -1129,7 +1117,7 @@ comments state a limit in words and never cite these numbers, which may change.
       launch of the program, rewrites the `.sched_out` of the `Supervisor` too,
       with the tails it held (see "What the `Supervisor` knows of each node, on
       disk" in Future work).
-13. **Durability cannot be turned off.** No setting removes the input log and
+12. **Durability cannot be turned off.** No setting removes the input log and
     its replay (see "Layers of the design"). Rounds and checkpoints are avoided
     only by starting none, an ordered shutdown needs one, and with a
     `Supervisor` its escalation starts a halt round.
@@ -1711,10 +1699,10 @@ engine to check its business logic.
 
 This overview follows a node from its code to its run. It says where the code
 lives and how a heredoc finds it, how a node declares its ports, which threads
-it runs, which of them keep the process alive and how they report their health.
-It then names the hooks that a subclass redefines, says how the class handles
-markers and commands, describes its logging, and says that rounds come from
-outside the node, and what follows when nothing triggers them.
+it runs, why none of them keeps the process alive, and how a thread that dies
+ends it. It then names the hooks that a subclass redefines, says how the class
+handles markers and commands, describes its logging, and says that rounds come
+from outside the node, and what follows when nothing triggers them.
 
 **Where the code lives.** `engine/debasher_runtime_lib.py` is the module that
 the heredoc of a resident process imports
@@ -1781,37 +1769,62 @@ port blocks only the writer thread of that port, never the rest of the process.
 An independent heartbeat thread runs on its own timer. A node whose class
 defines `observe()` also runs the observation thread.
 
-**Which threads keep the process alive.** A thread is a daemon exactly when it
-cannot always be stopped. A daemon thread dies with the process, unwarned and
-unjoined; a thread that is not a daemon keeps the process from ending until it
-has returned. The reader, brain, heartbeat and observation threads can always be
-stopped. Each one sees the stop from where it waits. A reader sees it at the end
-of its wait for data, which lasts at most `_READER_POLL_MS` (200 ms). The brain
-thread sees it in the `_STOP` sentinel on its queue, and the other two in an
-event. So they are not daemons. `stop_threads` stops them and waits for them
-with no limit. Each one finishes what it was doing (the brain thread the message
-in hand) instead of being cut in the middle of it.
+**Which threads keep the process alive.** None. Every thread of a node is a
+daemon, which dies with the process, unwarned and unjoined, so the process ends
+once `run()` returns or raises, whatever its threads are doing. A stop signal
+does not rely on that: the reader, brain, heartbeat and observation threads can
+always be stopped. Each one sees the stop from where it waits. A reader sees it
+at the end of its wait for data, which lasts at most `_READER_POLL_MS` (200 ms).
+The brain thread sees it in the `_STOP` sentinel on its queue, and the other two
+in an event. On a stop signal, `stop_threads` stops them and waits for them with
+no limit. Each one finishes what it was doing (the brain thread the message in
+hand) instead of being cut in the middle of it.
 
 A writer thread cannot always be stopped. When its reader is down and the pipe
 is full it stays blocked in `write()`, and the write does not even fail, since
-the node holds both ends of the FIFO so that the channel outlives a crash. If it
-were not a daemon, a node with a stalled neighbor would never end. So it is one:
+the node holds both ends of the FIFO so that the channel outlives a crash. So
 `stop_threads` waits for it for `WRITER_STOP_TIMEOUT_SECS`, then abandons it,
 and the process ends anyway. All it loses is its outbound queue, which the
 checkpoint and the replay of the input log cover.
 
-The price of the threads that are not daemons is that the process cannot end
-while one of them runs. `run()` therefore stops them when starting the threads
-fails. A `process_data` or an `observe` that never returns keeps the node alive
-after SIGTERM (see limit 4, "Stuck but alive", in the Contract, and the fallback
-to SIGKILL of `debasher_stop_resident`).
+The wait with no limit has a price. A `process_data` or an `observe` that never
+returns keeps the node alive after SIGTERM (see limit 4, "Stuck but alive", in
+the Contract, and the fallback to SIGKILL of `debasher_stop_resident`). A bound
+would end such a stop with exit code 0 and a `.finished`, as if it had been a
+clean one, with the brain thread cut in the middle of a message.
 
-**Health reporting.** It is passive, not pushed. On its own timer, the heartbeat
-thread polls `Thread.is_alive()` on every reader and writer thread, on the brain
-thread and on the observation thread. It reports "alive" to the `Supervisor`
-only if all of them still are. A Python thread that dies from an uncaught
-exception does so silently, without crashing the process, which is exactly what
-`is_alive()` catches.
+**A dead thread ends the process.** A Python thread that dies from an uncaught
+exception does so silently, without ending its process. So every thread of a
+node runs its loop through `_run_guarded`. A loop that raises, or that returns
+before the process is told to stop, is a dead thread (see the Glossary).
+`_run_guarded` logs why, with the traceback, keeps the first death in
+`_thread_error`, and wakes `run()` (`_wake_run`, which sets `_stop_requested`).
+`run()` stops the other threads with `close=False`, waiting for them at most
+`DEAD_THREAD_STOP_TIMEOUT_SECS` (5 seconds) in all. It then raises a
+`RuntimeError` that carries the cause, and the interpreter exits with code 1.
+The node has crashed, and the `Supervisor` notices it by its PID (see "Failure
+detection"). Without a `Supervisor`, it stays down until it is relaunched by
+hand, as after any crash. Each step has its reason:
+
+- No `CLOSE`. A relaunch resumes the node, and its peers must not take it for
+  one that has finished for good (see "Ordered shutdown").
+- A bounded wait. Another thread may be blocked for ever, such as a brain thread
+  in a `process_data` that never returns. What is left of it ends with the
+  process, as in any crash, which loses nothing that a relaunch does not bring
+  back. The readers stop between blocks, so nothing that they took from a FIFO
+  is lost before it is logged.
+- Daemons. A thread that is not a daemon keeps the interpreter from exiting
+  until it returns, so one blocked for ever would keep the process alive after
+  `run()` has raised.
+- No heartbeat after the death. One sent while the other threads stop would set
+  the count of relaunches of the node back to 0 (see "Relaunching a downed
+  node"), and a node that dies again after every relaunch would be relaunched
+  for ever.
+
+During the replay only the writer threads run. One that dies stops the replay at
+the next record, and `run()` raises in the same way without starting the other
+threads. The `Supervisor` follows the same rule, with its checker thread among
+its threads (see "Failure detection").
 
 **Subclass extension points.** A subclass redefines
 `process_data(port_name, packet)`, where `packet` is the `payload` of the `DATA`
@@ -2037,8 +2050,9 @@ What `observe()` sees enters the node as an input:
   with no observe port may observe only to act, and `inject()` then raises
   `RuntimeError`. It raises `RuntimeError` from `process_data` too, since an
   input that processing made would be made again by every replay.
-- The observation thread counts in the health of the node, like the others: if
-  `observe()` raises, the thread ends and the heartbeat stops.
+- The observation thread is a thread of the node like the others: if
+  `observe()` raises, the thread dies, and that dead thread ends the process of
+  the node (see the Glossary).
 
 After a crash, `observe()` does not know what it had brought in, and brings it
 in again. `process_data` drops what it already acted on, keeping it in its node
@@ -2233,11 +2247,14 @@ after a node failure").
 9. Replays the input log after the `capture_pos` of the checkpoint, all of it if
    there was none (see "Input log"). While replaying, a `send_data` that would
    take the backlog over `OUT_BACKLOG_FAIL_BYTES` waits for room, unless the
-   message alone is larger than the limit (see "Checkpoint persistence").
+   message alone is larger than the limit (see "Checkpoint persistence"). A
+   writer that dies meanwhile stops the replay, and `run()` raises (see
+   "Overview of the class").
 10. Starts the other threads. If this fails, it stops the threads that are
-    running and raises the error, since they would otherwise keep the process
-    alive doing nothing.
-11. Waits until told to stop, and stops every thread.
+    running, so that the readers stop between blocks, and raises the error.
+11. Waits until told to stop, and stops every thread. If a thread dies instead,
+    it stops the others within `DEAD_THREAD_STOP_TIMEOUT_SECS` and raises a
+    `RuntimeError`.
 
 A SIGTERM during the startup is honored when the startup ends, since the replay
 does not look at it. Only a `send_data` that waits for room stops waiting, since
@@ -2368,7 +2385,7 @@ like any other checkpoint (see how a program is resumed, below). The cost of
 ignoring the triggers is that a halt cannot always be retried. An initiator that
 has halted, and that no marker of the new halt reaches, never opens it. So when
 another initiator does (one relaunched after a crash, for instance), the nodes
-downstream of the first wait for its marker for ever (see limit 10, "A crash
+downstream of the first wait for its marker for ever (see limit 9, "A crash
 while a round is open", in the Contract). When every initiator has halted, no
 new round starts at all.
 
@@ -2478,8 +2495,8 @@ never the checkpoint itself.
 A checkpoint that cannot be written stops the node as an exception of
 `process_data` does: a node state that JSON cannot serialize raises a
 `TypeError`, and a full disk an `OSError`, which ends the brain thread. The
-round is over at the node all the same. The heartbeat reports the dead thread,
-and the `Supervisor` relaunches the node, which restores its previous checkpoint
+round is over at the node all the same. The dead thread ends the process, and
+the `Supervisor` relaunches the node, which restores its previous checkpoint
 and replays a longer part of its input log. A temporary file left behind is
 never loaded, since its name is not an epoch.
 
@@ -2953,14 +2970,14 @@ none (see "Control envelope"). A reader hands it to the brain thread like any
 other envelope, so it is logged. Then the reader keeps reading but drops
 everything that follows: nothing after it is decoded, logged or queued. The
 first such line warns, once per port. The reader does not end on a `CLOSE`, for
-two reasons. First, a reader that ended would leave the heartbeat unhealthy for
-good once its producer finished. Second, a node whose peer sent `CLOSE`, ended
-its reader, and was later relaunched would fill that peer's pipe with nobody
-reading, since the old reader is gone. Dropping instead of ending solves both. A
-control port (see the Glossary) is the exception. Its `CLOSE` is logged like any
-other envelope, but it closes nothing, live or in a replay. Its reader goes on
-delivering what follows, since several writers feed the port in turn, and none
-of them ends it for the others.
+two reasons. First, a reader that ended would be a dead thread, which ends the
+process, once its producer finished. Second, a node whose peer sent `CLOSE`,
+ended its reader, and was later relaunched would fill that peer's pipe with
+nobody reading, since the old reader is gone. Dropping instead of ending solves
+both. A control port (see the Glossary) is the exception. Its `CLOSE` is logged
+like any other envelope, but it closes nothing, live or in a replay. Its reader
+goes on delivering what follows, since several writers feed the port in turn,
+and none of them ends it for the others.
 
 `closed_ports`, sorted, is the checkpoint field that lists the input ports whose
 `CLOSE` the brain thread had processed at the capture, that is, those with a
@@ -3069,7 +3086,7 @@ its own opens and closes of the FIFO, to every channel.
 A resident program that declares `--mirror` on a fifo is therefore refused when
 it is loaded, before anything is launched (rule 4 of "Validation when the
 program is loaded"). So a mirror tap never sits between two resident processes
-(see limit 8, "No mirror tap on a channel", in the Contract). `--mirror` remains
+(see limit 7, "No mirror tap on a channel", in the Contract). `--mirror` remains
 a debugging aid of general programs, behind the "Watch FIFO" of the web UI.
 
 # Reconnecting after a node failure
@@ -3440,7 +3457,7 @@ Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
 (see the Contract's failure model). Nothing holds them in a program without a
 `Supervisor` either. Nothing holds them during an ordered shutdown, since
 `debasher_stop_resident` stops the `Supervisor` before it triggers the halt (a
-crash during a halt is already outside the guarantees, see limit 10, "A crash
+crash during a halt is already outside the guarantees, see limit 9, "A crash
 while a round is open", in the Contract). Nor does anything hold them when the
 `Supervisor` is given the flag `-no-hold-fifos`. With that flag it holds nothing
 and logs a warning that says what is at stake. Its module offers the flag as an
@@ -3474,9 +3491,9 @@ since its last heartbeat with `HEARTBEAT_TIMEOUT_SECS`. The check interval is a
 class attribute of the `Supervisor`, 5 seconds by default, and no computational
 specification sets it, so only a subclass changes it. It bounds three things:
 the time to notice a node whose PID is gone or whose `.finished` has appeared;
-how long past `HEARTBEAT_TIMEOUT_SECS` a node alive but unhealthy may go
-unnoticed; and when a tick counts as late (see below). One thread does a cheap
-comparison per node at each tick, so the number of threads stays the same
+how long past `HEARTBEAT_TIMEOUT_SECS` a node that runs but sends no heartbeat
+may go unnoticed; and when a tick counts as late (see below). One thread does a
+cheap comparison per node at each tick, so the number of threads stays the same
 whatever the number of nodes. A `threading.Timer` per node would instead take a
 thread of the operating system per node. It would also take a new one at every
 heartbeat, since a `Timer` that has fired or been cancelled cannot be reused.
@@ -3501,8 +3518,8 @@ its checkpoint, runs `initialize_runtime()` and replays its input log before its
 heartbeat thread starts, which can take much longer than the interval between
 two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECS`
 after the threads start, not at once. It resets the count of relaunches (see
-"Relaunching a downed node"), so it has to show that the node has run healthy
-for a while, not only that it started. Sent at once, it would reset the count of
+"Relaunching a downed node"), so it has to show that the node has run for a
+while, not only that it started. Sent at once, it would reset the count of
 a node whose reader fails on the first live message after every relaunch. One
 example is a message past a gap in its sequence numbers that no relaunch can
 fill. That node would be relaunched for ever. A node gives its deadline with its
@@ -3556,14 +3573,15 @@ that is expected gives its `Supervisor` a longer `heartbeat_timeout_s`.
 
 Nothing supervises the `Supervisor` (see "Failure model"). So it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread
-declares healthy nodes down. Nor must it live on without its checker thread,
-blind to the nodes that do go down. An exception that ends either thread is
-logged and ends the `Supervisor` with an error (its `run()` raises a
-`RuntimeError` that carries it). That then counts as a `Supervisor` that died:
-the nodes keep running, unsupervised, until it is relaunched by hand. What a
-writer of its channels can get wrong, a malformed command or a type that does
-not belong there, is dropped by the reader before it reaches the brain thread
-(see "Fields of each type").
+declares working nodes down. Nor must it live on without its checker thread,
+blind to the nodes that do go down, or without a reader of a heartbeat channel.
+A thread of it that dies is a dead thread, as in a node (see "Overview of the
+class"): it is logged and ends the `Supervisor` with an error (its `run()`
+raises a `RuntimeError` that carries it). That then counts as a `Supervisor`
+that died: the nodes keep running, unsupervised, until it is relaunched by hand.
+What a writer of its channels can get wrong, a malformed command or a type that
+does not belong there, is dropped by the reader before it reaches the brain
+thread (see "Fields of each type").
 
 A node that exits with an error on purpose leaves the same signs as one that
 crashes (no `.finished`, no more heartbeats, a dead PID), and both are treated
@@ -3603,10 +3621,11 @@ the same handler (see "Ordered shutdown"), installed when `run()` runs on the
 main thread (not when a test drives it on another thread). `run()` waits on one
 event, `_all_resolved`. It is set in three cases: by the checker thread once
 every node is resolved, by `run()` itself once the handler has noted a stop
-signal, and by `_run_guarded` when a thread of the `Supervisor` dies. `run()`
-tells the last apart by `_thread_error`. The signal lets the ordered shutdown
-tool end the `Supervisor` before it triggers the halt, so that the `Supervisor`
-cannot relaunch a node under it (see "`debasher_stop_resident`").
+signal, and by `_wake_run` when a thread of the `Supervisor` dies (see dead
+thread in the Glossary). `run()` tells the last apart by `_thread_error`. The
+signal lets the ordered shutdown tool end the `Supervisor` before it triggers
+the halt, so that the `Supervisor` cannot relaunch a node under it (see
+"`debasher_stop_resident`").
 
 ## Relaunching a downed node
 
@@ -3702,7 +3721,7 @@ from its last 64 KiB. The output of the `Supervisor` keeps them until the
 `Supervisor` itself is launched again, by hand or by the next launch of the
 program, which rewrites it too. Until then, the cause of every crash that a
 relaunch followed is in that output, which the web UI and the MCP tool
-`get_process_output` (kind scheduler) show. What this leaves out is limit 12 of
+`get_process_output` (kind scheduler) show. What this leaves out is limit 11 of
 the Contract, "The cause of a crash outside the output of the `Supervisor`".
 
 ## Escalation on a permanent node failure
@@ -3776,7 +3795,7 @@ weighed.
 A node that is not an initiator and crashes while the round of its halt is open
 comes back with no memory of that round. The markers it had received are not
 replayed, and nothing sends the `shutdown` trigger again. So it never halts (see
-limit 10, "A crash while a round is open", in the Contract). The `--timeout` of
+limit 9, "A crash while a round is open", in the Contract). The `--timeout` of
 `debasher_stop_resident` keeps this from hanging the stop for ever, and the
 fallback to `debasher_stop` ends the program. What must not happen is that the
 forced ending passes for an ordered shutdown.
@@ -3786,16 +3805,16 @@ whenever it falls back to `debasher_stop`. It never exits with the code of
 `debasher_stop`, which is usually 0, since `debasher_stop` does not take
 "something was still running to kill" for a failure. Before the fallback,
 `debasher_stop_resident` also writes a warning on its stderr, "could not stop
-... gracefully within ...s, forcing debasher_stop". A user who runs the tool
-sees both. The web UI reads the code and says that the program was killed
-(`orderlyStopOutcome`, `frontend/src/models/residentRun.ts`). The escalation of
-the `Supervisor` cannot read it, since the fallback kills the `Supervisor`
-before the tool ends. The tool inherits the stderr of the `Supervisor`, its
-scheduler output (`.sched_out`). So the warning stays there, after the warning
-with which the escalation began, as the record that the program was killed (G8:
-detected, never silent). The tool runs for a short time, so inheriting that
-stream keeps the file open only briefly, unlike the node that a relaunch starts,
-which may run for days (see "Relaunching a downed node").
+... gracefully, forcing debasher_stop", after the error that gives the cause. A
+user who runs the tool sees both. The web UI reads the code and says that the
+program was killed (`orderlyStopOutcome`, `frontend/src/models/residentRun.ts`).
+The escalation of the `Supervisor` cannot read it, since the fallback kills the
+`Supervisor` before the tool ends. The tool inherits the stderr of the
+`Supervisor`, its scheduler output (`.sched_out`). So the warning stays there,
+after the warning with which the escalation began, as the record that the
+program was killed (G8: detected, never silent). The tool runs for a short time,
+so inheriting that stream keeps the file open only briefly, unlike the node that
+a relaunch starts, which may run for days (see "Relaunching a downed node").
 
 The alternative, making the case recoverable, would record in the checkpoint a
 halt that is open and act on it at recovery. It has two holes. A checkpoint is
@@ -3928,7 +3947,11 @@ The stop goes in seven steps:
    initiator halts in the same round.
 5. It waits for every node's halted marker to go past its baseline. It never
    waits for the marker to exist: a node that halted in an earlier halt, already
-   resumed, would already show one.
+   resumed, would already show one. A node whose process ends before its halted
+   marker goes past its baseline fails the step at once. It never halts, nor do
+   the nodes that its markers would reach, and the `Supervisor`, stopped by
+   then, relaunches nothing. A dead thread ends a node in that way (see the
+   Glossary).
 6. It reads every node's `.id` again, not reusing any read earlier. It sends a
    stop signal to each node that still runs.
 7. It waits for every node's own `.finished`.
@@ -3937,9 +3960,9 @@ The same deadline, from `--timeout`, bounds the check of the names, the finding
 of the nodes and every step. A step from the third on that fails sends the tool
 to the fallback at once, without waiting for the deadline. One such failure is a
 trigger that cannot be written within 5 seconds, as when a control port fed from
-outside has no reader. A failure while checking the names or finding the nodes,
-such as a process script that never comes, ends the tool with 1 and an error,
-with no fallback.
+outside has no reader. Another is a node that has ended before it halted. A
+failure while checking the names or finding the nodes, such as a process script
+that never comes, ends the tool with 1 and an error, with no fallback.
 
 A stop signal is `SIGTERM` to the whole process group (`kill -TERM -- "-$pid"`,
 `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of the `SIGKILL` of
@@ -4016,7 +4039,7 @@ persistence").
 With `--every <secs>`, the tool starts a round every that many seconds. Each
 round has until the next one to close. One that has not closed by then is
 reported with a warning, and the next trigger replaces it. The period has to be
-longer than a round, or rounds keep replacing each other (see limit 9, "A round
+longer than a round, or rounds keep replacing each other (see limit 8, "A round
 that a newer one replaces", in the Contract). `--timeout` does not apply, and
 giving both is an error.
 
@@ -4154,7 +4177,7 @@ writes both into its node info file (see the Glossary), a JSON object:
             "out_backlog_fail_bytes": 67108864,
             "gil_switch_interval_secs": 0.0005},
  "launcher": {"runs_root": "/data/out/launch", "process": null},
- "updated_at": 1790000123.4, "healthy": true,
+ "updated_at": 1790000123.4,
  "out_backlog_bytes": {"outdone": 0},
  "checkpoints_skipped_since": null}
 ```
@@ -4170,9 +4193,7 @@ file when its threads start, next to its control ports file.
 
 The heartbeat thread writes the file again, whole, at every tick, with the
 figures that change. It does so whether the program has a `Supervisor` or not.
-`updated_at` is the time of the tick. `healthy` says whether every thread was
-alive at that tick. `debasher_status` cannot tell it, since a node whose brain
-thread has died still has a live process. `out_backlog_bytes` is the size of the
+`updated_at` is the time of the tick. `out_backlog_bytes` is the size of the
 outbound backlog of each output port. `send_data` and the writer threads update
 it with the backlog, as they update the total of the backlog. So a tick does not
 have to go through the backlog. `checkpoints_skipped_since` is the epoch since
@@ -4219,9 +4240,10 @@ on it.
 Its `node_info` is the node info file as the node last wrote it, with its age in
 seconds, or `null` if the node has never written one. Its `stale` is true when
 the file is older than two heartbeat intervals. That happens in a node that is
-down, still replaying, or whose heartbeat thread has died. `notice` is the
-notice of the node (see "Notices"): its level, its text and when it was set, or
-`null` without one.
+down, still replaying, or whose process runs but does not tick (suspended, kept
+off the CPU, or inside a call that keeps the GIL). `notice` is the notice of the
+node (see "Notices"): its level, its text and when it was set, or `null` without
+one.
 
 `checkpoint <epoch>` gives one checkpoint that the node retains: its path, the
 time at which it was written, its schema version, and `readable`, whether that
@@ -4848,9 +4870,9 @@ and languages.
 
 - **A check that the brain thread makes progress.** A computational
   specification of a node, for instance `progress_timeout_s`, off by default.
-  When it is set, the node is not healthy when its inbound queue holds messages
-  and its brain thread has taken none for that long (see limit 4, "Stuck but
-  alive", in the Contract).
+  When it is set, the node ends with an error, as on a dead thread, when its
+  inbound queue holds messages and its brain thread has taken none for that
+  long (see limit 4, "Stuck but alive", in the Contract).
   - What it covers. A brain thread blocked in an endless loop, a deadlock or a
     call that never returns. What the node observes outside is left to its
     `observe()`, which alone knows when silence is a failure.
@@ -4861,15 +4883,6 @@ and languages.
     the longest call.
   - When to build it. Only if a blocked brain thread turns out to be a case that
     a program meets.
-- **A dead thread ends the process.** When a thread of a node has died, the
-  heartbeat thread would log the cause and end the process with an error. An
-  exception and a crash would then be the same (see limit 6, "A node with a dead
-  thread and no `Supervisor`", in the Contract).
-  - What it gives. Without a `Supervisor`, the status `FAILED` instead of an
-    `IN-PROGRESS` that does nothing. With one, detection by the PID within
-    `HEARTBEAT_CHECK_INTERVAL_SECS`.
-  - What it costs. G7 and G8 change, the exit must not lose the logs, and it
-    needs new unit and real-run tests.
 - **Supervising the `Supervisor`.** If the `Supervisor` dies, the nodes keep
   running, but nobody relaunches a crashed node and no FIFO is held, until the
   `Supervisor` is relaunched by hand (see "Failure model").
@@ -4898,7 +4911,7 @@ and languages.
     program.
   - How it is set. A computational specification of the `Supervisor`, for
     instance `snapshot_interval_s`, with no timer by default.
-  - To settle. The period has to be longer than a round (see limit 9, "A round
+  - To settle. The period has to be longer than a round (see limit 8, "A round
     that a newer one replaces", in the Contract). The timer has to live with a
     manual trigger and with `--every`. A `Supervisor` with a timer needs
     initiator ports.
@@ -4916,7 +4929,7 @@ and languages.
   PID in the output directory while it runs, and refuse a second `--every` while
   that PID is alive.
   - Why. Two `--every` on the same output directory start rounds that replace
-    each other, so that none closes (see limit 9, "A round that a newer one
+    each other, so that none closes (see limit 8, "A round that a newer one
     replaces", in the Contract).
   - What else it gives. The web UI could find the tool, to change the period of
     a running program.
@@ -4971,7 +4984,7 @@ and languages.
     second contract, rtdocs, the guidance of an AI, and tests in both modes.
   - The need first. Before it is built, the need it serves has to be named: one
     that neither a general program of processes joined by FIFOs nor the closest
-    approach of today (see limit 13, "Durability cannot be turned off", in the
+    approach of today (see limit 12, "Durability cannot be turned off", in the
     Contract) meets.
 - **Global (coordinated) rollback, as a fallback to localized recovery.** Detect
   a violation of the Contract, stop, rewind every node to the last consistent
@@ -5014,7 +5027,7 @@ and languages.
     a round identifier, in the marker and in each checkpoint, lets the script
     check it.
   - An initiator that crashed in a round. It can close the round again after its
-    relaunch, with a later capture (see limit 10, "A crash while a round is
+    relaunch, with a later capture (see limit 9, "A crash while a round is
     open", in the Contract). So that epoch is not a consistent cut, and the
     script cannot tell from the checkpoints alone. The node can tell at
     recovery, from the trigger or the marker after its `capture_pos`. Moving

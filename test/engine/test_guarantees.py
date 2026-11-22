@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+import debasher_runtime_lib as lib
+
 from chaos_ref import (
     DETECTION_MARGIN_SECS,
     ExtFeeder,
@@ -423,14 +425,14 @@ def test_a_node_whose_process_is_gone_is_noticed_within_the_check_interval(outdi
     assert wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"
 
 
-def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdir):
+def test_a_node_with_a_dead_thread_ends_and_is_noticed_by_its_pid(outdir):
     """
-    Bounded detection: a node that is alive but unhealthy, because one
-    of its threads died, is noticed within HEARTBEAT_TIMEOUT_SECS plus one
-    HEARTBEAT_CHECK_INTERVAL_SECS, and then relaunched. A line that is not JSON, followed by one that is not
-    a HELLO, stops the reader thread of fanin's ext port (see the resync
-    line in the design doc) while the process and its other threads go
-    on.
+    Bounded detection: a thread of a node that dies ends its process, with
+    an error, within the bounded stop of its other threads, so the node is
+    noticed by its PID like any other crash, within
+    HEARTBEAT_CHECK_INTERVAL_SECS, and then relaunched. A line that is not
+    JSON, followed by one that is not a HELLO, stops the reader thread of
+    fanin's ext port (see the resync line in the design doc).
     """
     launch_chaos(outdir)
     time.sleep(1.0)  # let every node send at least one heartbeat first
@@ -443,15 +445,16 @@ def test_a_node_with_a_dead_thread_is_noticed_within_the_heartbeat_timeout(outdi
     finally:
         os.close(fd)
 
-    # Still alive well before the timeout: this is the path of an unhealthy
-    # node, not of a process that is gone.
-    time.sleep(1.0)
-    os.killpg(int(old_pid), 0)
-
     noticed_at = down_reported_at(outdir, "fanin")
     assert noticed_at is not None, "the Supervisor never declared fanin down"
     delay = noticed_at - broken_at
-    assert delay <= HEARTBEAT_TIMEOUT_SECS + HEARTBEAT_CHECK_INTERVAL_SECS + DETECTION_MARGIN_SECS, (
-        f"fanin was declared down {delay:.2f}s after its reader thread died"
+    bound = (
+        lib.FBPProcess.DEAD_THREAD_STOP_TIMEOUT_SECS
+        + HEARTBEAT_CHECK_INTERVAL_SECS
+        + DETECTION_MARGIN_SECS
     )
+    assert delay <= bound, f"fanin was declared down {delay:.2f}s after its reader thread died"
+    assert delay < HEARTBEAT_TIMEOUT_SECS, "fanin was noticed by the heartbeat timeout, not by its PID"
+    with open(sched_out_file(outdir, "fanin")) as f:
+        assert "a thread of its own died ('reader:ext')" in f.read()
     assert wait_for_relaunch(outdir, "fanin", old_pid) is not None, "fanin was never relaunched"

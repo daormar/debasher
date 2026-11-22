@@ -448,7 +448,12 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   idempotent. Read options from `self.opts` (labels without the dash), log with
   `self.log` (its lines, and the warnings of the runtime, such as a dropped
   envelope, are in the scheduler output of the node: `get_process_output` with
-  `kind: scheduler`), wait with `self.sleep()`.
+  `kind: scheduler`), wait with `self.sleep()`. A hook that raises ends the node
+  with an error, its traceback in the scheduler output; the relaunch replays the
+  messages since the checkpoint, so a message on which `process_data` raises
+  does so at every relaunch until the Supervisor gives up on the node: drop,
+  with `self.log.warning()`, a message the node cannot use. Raise in `observe`
+  only for a failure that a relaunch mends, such as a stalled connection.
 - **Methods that a node calls**, on top of `send_data` and `sleep`:
   - `self.inject(payload)`, from `observe`: `observe` looks at the world
     outside (a directory, a queue) on a thread of its own, every
@@ -483,7 +488,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   parts needs an initiator in each. After a crash a node resumes from its
   checkpoint and replays its input log. A `send_data` of a message larger than
   `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) raises RuntimeError, live and
-  in a replay, naming its size, its port and the limit: raise
+  in a replay, naming its size, its port and the limit, which ends the node, at
+  every relaunch, until the Supervisor gives up on it: raise
   `out_backlog_fail_mb` in the `computationalSpecs` of the node or send smaller
   messages. While the node replays, a `send_data` that would take the outbound
   backlog over that limit waits for room instead, with one warning in the
@@ -498,7 +504,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   drops any other type with a warning in the scheduler output, and the node
   ignores a `CLOSE` written there. A Supervisor that fails (a thread of its own
   died) leaves its traceback in its scheduler output; the nodes go on running
-  unsupervised: stop the program and launch it again. A relaunch rewrites the
+  unsupervised: stop the program and launch it again. A node one of whose
+  threads dies (a hook that raised, a reader that read a corrupt line) also ends
+  with an error; the Supervisor relaunches it within seconds, and without a
+  Supervisor it stays down until `relaunch_node`. A relaunch rewrites the
   scheduler output of the node, so the cause of a crash after which the
   Supervisor relaunched a node is in the scheduler output of the Supervisor:
   "node '<node>' is down (attempt <n>/3), relaunching; the last lines of its
@@ -535,19 +544,20 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   a node that has one, an "i" in a blue circle for `info` and an "!" in an
   amber triangle for `warning`, with the text in its tooltip; the mark is
   dimmed while the node does not run.
-- **Talking to a live program.** An external input (`fifoTag: "external"`)
-  and a business output with no connection are written and read from
-  outside with `list_fifos`, `write_fifo` and `read_fifo`, in resident
-  programs only. A script that writes into an external input itself writes
-  one line per message, `{"type": "DATA", "payload": <value>}`, in one write,
-  as strict JSON in UTF-8 (no NaN or Infinity): a line that is not UTF-8 or not
-  JSON stops the reader of the node, and `read_fifo` shows such a line as not
-  an envelope. A line that is JSON but not such an envelope (a missing key, an
-  unknown type, a `seq` that is not an integer, or a type other than `DATA`
-  and `BARRIER`) is dropped by the reader, with a warning, "reader for
-  '<port>' dropped ...", in the scheduler output of the node
-  (`get_process_output`, `kind: scheduler`); it never reaches `process_data`
-  or the input log, so `inspect_node` (`log`) does not show it.
+- **Talking to a live program.** An external input (`fifoTag: "external"`) and a
+  business output with no connection are written and read from outside with
+  `list_fifos`, `write_fifo` and `read_fifo`, in resident programs only. A
+  script that writes into an external input itself writes one line per message,
+  `{"type": "DATA", "payload": <value>}`, in one write, as strict JSON in UTF-8
+  (no NaN or Infinity): a line that is not UTF-8 or not JSON ends the node with
+  an error, unless a HELLO follows it (a Supervisor relaunches the node, without
+  that line), and `read_fifo` shows such a line as not an envelope. A line that
+  is JSON but not such an envelope (a missing key, an unknown type, a `seq` that
+  is not an integer, or a type other than `DATA` and `BARRIER`) is dropped by
+  the reader, with a warning, "reader for '<port>' dropped ...", in the
+  scheduler output of the node (`get_process_output`, `kind: scheduler`); it
+  never reaches `process_data` or the input log, so `inspect_node` (`log`) does
+  not show it.
 
 ## Business tests
 

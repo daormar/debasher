@@ -18,7 +18,6 @@ export interface NodeInfo {
   // it runs alone, or null when it runs the whole general program.
   launcher?: { runs_root: string; process: string | null };
   updated_at: number;
-  healthy: boolean;
   out_backlog_bytes: Record<string, number>;
   checkpoints_skipped_since: number | null;
   age_secs: number;
@@ -157,7 +156,8 @@ function outboundBacklogRows(info: NodeInfo): SummaryRow[] {
 
 // The node info file is that of the latest incarnation. It is stale by
 // nature in a node that is not alive, and warns only in one that is: one
-// still replaying its input log, or whose heartbeat thread has died.
+// still replaying its input log, or one that runs but does not tick
+// (suspended, kept off the CPU, or inside a call that keeps the GIL).
 function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
   if (info === null) {
     return [{
@@ -171,17 +171,10 @@ function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
       label: "Latest heartbeat tick",
       value: info.stale && alive
         ? `${formatTime(info.updated_at)}, ${Math.round(info.age_secs)} s ago: older than two ` +
-          "heartbeat intervals, so the node is still replaying its input log, or its heartbeat " +
-          "thread has died"
+          "heartbeat intervals, so the node is still replaying its input log, or runs but does " +
+          "not tick (suspended, kept off the CPU, or inside a call that keeps the GIL)"
         : `${formatTime(info.updated_at)}, ${Math.round(info.age_secs)} s ago`,
       warning: info.stale && alive,
-    },
-    {
-      label: "Threads",
-      value: info.healthy
-        ? "every thread alive at the latest tick"
-        : "a thread was dead at the latest tick: its part of the work stopped, although the process lives",
-      warning: !info.healthy,
     },
     ...outboundBacklogRows(info),
   ];

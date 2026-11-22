@@ -36,7 +36,7 @@ from debasher_runtime_envelope import (
     decode_envelope,
     encode_data,
 )
-from debasher_runtime_transport import _PortWorker, _STOP
+from debasher_runtime_transport import _PortWorker, _STOP, _join_until
 from debasher_runtime_inputlog import LogCapReached, _InputLog
 
 # What a replay has asked of the notice so far when it has asked nothing
@@ -502,6 +502,8 @@ class FBPProcess(_PortWorker):
         node from its latest checkpoint with restore_node_state(), calls
         initialize_runtime(), calls process_data() again for every message
         received since that checkpoint, and then processes what arrives.
+        Raises RuntimeError, which ends the process with an error, once a
+        thread of the node has died.
         """
         # Full startup sequence: install the SIGTERM handler -> open every
         # FIFO -> find the most recent checkpoint if any ->
@@ -514,12 +516,12 @@ class FBPProcess(_PortWorker):
         # checkpoint, since the node state is then the default one) ->
         # start_threads() (starts the other threads) -> wait until told to
         # stop (SIGTERM, from outside this process; see _on_stop_signal and
-        # _stop_requested) -> stop every thread, from this (the calling)
-        # thread rather than the one that actually delivered the signal. A
-        # halt closing its epoch is not part of this wait (see
-        # _on_epoch_closed): it behaves like an ordinary snapshot, and this
-        # node keeps running until told to stop by signal, whether or not it
-        # ever halted.
+        # _stop_requested), or until a thread dies (see _run_guarded) -> stop
+        # every thread, from this (the calling) thread rather than the one
+        # that actually delivered the signal. A halt closing its epoch is not
+        # part of this wait (see _on_epoch_closed): it behaves like an
+        # ordinary snapshot, and this node keeps running until told to stop
+        # by signal, whether or not it ever halted.
         #
         # A signal handler can only be installed from the main thread; a
         # node driven by run() on a background thread (every test that does
@@ -564,24 +566,30 @@ class FBPProcess(_PortWorker):
         self._open_input_log(capture_pos)
         self._start_writer_threads()
         self._replay_input_log(capture_pos)
+        # A writer may have died while the log was replayed
+        if self._thread_error is not None:
+            self._stop_after_dead_thread()
 
-        # The threads that are not daemons keep the process alive, so a
-        # failure while they start has to stop them, or the process would
-        # stay up doing nothing, and deaf to a SIGTERM.
+        # A failure while the threads start stops those already started, so
+        # that the readers stop between blocks before the process ends
         try:
             self.start_threads()
         except BaseException:
             self.stop_threads(close=False)
             raise
         self._wait_for_stop(self._stop_requested)
+        # A thread that died ends the process: the node would otherwise stay
+        # up without its part of the work, which only a relaunch brings back
+        if self._thread_error is not None:
+            self._stop_after_dead_thread()
         # A halt is an orderly stop that the whole program is resumed from
         # later, not the end of this node. CLOSE is what a writer says when
         # it has finished for good, and a peer that read one at a halt would
         # take this node for a finished one when it comes back. This is why
         # close=False here does not depend on whether this node ever
-        # halted: the only way run() ever gets past the wait above is an
-        # external stop signal, which carries the same "come back later"
-        # meaning regardless.
+        # halted: the only way run() ever gets here is an external stop
+        # signal, which carries the same "come back later" meaning
+        # regardless.
         self.stop_threads(close=False)
 
     def _restore_checkpoint(self, checkpoint):
@@ -649,12 +657,10 @@ class FBPProcess(_PortWorker):
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
         self._started_at = time.time()
-        self._report_node_info(self._are_all_threads_alive())
-        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="heartbeat")
-        self._heartbeat_thread.start()
+        self._report_node_info()
+        self._heartbeat_thread = self._start_guarded_thread("heartbeat", self._heartbeat_loop)
         if self._observes():
-            self._observe_thread = threading.Thread(target=self._observe_loop, name="observer")
-            self._observe_thread.start()
+            self._observe_thread = self._start_guarded_thread("observer", self._observe_loop)
 
     def _get_control_ports_path(self):
         return self._get_execdir_entry("control_ports")
@@ -687,7 +693,7 @@ class FBPProcess(_PortWorker):
         under names of its own: nothing here."""
         return {}
 
-    def _write_node_info(self, healthy):
+    def _write_node_info(self):
         """
         Writes the node info file: what a tool outside the node (see
         debasher_inspect_resident) needs to know of it and cannot read
@@ -695,10 +701,9 @@ class FBPProcess(_PortWorker):
         computational specifications of the process decide, and the size of
         the outbound backlog, which lives only in memory, and whose copy in a
         checkpoint is missing precisely when it grows too large. Written when
-        the threads start and again at every tick of the heartbeat thread,
-        with `healthy` as that tick found it. Atomic (temp file + rename),
-        like a checkpoint. Nothing in the node reads it back: it is not part
-        of the state of the node.
+        the threads start and again at every tick of the heartbeat thread.
+        Atomic (temp file + rename), like a checkpoint. Nothing in the node
+        reads it back: it is not part of the state of the node.
         """
         with self._out_backlog_lock:
             out_backlog_bytes = dict(self._unwritten_port_bytes)
@@ -714,7 +719,6 @@ class FBPProcess(_PortWorker):
             },
             **self._get_node_info_extra(),
             "updated_at": time.time(),
-            "healthy": healthy,
             "out_backlog_bytes": out_backlog_bytes,
             "checkpoints_skipped_since": self._checkpoints_skipped_since,
         }
@@ -724,37 +728,32 @@ class FBPProcess(_PortWorker):
             json.dump(info, f)
         os.replace(tmp_path, path)
 
-    def _report_node_info(self, healthy):
+    def _report_node_info(self):
         """Writes the node info file. One that cannot be written is not a
         reason to stop the node: it only reports, so the node goes on and
         its file goes stale."""
         try:
-            self._write_node_info(healthy)
+            self._write_node_info()
         except OSError as exc:
             self.log.warning("cannot write the node info file: %r", exc)
 
-    def stop_threads(self, timeout=None, close=True):
+    def _join_threads(self, deadline, close):
         """
-        Signals the heartbeat thread to stop, then defers to
-        _PortWorker.stop_threads() for the reader/writer/brain threads,
-        then joins the heartbeat thread too.
+        Stops the observation thread, then the threads of _PortWorker, then
+        the heartbeat thread, all by the same `deadline`, and closes the
+        input log.
         """
         self._heartbeat_stop.set()
         self._observe_stop.set()
         self._observe_wake.set()
-        if self._observe_thread is not None:
-            self._observe_thread.join(timeout)
-        super().stop_threads(timeout, close)
-        if self._heartbeat_thread is not None:
-            self._heartbeat_thread.join(timeout)
+        _join_until(self._observe_thread, deadline)
+        super()._join_threads(deadline, close)
+        _join_until(self._heartbeat_thread, deadline)
         if self._input_log is not None:
             self._input_log.close()
 
-    def _are_all_threads_alive(self):
-        alive = super()._are_all_threads_alive()
-        if self._observe_thread is not None:
-            alive = alive and self._observe_thread.is_alive()
-        return alive
+    def _wake_run(self):
+        self._stop_requested.set()
 
     # -- observation of the outside world --
 
@@ -1288,21 +1287,24 @@ class FBPProcess(_PortWorker):
     def _heartbeat_loop(self):
         # The first heartbeat goes out one interval after the threads start,
         # not at once: a heartbeat resets the relaunch budget of the node at
-        # the Supervisor, so it has to show that the node has been healthy
-        # for a while, not only that it started. A node whose reader fails on
+        # the Supervisor, so it has to show that the node has run for a
+        # while, not only that it started. A node whose reader fails on
         # the first live message after every relaunch (a gap in the sequence
         # numbers that no relaunch can fill) must use up its budget.
+        # A thread that dies ends the process (see _run_guarded), so a
+        # heartbeat only says that the process runs, which is what the
+        # Supervisor cannot tell from its PID alone: a node suspended, kept
+        # off the CPU or inside a call that keeps the GIL sends none. A Supervisor is optional (SUPERVISOR_PORT
+        # is None if there is none). None goes out once a thread has died,
+        # while run() stops the others: it would reset the count of
+        # relaunches of a node that dies again after every relaunch.
         while not self._heartbeat_stop.wait(self.HEARTBEAT_INTERVAL_SECS):
-            healthy = self._are_all_threads_alive()
-            self.log.debug("heartbeat tick, healthy=%s", healthy)
-            # Only ever reports "alive" if every thread still is (passive
-            # health reporting, see _are_all_threads_alive). A supervisor
-            # is optional (SUPERVISOR_PORT is None if there is none), and
-            # an unhealthy process simply stops sending, rather than
-            # actively announcing its own bad health.
-            if healthy and self.SUPERVISOR_PORT is not None:
+            self.log.debug("heartbeat tick")
+            if self._thread_error is not None:
+                continue
+            if self.SUPERVISOR_PORT is not None:
                 self._send_interact(self.SUPERVISOR_PORT, "heartbeat")
-            self._report_node_info(healthy)
+            self._report_node_info()
         self.log.debug("heartbeat thread stopped")
 
     def _on_barrier(self, port_name, payload):
@@ -1658,6 +1660,10 @@ class FBPProcess(_PortWorker):
         self._replaying = True
         try:
             for record in self._input_log.replay(capture_pos):
+                # A writer that died ends the process (see run()), and the
+                # rest of the replay would be lost with it
+                if self._thread_error is not None:
+                    break
                 if record.envelope.type == TYPE_CLOSE:
                     # It only closes its port; a control port is never closed.
                     if record.port not in self.CONTROL_PORTS:
@@ -1734,7 +1740,10 @@ class FBPProcess(_PortWorker):
         every message received since the latest checkpoint. It must not
         depend on the time, on randomness or on reads from outside the
         program, and whatever it does outside its FIFOs (writing a file,
-        calling a service) may be done more than once.
+        calling a service) may be done more than once. An exception that it
+        raises ends the node with an error, and the replay at the relaunch
+        calls it again on the same message: drop, with a warning, a message
+        that the node cannot use, rather than raise.
         """
         raise NotImplementedError
 
@@ -1779,5 +1788,7 @@ class FBPProcess(_PortWorker):
         again. After a crash, observe() may bring in again what it had
         already brought in, so process_data() keeps in the node state what
         it has acted on, and drops a repetition. If observe() raises, the
-        node stops sending heartbeats, as a node that crashed does.
+        node ends with an error, as a node that crashed does, and a
+        Supervisor relaunches it: raise only for a failure that a relaunch
+        mends, such as a stalled connection.
         """

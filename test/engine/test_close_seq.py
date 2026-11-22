@@ -192,7 +192,8 @@ def test_a_close_with_no_claim_is_never_an_error():
 def test_a_real_lost_message_before_close_is_caught_end_to_end(fifo_path):
     # The sender genuinely sent 1, 2 and 3, but the fifo (or the receiver's
     # own log) never got 3 before it finished for good: the receiver's
-    # reader thread dies from the mismatch, the process staying alive.
+    # reader thread dies from the mismatch, which wakes run() to end the
+    # process.
     proc = _Recorder(opts={"inf": fifo_path})
     proc.start_threads()
     try:
@@ -204,7 +205,7 @@ def test_a_real_lost_message_before_close_is_caught_end_to_end(fifo_path):
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert not proc._are_all_threads_alive()
+        assert proc._dead_thread_name == "reader:inf"
         assert proc.received == ["a", "b"]
         assert [r.envelope.type for r in _log_records(proc)] == ["DATA", "DATA", "CLOSE"]
     finally:

@@ -466,8 +466,8 @@ outside it; they are described in the :ref:`tools` Section.
   end, or stop it with ``debasher_stop -d <run directory>``.
 * ``debasher_inspect_resident -d <outdir> -p <process> summary`` shows
   what a node keeps: its checkpoints, the size of its input log, its
-  health and its notice. The commands ``checkpoint <epoch>`` and
-  ``log`` show a checkpoint and the latest records of the input log,
+  outbound backlog and its notice. The commands ``checkpoint <epoch>``
+  and ``log`` show a checkpoint and the latest records of the input log,
   and ``notices`` the notices of every node at once.
 
 Observing the Outside World
@@ -543,13 +543,14 @@ receive names that do not repeat. A module that only needs to set
 any other node. The :doc:`webui_watch_tally` shows a complete program
 with a ``DirectoryWatcher``, and its tests.
 
-If ``observe`` raises, the node stops sending heartbeats, as a node
-that crashed does, and the ``Supervisor`` relaunches it. A node whose
-source can stall while its process stays alive (a stream that gives no
-more data and does not close) raises in ``observe`` once it has seen
-nothing for too long, and the relaunch reconnects. The
-:doc:`webui_stream_stall` shows such a node, and lets you try a stall,
-a frozen node and the limits of a node by hand.
+If ``observe`` raises, the process of the node ends with an error, as it
+does when any of its threads dies, and the ``Supervisor`` relaunches it
+(in a program without one, the node is down until it is relaunched by
+hand). A node whose source can stall while its process stays alive (a
+stream that gives no more data and does not close) raises in ``observe``
+once it has seen nothing for too long, and the relaunch reconnects. The
+:doc:`webui_stream_stall` shows such a node, and lets you try a stall, a
+frozen node and the limits of a node by hand.
 
 Notices
 ^^^^^^^
@@ -718,9 +719,10 @@ program gives these guarantees:
 
 * On every channel, messages arrive in the order in which they were
   sent, and with no failure every message is delivered once.
-* A node that crashes (killed, out of memory, an exception that ends
-  its process) and is relaunched returns to the state it would have had without the
-  crash, and its readers receive neither duplicates nor gaps.
+* A node that crashes (killed, out of memory, an exception in any of its
+  threads, which ends its process) and is relaunched returns to the
+  state it would have had without the crash, and its readers receive
+  neither duplicates nor gaps.
 * A snapshot captures a consistent state of every node, and an orderly
   stop followed by a new launch loses nothing.
 * A crashed node is detected within a bounded time when the program

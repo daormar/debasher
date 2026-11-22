@@ -101,6 +101,12 @@ describe("buildNodeCodePrompt", () => {
     expect(prompt).toContain("such as that of a `set` of strings");
   });
 
+  it("says that an exception of a hook ends the node, and comes back at the replay", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("An exception that a hook raises ends the node with an error");
+    expect(prompt).toContain("drop a message that the node cannot use, with `self.log.warning()`, rather than raise");
+  });
+
   it("carries the reference of the runtime library, or why it is missing", () => {
     expect(buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library))
       .toContain("from their own documentation:\n\n### FBPProcess\n\nThe base class of every node.");

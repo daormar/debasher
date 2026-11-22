@@ -158,26 +158,15 @@ read_halted_marker_or_baseline()
 }
 
 ########
-# Waits until the halted marker at $1 holds an epoch past its baseline $2,
-# or the deadline $3 passes.
-wait_for_fresh_halted_marker()
+# Returns 0 if the halted marker at $1 holds an epoch past its baseline $2.
+has_fresh_halted_marker()
 {
     local path=$1
     local baseline=$2
-    local deadline=$3
     local current
-    while :; do
-        if [ -f "${path}" ]; then
-            current=$("${CAT}" "${path}" 2>/dev/null)
-            if [ -n "${current}" ] && [ "${current}" -gt "${baseline}" ] 2>/dev/null; then
-                return 0
-            fi
-        fi
-        if [ "$(debasher::_resident_tool_get_now_secs)" -ge "${deadline}" ]; then
-            return 1
-        fi
-        "${SLEEP}" 0.2
-    done
+    [ -f "${path}" ] || return 1
+    current=$("${CAT}" "${path}" 2>/dev/null)
+    [ -n "${current}" ] && [ "${current}" -gt "${baseline}" ] 2>/dev/null
 }
 
 ########
@@ -279,9 +268,10 @@ capture_halted_marker_baselines()
 ########
 # Waits until the halted marker of each node of the array named $2, in the
 # output directory $1, goes past its baseline in the associative array
-# named $3 (see wait_for_fresh_halted_marker), or the deadline $4 passes.
-# Every node, not only initiators, since a halt round closes at every node
-# the marker reaches, not just where it started.
+# named $3 (see has_fresh_halted_marker). Returns 1, with an error, at the
+# deadline $4, or as soon as the process of a node not yet halted has
+# ended. Every node, not only initiators, since a halt round closes at
+# every node the marker reaches, not just where it started.
 wait_for_every_halted_marker()
 {
     local absdirname=$1
@@ -290,12 +280,28 @@ wait_for_every_halted_marker()
     local deadline=$4
 
     local node marker_file
-    for node in "${waited_nodes_ref[@]}"; do
-        marker_file=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" halted)
-        if ! wait_for_fresh_halted_marker "${marker_file}" "${waited_baselines_ref[${node}]}" "${deadline}"; then
-            echo "Error: ${node} never marked itself halted" >&2
+    local -a pending=("${waited_nodes_ref[@]}") still_pending
+    while [ ${#pending[@]} -gt 0 ]; do
+        still_pending=()
+        for node in "${pending[@]}"; do
+            marker_file=$(debasher::_resident_tool_get_node_execdir_entry "${absdirname}" "${node}" halted)
+            has_fresh_halted_marker "${marker_file}" "${waited_baselines_ref[${node}]}" && continue
+            # A node that has ended never halts, and neither do those that
+            # its markers would reach: a thread of it that died ends its
+            # process, and the Supervisor, stopped by now, relaunches nothing
+            if ! read_running_pid_of_node "${absdirname}" "${node}" > /dev/null; then
+                echo "Error: ${node} ended before it marked itself halted (see its scheduler output)" >&2
+                return 1
+            fi
+            still_pending+=("${node}")
+        done
+        pending=("${still_pending[@]}")
+        [ ${#pending[@]} -gt 0 ] || break
+        if [ "$(debasher::_resident_tool_get_now_secs)" -ge "${deadline}" ]; then
+            echo "Error: ${pending[0]} never marked itself halted" >&2
             return 1
         fi
+        "${SLEEP}" 0.2
     done
 }
 
@@ -398,7 +404,9 @@ stop_resident_program()
         return 0
     fi
 
-    echo "Warning: could not stop ${dirname} gracefully within ${timeout_secs}s, forcing debasher_stop" >&2
+    # The error before this line gives the cause: the deadline, or a node
+    # that ended before it halted
+    echo "Warning: could not stop ${dirname} gracefully, forcing debasher_stop" >&2
     "${debasher_bindir}/debasher_stop" -d "${dirname}"
     # Always DEBASHER_STOP_RESIDENT_FORCED_EXIT here, not debasher_stop's own
     # exit code (typically 0: it does not treat "something was still running

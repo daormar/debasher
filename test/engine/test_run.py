@@ -322,8 +322,12 @@ def test_run_restores_the_outbound_backlog_and_it_reaches_a_neighbor(execdir):
     os.mkfifo(out_fifo)
     # A read end held here keeps what the node wrote in the pipe once it is gone.
     rfd = os.open(out_fifo, os.O_RDONLY | os.O_NONBLOCK)
+    # A fifo, which the node holds at both ends: a reader of /dev/null would
+    # end at its end, a dead thread that ends the run.
+    in_fifo = execdir / "in.fifo"
+    os.mkfifo(in_fifo)
     try:
-        proc = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})
+        proc = _Relay(opts={"inf": str(in_fifo), "outf": str(out_fifo)})
         proc._save_checkpoint(
             lib._Checkpoint(
                 epoch=0,
@@ -333,7 +337,7 @@ def test_run_restores_the_outbound_backlog_and_it_reaches_a_neighbor(execdir):
             )
         )
 
-        restarted = _Relay(opts={"inf": "/dev/null", "outf": str(out_fifo)})
+        restarted = _Relay(opts={"inf": str(in_fifo), "outf": str(out_fifo)})
         run_thread = threading.Thread(target=restarted.run, daemon=True)
         run_thread.start()
 

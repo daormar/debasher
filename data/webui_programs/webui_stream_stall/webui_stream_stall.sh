@@ -180,8 +180,8 @@ class Acquire(FBPProcess):
             self.last_progress = now
         elif now - self.last_progress > self.stall_timeout:
             # A stream that stalls keeps the process alive and doing
-            # nothing; raising makes the node unhealthy, so that the
-            # Supervisor relaunches it and the relaunch reconnects
+            # nothing; raising ends the process with an error, so that
+            # the Supervisor relaunches it and the relaunch reconnects
             self.set_notice(
                 f"the stream gave no read for {self.stall_timeout:g} s, after "
                 f"{self.stream.given} reads of connection {self.stream.connection}",

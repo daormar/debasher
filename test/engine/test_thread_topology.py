@@ -217,7 +217,7 @@ class _SlowReader(_ReaderOnly):
         super().process_data(port_name, packet)
 
 
-def test_a_consumer_whose_producer_finished_keeps_saying_it_is_healthy(fifo_path):
+def test_a_consumer_whose_producer_finished_has_no_dead_thread(fifo_path):
     proc = _SlowReader(opts={"inf": fifo_path})
     proc.start_threads()
     try:
@@ -229,10 +229,11 @@ def test_a_consumer_whose_producer_finished_keeps_saying_it_is_healthy(fifo_path
         # The CLOSE is in the log already, and the brain still has most of the messages to go.
         assert _wait_until(lambda: proc._input_log.next_pos == 12)
         assert len(proc.received) < 10
-        assert proc._are_all_threads_alive()
+        assert proc._thread_error is None
 
         assert _wait_until(lambda: len(proc.received) == 10, timeout=5)
-        assert proc._are_all_threads_alive()
+        assert proc._thread_error is None
+        assert proc._reader_threads["inf"].is_alive()
     finally:
         proc.stop_threads(timeout=2)
 
@@ -446,18 +447,12 @@ def test_reader_thread_drops_a_type_that_its_port_does_not_carry(fifo_path, capl
         proc.stop_threads(timeout=2)
 
 
-def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_path):
+def test_reader_thread_dying_on_bad_input_is_recorded_as_a_dead_thread(fifo_path):
     proc = _ReaderOnly(opts={"inf": fifo_path})
     proc.start_threads()
     try:
-        # The reader thread is expected to die here (uncaught
-        # json.JSONDecodeError from decode_envelope) -- that's the point
-        # of this test, per the base class's passive health-reporting
-        # design. Pytest reports that as a
-        # PytestUnhandledThreadExceptionWarning at its own next check,
-        # not synchronously with the thread dying, so this doesn't try
-        # to assert on the warning itself (too timing-sensitive), only
-        # on the resulting, directly-observable state.
+        # The reader thread is expected to die here (a ValueError on a line
+        # that no HELLO follows), which wakes run() to end the process.
         # One unparsable line is only tolerated when a HELLO follows it
         # (the fragment of a writer that died), so this one is fatal as
         # soon as something else comes after it.
@@ -468,7 +463,9 @@ def test_reader_thread_dying_on_bad_input_is_caught_by_all_threads_alive(fifo_pa
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert proc._are_all_threads_alive() is False
+        assert proc._dead_thread_name == "reader:inf"
+        assert "not followed by HELLO" in str(proc._thread_error)
+        assert proc._stop_requested.is_set()
     finally:
         proc.stop_threads(timeout=2)
 
@@ -481,7 +478,7 @@ class _FailsOnFirst(_ReaderOnly):
         self.received.append((port_name, packet))
 
 
-def test_an_exception_of_process_data_ends_the_brain_thread_and_not_the_node(fifo_path):
+def test_an_exception_of_process_data_is_recorded_as_a_dead_brain_thread(fifo_path):
     # The brain thread is expected to die here; the test asserts on the
     # state it leaves, as the test above does for a reader
     proc = _FailsOnFirst(opts={"inf": fifo_path})
@@ -492,16 +489,9 @@ def test_an_exception_of_process_data_ends_the_brain_thread_and_not_the_node(fif
             w.flush()
             assert _wait_until(lambda: not proc._brain_thread.is_alive())
 
-            # Unhealthy, so the heartbeat thread stops sending, but the
-            # reader goes on taking what arrives into the input log
-            assert proc._are_all_threads_alive() is False
-            assert proc._reader_threads["inf"].is_alive()
-            w.write(lib.encode_data(2) + "\n")
-            w.flush()
-
-        assert _wait_until(
-            lambda: [r.envelope.payload for r in proc._input_log.replay(0)] == [1, 2]
-        )
+        assert proc._dead_thread_name == "brain"
+        assert str(proc._thread_error) == "a fault of the module"
+        assert proc._stop_requested.is_set()
         assert proc.received == [("inf", 1)]
     finally:
         proc.stop_threads(timeout=2)
@@ -702,11 +692,6 @@ def test_a_stalled_reader_on_one_output_port_blocks_only_its_writer(tmp_path):
 # --- brain thread / stop_threads -----------------------------------------
 
 
-def test_all_threads_alive_is_true_with_no_declared_ports():
-    proc = lib.FBPProcess(opts={})
-    assert proc._are_all_threads_alive() is True
-
-
 # --- heartbeat thread sends to SUPERVISOR_PORT, if set -------------------
 
 
@@ -758,7 +743,6 @@ def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
         HEARTBEAT_INTERVAL_SECS = 0.5
 
     proc = Slow(opts={"out": "/dev/null"})
-    proc._are_all_threads_alive = lambda: True
     sent = []
     proc._send_interact = lambda port, command, args=None: sent.append(time.monotonic())
 
@@ -779,13 +763,12 @@ def test_the_first_heartbeat_goes_out_one_interval_after_the_threads_start():
 
 
 def test_heartbeat_thread_stops_sending_once_a_thread_has_died():
-    # Pure Python-level check of the health gate itself, with no real
-    # FIFOs involved (real FIFO/writer-thread timing is exercised
-    # separately, by the two tests above): run only the heartbeat loop
-    # directly, with _are_all_threads_alive() forced False, and confirm
-    # nothing gets enqueued for the writer thread to ever send.
+    # A heartbeat sent while run() stops the other threads would reset the
+    # count of relaunches of a node that dies again after every relaunch.
+    # Only the heartbeat loop runs, with no real fifo, and a death recorded
+    # as _run_guarded records one: nothing is queued for the writer.
     proc = _Supervised(opts={"out": "/dev/null"})
-    proc._are_all_threads_alive = lambda: False
+    proc._thread_error = RuntimeError("a thread died")
 
     thread = threading.Thread(target=proc._heartbeat_loop, name="heartbeat")
     thread.start()

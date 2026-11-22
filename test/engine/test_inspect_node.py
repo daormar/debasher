@@ -58,7 +58,6 @@ def _node_info(**fields):
             "gil_switch_interval_secs": 0.0005,
         },
         "updated_at": time.time(),
-        "healthy": True,
         "out_backlog_bytes": {"outf": 12},
         "checkpoints_skipped_since": None,
     }

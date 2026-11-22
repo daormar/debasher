@@ -64,7 +64,7 @@ def test_a_node_while_it_lives_after_a_round_and_once_it_stops(outdir):
     assert summary["checkpoints"] == []
     info = summary["node_info"]
     assert info["runtime_class"] == "FBPProcess"
-    assert info["healthy"] is True
+    assert "healthy" not in info
     assert info["stale"] is False
 
     snapshot = subprocess.run(

@@ -96,7 +96,7 @@ def test_the_node_info_file_is_written_when_the_threads_start(execdir, fifo_opts
         "out_backlog_fail_bytes": 3 * 1024 * 1024,
         "gil_switch_interval_secs": lib.FBPProcess.GIL_SWITCH_INTERVAL_SECS,
     }
-    assert info["healthy"] is True
+    assert "healthy" not in info
     assert info["out_backlog_bytes"] == {}
     assert info["checkpoints_skipped_since"] is None
     assert "launcher" not in info
@@ -111,11 +111,11 @@ def test_a_task_of_an_array_writes_a_file_of_its_own(execdir, monkeypatch):
     assert not (execdir / "node_info").exists()
 
 
-def test_every_heartbeat_tick_writes_it_again(execdir):
+def test_every_heartbeat_tick_writes_it_again(execdir, fifo_opts):
     class Quick(_Fork):
         HEARTBEAT_INTERVAL_SECS = 0.05
 
-    proc = _started(Quick(opts=_OPTS))
+    proc = _started(Quick(opts=fifo_opts))
     try:
         first = _read_node_info(execdir)
         assert _wait_until(lambda: _read_node_info(execdir)["updated_at"] > first["updated_at"])
@@ -125,21 +125,6 @@ def test_every_heartbeat_tick_writes_it_again(execdir):
 
     assert later["started_at"] == first["started_at"]
     assert later["heartbeat_interval_secs"] == 0.05
-
-
-def test_a_tick_reports_a_dead_thread(execdir, fifo_opts):
-    class Quick(_Fork):
-        HEARTBEAT_INTERVAL_SECS = 0.05
-
-    proc = _started(Quick(opts=fifo_opts))
-    try:
-        assert _read_node_info(execdir)["healthy"] is True
-        # The brain thread ends, as it does on an exception of process_data;
-        # the process goes on.
-        proc._inbound_queue.put(transport._STOP)
-        assert _wait_until(lambda: _read_node_info(execdir)["healthy"] is False)
-    finally:
-        proc.stop_threads(timeout=2)
 
 
 def _run_brain(proc, items):
@@ -175,7 +160,7 @@ def test_the_backlog_of_each_port_is_kept_with_the_backlog(execdir):
     assert proc._unwritten_bytes == len(lines["outa"][1]) + len(lines["outb"][0])
 
     proc._started_at = time.time()
-    proc._write_node_info(True)
+    proc._write_node_info()
     assert _read_node_info(execdir)["out_backlog_bytes"] == proc._unwritten_port_bytes
 
 
@@ -188,11 +173,11 @@ def test_the_backlog_restored_from_a_checkpoint_is_counted(execdir):
     }
 
 
-def test_a_file_that_cannot_be_written_does_not_stop_the_heartbeats(execdir, caplog):
+def test_a_file_that_cannot_be_written_does_not_stop_the_heartbeats(execdir, fifo_opts, caplog):
     class Quick(_Fork):
         HEARTBEAT_INTERVAL_SECS = 0.05
 
-    proc = _started(Quick(opts=_OPTS))
+    proc = _started(Quick(opts=fifo_opts))
     proc.log.addHandler(caplog.handler)
     try:
         # The temporary file cannot be created where a directory stands.

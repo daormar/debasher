@@ -407,9 +407,12 @@ it. ``debasher_stop`` would kill every process at once instead.
   named as for ``-x``. A node given to ``-x`` as well is killed instead
   of left running.
 * ``--timeout <int>``: seconds to wait for the stop to complete (60 by
-  default), after which the tool falls back to ``debasher_stop``,
-  which kills every process of the program (those given to ``-x`` and
-  a kept ``Supervisor`` too), and fails.
+  default), after which the tool falls back to ``debasher_stop``, which
+  kills every process of the program (those given to ``-x`` and a kept
+  ``Supervisor`` too), and fails. The tool does not wait for the timeout
+  when the process of a node has ended before that node marked itself
+  halted: it says so, with ``Error: <node> ended before it marked itself
+  halted``, and falls back at once.
 * ``--keep-supervisor``: leave the ``Supervisor`` of the program
   running. The ``Supervisor`` runs the tool this way when it gives up
   on a node, since it waits for the tool itself; it ends by itself
@@ -500,11 +503,12 @@ task, for an array process. The commands are:
 
 * ``summary``: the state of the node (alive, down, finished or not
   launched), its checkpoints, the size of its input log against its
-  limit, its health and its notice. Its ``input_log.to_replay`` is the
-  number of records above the capture of the latest checkpoint, which a
-  relaunch goes through (only the data records are processed again, so
-  it bounds the work redone), or ``null`` when the latest checkpoint is
-  of another schema version, on which the node does not start.
+  limit, its outbound backlog and its notice. Its
+  ``input_log.to_replay`` is the number of records above the capture of
+  the latest checkpoint, which a relaunch goes through (only the data
+  records are processed again, so it bounds the work redone), or
+  ``null`` when the latest checkpoint is of another schema version, on
+  which the node does not start.
 * ``checkpoint <int>``: a checkpoint that the node keeps, given by its
   epoch, as ``summary`` lists them.
 * ``log [--port <string>] [--last <int>]``: the latest records of the

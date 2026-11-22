@@ -3177,12 +3177,12 @@ during the stop does not interrupt it. The options `-x`, `--kill` and
 
 - 0: an orderly stop. Every node halted in the same round, and the next launch
   resumes the program with nothing lost.
-- 2: the orderly stop did not end within the timeout, and the tool fell back to
-  the hard kill of `debasher_stop`. The program has ended, but was killed: each
-  node resumes from its last checkpoint and its input log, and what the FIFOs
-  held may be lost, at most what a pipe holds for each business channel, which
-  the nodes that read them report as a gap in the sequence numbers when they
-  resume.
+- 2: the orderly stop did not end (a node ended before it halted, or the timeout
+  passed), and the tool fell back to the hard kill of `debasher_stop`. The
+  program has ended, but was killed: each node resumes from its last checkpoint
+  and its input log, and what the FIFOs held may be lost, at most what a pipe
+  holds for each business channel, which the nodes that read them report as a
+  gap in the sequence numbers when they resume.
 - 1: an error of usage or setup, reported with what the tool printed.
 
 **Killing.** "Kill program" runs `debasher_stop` on the output directory, the
@@ -3399,17 +3399,16 @@ a node, shows what the node keeps in its execdir, read only, in three views:
   log against its cap, how many records lie above the `capture_pos` of the
   latest checkpoint (what the node would replay if it crashed now), the size of
   the outbound backlog against its limits, the cap and the limits being those in
-  force for the node, which it writes into its node info file, and whether every
-  thread of the node was alive at its latest heartbeat tick. These are the
+  force for the node, which it writes into its node info file. These are the
   figures that warn of a coming failure: with no rounds, the input log grows
   until its cap stops the node, with a reader that does not read, the outbound
-  backlog grows until it does, and a node with a dead thread shows as
-  `IN-PROGRESS` while it does nothing. The summary also shows the notice of the
-  node, if it has one (see the notices of the nodes, below). A node info file
-  older than two heartbeat intervals has stopped being written: in a node that
-  is alive, this means that it is still replaying its input log or that its
-  heartbeat thread has died, and the summary marks it; in a node that is not
-  alive, it is simply the file of its latest incarnation, shown unmarked.
+  backlog grows until it does. The summary also shows the notice of the node, if
+  it has one (see the notices of the nodes, below). A node info file older than
+  two heartbeat intervals has stopped being written: in a node that is alive,
+  this means that it is still replaying its input log or that it runs but does
+  not tick (suspended, kept off the CPU, or inside a call that keeps the GIL),
+  and the summary marks it; in a node that is not alive, it is simply the file
+  of its latest incarnation, shown unmarked.
 - The checkpoints: the list of those that the node retains and, for the one
   chosen, its `node_state`, formatted, together with the messages in transit
   that it holds, `channel_state` and `out_backlog`, counted by port.
@@ -3424,13 +3423,13 @@ a node, shows what the node keeps in its execdir, read only, in three views:
 The action is offered on every node but the `Supervisor`, which keeps no node
 state, and enabled once the node has been launched, whatever the run phase: a
 stopped node keeps what it held, which is when it is most worth reading. The
-summary marks a figure only when it crosses a limit that the engine sets (a
-node that is down, a dead thread, a live node whose node info file is older
-than two heartbeat intervals, an outbound backlog over the size above which
-checkpoints are skipped, skipped checkpoints, an input log at its cap or that
-cannot be read), never a threshold that the web UI sets. Each view is read
-when it is shown and again when the user asks, never polled, so that a view
-left open does not start the engine tool every few seconds.
+summary marks a figure only when it crosses a limit that the engine sets (a node
+that is down, a live node whose node info file is older than two heartbeat
+intervals, an outbound backlog over the size above which checkpoints are
+skipped, skipped checkpoints, an input log at its cap or that cannot be read),
+never a threshold that the web UI sets. Each view is read when it is shown and
+again when the user asks, never polled, so that a view left open does not start
+the engine tool every few seconds.
 
 The backend reads none of these files itself. An engine tool,
 `debasher_inspect_resident -d <output directory> -p <process> [-t <index>]`,

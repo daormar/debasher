@@ -55,9 +55,12 @@ which one you start with.
    `self.sleep()` for the pace, `inject` from `observe` for what it sees
    outside, and `set_notice` for what whoever watches the program should know (a
    missing configuration file), set again in `restore_node_state` when it
-   follows from the node state. A directory watcher or a launcher needs little
-   code or none: its class sends on `-outrequests` and `-outdone`, so the code
-   never does. A node that reads the results of a batch run takes the run
+   follows from the node state. In `process_data`, drop a message that the node
+   cannot use, with a warning, rather than raise: an exception ends the node,
+   and the replay raises it again at every relaunch. Raise in `observe` only for
+   a failure that a relaunch mends. A directory watcher or a launcher needs
+   little code or none: its class sends on `-outrequests` and `-outdone`, so the
+   code never does. A node that reads the results of a batch run takes the run
    directory from `run_dir` in the message on `-outdone`, rather than building
    it again from a runs root of its own.
 4. **Write a test.** `add_test` writes the skeleton of a business test into

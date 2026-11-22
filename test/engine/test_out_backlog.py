@@ -540,14 +540,15 @@ def test_a_failure_while_the_threads_start_ends_run_with_no_thread_left(relay_op
 
 def test_a_first_node_info_file_that_cannot_be_written_leaves_the_node_running(relay_opts, caplog):
     class _NoInfoFile(_Relay):
-        def _write_node_info(self, healthy):
+        def _write_node_info(self):
             raise OSError(28, "No space left on device")
 
     node = _NoInfoFile(opts=relay_opts)
     node.log.addHandler(caplog.handler)
     thread, outcome = _start_run(node)
     try:
-        assert _wait_until(lambda: node._brain_thread is not None and node._are_all_threads_alive())
+        assert _wait_until(lambda: node._brain_thread is not None and node._brain_thread.is_alive())
+        assert node._thread_error is None
     finally:
         node._stop_requested.set()
         thread.join(timeout=5)

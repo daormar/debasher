@@ -187,6 +187,34 @@ def test_a_supervisor_that_is_gone_is_not_waited_for(outdir):
         assert os.path.exists(finished), f"{name} never wrote .finished"
 
 
+def test_a_node_that_has_ended_is_not_waited_for_to_halt(outdir):
+    """
+    A node whose process has ended, as one does when a thread of it dies,
+    never halts, and nor do the nodes that its markers would reach:
+    debasher_stop_resident says so and falls back to debasher_stop at once,
+    instead of waiting for the whole deadline. The Supervisor is killed
+    first, so that nothing relaunches loop.
+    """
+    launch_chaos(outdir)
+    time.sleep(1.0)  # let every node send at least one heartbeat first
+    for name in ("sup", "loop"):
+        pid = int(read_pid(id_file(outdir, name)))
+        os.killpg(pid, signal.SIGKILL)
+        assert wait_until(lambda: not _group_exists(pid), timeout=10.0), f"{name} is still running"
+
+    start = time.monotonic()
+    result = subprocess.run(
+        [str(DEBASHER_STOP_RESIDENT), "-d", outdir, "--timeout", "60"],
+        capture_output=True,
+        text=True,
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 2, f"{result.stdout}\n{result.stderr}"
+    assert "loop ended before it marked itself halted" in result.stderr, result.stderr
+    assert elapsed < 20.0, f"took {elapsed:.1f}s, loop must not have been waited for"
+
+
 def test_debasher_stop_resident_dash_x_leaves_the_named_node_alone(outdir):
     """
     The -x flag: a node named there is not waited for and not signalled,

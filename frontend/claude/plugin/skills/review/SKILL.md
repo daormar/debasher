@@ -57,18 +57,19 @@ its code. Offer to run the tests when what they do matters to a finding.
   count it again with a copy of its rule (in Bash: a Python tasks file cannot
   ask), and does the options handler (array or generator) read only inputs that
   stay unchanged during the run?
-- **Nodes** of a resident program: is `process_data` deterministic, does it
-  send only from there, does what it sends hold no NaN or infinity (a float
-  that can be one checked before `send_data`), is the node state complete and
-  serializable as JSON,
-  and are effects outside the program idempotent? Does it wait with
-  `self.sleep()` rather than `time.sleep()`, look at the outside world only
-  in `observe` (bringing it in with `inject`), and set again in
-  `restore_node_state` a notice that follows from the node state? Does a
-  directory watcher or a launcher leave `-outrequests` and `-outdone` to its
-  class, and does a node that reads the results of a batch run take its
-  directory from `run_dir` rather than build it again from a runs root of
-  its own, which breaks silently once the two differ?
+- **Nodes** of a resident program: is `process_data` deterministic, does it send
+  only from there, does what it sends hold no NaN or infinity (a float that can
+  be one checked before `send_data`), is the node state complete and
+  serializable as JSON, and are effects outside the program idempotent? Does
+  `process_data` drop, with a warning, a message that it cannot use, rather than
+  raise, which ends the node at every relaunch? Does `observe` raise only for a
+  failure that a relaunch mends? Does it wait with `self.sleep()` rather than
+  `time.sleep()`, look at the outside world only in `observe` (bringing it in
+  with `inject`), and set again in `restore_node_state` a notice that follows
+  from the node state? Does a directory watcher or a launcher leave
+  `-outrequests` and `-outdone` to its class, and does a node that reads the
+  results of a batch run take its directory from `run_dir` rather than build it
+  again from a runs root of its own, which breaks silently once the two differ?
 - **Comments.** Is the code commented as its code prompt asks under "How to
   comment the code": a docstring (or, in Bash, a block of `#` comments) for
   each helper function and each hook or method that a node redefines, a

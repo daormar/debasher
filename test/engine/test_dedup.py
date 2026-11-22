@@ -190,11 +190,9 @@ def test_a_marker_with_no_last_seq_is_not_checked():
     assert proc._inbound_queue.qsize() == 2
 
 
-def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_path):
-    # The reader thread dying from an uncaught exception is expected here
-    # (same passive health-reporting design as elsewhere): pytest reports it
-    # as a PytestUnhandledThreadExceptionWarning at its own next check, not
-    # synchronously, so this only asserts on the resulting, observable state.
+def test_a_gap_kills_the_reader_thread_which_ends_the_process(fifo_path):
+    # The reader thread dying from the gap is expected here: it is recorded
+    # as a dead thread, which wakes run() to end the process.
     proc = _Recorder(opts={"inf": fifo_path})
     proc.start_threads()
     try:
@@ -205,7 +203,7 @@ def test_a_gap_kills_the_reader_thread_which_is_how_the_heartbeat_notices(fifo_p
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert not proc._are_all_threads_alive()
+        assert proc._dead_thread_name == "reader:inf"
     finally:
         proc.stop_threads(timeout=2)
 
@@ -225,7 +223,7 @@ def test_a_marker_that_follows_lost_messages_kills_the_reader_thread_end_to_end(
 
         reader = proc._reader_threads["inf"]
         assert _wait_until(lambda: not reader.is_alive())
-        assert not proc._are_all_threads_alive()
+        assert proc._dead_thread_name == "reader:inf"
         assert [r.envelope.type for r in _log_records(proc)] == ["DATA", "DATA"]
     finally:
         proc.stop_threads(timeout=2)

@@ -72,9 +72,11 @@ export function orderlyStopOutcome(exitCode: number | null): string {
   }
 
   if (exitCode === 2) {
-    return "The orderly stop did not end within the timeout, and fell back " +
-      "to the hard kill of debasher_stop. The program has ended, but was " +
-      "killed. " + HARD_KILL_CONSEQUENCES;
+    return "The orderly stop did not end (a node ended before it halted, or " +
+      "the timeout passed), and fell back to the hard kill of debasher_stop. " +
+      "The program has ended, but was killed. Read the error above and the " +
+      "scheduler output of the node it names before launching again. " +
+      HARD_KILL_CONSEQUENCES;
   }
 
   if (exitCode === 1) {

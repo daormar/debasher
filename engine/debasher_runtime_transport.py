@@ -27,6 +27,7 @@ import queue
 import resource
 import select
 import threading
+import time
 
 from debasher_runtime_envelope import (
     TYPE_CLOSE,
@@ -56,6 +57,23 @@ from debasher_runtime_envelope import (
 # Sentinel put on a queue to tell its consumer thread to stop, rather
 # than reusing e.g. None (a legitimate DATA payload).
 _STOP = object()
+
+
+def _get_deadline(timeout):
+    """The time.monotonic() by which a wait of `timeout` seconds ends, or
+    None, for a wait with no end, if `timeout` is None."""
+    return None if timeout is None else time.monotonic() + timeout
+
+
+def _join_until(thread, deadline):
+    """Joins `thread`, if it is not None, until `deadline` (see
+    _get_deadline), at once if that has passed."""
+    if thread is None:
+        return
+    if deadline is None:
+        thread.join()
+    else:
+        thread.join(max(0.0, deadline - time.monotonic()))
 
 
 def _parse_opts(argv, flags=()):
@@ -244,6 +262,11 @@ class _PortWorker:
         self._stopping = threading.Event()
         # Whether the writers say CLOSE when they stop, decided by stop_threads().
         self._close_on_stop = True
+        # The first thread of this process that died, and what ended it,
+        # set by _run_guarded: run() ends the process with it.
+        self._dead_thread_name = None
+        self._thread_error = None
+        self._thread_error_lock = threading.Lock()
 
     def _apply_comp_specs(self, comp_specs):
         """
@@ -370,6 +393,11 @@ class _PortWorker:
     # keeps the process alive.
     WRITER_STOP_TIMEOUT_SECS = 5
 
+    # How long run() waits, in all, for the other threads to stop once a
+    # thread of the process has died, before it ends the process all the
+    # same (see _stop_after_dead_thread).
+    DEAD_THREAD_STOP_TIMEOUT_SECS = 5
+
     # The descriptors a process may need beyond those of its fifos: the
     # standard streams, its log files, a checkpoint being written, the pipes
     # of a subprocess it launches and the interpreter's own.
@@ -456,74 +484,145 @@ class _PortWorker:
         peer: every endpoint holds both ends of its fifo (see
         _open_fifo_reader and _open_fifo_writer), so the channel outlives the
         crash of either process and the processes can start in any order.
-
-        Brain and reader threads are not daemons: this process is meant to
-        keep running until explicitly told to stop, and stop_threads() can
-        always stop and join them. Writer threads are daemons, because one
-        can stay blocked in a write while its peer is down and must never
-        keep the process alive.
+        Every thread is a daemon and runs through _run_guarded.
         """
         self._open_fifos()
 
         for tag, option_name in self._get_input_ports().items():
-            thread = threading.Thread(
-                target=self._reader_loop, args=(tag, option_name), name=f"reader:{tag}"
+            self._reader_threads[tag] = self._start_guarded_thread(
+                f"reader:{tag}", self._reader_loop, tag, option_name
             )
-            self._reader_threads[tag] = thread
-            thread.start()
 
         self._start_writer_threads()
 
-        self._brain_thread = threading.Thread(target=self._brain_loop, name="brain")
-        self._brain_thread.start()
+        self._brain_thread = self._start_guarded_thread("brain", self._brain_loop)
 
     def _start_writer_threads(self):
         """Starts the writer thread of every output port that has none yet."""
         for tag, option_name in self._get_output_ports().items():
             if tag in self._writer_threads:
                 continue
-            thread = threading.Thread(
-                target=self._writer_loop,
-                args=(tag, option_name),
-                name=f"writer:{tag}",
-                daemon=True,
+            self._writer_threads[tag] = self._start_guarded_thread(
+                f"writer:{tag}", self._writer_loop, tag, option_name
             )
-            self._writer_threads[tag] = thread
-            thread.start()
+
+    def _start_guarded_thread(self, name, loop, *args):
+        """Starts a daemon thread named `name` that runs `loop(*args)`
+        through _run_guarded, and returns it."""
+        # A daemon, so that a thread blocked for ever (a writer whose peer is
+        # down, a brain stuck in process_data) never keeps the process from
+        # ending once run() returns or raises: the interpreter would wait for
+        # it at its exit. A normal stop joins every thread all the same (see
+        # stop_threads).
+        thread = threading.Thread(
+            target=self._run_guarded, args=(loop, *args), name=name, daemon=True
+        )
+        thread.start()
+        return thread
+
+    def _run_guarded(self, loop, *args):
+        """
+        Runs `loop(*args)`, the body of a thread of this process. If it
+        raises, or returns before the process is stopping, the thread has
+        died: logs why, records the first such death for run() (see
+        _stop_after_dead_thread) and wakes run() (see _wake_run).
+        """
+        try:
+            loop(*args)
+        except BaseException as exc:
+            self.log.exception("thread %r died", threading.current_thread().name)
+            self._record_dead_thread(exc)
+            return
+        # No loop of a thread ends of its own while the process runs, so one
+        # that does has stopped doing its part of the work as surely as one
+        # that raised
+        if not self._stopping.is_set():
+            self.log.error(
+                "thread %r ended before the process was told to stop",
+                threading.current_thread().name,
+            )
+            self._record_dead_thread(
+                RuntimeError(f"thread {threading.current_thread().name!r} ended on its own")
+            )
+
+    def _record_dead_thread(self, exc):
+        """Records `exc` as what ended the current thread, unless another
+        thread died first, and wakes run()."""
+        with self._thread_error_lock:
+            if self._thread_error is None:
+                self._dead_thread_name = threading.current_thread().name
+                self._thread_error = exc
+        self._wake_run()
+
+    def _wake_run(self):
+        """Wakes run(), which then ends the process because a thread died
+        (see _stop_after_dead_thread). Each class sets the event its run()
+        waits on."""
+        raise NotImplementedError
+
+    def _stop_after_dead_thread(self):
+        """
+        Stops every thread, without CLOSE, waiting for them at most
+        DEAD_THREAD_STOP_TIMEOUT_SECS in all, and raises a RuntimeError
+        that carries what ended the thread that died. Called by run() once
+        a thread has died.
+        """
+        # Without CLOSE: the process is relaunched, and its peers must not
+        # take it for one that has finished for good. The wait is bounded,
+        # since a thread may be blocked for ever, and what is left of it is
+        # ended with the process, which is a crash: that loses nothing that a
+        # relaunch does not bring back. The readers stop between blocks, so
+        # nothing that they have taken from a fifo is lost before it is logged.
+        self.stop_threads(timeout=self.DEAD_THREAD_STOP_TIMEOUT_SECS, close=False)
+        raise RuntimeError(
+            f"{type(self).__name__}: a thread of its own died ({self._dead_thread_name!r}), "
+            f"so the process ends: {self._thread_error!r}"
+        ) from self._thread_error
 
     def stop_threads(self, timeout=None, close=True):
         """
-        Tells every thread to stop and waits for them: the readers and the
-        brain thread for up to `timeout` each (for ever if None), and each
-        writer for up to `timeout`, or WRITER_STOP_TIMEOUT_SECS if None.
-        With close=True each writer sends CLOSE after what is queued; with
-        close=False it sends nothing more. Then closes the descriptors of
-        every port whose thread has ended.
+        Tells every thread to stop and waits for them, for up to `timeout`
+        seconds in all, or for ever if None, except that a writer is waited
+        for at most WRITER_STOP_TIMEOUT_SECS. With close=True each writer
+        sends CLOSE after what is queued; with close=False it sends nothing
+        more. Then closes the descriptors of every port whose thread has
+        ended.
+        """
+        # First, so that a thread that a class stops before these, such as
+        # the observation thread, is not taken for one that ended on its own
+        self._stopping.set()
+        self._join_threads(_get_deadline(timeout), close)
+
+    def _join_threads(self, deadline, close):
+        """
+        The body of stop_threads(), which waits until `deadline` (see
+        _get_deadline). A class with threads of its own extends this, not
+        stop_threads(), so that one deadline bounds them all.
         """
         self._close_on_stop = close
-        # A reader sees the flag within _READER_POLL_MS, without anything
-        # written into its fifo; the brain thread and the writers see the
-        # sentinel in their queues, after what is already queued.
-        self._stopping.set()
+        # A reader sees _stopping, which stop_threads() has set, within
+        # _READER_POLL_MS, without anything written into its fifo; the brain
+        # thread and the writers see the sentinel in their queues, after what
+        # is already queued.
         self._inbound_queue.put(_STOP)
         for q in self._outbound_queues.values():
             q.put(_STOP)
 
         for thread in [*self._reader_threads.values(), self._brain_thread]:
-            if thread is not None:
-                thread.join(timeout)
+            _join_until(thread, deadline)
 
         # A writer whose peer is down and whose pipe is full cannot finish:
         # it is abandoned, and its descriptors are left open for it.
-        writer_timeout = self.WRITER_STOP_TIMEOUT_SECS if timeout is None else timeout
         for tag, thread in self._writer_threads.items():
-            thread.join(writer_timeout)
+            writer_deadline = _get_deadline(self.WRITER_STOP_TIMEOUT_SECS)
+            if deadline is not None:
+                writer_deadline = min(writer_deadline, deadline)
+            _join_until(thread, writer_deadline)
             if thread.is_alive():
                 self.log.warning(
-                    "writer for %r did not finish within %s s (its peer is probably "
+                    "writer for %r did not finish in time (its peer is probably "
                     "down and the fifo is full), abandoning it",
                     tag,
-                    writer_timeout,
                 )
 
         self._close_finished_fifos()
@@ -805,19 +904,6 @@ class _PortWorker:
 
     def _brain_loop(self):
         raise NotImplementedError
-
-    def _are_all_threads_alive(self):
-        """
-        True only if every reader, writer and the brain thread are
-        still alive. A Python thread killed by an uncaught exception
-        dies silently without crashing the process, so this passive
-        check is what actually catches that, rather than requiring
-        reader/writer threads to report anything themselves.
-        """
-        threads = [*self._reader_threads.values(), *self._writer_threads.values()]
-        if self._brain_thread is not None:
-            threads.append(self._brain_thread)
-        return all(thread.is_alive() for thread in threads)
 
     def _get_execdir(self):
         execdir = os.environ.get("DEBASHER_PROCESS_EXECDIR")

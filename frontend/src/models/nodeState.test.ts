@@ -49,7 +49,6 @@ function nodeInfo(fields: Partial<NodeInfo> = {}): NodeInfo {
     heartbeat_interval_secs: 5,
     limits: { input_log_max_bytes: 100 * MiB, out_backlog_max_bytes: 8 * MiB, out_backlog_fail_bytes: 64 * MiB },
     updated_at: 1790000100,
-    healthy: true,
     out_backlog_bytes: {},
     checkpoints_skipped_since: null,
     age_secs: 2,
@@ -75,18 +74,19 @@ function warnings(s: NodeSummary): string[] {
 }
 
 describe("summaryRows", () => {
-  it("warns of nothing in a healthy node", () => {
+  it("warns of nothing in a node that runs well", () => {
     expect(warnings(summary())).toEqual([]);
   });
 
-  it("warns of a node that is down and of a dead thread", () => {
-    expect(warnings(summary({ task_state: "down", node_info: nodeInfo({ healthy: false }) })))
-      .toEqual(["Task", "Threads"]);
+  it("warns of a node that is down", () => {
+    expect(warnings(summary({ task_state: "down" }))).toEqual(["Task"]);
   });
 
   it("warns of a stale node info file only in a node that is alive", () => {
     const stale = nodeInfo({ stale: true });
     expect(warnings(summary({ node_info: stale }))).toEqual(["Latest heartbeat tick"]);
+    const tick = summaryRows(summary({ node_info: stale })).find(row => row.label === "Latest heartbeat tick");
+    expect(tick?.value).toMatch(/runs but does not tick/);
     expect(warnings(summary({ task_state: "finished", node_info: stale }))).toEqual([]);
   });
 

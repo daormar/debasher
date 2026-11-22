@@ -26,7 +26,7 @@ import threading
 import time
 
 from debasher_runtime_envelope import TYPE_CLOSE, TYPE_INTERACT
-from debasher_runtime_transport import _PortWorker, _STOP
+from debasher_runtime_transport import _PortWorker, _STOP, _join_until
 
 
 #####################
@@ -206,14 +206,11 @@ class Supervisor(_PortWorker):
         self._checker_stop = threading.Event()
         # What run() waits on: set once every node is resolved (done, or
         # given up on) and no escalation runs, by run() itself on a stop
-        # signal (see _wait_for_stop), and by _run_guarded when a thread of
-        # its own dies, which run() tells apart by _thread_error. Not acted
+        # signal (see _wait_for_stop), and by _wake_run when a thread of its
+        # own dies, which run() tells apart by _thread_error. Not acted
         # on by the checker thread itself, which would deadlock joining its
         # own thread from inside stop_threads().
         self._all_resolved = threading.Event()
-        # The exception that ended the brain thread or the checker thread,
-        # if one did (see _run_guarded): run() raises it.
-        self._thread_error = None
 
     def _parse_port_field(self, attribute, items):
         """
@@ -297,28 +294,24 @@ class Supervisor(_PortWorker):
 
         self.start_threads()
         self._wait_for_stop(self._all_resolved)
+        # Nothing supervises the Supervisor, so it must not live on without
+        # a thread of its own, deaf to the heartbeats or blind to the nodes
+        # that go down: the run fails.
+        if self._thread_error is not None:
+            self._stop_after_dead_thread()
         # No CLOSE on the initiator ports: the stop of a Supervisor is no end
         # for good, since another one, of a resumed program, writes into the
         # same ports.
         self.stop_threads(close=False)
-        if self._thread_error is not None:
-            raise RuntimeError(
-                f"{type(self).__name__}: a thread of its own died, so it stopped "
-                f"supervising: {self._thread_error!r}"
-            ) from self._thread_error
 
     def start_threads(self):
         super().start_threads()
-        self._checker_thread = threading.Thread(
-            target=self._run_guarded, args=(self._check_loop,), name="checker"
-        )
-        self._checker_thread.start()
+        self._checker_thread = self._start_guarded_thread("checker", self._check_loop)
 
-    def stop_threads(self, timeout=None, close=True):
+    def _join_threads(self, deadline, close):
         self._checker_stop.set()
-        super().stop_threads(timeout, close)
-        if self._checker_thread is not None:
-            self._checker_thread.join(timeout)
+        super()._join_threads(deadline, close)
+        _join_until(self._checker_thread, deadline)
         self._close_held_fifos()
 
     # -- the fifos of the business channels --
@@ -368,23 +361,11 @@ class Supervisor(_PortWorker):
 
     # -- brain loop: heartbeat/checkpoint_saved from nodes, manual trigger --
 
-    def _run_guarded(self, loop):
-        """
-        Runs `loop`, the body of the brain thread or of the checker thread.
-        Nothing supervises the Supervisor, so if either dies it must not
-        live on without it, deaf to the heartbeats and relaunching healthy
-        nodes as if they were down: the exception is logged and ends run(),
-        which raises it, and the run fails.
-        """
-        try:
-            loop()
-        except BaseException as exc:
-            self.log.exception("thread %r died", threading.current_thread().name)
-            self._thread_error = exc
-            self._all_resolved.set()
+    def _wake_run(self):
+        self._all_resolved.set()
 
     def _brain_loop(self):
-        self._run_guarded(self._dispatch_loop)
+        self._dispatch_loop()
 
     def _get_port_types(self, tag):
         # Every channel of a Supervisor, a node's heartbeat or the manual

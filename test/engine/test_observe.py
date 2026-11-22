@@ -74,7 +74,7 @@ def test_a_node_without_observe_has_no_observation_thread(ports):
     node.start_threads()
     try:
         assert node._observe_thread is None
-        assert node._are_all_threads_alive()
+        assert node._thread_error is None
     finally:
         node.stop_threads(timeout=2)
 
@@ -103,7 +103,7 @@ def test_observe_now_runs_observe_before_its_interval(ports):
         node.stop_threads(timeout=2)
 
 
-def test_a_dead_observation_thread_makes_the_node_unhealthy(ports):
+def test_an_observe_that_raises_is_recorded_as_a_dead_observation_thread(ports):
     class Broken(_Base):
         OBSERVE_INTERVAL_SECS = 60
 
@@ -114,9 +114,23 @@ def test_a_dead_observation_thread_makes_the_node_unhealthy(ports):
     node.start_threads()
     try:
         assert _wait_until(lambda: not node._observe_thread.is_alive())
-        assert not node._are_all_threads_alive()
+        assert node._dead_thread_name == "observer"
+        assert node._stop_requested.is_set()
     finally:
         node.stop_threads(timeout=2)
+
+
+def test_the_stop_of_an_observing_node_is_not_taken_for_a_dead_thread(ports):
+    # The observation thread ends before the threads of _PortWorker are told
+    # to stop, and must not be taken for one that ended on its own.
+    node = _Watcher(opts=ports)
+    node.start_threads()
+    try:
+        assert _wait_until(lambda: node.observations >= 1)
+    finally:
+        node.stop_threads(timeout=2)
+    assert not node._observe_thread.is_alive()
+    assert node._thread_error is None
 
 
 def test_an_observe_port_that_is_an_input_port_is_refused(ports):
