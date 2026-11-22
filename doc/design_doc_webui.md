@@ -3167,7 +3167,7 @@ another program.
 **Stopping in order.** "Stop program" is replaced by the orderly stop, which
 runs `debasher_stop_resident -d <output directory>` with its default timeout:
 the tool halts every node in one round, then stops the nodes, the `Supervisor`
-first (see "`debasher_stop_resident`: the graceful stop tool" in
+first (see "`debasher_stop_resident`: the ordered shutdown tool" in
 `doc/design_doc_resident.md`). It runs within the request, which lasts until the
 program has stopped, up to about the timeout of the tool, and the frontend shows
 the program as stopping and offers no other action on it meanwhile. A tab closed

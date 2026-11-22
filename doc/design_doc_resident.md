@@ -32,9 +32,9 @@ precisely what is promised.
   obtain, at any moment, a coherent picture of the state of every process and of
   the messages in transit between them, useful both for recovery and for
   inspecting or auditing what was happening at a given instant.
-- **Shut down and resume a whole workflow in an orderly way**: stop every
-  process of a run in progress and, later, resume from the checkpoints that the
-  shutdown closed, each node returning to the state it had when it stopped.
+- **Shut down a whole workflow and resume it**: give a run in progress an
+  ordered shutdown and, later, resume from the checkpoints that the shutdown
+  closed, each node returning to the state it had when it stopped.
 - **Detect failures actively, within a bounded time**, without depending on a
   human noticing that something stopped responding, and without false positives
   when a process is simply busy with a long operation, except for a call that
@@ -107,13 +107,22 @@ and so do the entries below that refer to it.
   the engine sends, and `CLOSE`, which a writer that has finished for good sends
   (no process of a resident program does, see "Ordered shutdown"), business
   channels and channels to an external port carry `DATA` and `BARRIER`, and the
-  heartbeat channels and the channels of commands carry only `INTERACT` (see
-  "Channel topology").
+  heartbeat channels and the channels to a control port carry only `INTERACT`
+  (see "Channel topology").
+- **business channel**: a channel between business nodes (or a self-loop), whose
+  fifo has no fifo tag and is not read by the `Supervisor`. It carries `DATA`
+  and `BARRIER`, so a round travels on it.
+- **business port**: an input port of a business node that is neither a control
+  port nor an external port, the kind of port on which a round waits for a
+  marker, or an output port that writes a business channel.
+- **heartbeat channel**: the channel from a node to the `Supervisor`, one per
+  node, which the node owns. It carries only `INTERACT`: the heartbeats of the
+  node and its `checkpoint_saved` commands (see "Channel topology").
 - **fifo owner**: the FIFO owner, as defined in the design of the engine: the
-  process whose `define_fifo_opt` (or `define_fifo_opt_generator`) creates a
-  FIFO. It is the process that writes it, except for a fifo tagged `--control`
-  or `--external` whose writer is outside the program, which its reader owns
-  (see "Channel kinds declared with the fifo").
+  task whose `define_fifo_opt` (or `define_fifo_opt_generator`) creates a FIFO.
+  It is the task that writes it, except for a fifo tagged `--control` or
+  `--external` whose writer is outside the program, which its reader owns (see
+  "Channel kinds declared with the fifo").
 - **fifo tag**: `--control` or `--external`, the optional argument of
   `define_fifo_opt` and `define_fifo_opt_generator` that makes the reader's end
   of a fifo a control port or an external port (see "Channel kinds declared with
@@ -242,17 +251,17 @@ and so do the entries below that refer to it.
 - **`CLOSE`**: the last envelope of a writer that has finished for good: it will
   never write again. It means "finished for good", not "finished successfully":
   a process that exits with an error sends none and counts as crashed. A halt is
-  not a finish for good, since the node is resumed later, so an ordered halt
-  sends none. The reader hands it to the brain thread in order and then keeps
-  reading, but drops everything that follows it (the `Supervisor`'s readers
-  deliver it, since a node that closed its channel may be relaunched and must
-  be heard). `closed_ports` is the checkpoint field that lists the input ports
-  whose `CLOSE` the brain thread had processed when the round captured the node
-  state. A sender that numbers what it sends (G5) puts its `out_seq` for that
-  channel in `CLOSE`'s own payload, `last_seq`: the receiver checks it against
-  what it has accepted, and a mismatch is a lost message that nothing else
-  would ever reveal, since nothing comes after a `CLOSE` (G8). Left out (an
-  empty payload) when the sender does not number what it sends.
+  not a finish for good, since the node is resumed later, so a halt sends none.
+  The reader hands it to the brain thread in order and then keeps reading, but
+  drops everything that follows it (the `Supervisor`'s readers deliver it, since
+  a node that closed its channel may be relaunched and must be heard).
+  `closed_ports` is the checkpoint field that lists the input ports whose
+  `CLOSE` the brain thread had processed when the round captured the node state.
+  A sender that numbers what it sends (G5) puts its `out_seq` for that channel
+  in `CLOSE`'s own payload, `last_seq`: the receiver checks it against what it
+  has accepted, and a mismatch is a lost message that nothing else would ever
+  reveal, since nothing comes after a `CLOSE` (G8). Left out (an empty payload)
+  when the sender does not number what it sends.
 - **`HELLO`, resync line**: the first thing every incarnation of a writer sends,
   in one write together with a leading newline. The newline ends any fragment
   that the previous incarnation left when it was killed in the middle of a
@@ -331,16 +340,20 @@ and so do the entries below that refer to it.
   receiving one is not conditional on anything: a node that never halted stops
   on one just the same. Nothing in `FBPProcess` decides when to send it: that is
   external, by design, typically once every node's halted marker has gone past
-  its baseline.
-  `Supervisor` stops on one too (see the "Clean-completion detection"
-  subsection).
-- **`debasher_stop_resident`**: the tool that actually sends the stop signal
-  in a real program, the graceful counterpart to `debasher_stop` (see
-  "`debasher_stop_resident`: the graceful stop tool" for the full sequence).
-  Stops a `Supervisor`, if the program has one, before the tool triggers the
-  halt. Then waits for every node's halted marker to go past its baseline, and
-  signals each node. Falls back to `debasher_stop`'s hard kill past its own
-  `--timeout`.
+  its baseline. The `Supervisor` stops on one too (see the "Clean-completion
+  detection" subsection).
+- **ordered shutdown**: the stop of a whole resident program that loses nothing
+  a resume cannot bring back. It is a halt, then a stop signal to every node
+  once its halted marker has gone past its baseline. `debasher_stop_resident`
+  performs it, and so does the escalation of the `Supervisor` (see "Ordered
+  shutdown").
+- **`debasher_stop_resident`**: the tool that actually sends the stop signal in
+  a real program, which gives it an ordered shutdown where `debasher_stop` kills
+  it (see "`debasher_stop_resident`: the ordered shutdown tool" for the full
+  sequence). Stops a `Supervisor`, if the program has one, before the tool
+  triggers the halt. Then waits for every node's halted marker to go past its
+  baseline, and signals each node. Falls back to `debasher_stop`'s hard kill
+  past its own `--timeout`.
 - **`debasher_snapshot_resident`**: the tool that starts a snapshot in a
   running program from outside it, with or without a `Supervisor`, once or
   every given number of seconds (see "`debasher_snapshot_resident`: rounds
@@ -437,8 +450,8 @@ and so do the entries below that refer to it.
   redesign, after appending the record to the log). After a `CLOSE` it goes on
   reading but drops everything that follows. It ends only when its node stops,
   or on an error of its stream or of its input log (see "Ghost connections").
-- **writer thread**: one per output port, with its own outbound queue. It sends
-  `HELLO` first and, when its node has finished for good (not at a halt),
+- **writer thread**: one per output port, with its own **outbound queue**. It
+  sends `HELLO` first and, when its node has finished for good (not at a halt),
   `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it
   is a daemon thread and `stop_threads()` gives up on it after a bounded wait.
 - **brain thread**: the only consumer of the **inbound queue** and the only
@@ -509,8 +522,13 @@ and so do the entries below that refer to it.
   "Failure detection").
 - **down, done, given up**: the states of a node in the `Supervisor`. Down:
   declared down and relaunched. Done: its `.finished` file appeared (it exited
-  cleanly with code 0), so it is never checked again. Given up: it exhausted
-  `MAX_RELAUNCH_ATTEMPTS`, which triggers the escalation.
+  cleanly with code 0), so it is never checked again. Given up: it exhausted its
+  relaunch budget, which triggers the escalation.
+- **count of relaunches**: how many times in a row the `Supervisor` has declared
+  a node down. It goes back to 0 at the next heartbeat of the node. Its bound is
+  the **relaunch budget**, `MAX_RELAUNCH_ATTEMPTS`: a node is relaunched at most
+  that many times in a row, and the next time it is declared down it is given up
+  (see "Relaunching a downed node").
 - **escalation**: what the `Supervisor` does when a node is given up: it kills
   that node if it still runs, then an ordered shutdown of the other nodes
   through the initiators and, if some node has not finished after
@@ -524,6 +542,12 @@ and so do the entries below that refer to it.
 - **batch run**: one execution of the general program of a launcher node, with
   the options of one request, by `debasher_exec` on a directory of its own,
   outside the resident program's scheduling.
+- **port of requests**: an input port of a launcher node that carries data, that
+  is, one that is not a control port. Each message on it is a request for a
+  batch run (see "Requests and run directories").
+- **set of announced runs**: the node state of a launcher node, the positions of
+  the requests whose batch run has ended and whose end the node has announced on
+  `DONE_PORT` (see "The end of a batch run as an input event").
 - **runs root**: the directory under which a launcher node places its batch
   runs: the output directory of its process, or the absolute path that the
   option `-runsdir` of its process gives.
@@ -650,11 +674,11 @@ which layer needs each of them.
   ran first. With no round to prune it, the input log grows until
   `INPUT_LOG_MAX_BYTES` stops the reader that reaches it.
 - **Rounds and checkpoints.** A round saves a checkpoint at every node (see
-  "Chandy-Lamport barrier propagation"). The checkpoint prunes the input log
-  and bounds the replay, and a halt round gives an ordered stop and its
-  resume. Rounds run only when something starts them. `debasher_stop_resident`
-  stops with a halt round, and so does the escalation of the `Supervisor`, so a
-  program that is ever stopped in order uses them.
+  "Chandy-Lamport barrier propagation"). The checkpoint prunes the input log and
+  bounds the replay, and a halt round gives an ordered shutdown and its resume.
+  Rounds run only when something starts them. `debasher_stop_resident` stops
+  with a halt round, and so does the escalation of the `Supervisor`, so a
+  program that is ever given an ordered shutdown uses them.
 - **Supervision.** The `Supervisor` notices a node down and relaunches it (see
   "`Supervisor` class"). It also holds the business channels, so that what a
   FIFO holds outlives both its endpoints (see "Holding the business
@@ -695,9 +719,9 @@ working, and which failures they do not cover.
     as a failure outside the graph that is gone at the replay, ends in a
     recovery.
 - **Assumed to keep working**: the machine and its operating system, and the
-  filesystem under the program's outdir (it keeps what was written: checkpoints,
-  input logs, markers). Resident programs run on a single machine (BUILTIN
-  scheduler only), so network partitions do not apply.
+  filesystem under the program's output directory (it keeps what was written:
+  checkpoints, input logs, markers). Resident programs run on a single machine
+  (BUILTIN scheduler only), so network partitions do not apply.
 - **Durability level: process crashes only.** Nothing is
   `fsync`ed anywhere, so logs and checkpoints survive the crash of a process but
   not the crash or power loss of the machine; see the note below on what `fsync`
@@ -846,7 +870,7 @@ guarantee in words and never cite these numbers, which may change.
   they were sent.
 - **G2, no silent loss without failures**: with no failure, every `DATA` message
   sent on a channel is handed exactly once to the receiver's `process_data`,
-  also while a snapshot or shutdown round is open.
+  also while a snapshot or a halt is open.
 - **G3, node recovery**: after a crash, a relaunched node ends in the state it
   would have had without the crash: its latest checkpoint plus the replay of
   everything it had received since, in the order it processed it (given the
@@ -876,11 +900,11 @@ guarantee in words and never cite these numbers, which may change.
   next message. The receiver's last numbers are rebuilt from its checkpoint
   and its log. It relies on determinism: a replay that produced different
   outputs would reuse numbers for different messages.
-- **G6, consistent snapshots and orderly halt**: while no node crashes during a
-  round, the checkpoints closed by that round form a consistent cut, and after a
-  halt every node resumes in the state it had when it stopped: it loads its
-  checkpoint and replays from its input log only what it processed after
-  capturing it. A crash during a round aborts it at the node that crashed
+- **G6, consistent cuts and the resume after a halt**: while no node crashes
+  during a round, the checkpoints closed by that round form a consistent cut,
+  and after a halt every node resumes in the state it had when it stopped: it
+  loads its checkpoint and replays from its input log only what it processed
+  after capturing it. A crash during a round aborts it at the node that crashed
   (see "A crash while a round is open" in the limits below).
 - **G7, bounded detection**: a node whose process is verifiably gone is
   noticed within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy
@@ -985,14 +1009,14 @@ change.
      only between two blocks, and hands over every message of the block it
      holds. So of what the reader has taken from the FIFO, a stop loses only the
      part already read of a message whose end has not arrived, which the reader
-     holds in memory. In the ordered stop of `debasher_stop_resident`, the stop
-     signal comes after a halt: that message follows the marker of the halt on
-     its channel, so its writer sends it again on resume. A stop signal with no
-     halt before it (sent by hand, for instance) loses it like anything else the
-     FIFO held, and G8 reports the hole. Its rest stays in the FIFO, and matters
-     only if the FIFO outlives the stop, as on an external port whose source
-     keeps it open: the reader of the next incarnation finds it as a fragment
-     that no `HELLO` follows, which stops that reader.
+     holds in memory. In the ordered shutdown of `debasher_stop_resident`, the
+     stop signal comes after a halt: that message follows the marker of the halt
+     on its channel, so its writer sends it again on resume. A stop signal with
+     no halt before it (sent by hand, for instance) loses it like anything else
+     the FIFO held, and G8 reports the hole. Its rest stays in the FIFO, and
+     matters only if the FIFO outlives the stop, as on an external port whose
+     source keeps it open: the reader of the next incarnation finds it as a
+     fragment that no `HELLO` follows, which stops that reader.
 4. **Stuck but alive.** A node that is alive and whose work makes no progress is
    not detected, whether a thread of it is blocked (an endless loop, a
    deadlock) or what it observes outside has stopped.
@@ -1074,8 +1098,9 @@ change.
     case recoverable would need a round's partial progress to be durable, which
     is not designed.
     - A node that is not an initiator. The next marker of that round opens it
-      again, and the node waits forever for the markers it had already received.
-      It writes no checkpoint for that epoch, and the next round replaces it.
+      again, and the node waits for ever for the markers it had already
+      received. It writes no checkpoint for that epoch, and the next round
+      replaces it.
     - An initiator whose round a trigger opened. It had received no marker, so
       the round opens again when its own marker comes back round a cycle, and
       closes there. Its capture is then later than the first, so that epoch is
@@ -1087,10 +1112,10 @@ change.
       reason a halted marker never goes past its baseline. Then the tool falls
       back to the hard kill of `debasher_stop`, and reports it with its own exit
       code (see "Failing loudly instead of retrying").
-11. **A node that crashes again right after every relaunch** is not retried
-    forever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
-    the escalation applies, unless it sends a heartbeat between its crashes
-    (see "Stuck but alive").
+11. **A node that crashes again right after every relaunch** is not retried for
+    ever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
+    the escalation applies, unless it sends a heartbeat between its crashes (see
+    "Stuck but alive").
 12. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
@@ -1109,8 +1134,8 @@ change.
       disk" in Future work).
 13. **Durability cannot be turned off.** No setting removes the input log and
     its replay (see "Layers of the design"). Rounds and checkpoints are avoided
-    only by starting none, a stop in order needs one, and with a `Supervisor`
-    its escalation starts a halt round.
+    only by starting none, an ordered shutdown needs one, and with a
+    `Supervisor` its escalation starts a halt round.
     - The closest today. Start no snapshot, raise `input_log_max_mb`, stop with
       `debasher_stop` rather than `debasher_stop_resident`, and reset the
       program before each launch (see "`debasher_reset_resident`: a clean
@@ -1330,10 +1355,10 @@ interpreting `payload`):
 - `DATA.payload`: free-form, whatever the business logic wants;
   `process_data(port_name, packet)` (see "`FBPProcess` class") receives
   it already deserialized. The reader thread never looks at it.
-- `BARRIER.payload.epoch`: identifies the snapshot round; enough for the
-  initiator (see "Chandy-Lamport barrier propagation") to recognize, in a
-  cycle, that the marker coming back through its own input port is its own (no
-  need to carry the initiator's identity).
+- `BARRIER.payload.epoch`: identifies the round; enough for the initiator (see
+  "Chandy-Lamport barrier propagation") to recognize, in a cycle, that the
+  marker coming back through its own input port is its own (no need to carry the
+  initiator's identity).
 - `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown
   (see "Ordered shutdown") instead of a snapshot.
 - `BARRIER.payload.last_seq`: the `out_seq` of the sender for that channel when
@@ -1357,8 +1382,8 @@ interpreting `payload`):
   Consumed by the reader thread.
 - No `port_name` field on any type: each reader thread (see "`FBPProcess`
   class") already knows which port a message came from by construction (it is
-  dedicated to that FIFO); it gets attached once the message enters the
-  in-memory internal queue, not in the wire format.
+  dedicated to that FIFO); it gets attached once the message enters the inbound
+  queue, not in the wire format.
 
 The reader thread checks these fields before anything else sees the envelope:
 `seq` and `last_seq` are integers when present, `epoch` is an integer and
@@ -1377,42 +1402,42 @@ warning.
 ## Channel topology
 
 Which types a channel carries depends on its kind (see "Channel kinds declared
-with the fifo"). `HELLO` and `CLOSE` belong to the transport, not to any kind
-of channel: every writer thread of the engine sends `HELLO` when it starts and
+with the fifo"). `HELLO` and `CLOSE` belong to the transport, not to any kind of
+channel: every writer thread of the engine sends `HELLO` when it starts and
 `CLOSE` when it finishes for good, whatever its channel (a writer from outside
-the program may leave both out). The other three types split by kind: `DATA`
-and `BARRIER` travel only on business channels and on channels to an external
-port, `INTERACT` only on the heartbeat channels and on the channels of
-commands, so the two never share a channel. The engine and the runtime write
-them so, and the reader thread of each port checks it, since a writer outside
-the program may not: a control port, and every channel of the `Supervisor`,
-takes only `INTERACT`; a business port and an external port take `DATA` and
-`BARRIER`. Any other type is dropped with a warning, as a malformed envelope
-is (see "Fields of each type"). Channel by channel:
+the program may leave both out). The other three types split by kind: `DATA` and
+`BARRIER` travel only on business channels and on channels to an external port,
+`INTERACT` only on the heartbeat channels and on the channels to a control port,
+so the two never share a channel. The engine and the runtime write them so, and
+the reader thread of each port checks it, since a writer outside the program may
+not: a control port, and every channel of the `Supervisor`, takes only
+`INTERACT`; a business port and an external port take `DATA` and `BARRIER`. Any
+other type is dropped with a warning, as a malformed envelope is (see "Fields of
+each type"). Channel by channel:
 
-- Between business processes (`FBPProcess`), the normal FBP graph channels
-  carry `DATA` and `HELLO` in normal operation (and `CLOSE` from a writer that
-  finishes for good), and `BARRIER` interleaved
-  when a snapshot/shutdown is in progress; this is how Chandy-Lamport
-  propagates the marker: each node forwards it through its own output ports,
-  the same ones it uses for `DATA`, never "upward" to anywhere else.
-- Between each node and the supervisor, a separate channel (heartbeat) that only
-  carries `INTERACT`: a single input port per node (not two), multiplexing
+- Between business processes (`FBPProcess`), the normal FBP graph channels carry
+  `DATA` and `HELLO` in normal operation (and `CLOSE` from a writer that
+  finishes for good), and `BARRIER` interleaved while a round (a snapshot or a
+  halt) is open; this is how Chandy-Lamport propagates the marker: each node
+  forwards it through its own output ports, the same ones it uses for `DATA`,
+  never "upward" to anywhere else.
+- Between each node and the `Supervisor`, a separate channel (heartbeat) that
+  only carries `INTERACT`: a single input port per node (not two), multiplexing
   `{"command": "heartbeat"}` and
-  `{"command": "checkpoint_saved", "args": {"epoch": ..., "path": ...}}`
-  (see "Checkpoint persistence") on the same channel; there is no real
-  contention between the two (lightweight, infrequent messages), and separate
-  ports would only double the supervisor's manual wiring for no benefit.
-- From the supervisor to each initiator, an initiator port: a channel of
-  commands that the supervisor owns and defines with the tag `--control`, so
-  that the initiator reads it as a control port. It carries only `INTERACT`
+  `{"command": "checkpoint_saved", "args": {"epoch": ..., "path": ...}}` (see
+  "Checkpoint persistence") on the same channel; there is no real contention
+  between the two (lightweight, infrequent messages), and separate ports would
+  only double the manual wiring of the `Supervisor` for no benefit.
+- From the `Supervisor` to each initiator, an initiator port: a channel to a
+  control port that the `Supervisor` owns and defines with the tag `--control`,
+  so that the initiator reads it as a control port. It carries only `INTERACT`
   (`start_snapshot`, `shutdown`, see "Initiator ports"), never a marker, so the
   round it opens never waits on it. A `CLOSE` on it does not close it, and the
-  supervisor sends none when it stops (see control port in the Glossary).
-- From outside the program, the other channels of commands: the manual trigger
-  port of the supervisor, also tagged `--control`, whose `INTERACT` the
-  supervisor relays to every initiator port (see "Manual trigger channel"), and
-  any control port of a node that an actor outside the program writes into
+  `Supervisor` sends none when it stops (see control port in the Glossary).
+- From outside the program, the other channels to a control port: the manual
+  trigger port of the `Supervisor`, also tagged `--control`, whose `INTERACT`
+  the `Supervisor` relays to every initiator port (see "Manual trigger port"),
+  and any control port of a node that an actor outside the program writes into
   directly (finding it through the node's control ports file). They carry only
   `INTERACT`.
 - From outside the program into an external port of a node: `DATA`, like a
@@ -1421,23 +1446,23 @@ is (see "Fields of each type"). Channel by channel:
   initiator opened, which is then read like on any other port. A `CLOSE` on it
   closes it for good, since its writer is not expected to come back (see
   external port in the Glossary).
-- The supervisor never sees a `BARRIER`: it does not take part in the barrier
+- The `Supervisor` never sees a `BARRIER`: it does not take part in the barrier
   protocol (see "Chandy-Lamport barrier propagation"), it only speaks
   `INTERACT`. A `DATA` or `BARRIER` that reaches one of its channels anyway is
   dropped by the reader with a warning.
 
 # Channel kinds declared with the fifo
 
-The kind of every channel of a resident program, and its direction, are
-declared in the module's own options, where the engine can read them when it
-loads the program: a business channel, a channel of commands to a control port,
-or a channel fed from outside to an external port. Without this they are only
-in the Python class of each node (`INPUT_PORTS`, `OUTPUT_PORTS`,
-`CONTROL_PORTS`, `EXTERNAL_PORTS`), which the engine cannot see. Knowing them at
-load lets the engine check, before launching anything, that the channels of a
-program can carry a round to every node; lets each node take its port lists
-from the engine instead of declaring them a second time; and gives the frontend
-what it needs to show and edit the channels of a resident program.
+The kind of every channel of a resident program, and its direction, are declared
+in the module's own options, where the engine can read them when it loads the
+program: a business channel, a channel to a control port, or a channel fed from
+outside to an external port. Without this they are only in the Python class of
+each node (`INPUT_PORTS`, `OUTPUT_PORTS`, `CONTROL_PORTS`, `EXTERNAL_PORTS`),
+which the engine cannot see. Knowing them at load lets the engine check, before
+launching anything, that the channels of a program can carry a round to every
+node; lets each node take its port lists from the engine instead of declaring
+them a second time; and gives the frontend what it needs to show and edit the
+channels of a resident program.
 
 ## Direction: the owner writes
 
@@ -1445,13 +1470,13 @@ An output option is named `-out...` or `--out...`, in every program, and
 `define_opt_from_proc_out` and `define_opt_from_proc_task_out` only connect an
 input option to an output option of another process, or of the same one (a
 self-loop). In a resident program, every FIFO is created once, by the
-`define_fifo_opt` (or `define_fifo_opt_generator`) of one process, its fifo
-owner, through an output option: the owner writes it. The process at the other
-end reads it, through an input option connected to that output, or no process of
-the program does, and the other end is outside (`__EXTERNAL__` in the engine's
-fifo registry). The one exception is a fifo whose writer is outside the program:
-the process that reads it has to create it, through an input option, and the
-fifo carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
+`define_fifo_opt` (or `define_fifo_opt_generator`) of one task, its fifo owner,
+through an output option: the owner writes it. The process at the other end
+reads it, through an input option connected to that output, or no process of the
+program does, and the other end is outside (`__EXTERNAL__` in the engine's fifo
+registry). The one exception is a fifo whose writer is outside the program: the
+process that reads it has to create it, through an input option, and the fifo
+carries a fifo tag. The engine's registries (`DEBASHER_PROGRAM_FIFOS` and
 `DEBASHER_FIFO_READERS`, written to `program.fifos`) give the owner and the
 other end of every fifo, task by task, and the other end may be another task of
 the owner's own array; the option through which the owner defines each fifo is
@@ -1466,9 +1491,9 @@ way as `--mirror`, stored in a registry of its own:
 - no tag: written by its owner, and read by the process at the other end, if
   any, through an input port: a heartbeat channel when the `Supervisor` reads
   it (see "`Supervisor` class"), and otherwise a business channel;
-- `--control`: a channel of commands, whose reader's end is a control port. Its
-  writer is the `Supervisor`, which owns it (an initiator port), or someone
-  outside the program, and then the reader owns it;
+- `--control`: a channel whose reader's end is a control port. Its writer is the
+  `Supervisor`, which owns it (an initiator port), or someone outside the
+  program, and then the reader owns it;
 - `--external`: a channel fed from outside the program, owned by its reader,
   whose end is an external port.
 
@@ -1502,9 +1527,8 @@ flags of every fifo, before launching anything, in
 `debasher::_validate_program_fifo_flags`, which `debasher_exec` calls once the
 other end of every fifo is known:
 
-1. Every node can be reached from an initiator, a node that reads a control
-   channel, through business channels in the direction in which they carry a
-   marker.
+1. Every node can be reached from an initiator, a node with a control port,
+   through business channels in the direction in which they carry a marker.
 2. Every tagged fifo is used as its tag says. A fifo tagged `--external` has
    its other end outside the program, so that its owner reads it. A fifo tagged
    `--control` either has its other end outside, and its owner reads it, or is
@@ -1523,7 +1547,7 @@ the rule. Each check walks the fifos once; the registries it reads are already
 built by then, for every task of every array and generator. In the fan-in of two
 nodes fed from outside (see "Chandy-Lamport barrier propagation"), where nodes
 `a` and `b`, whose only inputs come from outside, both write to a node `c`, a
-program in which only `a` has a control channel is refused by rule 1, since `b`
+program in which only `a` has a control port is refused by rule 1, since `b`
 cannot be reached.
 
 ## Ports from the engine
@@ -1584,20 +1608,20 @@ The ports of a node may form a fanout family (see the Glossary of
 `doc/design_doc_engine.md`), such as `-outf-ith`, defined in a loop over an
 option of the command line, as in a general program. The number may instead be
 that of the tasks of another process, asked for with `get_process_num_tasks`
-(see "Arrays and option generators" in `doc/design_doc_engine.md`). The
-topology is still fixed before the run starts. Only how many ports and tasks
-there are changes from one run to another. A relaunch gets the ports it had:
-it runs the same generated script, with the same options, and a node that asks
-for the number of tasks asks again inside its task, where the execution
-context gives the same answer. A run with another number has to start afresh
-(see "`debasher_reset_resident`: a clean start"). The engine does not check
-that a node restored from a checkpoint has the ports it had, and the closed
-ports and the sequence numbers in the checkpoint are keyed by port name.
+(see "Arrays and option generators" in `doc/design_doc_engine.md`). The topology
+is still fixed before the run starts. Only how many ports and tasks there are
+changes from one run to another. A relaunch gets the ports it had: it runs the
+same process script, with the same options, and a node that asks for the number
+of tasks asks again inside its task, where the execution context gives the same
+answer. A run with another number has to start afresh (see
+"`debasher_reset_resident`: a clean start"). The engine does not check that a
+node restored from a checkpoint has the ports it had, and the closed ports and
+the sequence numbers in the checkpoint are keyed by port name.
 
-The generated script of each process carries the ports of every task
-(`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and the
-wrapper of a task exports its own as `DEBASHER_PROCESS_PORTS`. For `fanin`, in
-the chaos reference program:
+The process script of each process carries the ports of every task
+(`DEBASHER_RESIDENT_TASK_PORTS`), so that a relaunch gets them too, and, for
+each task, it exports the ports of that task as `DEBASHER_PROCESS_PORTS`. For
+`fanin`, in the chaos reference program:
 
 ```
 input=ext,loop_in,trigger;output=outhb,outloop,outsink;control=trigger;external=ext;supervisor=outhb
@@ -1626,7 +1650,7 @@ is port by port.
 ## What the fifo tags leave out
 
 - The check says which nodes can be initiators, not whether a trigger really
-  reaches them: that depends on who writes into their control channels, a
+  reaches them: that depends on who writes into their control ports, a
   `Supervisor` whose `INITIATOR_PORTS` lists them or someone outside the
   program.
 - A node cut off at run time, by a node that fails for good, is a separate case,
@@ -1637,12 +1661,12 @@ is port by port.
 `FBPProcess` is the class from which every business node of a resident program
 derives: a long-running process with a state of its own, which exchanges
 envelopes with its peers over FIFOs, takes part in the rounds that capture a
-consistent snapshot, keeps a log of what it receives and, after a crash,
-returns to where it was from its latest checkpoint and that log. A module
-defines a node by writing a subclass of it that redefines a few hooks (see
-"Defining a node"). The runtime library ships two such subclasses of its own,
-`DirectoryWatcher` (see "Observing the outside world") and `ProgramLauncher`
-(see "`ProgramLauncher`: batch runs from a node").
+consistent cut, keeps a log of what it receives and, after a crash, returns to
+where it was from its latest checkpoint and that log. A module defines a node by
+writing a subclass of it that redefines a few hooks (see "Defining a node"). The
+runtime library ships two such subclasses of its own, `DirectoryWatcher` (see
+"Observing the outside world") and `ProgramLauncher` (see "`ProgramLauncher`:
+batch runs from a node").
 
 `FBPProcess` derives in turn from `_PortWorker`
 (`engine/debasher_runtime_transport.py`), which it shares with the
@@ -1762,7 +1786,7 @@ node test builds a node without the engine to check its business logic.
 - **Health reporting**: passive, not pushed; on its own timer, the heartbeat
   thread polls `Thread.is_alive()` on every reader and writer thread, on the
   brain thread and on the observation thread, and only reports "alive" to the
-  supervisor if all of them still are (a Python thread that dies from an
+  `Supervisor` if all of them still are (a Python thread that dies from an
   uncaught exception does so silently, without crashing the process, which is
   exactly what `is_alive()` catches).
 - **Subclass extension points**: `process_data(port_name, packet)`: `packet` is
@@ -1778,9 +1802,9 @@ node test builds a node without the engine to check its business logic.
   are pending: record a copy of the `DATA` arriving on those still-pending ports
   (that recorded set is the state of that channel) and also process every
   `DATA`, on any port, normally, as usual (what arrives after a port's marker
-  belongs to the next epoch). Once every input port's marker has arrived, or
-  its writer has said `CLOSE`, the node's part of the snapshot is complete.
-- **`INTERACT` logic**: the initiator's inbound connection from the supervisor
+  belongs to the next epoch). Once every input port's marker has arrived, or its
+  writer has said `CLOSE`, the node's part of the round is complete.
+- **`INTERACT` logic**: the initiator's inbound connection from the `Supervisor`
   is not a special kind of port for reading; it is one more `INPUT_PORTS` entry,
   handled by the same generic port-agnostic, type-based dispatch as everything
   else, but it is also listed in `CONTROL_PORTS`, which is what keeps the
@@ -1790,8 +1814,8 @@ node test builds a node without the engine to check its business logic.
   the node's own port in a cycle) as receiving a peer's `BARRIER` would, just
   triggered by `INTERACT` instead; `command: "shutdown"` is identical but
   forwards with `halt=True`. An unrecognized `command` logs a warning and is
-  ignored, it never aborts the process (the command catalog, "Control
-  envelope", is deliberately open-ended).
+  ignored, it never aborts the process (the command catalog, "Control envelope",
+  is deliberately open-ended).
 - **Logging**: `FBPProcess` exposes a preconfigured `self.log` (Python's stdlib
   `logging`), which `_PortWorker` sets up, same pattern as the existing
   `dispatch` process in `data/programs/dynamic_fanout_dispatcher.py` (stderr
@@ -1935,16 +1959,17 @@ ends with the one limit that no specification sets:
   and the hard limit has to be raised for the session that launches the
   program.
 
-For example, `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00;
-out_backlog_fail_mb=128"`. Sizes are in MiB and the interval in milliseconds.
-Each value but `batch_sched`, when given, must be a positive number, and
-`max_concurrent_runs` a positive whole number. The engine checks them when it
-loads the program (`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is
-launched. An `input_log_max_mb` or an `out_backlog_fail_mb` smaller than one
-message stops the node at its first message, which the engine cannot foresee,
-since it does not know the size of the messages. The built-in scheduler exports
-the computational specifications of the process to it as
-`DEBASHER_PROCESS_COMP_SPECS`, from the specification that the generated script
+For example,
+`add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00; out_backlog_fail_mb=128"`.
+Sizes are in MiB and the interval in milliseconds. Each value but `batch_sched`,
+when given, must be a positive number, and `max_concurrent_runs` a positive
+whole number. The engine checks them when it loads the program
+(`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is launched. An
+`input_log_max_mb` or an `out_backlog_fail_mb` smaller than one message stops
+the node at its first message, which the engine cannot foresee, since it does
+not know the size of the messages. The built-in scheduler exports the
+computational specifications of the process to it as
+`DEBASHER_PROCESS_COMP_SPECS`, from the specification that the process script
 carries, so a relaunch gets them too, and each class sets those that it reads on
 its instance when it is created (`_apply_comp_specs`), and ignores the other
 fields.
@@ -2152,9 +2177,9 @@ with a `NotImplementedError`.
 A node has one way to start, whether it is launched for the first time or
 relaunched after a failure. Which of the two it is shows only in what it finds
 on disk: with a checkpoint it restores it, and without one it starts from
-default values. The `Supervisor` needs no recovery mode: it runs the same script
-in both cases, and the process does the rest (see "Reconnecting after a node
-failure").
+default values. The `Supervisor` needs no recovery mode: it runs the same
+process script in both cases, and the process does the rest (see "Reconnecting
+after a node failure").
 
 `run()` follows these steps:
 
@@ -2207,7 +2232,7 @@ nodes that a round has to reach.
 A round opens at a node in one of two ways. At an initiator, a trigger opens it:
 an `INTERACT` `start_snapshot`, or `shutdown` for a halt, on one of its control
 ports, written by the `Supervisor` through an initiator port or from outside the
-program (see "Initiator ports" and "Manual trigger channel"). At any node, the
+program (see "Initiator ports" and "Manual trigger port"). At any node, the
 first marker of the round that arrives on an input port opens it. Either way,
 the node captures its state at once (see "State capture and checkpoint schema")
 and forwards the marker on every output port but the one to the `Supervisor`,
@@ -2283,12 +2308,12 @@ an initiator, since no marker can reach it otherwise.
 
 ## Ordered shutdown
 
-A halt stops a resident program without losing anything that a resume cannot
-bring back. It takes two steps: a round with `halt` true, which leaves every
-node with a checkpoint of the same round (see "Checkpoint persistence") and a
-halted marker, and then a stop signal to every node, which ends its `run()`.
-This section describes the two steps, what the halted flag of a node blocks and
-what it does not, and how a program is resumed.
+An ordered shutdown stops a resident program without losing anything that a
+resume cannot bring back. It takes two steps: a halt, a round with `halt` true,
+which leaves every node with a checkpoint of the same round (see "Checkpoint
+persistence") and a halted marker, and then a stop signal to every node, which
+ends its `run()`. This section describes the two steps, what `_halted` blocks
+and what it does not, and how a program is resumed.
 
 A halt is a round like a snapshot, whose markers carry `halt=True` (see
 "Chandy-Lamport barrier propagation"). When it closes at a node,
@@ -2330,10 +2355,10 @@ wait for ever on that lock. So `run()` waits on the event in steps of
 event itself (`_wait_for_stop`), which wakes whatever else waits on it, such as
 `sleep()`: a stop is seen at most that much later. When to send that signal is
 decided outside `FBPProcess`, by design: `debasher_stop_resident` sends it (see
-"`debasher_stop_resident`: the graceful stop tool"), typically once the halted
-marker of every node has gone past its baseline (see halted marker baseline in
-the Glossary), but nothing in the node requires that, or requires a halt to
-have happened at all.
+"`debasher_stop_resident`: the ordered shutdown tool"), typically once the
+halted marker of every node has gone past its baseline (see halted marker
+baseline in the Glossary), but nothing in the node requires that, or requires a
+halt to have happened at all.
 
 A halt sends no `CLOSE`, and neither does any other stop signal: `run()` always
 calls `stop_threads(close=False)` once its wait on `_stop_requested` returns.
@@ -2350,26 +2375,26 @@ finishes for good (see "A node that finishes for good" in "Future work").
 
 The signal has to reach the node's own process, not just the leader of the
 process group that `debasher_stop` and `.id` already agree on.
-`debasher_builtin_sched::_launch` backgrounds a generated script as the leader
-of its own process group (`pgid == pid`, the pid in `.id`), and the process
+`debasher_builtin_sched::_launch` backgrounds a process script as the leader of
+its own process group (`pgid == pid`, the pid in `.id`), and the process
 function that this script runs (`debasher::_execute_task`) starts the Python
 interpreter as a child process, so the interpreter of a resident process sits
 below the pid in `.id`, not at it. A plain, single-pid `SIGTERM` there would
-only reach the wrapper script, orphaning the interpreter, which would never
+only reach the process script, orphaning the interpreter, which would never
 receive anything and would keep running. So a stop signal targets the whole
 process group instead (`kill -TERM` to the group, in
 `debasher::_stop_pid_gracefully`, the same group that `debasher_stop` already
-reaches with `SIGKILL`, see `debasher::_stop_pid`), and the wrapper script
+reaches with `SIGKILL`, see `debasher::_stop_pid`), and the process script
 itself survives that same broadcast to still write `.finished` once its own
 child exits, which is what `debasher_builtin_sched::_print_script_trap`
-(`trap '' TERM`, the first thing `_create_script` writes into the generated file
+(`trap '' TERM`, the first thing `_create_script` writes into the process script
 of a resident program) is for. A hard kill (`SIGKILL`) cannot be trapped and is
 unaffected. An ignored signal is inherited through `fork` and `exec`, so the
 interpreter of the node starts with `SIGTERM` ignored; the node does not depend
 on it, since `run()` installs a handler of its own at its start, and that
 handler, unlike an ignored signal, goes back to the default in what the node
-starts, such as the `debasher_exec` of a `ProgramLauncher`. The script of a
-general program traps nothing (see "The built-in scheduler" in
+starts, such as the `debasher_exec` of a `ProgramLauncher`. The process script
+of a general program traps nothing (see "The built-in scheduler" in
 `doc/design_doc_engine.md`).
 
 A program is resumed by relaunching every process, through the ordinary
@@ -3123,7 +3148,7 @@ the writer and loses nothing inside the pipe, only whatever the killed
 reader had already consumed before it died.
 
 With no EOF, a reader never ends because its peer crashed or was relaunched. It
-ends only on a stop request, or on an error, which the heartbeat then reports:
+ends only when its node stops, or on an error, which the heartbeat then reports:
 of its stream (an unparsable line not followed by `HELLO`, a gap in the sequence
 numbers, a marker or a `CLOSE` that claims more than was accepted) or of its
 input log (at its size cap, or a failed write to it). The writer never sees
@@ -3196,7 +3221,7 @@ just blocks once the pipe fills, and its outbound backlog grows until
 `OUT_BACKLOG_FAIL_BYTES` stops it with an error (see "Checkpoint persistence")
 that names the port that holds the most, the one whose reader is not reading. In
 a resident program a reader stops for good only when it is stopped on its own by
-hand (a graceful stop reaches every node together) or when it crashes with
+hand (an ordered shutdown reaches every node together) or when it crashes with
 nobody to relaunch it; one slower than its writer for good has the same effect.
 No guarantee is at stake in any of them, since nothing is lost or duplicated:
 the limit keeps the memory of the writer from growing without end. A signal in
@@ -3208,13 +3233,13 @@ The `Supervisor` is the optional process of a resident program (at most one, of
 a single task) that watches its nodes and acts when one of them goes down. Every
 node sends it heartbeats on a channel of its own; the `Supervisor` declares a
 node down when they stop or when its process is gone, relaunches it, and, when a
-node keeps failing, gives up on it and stops the rest of the program in order.
-It also relays to the initiators the triggers that start a snapshot or a
-shutdown, and it holds the FIFO of every business channel, so that what a
-channel holds outlives the crash of both of its endpoints. A program without a
-`Supervisor` still runs, and a node of it relaunched by hand still recovers;
-what the program loses is the detection and relaunch, the relay of triggers and
-the held FIFOs.
+node keeps failing, gives up on it and stops the rest of the program with an
+ordered shutdown. It also relays to the initiators the triggers that start a
+snapshot or a halt, and it holds the FIFO of every business channel, so that
+what a channel holds outlives the crash of both of its endpoints. A program
+without a `Supervisor` still runs, and a node of it relaunched by hand still
+recovers; what the program loses is the detection and relaunch, the relay of
+triggers and the held FIFOs.
 
 The `Supervisor` derives, like `FBPProcess`, from `_PortWorker` (see
 "`FBPProcess` class"), which gives it the same thread-per-port plumbing: the
@@ -3228,14 +3253,14 @@ starts afresh. Besides those threads it runs one of its own, the checker
 thread, which decides on a timer which nodes are down.
 
 The section first covers the ports of the `Supervisor` ("Port declaration and
-node identity", "Initiator ports", "Manual trigger channel") and the FIFOs it
-holds ("Holding the business channels"). It then follows a node through its
-failures: how it is found down or finished ("Failure detection",
-"Clean-completion detection"), relaunched ("Relaunching a downed node") and
-finally given up on ("Escalation on a permanent node failure", "Failing loudly
-instead of retrying"). The tool that stops a resident program gracefully,
-which the `Supervisor` calls when it gives up on a node, is described with the
-one that resets a program, in "Tools for resident programs".
+node identity", "Initiator ports", "Manual trigger port") and the FIFOs it holds
+("Holding the business channels"). It then follows a node through its failures:
+how it is found down or finished ("Failure detection", "Clean-completion
+detection"), relaunched ("Relaunching a downed node") and finally given up on
+("Escalation on a permanent node failure", "Failing loudly instead of
+retrying"). The ordered shutdown tool, which the `Supervisor` calls when it
+gives up on a node, is described with the one that resets a program, in "Tools
+for resident programs".
 
 ## Port declaration and node identity
 
@@ -3298,7 +3323,7 @@ the program is loaded, since nothing that arrived there could reach a node.
 
 The initiator reads an initiator port as a control port, in its `CONTROL_PORTS`,
 because the `Supervisor` defines the fifo with the tag `--control`. Without the
-tag the channel would be a data port: the round would open, its marker would go
+tag its end would be a business port: the round would open, its marker would go
 downstream, and the initiator would wait for ever for a marker from the
 `Supervisor`, which sends none. The `Supervisor` sends no `CLOSE` on an
 initiator port when it stops, since another `Supervisor`, that of a resumed
@@ -3311,17 +3336,17 @@ initiator, whether or not the program has a `Supervisor` and however it is
 configured: through "Talk to FIFOs", or with `debasher_snapshot_resident`, which
 writes into the control ports of every node.
 
-## Manual trigger channel
+## Manual trigger port
 
 The `Supervisor` takes the triggers it relays from its manual trigger port,
 `MANUAL_TRIGGER_PORT`: at most one input option, a fifo that the `Supervisor`
 defines with the tag `--control` and that is written from outside the program.
-It is not one of `NODE_PORTS`, since it carries no node's identity: it is a
-channel of commands, not the heartbeat channel of a supervised node. The
-`Supervisor` relays every `INTERACT` that arrives there to every initiator of
-`INITIATOR_PORTS`, adding an epoch to its `args` when they carry none (see
-numbered trigger in the Glossary), so that every initiator opens the same
-round; a command that starts no round never reads it.
+It is not one of `NODE_PORTS`, since it carries no node's identity: it is the
+end of a channel to a control port, not of the heartbeat channel of a supervised
+node. The `Supervisor` relays every `INTERACT` that arrives there to every
+initiator of `INITIATOR_PORTS`, adding an epoch to its `args` when they carry
+none (see numbered trigger in the Glossary), so that every initiator opens the
+same round; a command that starts no round never reads it.
 
 The `Supervisor` checks no more of the command than that it is a string (see
 "Fields of each type"), and does not interpret it, as the catalog of `INTERACT`
@@ -3381,13 +3406,13 @@ finishes for good" in Future work).
 
 Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
 (see the Contract's failure model), in a program without a `Supervisor`, and
-during a graceful stop, since `debasher_stop_resident` stops the `Supervisor`
-before it triggers the halt (a crash during a halt is already outside the
-guarantees, see "A crash while a round is open" in the Contract's limits); nor
-when the `Supervisor` is given the flag `-no-hold-fifos`, with which it holds
-nothing and logs a warning that says what is at stake. Its module offers the
-flag as an option of the command line of the program, a flag like any other
-(`explain_flag`, `opt_is_non_mandatory_cmdline`,
+during an ordered shutdown, since `debasher_stop_resident` stops the
+`Supervisor` before it triggers the halt (a crash during a halt is already
+outside the guarantees, see "A crash while a round is open" in the Contract's
+limits); nor when the `Supervisor` is given the flag `-no-hold-fifos`, with
+which it holds nothing and logs a warning that says what is at stake. Its module
+offers the flag as an option of the command line of the program, a flag like any
+other (`explain_flag`, `opt_is_non_mandatory_cmdline`,
 `define_cmdline_flag_if_given`), so that a run can choose; the chaos test uses
 it to reach the limit it would otherwise never reach. The flag reaches the
 `Supervisor` only through an option of its module; a module that does not define
@@ -3400,11 +3425,11 @@ of a resident process").
 node opens them, with a single `SIGKILL`, at random moments and with lines
 longer than `PIPE_BUF`: with the `Supervisor` holding it, a new reader finds
 what was left, complete lines with consecutive numbers between at most a
-fragment at each end; without it, nothing. The chaos test does it on a real
-run (see "Acceptance: how reliability is shown"): with sink frozen, fanin
-writes a backlog to their channel and saves a checkpoint that covers it, and
-both are killed; without a holder, sink reports the backlog as lost (G8), and
-with it the trace is exact.
+fragment at each end; without it, nothing. The chaos test does it on a real run
+(see "Acceptance: how reliability is shown"): with `sink` frozen, `fanin` writes
+a backlog to their channel and saves a checkpoint that covers it, and both are
+killed; without a holder, sink reports the backlog as lost (G8), and with it the
+trace is exact.
 
 ## Failure detection
 
@@ -3434,12 +3459,12 @@ kept in `_starting`, and `_get_silence_limit` gives the limit. A node restores
 its checkpoint, runs `initialize_runtime()` and replays its input log before its
 heartbeat thread starts, which can take much longer than the interval between
 two heartbeats. The first heartbeat then comes one `HEARTBEAT_INTERVAL_SECS`
-after the threads start, not at once: it resets the relaunch budget (see
+after the threads start, not at once: it resets the count of relaunches (see
 "Relaunching a downed node"), so it has to show that the node has run healthy
-for a while, not only that it started. Sent at once, it would reset the budget
-of a node whose reader fails on the first live message after every relaunch,
-such as one past a gap in its sequence numbers that no relaunch can fill, and
-that node would be relaunched for ever. A node gives its deadline with its
+for a while, not only that it started. Sent at once, it would reset the count of
+a node whose reader fails on the first live message after every relaunch, such
+as one past a gap in its sequence numbers that no relaunch can fill, and that
+node would be relaunched for ever. A node gives its deadline with its
 computational specification `startup_timeout_s`, which the engine passes to the
 `Supervisor` in `NODE_STARTUP_TIMEOUT_SECS` (see "Ports from the engine"); the
 `startup_timeout_s` of the `Supervisor` itself, `STARTUP_TIMEOUT_SECS`, is the
@@ -3502,11 +3527,11 @@ reader before it reaches the brain thread (see "Fields of each type").
 A node that exits with an error on purpose leaves the same signs as one that
 crashes (no `.finished`, no more heartbeats, a dead PID), and both are treated
 alike; there is no `.failed` file to tell them apart, since nothing needs to.
-Should a need arise, a better way than a file that the wrapper script writes
+Should a need arise, a better way than a file that the process script writes
 after the fact is for the node to send a richer `INTERACT` before it exits,
 while it is still alive and knows why.
 
-## Clean-completion detection (and the `Supervisor`'s own shutdown)
+## Clean-completion detection (and the `Supervisor`'s own stop)
 
 At every tick, the checker thread also looks for the `.finished` file of every
 node not yet resolved. It costs one `os.path.exists()` per node, as cheap as the
@@ -3517,12 +3542,12 @@ within one `HEARTBEAT_CHECK_INTERVAL_SECS`, not up to a whole
 `debasher::_signal_process_completion` (`engine/debasher_lib_sched_procs.sh`),
 which `debasher::_execute_task` reaches only when the task succeeds or its
 `_skip` method skips it: a non-zero exit code returns before it. So `.finished`
-means that the node exited cleanly, with code 0, or was skipped. The script of
-the task writes it and then exits, and both can happen after the look for the
-`.finished` at the start of a tick: so the `.finished` of a node is looked for
-once more right before it is declared down, whether by its PID or by its
-silence, and the node is marked done if it is there, never taken for a crashed
-one and relaunched.
+means that the node exited cleanly, with code 0, or was skipped. The process
+script of the task writes it and then exits, and both can happen after the look
+for the `.finished` at the start of a tick: so the `.finished` of a node is
+looked for once more right before it is declared down, whether by its PID or by
+its silence, and the node is marked done if it is there, never taken for a
+crashed one and relaunched.
 
 Once its `.finished` is seen, the node is done: it is never checked again,
 neither its heartbeat nor its PID, and `on_node_down` is never called for it.
@@ -3539,10 +3564,9 @@ main thread (not when a test drives it on another thread). `run()` waits on one
 event, `_all_resolved`, which is set in three cases: by the checker thread once
 every node is resolved, by `run()` itself once the handler has noted a stop
 signal, and by `_run_guarded` when a thread of the `Supervisor` dies; `run()`
-tells the last apart by `_thread_error`. The signal lets a tool that stops the
-program gracefully end the `Supervisor` before it triggers the halt, so that
-the `Supervisor` cannot relaunch a node under it (see
-"`debasher_stop_resident`").
+tells the last apart by `_thread_error`. The signal lets the ordered shutdown
+tool end the `Supervisor` before it triggers the halt, so that the `Supervisor`
+cannot relaunch a node under it (see "`debasher_stop_resident`").
 
 ## Relaunching a downed node
 
@@ -3562,41 +3586,41 @@ for a node named with one; without `-t` it passes `NO_ARRAY_TASK`. A relaunch
 is therefore the same operation as the first launch, as "Startup sequence:
 `run()`" requires.
 
-Running the script of the node, `__exec__/<node>/<node>`, again would not do,
-since the script does not carry what changes from one launch to the next.
-`_launch` exports `BUILTIN_ARRAY_TASK_ID` just before it starts the script, and
-the variable is not among those written into the script, an allowlist written
-once per process when the script is generated, while this value changes with
-every launch; and `_launch`, not the script, writes the `.id` file. A plain
-`subprocess.Popen` from the `Supervisor` would give the node the
+Running the process script of the node, `__exec__/<node>/<node>`, again would
+not do, since the script does not carry what changes from one launch to the
+next. `_launch` exports `BUILTIN_ARRAY_TASK_ID` just before it starts the
+script, and the variable is not among those written into the script, an
+allowlist written once per process when the script is generated, while this
+value changes with every launch; and `_launch`, not the script, writes the `.id`
+file. A plain `subprocess.Popen` from the `Supervisor` would give the node the
 `BUILTIN_ARRAY_TASK_ID` of the `Supervisor` instead, and would never update its
 `.id`: `_is_node_pid_alive` would report the stale PID dead for ever, and since
-a real heartbeat resets the relaunch budget at every recovery, the budget would
-never run out, an endless loop of relaunches. It would also leave the node in
-the process group of the `Supervisor`, while `debasher_stop`
+a real heartbeat resets the count of relaunches at every recovery, the budget
+would never run out, an endless loop of relaunches. It would also leave the node
+in the process group of the `Supervisor`, while `debasher_stop`
 (`kill -9 -- -$pid`) relies on one group per process. `_launch` avoids all of
 it: it writes the `.id`, and its own export overrides whatever the caller
 inherited.
 
 What `_launch` (`engine/debasher_builtin_sched_lib.sh`) does for this is four
-things. First, it exports the index of the task, `BUILTIN_ARRAY_TASK_ID`, 0
-for a launch with no task index, and unsets it once the script is started and
-its id written, so that the caller keeps none. Second, if the `.id` names an
-earlier incarnation that still runs (its PID, with the time at which its
-process started, so that a PID reused by another process is not taken for it),
-it kills its whole process group with `SIGKILL` (`debasher::_stop_pid`). A
-node declared down by its silence may still be alive, stuck; it is killed by
-its relaunch, not stopped gracefully, so that the earlier incarnation does not
-go on holding its FIFOs next to the new one. Third, it exports
-`DEBASHER_LIBEXECDIR` and `DEBASHER_BINDIR`, so that a running process can find
-the installed tools (`debasher_libexecdir` and `debasher_bindir` are variables
-of the context of the script, which do not reach the programs it runs).
-Fourth, it starts the script as the leader of a process group of its own and
-writes the id of the new process into the `.id` file as soon as the process
-starts, without waiting for it, through a temporary file renamed into place, so
-that a reader sees either the old id or the new one, never an empty file. A
-script that wrote its own id would make `_launch` wait for it, and a wait of a
-fixed length fails a script that is slow to start.
+things. First, it exports the index of the task, `BUILTIN_ARRAY_TASK_ID`, 0 for
+a launch with no task index, and unsets it once the script is started and its id
+written, so that the caller keeps none. Second, if the `.id` names an earlier
+incarnation that still runs (its PID, with the time at which its process
+started, so that a PID reused by another process is not taken for it), it kills
+its whole process group with `SIGKILL` (`debasher::_stop_pid`). A node declared
+down by its silence may still be alive, stuck; it is killed by its relaunch, not
+given a stop signal, so that the earlier incarnation does not go on holding its
+FIFOs next to the new one. Third, it exports `DEBASHER_LIBEXECDIR` and
+`DEBASHER_BINDIR`, so that a running process can find the installed tools
+(`debasher_libexecdir` and `debasher_bindir` are variables of the context of the
+script, which do not reach the programs it runs). Fourth, it starts the script
+as the leader of a process group of its own and writes the id of the new process
+into the `.id` file as soon as the process starts, without waiting for it,
+through a temporary file renamed into place, so that a reader sees either the
+old id or the new one, never an empty file. A script that wrote its own id would
+make `_launch` wait for it, and a wait of a fixed length fails a script that is
+slow to start.
 
 Before it calls `_launch`, `debasher_launch_process` removes the `.finished` of
 the task, so that the relaunched node reads `IN-PROGRESS` while it runs and
@@ -3612,15 +3636,15 @@ too: otherwise they would be those of the `Supervisor`'s own process, its
 would hold them open and write into them for as long as the node runs, long
 after the `Supervisor` has exited.
 
-A node is relaunched at most `MAX_RELAUNCH_ATTEMPTS` times in a row. The counter
-of a node grows each time the node is declared down, and goes back to 0 at its
-next heartbeat, the proof that it has recovered, not only that its PID exists
-again (see "Failure detection": the first heartbeat goes out one interval after
-the startup, restore and replay included, is over). This tells a node that
-crashes after every relaunch, during its startup or right after it, whose
-counter grows until the budget runs out, from one that crashes now and then over
-a long run and recovers each time, whose counter goes back to 0 and never runs
-out from incidents far apart. Past the limit, the `Supervisor` calls
+A node is relaunched at most `MAX_RELAUNCH_ATTEMPTS` times in a row. The count
+of relaunches of a node grows each time the node is declared down, and goes back
+to 0 at its next heartbeat, the proof that it has recovered, not only that its
+PID exists again (see "Failure detection": the first heartbeat goes out one
+interval after the startup, restore and replay included, is over). This tells a
+node that crashes after every relaunch, during its startup or right after it,
+whose count grows until the relaunch budget runs out, from one that crashes now
+and then over a long run and recovers each time, whose count goes back to 0 and
+never runs out from incidents far apart. Past the limit, the `Supervisor` calls
 `on_node_permanently_failed(node_name)` instead of relaunching the node again,
 and the node is given up on: a state of its own, distinct from done, which is
 never retried. The error that says so gives the command that shows the scheduler
@@ -3647,11 +3671,11 @@ in the Contract's limits).
 This section is about what the `Supervisor` does once it gives up on a node. The
 node given up on may have been the only path in the graph to other nodes, and a
 marker travels only along the channels that carry `DATA` (see "Channel
-topology"): no halt can reach those nodes any more, and a graceful stop of the
-program cannot end by itself. The section goes through the mechanism, step by
-step; its fallback, and the asymmetry that it accepts; and why the `Supervisor`
-keeps itself out of the stop, and the alternatives that were ruled out, the last
-of them a channel that skips the barrier.
+topology"): no halt can reach those nodes any more, and an ordered shutdown of
+the program cannot end by itself. The section goes through the mechanism, step
+by step; its fallback, and the asymmetry that it accepts; and why the
+`Supervisor` keeps itself out of the stop, and the alternatives that were ruled
+out, the last of them a channel that skips the barrier.
 
 The default `on_node_permanently_failed(node_name)` escalates on a thread of its
 own, so that the checker thread goes on seeing the other nodes end. While the
@@ -3664,39 +3688,38 @@ the halt, which it could never make; `--kill <node>` kills it first, with
 `SIGKILL` to its process group, if it still runs, since a node given up on in
 its startup may hang there, alive and holding its FIFOs, and no relaunch is
 coming to kill it; `--keep-supervisor` leaves the `Supervisor` running; and
-`--timeout FORCE_STOP_TIMEOUT_SECS` bounds the graceful stop. The tool halts and
-stops every other node in order. Once each of them has written its `.finished`,
-every node of the `Supervisor` is resolved, done or given up on, and the
-`Supervisor` ends by itself, as it always does (see "Clean-completion
-detection"). The `Supervisor` finds the output directory of the program from its
-own execdir, and the tool through `DEBASHER_BINDIR`, which
-`debasher_builtin_sched::_launch` exports, since the `PATH` need not hold the
-bin directory of the engine.
+`--timeout FORCE_STOP_TIMEOUT_SECS` bounds the ordered shutdown. The tool halts
+and stops every other node. Once each of them has written its `.finished`, every
+node of the `Supervisor` is resolved, done or given up on, and the `Supervisor`
+ends by itself, as it always does (see "Clean-completion detection"). The
+`Supervisor` finds the output directory of the program from its own execdir, and
+the tool through `DEBASHER_BINDIR`, which `debasher_builtin_sched::_launch`
+exports, since the `PATH` need not hold the bin directory of the engine.
 
-If the graceful stop does not end within its timeout, as when the node given
+If the ordered shutdown does not end within its timeout, as when the node given
 up on was the only path to another one, the tool falls back to `debasher_stop`
-on the program (`engine/debasher_stop.sh`), which sends `SIGKILL` to the
-process group of every process still running, whatever the shape of the graph.
-That includes the `Supervisor`. So the `Supervisor` runs the tool in a session
-of its own: in the process group of the `Supervisor`, the tool and the
-`debasher_stop` that it runs would be killed together with it, and the nodes
-after it in the walk of `debasher_stop` would go on running. The asymmetry is
-accepted on purpose: the graceful stop keeps every guarantee of the
-checkpoints and the input logs, and the fallback is a backstop that only ends
-the program, expected only when a failure for good has cut the graph, and may
-lose whatever was in flight in what it kills.
+on the program (`engine/debasher_stop.sh`), which sends `SIGKILL` to the process
+group of every process still running, whatever the shape of the graph. That
+includes the `Supervisor`. So the `Supervisor` runs the tool in a session of its
+own: in the process group of the `Supervisor`, the tool and the `debasher_stop`
+that it runs would be killed together with it, and the nodes after it in the
+walk of `debasher_stop` would go on running. The asymmetry is accepted on
+purpose: the ordered shutdown keeps every guarantee of the checkpoints and the
+input logs, and the fallback is a backstop that only ends the program, expected
+only when a failure for good has cut the graph, and may lose whatever was in
+flight in what it kills.
 
-The `Supervisor` cannot let the tool stop it, as the tool does by default
-before it touches any node. The escalation waits for the tool on a thread of
-the `Supervisor`: the tool would send the `Supervisor` its stop signal and
-wait for its `.finished`, which the `Supervisor` writes only once it ends,
-after that thread returns, so the graceful stop would always run out its
-timeout and fall back to the hard kill. Stopping the `Supervisor` last instead
-of first fails the same way. A session of its own for the tool does not help
-there either: the tool names the `Supervisor` by the PID in its `.id`, not by
-the process group of the caller. With `--keep-supervisor`, the tool leaves the
-`Supervisor` alone, and the `Supervisor` ends by itself once the nodes are
-done, which nothing else has to tell it.
+The `Supervisor` cannot let the tool stop it, as the tool does by default before
+it touches any node. The escalation waits for the tool on a thread of the
+`Supervisor`: the tool would send the `Supervisor` its stop signal and wait for
+its `.finished`, which the `Supervisor` writes only once it ends, after that
+thread returns, so the ordered shutdown would always run out its timeout and
+fall back to the hard kill. Stopping the `Supervisor` last instead of first
+fails the same way. A session of its own for the tool does not help there
+either: the tool names the `Supervisor` by the PID in its `.id`, not by the
+process group of the caller. With `--keep-supervisor`, the tool leaves the
+`Supervisor` alone, and the `Supervisor` ends by itself once the nodes are done,
+which nothing else has to tell it.
 
 The alternative to the tool, a channel from the `Supervisor` to every node
 that skips the barrier, would take a FIFO more for each node of every program,
@@ -3705,18 +3728,18 @@ not only in a graph cut by a failure.
 
 ## Failing loudly instead of retrying
 
-This section is about a halt that cannot end, and how its forced ending is
-made visible instead of passing for a graceful one. It describes the case,
-then the mechanism, an exit code and who reads it, and then the alternative
-that was weighed.
+This section is about a halt that cannot end, and how its forced ending is made
+visible instead of passing for an ordered shutdown. It describes the case, then
+the mechanism, an exit code and who reads it, and then the alternative that was
+weighed.
 
-A node that is not an initiator and crashes while the round of its halt is
-open comes back with no memory of that round: the markers it had received are
-not replayed, and nothing sends the `shutdown` trigger again, so it never
-halts (see "A crash while a round is open" in the Contract's limits). The
-`--timeout` of `debasher_stop_resident` keeps this from hanging the stop for
-ever, and the fallback to `debasher_stop` ends the program; what must not
-happen is that the forced ending passes for a graceful one.
+A node that is not an initiator and crashes while the round of its halt is open
+comes back with no memory of that round: the markers it had received are not
+replayed, and nothing sends the `shutdown` trigger again, so it never halts (see
+"A crash while a round is open" in the Contract's limits). The `--timeout` of
+`debasher_stop_resident` keeps this from hanging the stop for ever, and the
+fallback to `debasher_stop` ends the program; what must not happen is that the
+forced ending passes for an ordered shutdown.
 
 So `debasher_stop_resident` exits with `DEBASHER_STOP_RESIDENT_FORCED_EXIT` (2)
 whenever it falls back to `debasher_stop`, never with the code of
@@ -3734,17 +3757,17 @@ silent). The tool runs for a short time, so inheriting that stream keeps the
 file open only briefly, unlike the node that a relaunch starts, which may run
 for days (see "Relaunching a downed node").
 
-The alternative, making the case recoverable, would record in the checkpoint
-a halt that is open and act on it at recovery. It has two holes. A checkpoint
-is taken when a round opens, at its `capture_pos`, never when it closes, so
-nothing would clear that record once the round closed, and a later crash would
-open again a halt that had ended cleanly. And the same forgetting affects
-every node on the path of the markers, not only an initiator, so recovering
-for real means making durable which peers had already closed their part of
-the round, a much larger change to the barrier. Failing loudly accepts the
-asymmetry of "Escalation on a permanent node failure": it does not make the
-case end gracefully, but nobody takes its forced ending for a graceful one,
-with no change to the barrier or the checkpoints.
+The alternative, making the case recoverable, would record in the checkpoint a
+halt that is open and act on it at recovery. It has two holes. A checkpoint is
+taken when a round opens, at its `capture_pos`, never when it closes, so nothing
+would clear that record once the round closed, and a later crash would open
+again a halt that had ended cleanly. And the same forgetting affects every node
+on the path of the markers, not only an initiator, so recovering for real means
+making durable which peers had already closed their part of the round, a much
+larger change to the barrier. Failing loudly accepts the asymmetry of
+"Escalation on a permanent node failure": it does not make the case end in an
+ordered shutdown, but nobody takes its forced ending for one, with no change to
+the barrier or the checkpoints.
 
 # Tools for resident programs
 
@@ -3752,18 +3775,19 @@ A resident program does not end on its own. Its nodes run until they are told to
 stop. They keep their state across runs, in checkpoints, input logs and halted
 markers, which the general tools of the engine know nothing about. Four tools
 act on such a program from outside it. They are installed in `bin`, next to
-`debasher_exec` and `debasher_stop`. `debasher_stop_resident` stops a running
-program gracefully. It halts the program in one round, so that every node can
-later resume where it stopped. `debasher_stop`, instead, kills every process at
-once. `debasher_snapshot_resident` starts a snapshot in a running program, once
-or periodically. Its nodes then write checkpoints and prune their input logs,
-whether the program has a `Supervisor` or not. `debasher_reset_resident` takes a
-stopped program back to its first run. It sets aside, or deletes, the state that
-the nodes keep, so that the next `debasher_exec` starts every node afresh.
-`debasher_inspect_resident` shows what one node keeps, and changes nothing. The
-`Supervisor` also uses `debasher_stop_resident`, to stop what remains of a
-program once it gives up on a node (see "Escalation on a permanent node
-failure"). The four share the code that loads the program and finds its nodes
+`debasher_exec` and `debasher_stop`. `debasher_stop_resident` gives a running
+program an ordered shutdown. It halts the program in one round, so that every
+node can later resume where it stopped. `debasher_stop`, instead, kills every
+process at once. `debasher_snapshot_resident` starts a snapshot in a running
+program, once or periodically. Its nodes then write checkpoints and prune their
+input logs, whether the program has a `Supervisor` or not.
+`debasher_reset_resident` takes a stopped program back to its first run. It sets
+aside, or deletes, the state that the nodes keep, so that the next
+`debasher_exec` starts every node afresh. `debasher_inspect_resident` shows what
+one node keeps, and changes nothing. The `Supervisor` also uses
+`debasher_stop_resident`, to stop what remains of a program once it gives up on
+a node (see "Escalation on a permanent node failure"). The four share the code
+that loads the program and finds its nodes
 (`engine/debasher_lib_resident_tools.sh`). Two of them, `debasher_stop_resident`
 and `debasher_snapshot_resident`, also share the code that writes a trigger into
 the control ports of the nodes.
@@ -3773,15 +3797,15 @@ tool is for and how it is called. It then goes through what the tool does, step
 by step where the order matters. For a tool that refuses some programs, the
 section says when the tool refuses.
 
-## `debasher_stop_resident`: the graceful stop tool
+## `debasher_stop_resident`: the ordered shutdown tool
 
-`debasher_stop_resident` is the graceful counterpart to `debasher_stop`. It
-halts a resident program in an ordered way (see "Ordered shutdown"), so that
-every node can resume where it stopped. Only then does it stop the processes. It
-relies on the `Supervisor` stopping on a stop signal (see "Clean-completion
-detection"). The rest of the section gives the options of the tool, how it finds
-the nodes of the program, the seven steps of the stop, and the stop signal that
-it sends.
+`debasher_stop_resident` gives a resident program an ordered shutdown (see
+"Ordered shutdown"), where `debasher_stop` kills it. It halts the program, so
+that every node can resume where it stopped. Only then does it stop the
+processes. It relies on the `Supervisor` stopping on a stop signal (see
+"Clean-completion detection"). The rest of the section gives the options of the
+tool, how it finds the nodes of the program, the seven steps of the stop, and
+the stop signal that it sends.
 
 ```
 debasher_stop_resident -d <outdir> [-x <node>[,<node>...]]
@@ -3802,7 +3826,7 @@ must not wait for ever on it.
   `<process>_<idx>` could be a process whose name ends that way. The option lets
   `on_node_permanently_failed` leave out the node that it gave up on, which
   could never halt.
-- `--kill` names nodes to kill before the graceful stop, in the same forms as
+- `--kill` names nodes to kill before the ordered shutdown, in the same forms as
   `-x`: `<process>` kills every task of a process of several tasks. Each one
   that still runs gets `SIGKILL` to its process group (`debasher::_stop_pid`).
   Its PID comes from `debasher::_builtin_sched_get_running_task_pid`, so that a
@@ -3811,7 +3835,7 @@ must not wait for ever on it.
   may still hang in its startup. `-x` alone leaves a node running. That is what
   a user who excludes one by hand wants.
 - `--timeout` (default 60, the same as `FORCE_STOP_TIMEOUT_SECS`) bounds the
-  whole graceful attempt. Past it, the tool falls back to
+  whole ordered shutdown. Past it, the tool falls back to
   `debasher_stop -d <outdir>`, a hard kill of the entire program. So the tool,
   once it has found the nodes, always ends the program one way or another. It
   never hangs indefinitely by itself (see "Failing loudly instead of retrying"
@@ -3833,10 +3857,10 @@ The tool finds the nodes of the program, and its `Supervisor` if it has one, as
 through `DEBASHER_PROGRAM_PROCESSES`, and classifies each process with
 `debasher::_classify_resident_process_role`. An array process is one node per
 task, as the `NODE_PORTS` of a `Supervisor` names it. Its number of tasks is
-read from the `DEBASHER_NUM_TASKS` line of its script. The scheduler writes that
-script before it launches any task, so a task not started yet is counted too.
-Every step of the stop reads the files of a task: its `.id` and `.finished`
-(`debasher::_get_array_taskid_filename`,
+read from the `DEBASHER_NUM_TASKS` line of its process script. The scheduler
+writes that script before it launches any task, so a task not started yet is
+counted too. Every step of the stop reads the files of a task: its `.id` and
+`.finished` (`debasher::_get_array_taskid_filename`,
 `debasher::_get_task_finished_filename`), its halted marker and its control
 ports file (see execdir in the Glossary). The escalation names the one task that
 it gave up on, so the other tasks of the same array are still stopped.
@@ -3875,33 +3899,33 @@ of the nodes and every step. A step from the third on that fails sends the tool
 to the fallback at once, without waiting for the deadline. One such failure is a
 trigger that cannot be written within 5 seconds, as when a control port fed from
 outside has no reader. A failure while checking the names or finding the nodes,
-such as a process whose script never comes, ends the tool with 1 and an error,
+such as a process script that never comes, ends the tool with 1 and an error,
 with no fallback.
 
 A stop signal is `SIGTERM` to the whole process group (`kill -TERM -- "-$pid"`,
 `debasher::_stop_pid_gracefully`, the `SIGTERM` sibling of the `SIGKILL` of
 `debasher::_stop_pid`), never to a lone PID. The reason is the shape of the
-processes of a task. `debasher_builtin_sched::_launch` starts a generated script
+processes of a task. `debasher_builtin_sched::_launch` starts a process script
 in the background, as the leader of its own process group (the PID in `.id`).
 The process function that this script runs (`debasher::_execute_task`) starts
 the Python interpreter as a child process. So the interpreter of a resident
 process sits below that PID, not at it. A `SIGTERM` to that PID alone would only
-reach the wrapper script. The script has no handler of its own and would die at
+reach the process script. The script has no handler of its own and would die at
 once. The interpreter would be orphaned, would never receive anything, and would
 run for ever.
 
-So the signal always goes to the whole group. The wrapper script itself ignores
+So the signal always goes to the whole group. The process script itself ignores
 `SIGTERM` at its top level (`debasher_builtin_sched::_print_script_trap`,
-`trap '' TERM`, the first thing that `_create_script` writes into the generated
-file). It does so to survive that same signal to the group long enough to write
-`.finished` once its child, the Python interpreter or a stopped `Supervisor`,
-exits. `SIGKILL`, which the hard kill of `debasher_stop` uses, cannot be
-trapped, and none of this affects it.
+`trap '' TERM`, the first thing that `_create_script` writes into the process
+script). It does so to survive that same signal to the group long enough to
+write `.finished` once its child, the Python interpreter or a stopped
+`Supervisor`, exits. `SIGKILL`, which the hard kill of `debasher_stop` uses,
+cannot be trapped, and none of this affects it.
 
 ## `debasher_snapshot_resident`: rounds from outside the program
 
 A node never starts a round on its own. The `Supervisor` starts a snapshot only
-when a trigger reaches its manual trigger channel. So without a tool or a person
+when a trigger reaches its manual trigger port. So without a tool or a person
 that writes triggers, a program closes no epoch and prunes nothing. It ends at
 the size cap of its input logs (see "Pruning and the size cap").
 `debasher_snapshot_resident` is that tool: it starts snapshots in a running
@@ -4046,8 +4070,8 @@ the program at once.
 
 In the first form, `-d`, `-p` and `-t` are those of `debasher_get_stdout`. The
 tool loads the program from its output directory, as the other tools do. It
-finds the number of tasks of the process in its script (see
-"`debasher_stop_resident`: the graceful stop tool"). `-t` is required for an
+finds the number of tasks of the process in its process script (see
+"`debasher_stop_resident`: the ordered shutdown tool"). `-t` is required for an
 array process, whose tasks are nodes of their own, and refused for any other.
 The tool refuses a process that the program does not have, and one that was
 never launched on this output directory (it has no script). It refuses an index
@@ -4313,11 +4337,11 @@ from the program's own settings; on the command line, the shell has it. Every
 node inherits the environment of `debasher_exec`, the `Supervisor` too. A node
 that the `Supervisor` relaunches inherits it as well. The launcher node runs
 each `debasher_exec` of a batch run with the environment of the node. The
-generated script of every process also carries the value that `debasher_exec`
-had when it generated it. So a node relaunched by hand, from a shell without it,
-still has it. A new run generates the scripts again, and takes its own value.
-The script also carries the directory of the module of every process, from
-which `DEBASHER_PROCESS_MODULE_DIR` comes.
+process script of every process also carries the value that `debasher_exec` had
+when it generated it. So a node relaunched by hand, from a shell without it,
+still has it. A new run generates the process scripts again, and takes its own
+value. The script also carries the directory of the module of every process,
+from which `DEBASHER_PROCESS_MODULE_DIR` comes.
 
 The launcher node observes its batch runs (see "Observing the outside world").
 Its `observe()` launches the registered ones. If the node has `DONE_PORT`,
@@ -4841,8 +4865,8 @@ and performance and languages.
   - Without a `Supervisor`. A program still needs `--every`.
   - A timer in a node instead. Left out: the timers of several initiators would
     need a common numbering of their rounds.
-- **A single orderly stop at a time.** `debasher_stop_resident` would take a
-  lock in the output directory, so that a second orderly stop of the same
+- **A single ordered shutdown at a time.** `debasher_stop_resident` would take a
+  lock in the output directory, so that a second ordered shutdown of the same
   program waits for the first or is refused.
   - Why. Today a second stop, from another tab of the web UI or from the
     command line, stops the `Supervisor` and writes its own `shutdown` in the
@@ -4880,9 +4904,9 @@ and performance and languages.
   - First step. When a checkpoint is saved, `fsync` of the input log first, so
     that on disk it reaches the `capture_pos` of the checkpoint (a node whose
     log does not is refused at startup, see "Recovery: startup and replay"),
-    then of the checkpoint file and of its directory; and of the log at a
-    halt. With the global rollback below, a program could go back, after a
-    failure of the machine, to its last consistent snapshot.
+    then of the checkpoint file and of its directory; and of the log at a halt.
+    With the global rollback below, a program could go back, after a failure of
+    the machine, to its last consistent cut.
   - Second step. `fsync` of the input log every few messages (group commit),
     which also protects the work since that snapshot, at a cost in throughput.
 - **A mode without durability.** A program would run with the base and
@@ -4902,8 +4926,8 @@ and performance and languages.
     `ProgramLauncher`.
   - Two points of design. One is a new incarnation of a writer, announced by its
     `HELLO`, which would restart the numbers of its channels, a thing that must
-    never happen in a program with durability. The other is what an ordered stop
-    promises with no checkpoint.
+    never happen in a program with durability. The other is what an ordered
+    shutdown promises with no checkpoint.
   - Its cost. Mostly around the runtime: the engine, the tools, the web UI, a
     second contract, rtdocs, the guidance of an AI, and tests in both modes.
   - The need first. Before it is built, the need it serves has to be named:
