@@ -832,6 +832,16 @@ check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${prognam
                        "decisions" '{"id": "by-hand", "decision": "unblock", "channel_reads": 1}'
 count_check_status $?
 
+# Check webui_live_stats, a non-durable resident program: a reading written
+# by hand is the first one of its source, so its statistics are its own;
+# the stop of the program has no halt, which check_resident_program does
+# not need to know
+progname="webui_live_stats"
+check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}" "readings" '{"value":5}' \
+                       "stats" '{"source": "hand", "value": 5, "count": 1, "mean": 5.0}'
+count_check_status $?
+
 # Check webui_conda_example, a general program whose process activates a
 # conda environment, which the run creates if it does not exist
 progname="webui_conda_example"

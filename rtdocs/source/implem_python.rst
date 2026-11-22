@@ -297,9 +297,9 @@ A resident program
 ------------------
 
 A resident program (see the :ref:`resident` Section) is a ``Program``
-with ``resident=True`` that adds nodes instead of processes. The running
-sum of that Section, shipped as ``sdk_running_sum``, has one node and a
-Supervisor:
+with ``resident=True`` that adds nodes instead of processes, durable
+unless it says ``durability="non-durable"``. The running sum of that
+Section, shipped as ``sdk_running_sum``, has one node and a Supervisor:
 
 .. literalinclude:: ../../data/sdk_programs/python/sdk_running_sum/sdk_running_sum.py
    :language: python

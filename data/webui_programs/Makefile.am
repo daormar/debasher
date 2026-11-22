@@ -39,6 +39,11 @@ webui_hello_world/webui_hello_world.sh	\
 webui_hello_world_py/hello_world.py	\
 webui_hello_world_py/program.yaml	\
 webui_hello_world_py/webui_hello_world_py.sh	\
+webui_live_stats/Acquire.py	\
+webui_live_stats/Stats.py	\
+webui_live_stats/program.yaml	\
+webui_live_stats/test/test_live_stats.py	\
+webui_live_stats/webui_live_stats.sh	\
 webui_running_sum/Accumulate.py	\
 webui_running_sum/program.yaml	\
 webui_running_sum/test/test_accumulate.py	\

@@ -66,6 +66,11 @@ The program
     ``resident`` for a resident program (see the :ref:`resident`
     Section); absent for a general program.
 
+``durability``
+    ``non-durable`` for a resident program in the non-durable mode (see
+    "Durable and Non-Durable Programs" in the :ref:`resident` Section);
+    absent for a durable one, and for a general program.
+
 ``description``
     The description of the program.
 
@@ -83,20 +88,19 @@ The program
 ``shared_dirs``
     The shared directories of the program, a list of names.
 
-``execution``
-    The execution options, as "Set execution options" of the editor
-    holds them: ``scheduler`` (``BUILTIN``, the default, or ``SLURM``),
-    ``builtin_sched_cpus``, ``builtin_sched_mem``, ``dflt_nodes``,
-    ``dflt_throttle``, ``rerun_outdated_procs``, ``conda_support``,
-    ``docker_support`` and, for a resident program,
-    ``snapshot_every_secs``. The web interface turns them into options
-    of ``debasher_exec`` when it runs the program (see the :ref:`exec`
-    Section), except ``snapshot_every_secs``, which starts
-    ``debasher_snapshot_resident --every``; a resident program always
-    runs with the builtin scheduler and takes only
-    ``builtin_sched_cpus`` and ``builtin_sched_mem``. The module does
-    not hold them, so a run from the command line gives its own
-    options.
+``execution`` The execution options, as "Set execution options" of the
+editor holds them: ``scheduler`` (``BUILTIN``, the default, or
+``SLURM``), ``builtin_sched_cpus``, ``builtin_sched_mem``,
+``dflt_nodes``, ``dflt_throttle``, ``rerun_outdated_procs``,
+``conda_support``, ``docker_support`` and, for a durable resident
+program, ``snapshot_every_secs``. The web interface turns them into
+options of ``debasher_exec`` when it runs the program (see the
+:ref:`exec` Section), except ``snapshot_every_secs``, which starts
+``debasher_snapshot_resident --every`` (a non-durable program takes no
+snapshots); a resident program always runs with the builtin scheduler
+and takes only ``builtin_sched_cpus`` and ``builtin_sched_mem``. The
+module does not hold them, so a run from the command line gives its own
+options.
 
 ``program_options``
     The options of the command line that a run from the web interface
@@ -186,19 +190,17 @@ is not checked against these names. The other keys of a process are:
     The Docker images of the process given as data, a list. A process
     gives them this way or as a ``docker_imgs`` method file, not both.
 
-``specs``
-    The specifications of the process in the program, by the names of
-    the engine: ``cpus``, ``mem`` (megabytes), ``time``
-    (``hh:mm:ss``), ``processdeps`` and ``force``, as
-    ``add_debasher_process`` takes them (see the :ref:`prog-def`
-    Section), and, for a node of a resident program, its limits
-    (``input_log_max_mb``, ``out_backlog_max_mb``,
-    ``out_backlog_fail_mb``, ``gil_switch_interval_ms``,
-    ``startup_timeout_s``, ``max_concurrent_runs``, ``batch_sched``,
-    ``heartbeat_timeout_s``). A process takes the default of each of
-    ``cpus``, ``mem`` and ``time`` that it leaves out: 1 CPU, 256
-    megabytes, ``01:00:00``, the values that the editor gives a new
-    process.
+``specs`` The specifications of the process in the program, by the names
+of the engine: ``cpus``, ``mem`` (megabytes), ``time`` (``hh:mm:ss``),
+``processdeps`` and ``force``, as ``add_debasher_process`` takes them
+(see the :ref:`prog-def` Section), and, for a node of a resident
+program, its limits (``input_log_max_mb``, ``out_backlog_max_mb``,
+``out_backlog_fail_mb``, ``gil_switch_interval_ms``,
+``inbound_queue_max_mb``, ``startup_timeout_s``,
+``max_concurrent_runs``, ``batch_sched``, ``heartbeat_timeout_s``). A
+process takes the default of each of ``cpus``, ``mem`` and ``time`` that
+it leaves out: 1 CPU, 256 megabytes, ``01:00:00``, the values that the
+editor gives a new process.
 
 ``kind``
     Only in a resident program: ``FBPProcess``, ``ProgramLauncher`` or

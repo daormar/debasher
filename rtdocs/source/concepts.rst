@@ -201,22 +201,23 @@ Two kinds of program
 --------------------
 
 A **general program** processes a batch of inputs: every process runs
-its tasks as soon as what they read is ready, and the program ends
-when the last one has finished. A **resident program** processes a
-stream: its processes, called **nodes**, keep a state of their own and
-run until told to stop. Nodes exchange **messages**, one line of JSON
-each, through FIFOs, which are their **ports** and **channels**; a
-node acts only in reaction to a message, and the activity of a program
-starts with a message written into it from outside, on an
-**external port**. A node that crashes is relaunched and returns to
-the state it had, from its last **checkpoint** and the **input log**
-of what it received since; a **snapshot** takes a consistent
-checkpoint of every node at once, and a **Supervisor** watches the
-nodes, relaunches the ones that go down and relays the orders to
-snapshot or stop. A node may also launch a general program for each
-request it receives, so that a stream drives batch runs. A resident
-program runs with the built-in scheduler, and its nodes are written
-in Python.
+its tasks as soon as what they read is ready, and the program ends when
+the last one has finished. A **resident program** processes a stream:
+its processes, called **nodes**, keep a state of their own and run until
+told to stop. Nodes exchange **messages**, one line of JSON each,
+through FIFOs, which are their **ports** and **channels**; a node acts
+only in reaction to a message, and the activity of a program starts with
+a message written into it from outside, on an **external port**. A node
+that crashes is relaunched and returns to the state it had, from its
+last **checkpoint** and the **input log** of what it received since; a
+**snapshot** takes a consistent checkpoint of every node at once (in a
+*durable* program, the default; a *non-durable* program keeps no
+checkpoint or input log, and a relaunched node starts again with its
+initial state), and a **Supervisor** watches the nodes, relaunches the
+ones that go down and relays the orders to snapshot or stop. A node may
+also launch a general program for each request it receives, so that a
+stream drives batch runs. A resident program runs with the built-in
+scheduler, and its nodes are written in Python.
 
 Both kinds define their processes the same way, with the options and
 connections above; the :ref:`resident` Section says what a node adds.

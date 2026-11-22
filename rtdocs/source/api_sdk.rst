@@ -75,7 +75,9 @@ Resident programs
 -----------------
 
 A resident program (``Program(..., resident=True)``) adds nodes and a
-``Supervisor`` instead of processes.
+``Supervisor`` instead of processes, and declares its durability mode
+with ``durability="durable"`` (the default) or ``"non-durable"`` (see
+the :ref:`resident` Section).
 
 .. autoclass:: debasher.Node(name, code, description="", options=(), base_dir=None)
 

@@ -181,6 +181,13 @@ changes only from one process to another, such as the order in which a
         node.check_replay(feeds, capture_after=1)
 
 ``load_node`` also takes ``opts``, the options of the node by name.
+The node runs as in its program: ``debasher_test`` exports the
+durability mode of the program as ``DEBASHER_PROGRAM_DURABILITY``, which
+``load_node`` reads (its argument ``durable=True`` or ``False``
+overrides it). For a node of a non-durable program, where nothing is
+restored or replayed, ``restart`` and ``check_replay`` raise
+``RuntimeError``: such a node is tested with ``feed``, ``sent`` and
+``observe`` alone.
 A node that observes the outside world, such as a
 ``DirectoryWatcher``, is tested with ``observe``: it runs the
 ``observe`` method of the node once and returns what it brought in,
@@ -392,7 +399,10 @@ debasher_stop_resident
 ``debasher_stop_resident`` stops a running resident program in order:
 every node saves its state in one last snapshot and then stops, so
 that the next ``debasher_exec`` on the same output directory resumes
-it. ``debasher_stop`` would kill every process at once instead.
+it. ``debasher_stop`` would kill every process at once instead. A
+non-durable program (see the :ref:`resident` Section) has no snapshot
+to take: the tool says so, stops the ``Supervisor`` and then every node
+without a halt, and the next launch starts every node afresh.
 
 ::
 
@@ -435,7 +445,9 @@ debasher_snapshot_resident
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 ``debasher_snapshot_resident`` takes a snapshot of a running resident
-program: every node saves a checkpoint and prunes its input log.
+program: every node saves a checkpoint and prunes its input log. It
+refuses a non-durable program, whose nodes keep no checkpoints, with
+status 1.
 
 ::
 
@@ -502,17 +514,19 @@ well as on a stopped one.
 task, for an array process. The commands are:
 
 * ``summary``: the state of the node (alive, down, finished or not
-  launched), its checkpoints, the size of its input log against its
-  limit, its outbound backlog and its notice. Its
-  ``input_log.to_replay`` is the number of records above the capture of
-  the latest checkpoint, which a relaunch goes through (only the data
-  records are processed again, so it bounds the work redone), or
-  ``null`` when the latest checkpoint is of another schema version, on
-  which the node does not start.
+  launched), the durability mode of its program, its checkpoints, the
+  size of its input log against its limit, its outbound backlog and its
+  notice. Its ``input_log.to_replay`` is the number of records above the
+  capture of the latest checkpoint, which a relaunch goes through (only
+  the data records are processed again, so it bounds the work redone),
+  or ``null`` when the latest checkpoint is of another schema version,
+  on which the node does not start.
 * ``checkpoint <int>``: a checkpoint that the node keeps, given by its
-  epoch, as ``summary`` lists them.
+  epoch, as ``summary`` lists them. Refused, with status 1, for a node
+  of a non-durable program, which keeps none.
 * ``log [--port <string>] [--last <int>]``: the latest records of the
-  input log (100 by default), or those of one port.
+  input log (100 by default), or those of one port. Refused, with status
+  1, for a node of a non-durable program, which keeps none.
 * ``runs``: the batch runs of a launcher node, with their states (a
   request whose run directory was removed is left out, see the
   :ref:`resident` Section).
@@ -600,13 +614,14 @@ through the module's own source file. It is introduced in the
     $ debasher_doc_mod -m debasher_file_example.sh -s file_writer \
         --show-opts --show-opthnd --show-impl --show-specs --show-meths
 
-The ``-m <string>`` option gives the module file, and the optional
-``-s <string>`` option restricts the output to a single process
-(omitted, every process the module defines is documented). The report
-always opens with the module's name and description, followed by a
-``Program Type`` section giving the program type (``general`` or
-``resident``). The remaining options select which information is
-included in the report:
+The ``-m <string>`` option gives the module file, and the optional ``-s
+<string>`` option restricts the output to a single process (omitted,
+every process the module defines is documented). The report always opens
+with the module's name and description, followed by a ``Program Type``
+section giving the program type (``general`` or ``resident``) and, for a
+resident program, a ``Durability`` section giving its durability mode
+(``durable`` or ``non-durable``). The remaining options select which
+information is included in the report:
 
 * ``--show-opts``: process options, as documented by ``explain_opts``,
   and, in a section of their own, the task shaping options that

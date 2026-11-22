@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/_static/schema/program-1.json
+schema_version: 1
+name: webui_live_stats
+type: resident
+durability: non-durable
+description: >-
+  Example built with the web UI: a non-durable resident program, whose node Acquire
+  reads a fake stream of readings and whose node Stats keeps live statistics over
+  them in memory, with the wall clock, as a program that keeps no state worth recovering:
+  a crash or a stop loses the window and the counts, and the node starts again.
+  A Supervisor relaunches a node that goes down.
+processes:
+  Acquire:
+    description: >-
+      Reads a fake stream of readings, one every -interval-ms, and readings written
+      by hand into -readings, and sends each one to Stats with its source.
+    code: Acquire.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    initiator: true
+    position: {x: 100, y: 260}
+    options:
+      -readings:
+        type: string
+        description: readings written from outside the program, one per message
+        value: readings
+        channel: fifo
+        fifo_tag: external
+      -interval-ms:
+        type: string
+        description: >-
+          milliseconds between two readings of the stream (50 by default)
+        cmdline: true
+        mandatory: false
+      -outreadings:
+        type: string
+        description: every reading, to Stats
+        value: acquired
+        channel: fifo
+  Stats:
+    description: >-
+      Keeps, for each source of readings, their count and mean and a window of the
+      last -window-s seconds, in memory and with the wall clock, and sends the running
+      statistics of each reading; every so many readings it sets a notice with the
+      rate of the stream and appends a summary line to summary.jsonl in its output
+      directory, which outlives the node.
+    code: Stats.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00', inbound_queue_max_mb: 4}
+    kind: FBPProcess
+    position: {x: 340, y: 260}
+    options:
+      -inreadings:
+        type: string
+        description: the readings of Acquire
+        from: Acquire.-outreadings
+      -window-s:
+        type: string
+        description: seconds of readings kept in the window (10 by default)
+        cmdline: true
+        mandatory: false
+      -outstats:
+        type: string
+        description: >-
+          the running statistics of each reading, read outside the program
+        value: stats
+        channel: fifo
+  Sup:
+    description: >-
+      Watches Acquire and Stats and relaunches them, with their initial state, if
+      they go down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 100, y: 60}

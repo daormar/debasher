@@ -1226,10 +1226,14 @@ DeBasher module can define its own methods, similarly to a process (see
 
   A general program is the kind described in this section, whose
   processes run once and end. A resident program is made of long-lived,
-  stateful Python processes (see the :ref:`resident` Section). Only the
-  type declared by the module given to ``debasher_exec`` counts: a
-  module loaded by it to reuse its processes or its program has its own
-  ``program_type`` method ignored.
+  stateful Python processes (see the :ref:`resident` Section). A
+  resident program may declare its durability mode as a second
+  argument, ``"durable"`` (the default) or ``"non-durable"``
+  (``program_type "resident" "non-durable"``, see "Durable and
+  Non-Durable Programs" in that Section); a general program takes none.
+  Only the type declared by the module given to ``debasher_exec``
+  counts: a module loaded by it to reuse its processes or its program
+  has its own ``program_type`` method ignored.
 
 Once a module (and/or its processes) defines any of these methods, the
 ``debasher_doc_mod`` tool can be used to generate Markdown

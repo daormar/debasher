@@ -145,7 +145,10 @@ The Home Screen
 The home screen offers three ways to open a program:
 
 * **Create new program** asks for its name and its type, "General
-  program" or "Resident program". The type cannot be changed later.
+  program" or "Resident program", and, for a resident program, its
+  *durability mode*, "Durable" or "Non-durable" (see the :ref:`resident`
+  Section). The type cannot be changed later; the mode can, in "Set
+  execution options".
 * **Load program** opens a program from its home directory: one saved
   with the web interface or written by ``debasher_build`` (see the
   :ref:`implem_python` Section), or any directory with a
@@ -434,21 +437,22 @@ The "Run" menu of the toolbar runs the program and acts on its run:
 * **Check program options** and **Validate program** run
   ``debasher_exec --check-proc-opts`` and ``debasher_exec --validate``
   (see the :ref:`exec` Section), and show what they print.
-* **Run tests** saves the program and runs its business tests, the
-  files ``test/*.bats`` and ``test/test_*.py`` of its home directory,
-  with ``debasher_test`` (see the :ref:`tools` Section), and shows
-  whether they passed and what they printed. It is not offered while a
-  run is in progress. The right-button menu of a process offers **Add
-  test**, which asks for the name of a new test file in ``test/`` (it
-  proposes one), says what it will write, and, once confirmed, writes a
-  first test for that process and opens it in the program files panel:
-  a test that runs the process with placeholders for its options, or,
-  for a node of a resident program, tests that build the node and feed
-  it a packet (or observe for it), restart it, and check with
-  ``check_replay`` that a replay gives the same. Every place to fill in
-  is marked with a ``TODO`` comment; fill them in, then remove the line
-  that makes each new test fail on purpose. A file that already exists is
-  opened, never overwritten.
+* **Run tests** saves the program and runs its business tests, the files
+  ``test/*.bats`` and ``test/test_*.py`` of its home directory, with
+  ``debasher_test`` (see the :ref:`tools` Section), and shows whether
+  they passed and what they printed. It is not offered while a run is in
+  progress. The right-button menu of a process offers **Add test**,
+  which asks for the name of a new test file in ``test/`` (it proposes
+  one), says what it will write, and, once confirmed, writes a first
+  test for that process and opens it in the program files panel: a test
+  that runs the process with placeholders for its options, or, for a
+  node of a resident program, tests that build the node and feed it a
+  packet (or observe for it) and, in a durable program, restart it and
+  check with ``check_replay`` that a replay gives the same (a
+  non-durable program replays nothing, so its nodes get neither). Every
+  place to fill in is marked with a ``TODO`` comment; fill them in, then
+  remove the line that makes each new test fail on purpose. A file that
+  already exists is opened, never overwritten.
 * **Run program** saves the program and launches it with
   ``debasher_exec``. A program that the engine refuses is reported at
   once, with what ``debasher_exec`` printed.
@@ -581,8 +585,13 @@ changes accordingly:
 * **Take snapshot** takes a snapshot of every node. "Set execution
   options" also sets a *snapshot period*: with one, every launch from
   the web interface also starts ``debasher_snapshot_resident --every``,
-  which a resident program needs so that the input logs of its nodes
-  do not grow until they stop them.
+  which a durable resident program needs so that the input logs of its
+  nodes do not grow until they stop them. A non-durable program (see the
+  :ref:`resident` Section) takes no snapshots, so neither is offered for
+  it; its *durability mode* is chosen when the program is created and
+  changed in "Set execution options", and a change of mode over the
+  state of a run needs "Reset program state" first, which "Run program"
+  offers in that case instead of resuming.
 * **Reset program state**, while the program is stopped, runs
   ``debasher_reset_resident``, so that the next launch starts every node
   afresh. It is refused while a batch run of a launcher node is still
@@ -608,12 +617,14 @@ The right-button menu of a node offers, besides the entries of a
 general program but "Watch FIFO":
 
 * **Show node state**: what ``debasher_inspect_resident`` shows of the
-  node, its summary, its checkpoints and its input log.
+  node, its summary, its checkpoints and its input log (its summary
+  alone in a non-durable program, which keeps neither).
 * **Show batch runs**, for a launcher node: its batch runs and their
   states, with the log, the status and the directory of each.
-* **Restart node**: stops the node, which then resumes from its latest
-  checkpoint and its input log, relaunched by the ``Supervisor``, or by
-  the web interface when the program has none.
+* **Restart node**: stops the node, which is then relaunched by the
+  ``Supervisor``, or by the web interface when the program has none, and
+  resumes from its latest checkpoint and its input log (in a non-durable
+  program, starts again with its initial state).
 * **Relaunch node**, in a program without a ``Supervisor``: relaunches
   the tasks of the node that are down.
 

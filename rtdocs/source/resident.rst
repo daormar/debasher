@@ -67,6 +67,11 @@ they run:
   a process that watches the nodes through the heartbeats they send
   it, relaunches a node that goes down, and relays the orders to take a
   snapshot or to stop to the initiators.
+* **Durability mode.** A resident program is *durable*, the default,
+  where its nodes keep the input logs and checkpoints above and come
+  back from a crash or a stop with the state they had, or
+  *non-durable*, where they keep neither and start again with their
+  initial state (see `Durable and Non-Durable Programs`_ below).
 
 A resident program always runs with the built-in scheduler, on a
 single machine: ``debasher_exec`` refuses another scheduler for it.
@@ -259,10 +264,12 @@ message as it arrives.
 Rules That a Node Follows
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Recovery calls ``process_data`` again for every message received since
-the latest checkpoint, and cannot tell a replay from the first
-execution. The guarantees of a resident program hold only if the code
-of every node follows these rules:
+In a durable program, recovery calls ``process_data`` again for every
+message received since the latest checkpoint, and cannot tell a replay
+from the first execution. The guarantees of a resident program hold only
+if the code of every node follows these rules (in a non-durable program
+only the last one applies, see `Durable and Non-Durable Programs`_
+below):
 
 * **process_data is deterministic.** Given the same node state and the
   same messages, it produces the same new state and sends the same
@@ -291,6 +298,80 @@ with ``restart`` (see the :ref:`tools` Section).
 A node that has to wait between two steps calls ``self.sleep(seconds)``
 instead of ``time.sleep``: it does not wait during a replay, and it
 returns early when the node is told to stop.
+
+Durable and Non-Durable Programs
+--------------------------------
+
+A resident program declares its durability mode as the second argument
+of ``program_type``:
+
+.. code-block:: bash
+
+    live_stats_program_type()
+    {
+        program_type "resident" "non-durable"
+    }
+
+Without a second argument, or with ``"durable"``, the program is
+*durable*: every node keeps an input log and checkpoints, a node that
+crashes is relaunched from its latest checkpoint and processes again
+what it received since, an orderly stop halts every node in one round so
+that the next launch resumes the program with nothing lost, and the
+program takes snapshots regularly so that the input logs do not grow
+until their cap (see `Stopping, Resuming and Resetting`_ below). It
+needs the rules of the previous section: a deterministic
+``process_data``, a complete node state, idempotent effects outside the
+program.
+
+A *non-durable* program has none of that: no input log, no checkpoints
+and no rounds. It is for programs whose nodes keep state that is not
+worth keeping across a crash (statistics over the last minutes of a
+stream, a cache that the stream rebuilds) or that cannot be captured,
+and that want the model of a node all the same: the hooks, the ports,
+``observe`` and ``inject``, the notices, the ``Supervisor``, the launcher
+and watcher nodes, the web interface. In a non-durable program:
+
+* A node is written the same way, but ``capture_node_state`` and
+  ``restore_node_state`` are never called and need not be written, and
+  ``process_data`` may use the clock, random numbers or anything else
+  outside the program: nothing is replayed. What has to outlive the node
+  goes into a file of its output directory (``DEBASHER_PROCESS_OUTDIR``),
+  which the engine keeps across launches and ``debasher_reset_resident``
+  takes away.
+* A node that crashes is relaunched by the ``Supervisor`` with its initial
+  state. The crash loses the state of the node, what it had read and not
+  yet processed, and what it had sent and not yet written; what its
+  channels held reaches the new incarnation, as long as some process
+  holds the FIFO (the other end, or the ``Supervisor``). Nothing reports a
+  lost message: the sequence numbers are not compared, since nothing
+  remembers them across a relaunch.
+* ``debasher_stop_resident`` stops the program without a halt: every node
+  processes what it had read and ends, and the next launch starts every
+  node afresh. ``debasher_snapshot_resident`` refuses the program, and
+  ``debasher_inspect_resident`` has no checkpoint or input log to show.
+* The input log cap gives way to a bound on what a node has read and not
+  yet processed, ``inbound_queue_max_mb`` (see `Limits of a Node`_
+  below): over it, the readers of the node wait, and the pressure goes
+  back into the FIFOs and the writers.
+* A launcher node still launches each request once, since its queue is
+  on disk; a request in flight at a crash is lost, and the end of a batch
+  run may be announced twice. A relaunched watcher sends a request again
+  for every complete file still in its directory, which the launcher
+  drops. Its tests cannot use ``restart`` or ``check_replay`` (see the
+  :ref:`tools` Section).
+
+The :doc:`webui_live_stats` is such a program, to try by hand: live
+statistics over a fake stream, kept in memory and with the clock.
+
+A program does not change its mode over the state of a run:
+``debasher_exec`` refuses to launch a program declared in one mode over an
+output directory with the state of a run in the other, and names
+``debasher_reset_resident``, after which the mode may change. Of the
+guarantees of `What Is Guaranteed and What Is Not`_, a non-durable
+program keeps the order and the delivery of the messages with no failure
+and the detection of a crashed node; the recovery of a node, the
+consistent snapshots and the resume after a stop belong to the durable
+mode.
 
 Ports and Channels
 ------------------
@@ -439,21 +520,26 @@ outside it; they are described in the :ref:`tools` Section.
   checkpoint, and a node whose log reaches ``INPUT_LOG_MAX_BYTES``
   (100 MiB by default) stops with an error.
 * ``debasher_stop_resident -d <outdir>`` stops the program in order:
-  every node saves its state in one last snapshot, and then stops.
-  ``debasher_stop``, the tool for general programs, also works, but it
-  kills every process at once, and what the FIFOs held may be lost.
-* Launching the program again with ``debasher_exec`` and the same
-  output directory resumes it: every node restores the checkpoint of
-  the stop, and processes again what it received after it, if
-  anything. A node whose input log was lost or cut (removed, emptied,
-  or ending before the position of its latest checkpoint) refuses to
-  start rather than silently lose what it processed after that
-  checkpoint: its error, which ``debasher_get_sched_out`` shows, names
-  the log and both positions. With a ``Supervisor``, every relaunch
-  fails the same way, at once, until the ``Supervisor`` gives up on the
-  node and stops the program, with an error that names the
-  ``debasher_get_sched_out`` command that shows this log; without one,
-  the task fails. The way out is
+  every node saves its state in one last snapshot, and then stops (a
+  non-durable program stops without that snapshot, see `Durable and
+  Non-Durable Programs`_ above). ``debasher_stop``, the tool for general
+  programs, also works, but it kills every process at once, and what
+  the FIFOs held may be lost.
+* Launching the program again with ``debasher_exec`` and the same output
+  directory resumes it: every node restores the checkpoint of the stop,
+  and processes again what it received after it, if anything. In a
+  non-durable program the launch starts every node afresh, over the
+  files its process left, and ``debasher_exec`` refuses to launch a
+  program in one mode over the state of a run in the other (see `Durable
+  and Non-Durable Programs`_ above). A node whose input log was lost or
+  cut (removed, emptied, or ending before the position of its latest
+  checkpoint) refuses to start rather than silently lose what it
+  processed after that checkpoint: its error, which
+  ``debasher_get_sched_out`` shows, names the log and both positions.
+  With a ``Supervisor``, every relaunch fails the same way, at once,
+  until the ``Supervisor`` gives up on the node and stops the program,
+  with an error that names the ``debasher_get_sched_out`` command that
+  shows this log; without one, the task fails. The way out is
   ``debasher_reset_resident``, which starts the whole program afresh.
   The input logs are never cleaned by hand: snapshots prune them.
 * ``debasher_reset_resident -d <outdir>`` takes a stopped program back
@@ -697,6 +783,10 @@ next to ``cpus``, ``mem`` and ``time``:
   process, or the node sends smaller messages.
 * ``gil_switch_interval_ms`` sets ``GIL_SWITCH_INTERVAL_SECS`` (0.5 ms
   by default).
+* ``inbound_queue_max_mb`` sets ``INBOUND_QUEUE_MAX_BYTES``, the size of
+  the messages that a node of a non-durable program has read and not yet
+  processed over which its readers wait (100 MiB by default); in a
+  durable program the input log cap bounds them instead.
 
 For example:
 
@@ -714,8 +804,9 @@ by hand.
 What Is Guaranteed and What Is Not
 ----------------------------------
 
-When the rules for writing a node above are followed, a resident
-program gives these guarantees:
+When the rules for writing a node above are followed, a durable
+resident program gives these guarantees (a non-durable one keeps the
+first and the fourth, see `Durable and Non-Durable Programs`_ above):
 
 * On every channel, messages arrive in the order in which they were
   sent, and with no failure every message is delivered once.
@@ -766,3 +857,5 @@ of the repository. They were built with the web interface, and
    webui_watch_tally
 
    webui_stream_stall
+
+   webui_live_stats
