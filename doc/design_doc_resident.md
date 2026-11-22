@@ -38,7 +38,8 @@ wins: it says precisely what is promised.
 - **Detect failures actively, within a bounded time**, without depending on a
   human noticing that something stopped responding. Do it without false
   positives when a process is simply busy with a long operation, except for a
-  call that keeps the GIL of Python (see "Limits and non-goals").
+  call that keeps the GIL of Python (see limit 5, "A long call that keeps the
+  GIL looks like a dead node", in the Contract).
 - **Reconstruct the communication history between processes**: every node keeps
   a durable log of what it received since its last checkpoint, in the exact
   order it processed it. A relaunched node thus re-processes what it had already
@@ -137,8 +138,8 @@ So do the entries below that refer to it.
   harness. A node acts only inside `process_data`, in reaction to what it
   receives, and never sends on its own initiative (`send_data` raises
   `RuntimeError` anywhere else). So a source is always outside the graph of
-  nodes, and what enters through it is an external input (see "Limits and
-  non-goals").
+  nodes, and what enters through it is an external input (see limit 2, "External
+  inputs", in the Contract).
 - **root**: a node that no node sends `DATA` to, not even itself through a
   self-loop. Its input ports, if it has any, are control ports or are written
   from outside the program, by a source. It can start a round, and its part of a
@@ -386,9 +387,9 @@ So do the entries below that refer to it.
   which the checkpoint stores as `out_backlog`:
   `{tag: [{"seq":, "payload":}, ...]}`, decoded from each queued line. Without
   it, a crash right after the capture would destroy those messages for good,
-  with no trace (see "Both endpoints of a channel crashed" in the Contract's
-  limits). Recovery queues it again, with the same numbers, before anything else
-  is sent. Two limits apply to it (see "Checkpoint persistence"):
+  with no trace (see limit 1, "Both endpoints of a channel crashed", in the
+  Contract). Recovery queues it again, with the same numbers, before anything
+  else is sent. Two limits apply to it (see "Checkpoint persistence"):
   `OUT_BACKLOG_FAIL_BYTES` to the live backlog, the bytes of its lines on all
   ports together, and `OUT_BACKLOG_MAX_BYTES` to the copy, the size of its
   entries in the checkpoint.
@@ -702,14 +703,14 @@ working, and which failures they do not cover.
   writer, brain or observation thread) does not end its process. The node stays
   alive but unhealthy, and its heartbeats stop. The `Supervisor` treats it as a
   crash. It relaunches the node, which kills the earlier incarnation. For a
-  program without a `Supervisor`, see "A node with a dead thread and no
-  `Supervisor`" in the Contract's limits. The `Supervisor` itself ends with an
-  error when one of its own threads dies (see "Failure detection"). Any number
-  of nodes may crash at any time, including while other nodes are recovering,
-  with the exceptions listed under "Limits and non-goals". There is deliberately
-  no bound on how many nodes fail simultaneously: each node recovers from its
-  own checkpoint and input log, on stable storage, independently of the others,
-  so correctness does not depend on how many failed at once. (A bound on
+  program without a `Supervisor`, see limit 6, "A node with a dead thread and no
+  `Supervisor`", in the Contract. The `Supervisor` itself ends with an error
+  when one of its own threads dies (see "Failure detection"). Any number of
+  nodes may crash at any time, including while other nodes are recovering, with
+  the exceptions listed under "Limits and non-goals". There is deliberately no
+  bound on how many nodes fail simultaneously: each node recovers from its own
+  checkpoint and input log, on stable storage, independently of the others, so
+  correctness does not depend on how many failed at once. (A bound on
   simultaneous failures only buys something in designs whose redundancy lives in
   other nodes' volatile memory, such as logging at the sender or replication
   with quorums; this design has neither.)
@@ -902,7 +903,7 @@ guarantee in words and never cite these numbers, which may change.
   After a halt, every node resumes in the state it had when it stopped: it loads
   its checkpoint and replays from its input log only what it processed after
   capturing it. A crash during a round aborts it at the node that crashed (see
-  "A crash while a round is open" in the limits below).
+  limit 10, "A crash while a round is open", below).
 - **G7, bounded detection**: a node whose process is verifiably gone is noticed
   within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy (one of its
   reader, writer, brain or observation threads died) is noticed within
@@ -981,8 +982,8 @@ comments state a limit in words and never cite these numbers, which may change.
    from the first message a node logs. A source may number its `DATA` as a node
    does (`seq`, from 1, one more for each message, never reused). The receiver
    checks those numbers as on any other channel. So a message lost at the
-   boundary, in the window of the next limit, is reported (G8) and not lost
-   silently. What a source sends without numbers gets no such check.
+   boundary, in the window of limit 3, is reported (G8) and not lost silently.
+   What a source sends without numbers gets no such check.
 3. **Messages read from a FIFO but not yet written to the input log** when a
    node crashes. Such a message is lost, since its sender considers it
    delivered, and the sequence numbers of G5 show the hole (G8).
@@ -1111,7 +1112,7 @@ comments state a limit in words and never cite these numbers, which may change.
 11. **A node that crashes again right after every relaunch** is not retried for
     ever: after `MAX_RELAUNCH_ATTEMPTS` it is declared permanently failed and
     the escalation applies, unless it sends a heartbeat between its crashes (see
-    "Stuck but alive").
+    limit 4, "Stuck but alive").
 12. **The cause of a crash outside the output of the `Supervisor`.** The
     `Supervisor` keeps the cause of each crash after which it relaunches the
     node, by copying the tail of the scheduler output of the node into its own
@@ -1802,7 +1803,7 @@ checkpoint and the replay of the input log cover.
 The price of the threads that are not daemons is that the process cannot end
 while one of them runs. `run()` therefore stops them when starting the threads
 fails. A `process_data` or an `observe` that never returns keeps the node alive
-after SIGTERM (see "Stuck but alive" in "Limits and non-goals" and the fallback
+after SIGTERM (see limit 4, "Stuck but alive", in the Contract, and the fallback
 to SIGKILL of `debasher_stop_resident`).
 
 **Health reporting.** It is passive, not pushed. On its own timer, the heartbeat
@@ -1971,8 +1972,8 @@ that no specification sets:
   - `out_backlog_fail_mb` sets `OUT_BACKLOG_FAIL_BYTES`, 64 MiB by default (see
     "Checkpoint persistence").
   - `gil_switch_interval_ms` sets `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms by default
-    (see "Messages read from a FIFO but not yet written to the input log" in
-    "Limits and non-goals").
+    (see limit 3, "Messages read from a FIFO but not yet written to the input
+    log", in the Contract).
 - For a node: `startup_timeout_s`, its startup deadline in seconds, which the
   engine passes to the `Supervisor` (see "Failure detection").
 - For the `Supervisor`: `heartbeat_timeout_s` and `startup_timeout_s` (see
@@ -2302,10 +2303,10 @@ replace it too. Without this, an initiator whose marker was lost would keep its
 round open for ever. So would every node of its cycle, whose input logs would
 grow until `INPUT_LOG_MAX_BYTES` ends their reader threads. A marker is lost
 when its node crashes after it has captured its state and queued the marker, and
-before its writer thread has written it. It is also lost in the cases of the
-Contract's limits: a message read from a FIFO and not yet written to the input
-log, a FIFO destroyed with both its endpoints down. A trigger that finds a halt
-open, and any trigger once the node has halted, are ignored (see "Ordered
+before its writer thread has written it. It is also lost in the cases of limits
+3 and 1 of the Contract: a message read from a FIFO and not yet written to the
+input log, a FIFO destroyed with both its endpoints down. A trigger that finds a
+halt open, and any trigger once the node has halted, are ignored (see "Ordered
 shutdown"). A numbered trigger follows the rule of a marker instead (see
 numbered trigger in the Glossary).
 
@@ -2367,9 +2368,9 @@ like any other checkpoint (see how a program is resumed, below). The cost of
 ignoring the triggers is that a halt cannot always be retried. An initiator that
 has halted, and that no marker of the new halt reaches, never opens it. So when
 another initiator does (one relaunched after a crash, for instance), the nodes
-downstream of the first wait for its marker for ever (see "A crash while a round
-is open" in the Contract's limits). When every initiator has halted, no new
-round starts at all.
+downstream of the first wait for its marker for ever (see limit 10, "A crash
+while a round is open", in the Contract). When every initiator has halted, no
+new round starts at all.
 
 What ends `run()` is the stop signal, not a round closing. `run()` installs a
 handler of `SIGTERM` (`_on_stop_signal`) on the main thread only, since
@@ -2815,8 +2816,8 @@ it puts `(pos, tag, type, payload, seq)` on the queue for each. So position
 order is processing order across every port. Logging a block in one write keeps
 each of its messages in memory (taken from the FIFO but not yet in the log) for
 the same short time. That time does not grow with the message's place in the
-block (see "Messages read from a FIFO but not yet written to the input log" in
-the Contract's limits). The version of `_PortWorker`, which the `Supervisor`
+block (see limit 3, "Messages read from a FIFO but not yet written to the input
+log", in the Contract). The version of `_PortWorker`, which the `Supervisor`
 keeps, is unaffected: it puts `(tag, type, payload)` for each envelope, with no
 position.
 
@@ -3027,8 +3028,8 @@ and logs its messages in one write; between the two, the messages exist only in
 the memory of the process. A message lost there, in a crash, is not recovered,
 since its sender considers it delivered and does not send it again. But the
 receiver notices it: the next message skips its number, or the next marker of a
-round says that more were sent than arrived (G8). This is the Contract's limit
-"Messages read from a FIFO but not yet written to the input log".
+round says that more were sent than arrived (G8). This is limit 3 of the
+Contract, "Messages read from a FIFO but not yet written to the input log".
 
 Four other designs were weighed and left out. A bounded inbound queue, between
 the reader threads and the brain thread, would not shorten that window. What a
@@ -3068,8 +3069,8 @@ its own opens and closes of the FIFO, to every channel.
 A resident program that declares `--mirror` on a fifo is therefore refused when
 it is loaded, before anything is launched (rule 4 of "Validation when the
 program is loaded"). So a mirror tap never sits between two resident processes
-(see "Limits and non-goals"). `--mirror` remains a debugging aid of general
-programs, behind the "Watch FIFO" of the web UI.
+(see limit 8, "No mirror tap on a channel", in the Contract). `--mirror` remains
+a debugging aid of general programs, behind the "Watch FIFO" of the web UI.
 
 # Reconnecting after a node failure
 
@@ -3402,8 +3403,8 @@ fragment is followed by the `HELLO` of its next incarnation (see "The resync
 line"), which sends that whole message again. The whole message is sent again
 because a message leaves the outbound backlog only once it is written whole. A
 fragment at the start is the rest of a line that the reader had begun to take
-when it died. It is the limit of "Messages read from a FIFO but not yet written
-to the input log" (see the Contract's limits), as when the reader alone crashes.
+when it died. It is limit 3 of the Contract, "Messages read from a FIFO but not
+yet written to the input log", as when the reader alone crashes.
 
 The engine gives the FIFOs to hold, `HOLD_FIFOS`, with the other ports of the
 `Supervisor` (see "Ports from the engine"). They are every fifo without a tag
@@ -3411,8 +3412,8 @@ whose two ends are nodes, the loop of a node that emits on its own and the
 channels of the tasks of an array included. The engine leaves out the heartbeat
 channels and the initiator ports, which the `Supervisor` already holds as one of
 their endpoints. It also leaves out every fifo with one end outside the program.
-Delivery there is at most once in any case (see "External inputs" in the
-Contract's limits). And a holder would change what the process outside sees: its
+Delivery there is at most once in any case (see limit 2, "External inputs", in
+the Contract). And a holder would change what the process outside sees: its
 `open()` would no longer wait for the node while it is down. A fifo to hold is
 not an option of the `Supervisor`. So the engine names it by its path under the
 fifo directory of the program, `<owner process>/<fifo>`. The `Supervisor`
@@ -3439,19 +3440,20 @@ Nothing holds the FIFOs while the `Supervisor` is down, which nothing watches
 (see the Contract's failure model). Nothing holds them in a program without a
 `Supervisor` either. Nothing holds them during an ordered shutdown, since
 `debasher_stop_resident` stops the `Supervisor` before it triggers the halt (a
-crash during a halt is already outside the guarantees, see "A crash while a
-round is open" in the Contract's limits). Nor does anything hold them when the
+crash during a halt is already outside the guarantees, see limit 10, "A crash
+while a round is open", in the Contract). Nor does anything hold them when the
 `Supervisor` is given the flag `-no-hold-fifos`. With that flag it holds nothing
 and logs a warning that says what is at stake. Its module offers the flag as an
 option of the command line of the program, a flag like any other
 (`explain_flag`, `opt_is_non_mandatory_cmdline`,
 `define_cmdline_flag_if_given`), so that a run can choose. The chaos test uses
-it to reach the limit it would otherwise never reach. The flag reaches the
-`Supervisor` only through an option of its module. A module that does not define
-it gives no way to turn the holding off, and its `Supervisor` holds the FIFOs in
-every run. Each held FIFO takes one descriptor, which the `Supervisor` counts in
-the limit it raises before it opens anything (see "Computational specifications
-of a resident process").
+it to reach limit 1 of the Contract, "Both endpoints of a channel crashed",
+which it would otherwise never reach. The flag reaches the `Supervisor` only
+through an option of its module. A module that does not define it gives no way
+to turn the holding off, and its `Supervisor` holds the FIFOs in every run. Each
+held FIFO takes one descriptor, which the `Supervisor` counts in the limit it
+raises before it opens anything (see "Computational specifications of a resident
+process").
 
 `test/engine/test_hold_fifos.py` kills both endpoints of a FIFO, opened as a
 node opens them, with a single `SIGKILL`, at random moments and with lines
@@ -3548,9 +3550,9 @@ by its PID, which does not depend on the time elapsed. The other way round, a
 node that does not run for longer than `HEARTBEAT_TIMEOUT_SECS`, or its startup
 deadline, is declared down, since from outside it cannot be told from one that
 is stuck. That is the case of a node starved of CPU, and of one whose
-`process_data` is inside a call that keeps the GIL (see "A long call that keeps
-the GIL looks like a dead node" in the Contract's limits). A program where that
-is expected gives its `Supervisor` a longer `heartbeat_timeout_s`.
+`process_data` is inside a call that keeps the GIL (see limit 5, "A long call
+that keeps the GIL looks like a dead node", in the Contract). A program where
+that is expected gives its `Supervisor` a longer `heartbeat_timeout_s`.
 
 Nothing supervises the `Supervisor` (see "Failure model"). So it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread
@@ -3700,9 +3702,8 @@ from its last 64 KiB. The output of the `Supervisor` keeps them until the
 `Supervisor` itself is launched again, by hand or by the next launch of the
 program, which rewrites it too. Until then, the cause of every crash that a
 relaunch followed is in that output, which the web UI and the MCP tool
-`get_process_output` (kind scheduler) show. What this leaves out is a limit of
-the Contract (see "The cause of a crash outside the output of the `Supervisor`"
-in the Contract's limits).
+`get_process_output` (kind scheduler) show. What this leaves out is limit 12 of
+the Contract, "The cause of a crash outside the output of the `Supervisor`".
 
 ## Escalation on a permanent node failure
 
@@ -3775,7 +3776,7 @@ weighed.
 A node that is not an initiator and crashes while the round of its halt is open
 comes back with no memory of that round. The markers it had received are not
 replayed, and nothing sends the `shutdown` trigger again. So it never halts (see
-"A crash while a round is open" in the Contract's limits). The `--timeout` of
+limit 10, "A crash while a round is open", in the Contract). The `--timeout` of
 `debasher_stop_resident` keeps this from hanging the stop for ever, and the
 fallback to `debasher_stop` ends the program. What must not happen is that the
 forced ending passes for an ordered shutdown.
@@ -4015,8 +4016,8 @@ persistence").
 With `--every <secs>`, the tool starts a round every that many seconds. Each
 round has until the next one to close. One that has not closed by then is
 reported with a warning, and the next trigger replaces it. The period has to be
-longer than a round, or rounds keep replacing each other (see "A round that a
-newer one replaces" in the Contract's limits). `--timeout` does not apply, and
+longer than a round, or rounds keep replacing each other (see limit 9, "A round
+that a newer one replaces", in the Contract). `--timeout` does not apply, and
 giving both is an error.
 
 The tool acts only on a running program, and it ends with it. It refuses a
@@ -4848,22 +4849,22 @@ and languages.
 - **A check that the brain thread makes progress.** A computational
   specification of a node, for instance `progress_timeout_s`, off by default.
   When it is set, the node is not healthy when its inbound queue holds messages
-  and its brain thread has taken none for that long (see "Stuck but alive" in
-  the Contract's limits).
+  and its brain thread has taken none for that long (see limit 4, "Stuck but
+  alive", in the Contract).
   - What it covers. A brain thread blocked in an endless loop, a deadlock or a
     call that never returns. What the node observes outside is left to its
     `observe()`, which alone knows when silence is a failure.
   - No false positive for a quiet node. A node with an empty inbound queue is
     never flagged.
-  - A long `process_data`. As for the GIL (see "A long call that keeps the GIL
-    looks like a dead node" in the Contract's limits), the timeout goes above
+  - A long `process_data`. As for the GIL (see limit 5, "A long call that keeps
+    the GIL looks like a dead node", in the Contract), the timeout goes above
     the longest call.
   - When to build it. Only if a blocked brain thread turns out to be a case that
     a program meets.
 - **A dead thread ends the process.** When a thread of a node has died, the
   heartbeat thread would log the cause and end the process with an error. An
-  exception and a crash would then be the same (see "A node with a dead thread
-  and no `Supervisor`" in the Contract's limits).
+  exception and a crash would then be the same (see limit 6, "A node with a dead
+  thread and no `Supervisor`", in the Contract).
   - What it gives. Without a `Supervisor`, the status `FAILED` instead of an
     `IN-PROGRESS` that does nothing. With one, detection by the PID within
     `HEARTBEAT_CHECK_INTERVAL_SECS`.
@@ -4897,8 +4898,8 @@ and languages.
     program.
   - How it is set. A computational specification of the `Supervisor`, for
     instance `snapshot_interval_s`, with no timer by default.
-  - To settle. The period has to be longer than a round (see "A round that a
-    newer one replaces" in the Contract's limits). The timer has to live with a
+  - To settle. The period has to be longer than a round (see limit 9, "A round
+    that a newer one replaces", in the Contract). The timer has to live with a
     manual trigger and with `--every`. A `Supervisor` with a timer needs
     initiator ports.
   - Without a `Supervisor`. A program still needs `--every`.
@@ -4915,8 +4916,8 @@ and languages.
   PID in the output directory while it runs, and refuse a second `--every` while
   that PID is alive.
   - Why. Two `--every` on the same output directory start rounds that replace
-    each other, so that none closes (see "A round that a newer one replaces" in
-    the Contract's limits).
+    each other, so that none closes (see limit 9, "A round that a newer one
+    replaces", in the Contract).
   - What else it gives. The web UI could find the tool, to change the period of
     a running program.
 - **A `Supervisor` that serializes rounds.** It would track which nodes have
@@ -4970,8 +4971,8 @@ and languages.
     second contract, rtdocs, the guidance of an AI, and tests in both modes.
   - The need first. Before it is built, the need it serves has to be named: one
     that neither a general program of processes joined by FIFOs nor the closest
-    approach of today (see "Durability cannot be turned off" in the Contract's
-    limits) meets.
+    approach of today (see limit 13, "Durability cannot be turned off", in the
+    Contract) meets.
 - **Global (coordinated) rollback, as a fallback to localized recovery.** Detect
   a violation of the Contract, stop, rewind every node to the last consistent
   cut, and resume. Localized recovery (see "Reconnecting after a node failure")
@@ -5013,13 +5014,13 @@ and languages.
     a round identifier, in the marker and in each checkpoint, lets the script
     check it.
   - An initiator that crashed in a round. It can close the round again after its
-    relaunch, with a later capture (see "A crash while a round is open" in the
-    Contract's limits). So that epoch is not a consistent cut, and the script
-    cannot tell from the checkpoints alone. The node can tell at recovery, from
-    the trigger or the marker after its `capture_pos`. Moving `_last_epoch`
-    during the replay past the epoch of every marker and numbered trigger in the
-    log would make the node ignore that round from then on; a trigger without an
-    epoch does not say which epoch it opened.
+    relaunch, with a later capture (see limit 10, "A crash while a round is
+    open", in the Contract). So that epoch is not a consistent cut, and the
+    script cannot tell from the checkpoints alone. The node can tell at
+    recovery, from the trigger or the marker after its `capture_pos`. Moving
+    `_last_epoch` during the replay past the epoch of every marker and numbered
+    trigger in the log would make the node ignore that round from then on; a
+    trigger without an epoch does not say which epoch it opened.
   - A program with nodes already `finished`. How `debasher_exec` relaunches it
     is to be checked against the logic of reruns; a new run creates the FIFOs
     again, which a rollback needs.
@@ -5028,8 +5029,8 @@ and languages.
   other process holds it when the `Supervisor` is down too, when there is no
   `Supervisor`, or with `-no-hold-fifos` (see "Holding the business channels").
   Only what the writer produces again after its latest checkpoint comes back
-  (see "Both endpoints of a channel crashed while no other process held the
-  FIFO" in the Contract's limits). Ways to widen it:
+  (see limit 1, "Both endpoints of a channel crashed while no other process held
+  the FIFO", in the Contract). Ways to widen it:
   - An older checkpoint. The writer restores an older retained checkpoint and
     replays from there: the input log is kept back to the `capture_pos` of the
     oldest one, the numbers come out the same, and its readers drop what they
@@ -5052,9 +5053,10 @@ and languages.
 - **Keeping on disk the part of a line already read when its reader dies.** A
   line longer than `PIPE_BUF`, read in more than one read, is in memory in part
   until its last read. If the reader dies meanwhile, the rest reaches the
-  relaunched reader as a fragment that no `HELLO` follows (see "Messages read
-  from a FIFO but not yet written to the input log" in the Contract's limits).
-  The loss is detected (G8), but the node cannot get past it on its own.
+  relaunched reader as a fragment that no `HELLO` follows (see limit 3,
+  "Messages read from a FIFO but not yet written to the input log", in the
+  Contract). The loss is detected (G8), but the node cannot get past it on its
+  own.
   - When it pays. Only if lines of several KiB become common: until then the
     loss never goes unnoticed, and the cost is significant.
   - Its form, with portable means only. The reader appends each part of a line
@@ -5208,10 +5210,11 @@ and languages.
   - What it gives. The reader threads decode and log their lines while the brain
     thread runs `process_data`, which helps a node with many ports and much
     traffic. The heartbeat thread goes on during a long call of a C extension
-    that keeps the GIL, and the limit "A long call that keeps the GIL looks like
-    a dead node" of the Contract would go away. The window of "Messages read
-    from a FIFO but not yet written to the input log" would not include the wait
-    for the GIL, and `GIL_SWITCH_INTERVAL_SECS` would have no effect.
+    that keeps the GIL, and limit 5 of the Contract, "A long call that keeps the
+    GIL looks like a dead node", would go away. The window of limit 3 of the
+    Contract, "Messages read from a FIFO but not yet written to the input log",
+    would not include the wait for the GIL, and `GIL_SWITCH_INTERVAL_SECS` would
+    have no effect.
   - What it needs. The runtime library uses only the standard library, and
     guards what its threads share with queues, events and locks, never with the
     GIL, so it is expected to run on that build as it is. Its tests and chaos
