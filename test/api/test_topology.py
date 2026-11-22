@@ -734,3 +734,19 @@ def test_a_script_at_the_path_of_the_module_is_refused(tmp_path):
 def test_a_file_outside_the_home_directory_is_not_checked_against_its_names():
     persistence.check_artifact_path("prg", "../shared/.tools/work.sh", "A file")
     persistence.check_artifact_path("prg", "/opt/tools/prg.sh", "A file")
+
+
+def test_the_durability_mode_of_a_resident_program_round_trips_and_the_default_is_left_out():
+    node = _process("accumulate", language="python", code="", nodeKind="FBPProcess", initiator=True, nodeCode=NodeCode())
+    supervisor = _process("sup", language="python", code="", nodeKind="Supervisor")
+    durable = _program("sums", [node, supervisor], programType="resident")
+    non_durable = durable.model_copy(update={"durability": "non-durable"})
+
+    assert split(durable).topology.durability is None
+    assert _round_trip(durable).durability == "durable"
+    assert split(non_durable).topology.durability == "non-durable"
+    assert _round_trip(non_durable).durability == "non-durable"
+    # A general program has no mode, whatever its model says
+    general = _program("gen", [_process("step")], durability="non-durable")
+    assert split(general).topology.durability is None
+    assert _round_trip(general).durability == "durable"

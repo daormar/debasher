@@ -68,6 +68,7 @@ const computationalSpecs = z.object({
   out_backlog_max_mb: z.number().optional(),
   out_backlog_fail_mb: z.number().optional(),
   gil_switch_interval_ms: z.number().optional(),
+  inbound_queue_max_mb: z.number().optional().describe("Non-durable programs only: the bound, in MiB, of what a node has read and not yet processed, over which its readers wait (100 by default)."),
   startup_timeout_s: z.number().optional(),
   max_concurrent_runs: z.number().int().positive().optional(),
   batch_sched: z.string().optional(),
@@ -155,7 +156,7 @@ export const executionOptions = z.object({
   rerunOutdatedProcs: z.boolean().optional(),
   condaSupport: z.boolean().optional(),
   dockerSupport: z.boolean().optional(),
-  snapshotEverySecs: z.string().optional(),
+  snapshotEverySecs: z.string().optional().describe("Durable resident programs only: the period, in seconds, of the snapshots that a launch starts; empty for none. Ignored by a non-durable program."),
 }).strict();
 
 export const programFields = z.object({
@@ -167,6 +168,9 @@ export const programFields = z.object({
   sharedDirs: z.array(z.string()).optional()
     .describe("The shared directories that the program declares, by name; an option with channel \"shared_dir\" names one of them or one that a module of the preamble declares."),
   outputDir: z.string().optional().describe("The directory where a run writes its results."),
+  durability: z.enum(["durable", "non-durable"]).optional().describe(
+    "Resident programs only (refused on a general program): durable (the default), where every node keeps an input log and checkpoints and comes back from a crash or a stop with its state, so process_data is deterministic and the program takes snapshots; or non-durable, where no node keeps either and a node that crashes or stops starts again with its initial state, with no snapshots and no determinism required. The engine refuses to change the mode over the program state of a run: reset the program state first (reset_program_state).",
+  ),
   executionOptions: executionOptions.optional(),
   programOptions: z.record(z.string(), z.string()).optional()
     .describe("The values of the command line options of the program, by label; replaces all of them. An empty value leaves the option out, as not given. A value cannot start with - or -- followed by an ASCII letter or _ (a negative number can)."),

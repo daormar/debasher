@@ -431,27 +431,49 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   (`--outdir`, `--sched`, `--wait`, `--debug`, ...), as a name or a value, and
   `run` is a relative path with no part empty or starting with a dot. The
   launcher drops any other request with an error in its scheduler output.
+- **Durability** (`durability`, set with `set_program_settings`): a resident
+  program is `durable` (the default) or `non-durable`. Durable, every node keeps
+  an input log and checkpoints: after a crash it is relaunched from its latest
+  checkpoint and replays what it received since, so the program needs snapshots
+  (a round that every node checkpoints, which also prunes the input logs) and
+  the rules of the hooks below. Non-durable, no node keeps either, no round is
+  taken, nothing is replayed, and a node that crashes or stops starts again with
+  its initial state: for nodes whose state is not worth keeping (live
+  statistics over a stream, a cache) or cannot be captured. `process_data` may
+  then use the clock, random numbers or reads from outside, the hooks
+  `capture_node_state` and `restore_node_state` stay empty, since they are never
+  called, and what has to outlive the node goes into a file of its output
+  directory (`DEBASHER_PROCESS_OUTDIR`), which the engine keeps and
+  `reset_program_state` takes away. A launcher node still launches each request
+  once (its queue is on disk); a watcher relaunched brings in again the files
+  still in its directory, which the launcher drops. The engine refuses to launch
+  a program in one mode over the program state of a run in the other: change the
+  mode only after `reset_program_state`, or on a new output directory. The
+  generated script declares it as `program_type "resident" "non-durable"`.
 - **Node code** (`nodeCode`, bodies without their `def` line): `preamble`
   (imports, helpers), `classBody` (attributes, `__init__` with the initial
   state, helper methods), `processData` (`process_data(self, port_name,
   packet)`), `captureNodeState`, `restoreNodeState`, `initializeRuntime`, and
-  the optional `observe`. An `FBPProcess` defines the first four hooks; the
-  other kinds inherit them, and a body replaces the inherited one (call
+  the optional `observe`. An `FBPProcess` defines the first four hooks (in a
+  non-durable program `captureNodeState` and `restoreNodeState` stay empty);
+  the other kinds inherit them, and a body replaces the inherited one (call
   `super()` to keep it).
 - **Rules of the hooks.** Send only from `process_data`, with
   `self.send_data(port, payload)`, as strict JSON (a payload with NaN or an
   infinity raises ValueError, so a float result that can be one is sent as
-  `None` or a string); `process_data` is deterministic; the node state is
-  complete and serializable as JSON (a node test checks both with
-  `check_replay`), and `capture_node_state` may return the node's own objects,
-  which the runtime copies when a round opens; effects outside the program are
-  idempotent. Read options from `self.opts` (labels without the dash), log with
+  `None` or a string). In a durable program, `process_data` is deterministic,
+  the node state is complete and serializable as JSON (a node test checks both
+  with `check_replay`, which a node of a non-durable program cannot use), and
+  `capture_node_state` may return the node's own objects, which the runtime
+  copies when a round opens; effects outside the program are idempotent. Read
+  options from `self.opts` (labels without the dash), log with
   `self.log` (its lines, and the warnings of the runtime, such as a dropped
   envelope, are in the scheduler output of the node: `get_process_output` with
   `kind: scheduler`), wait with `self.sleep()`. A hook that raises ends the node
-  with an error, its traceback in the scheduler output; the relaunch replays the
-  messages since the checkpoint, so a message on which `process_data` raises
-  does so at every relaunch until the Supervisor gives up on the node: drop,
+  with an error, its traceback in the scheduler output; in a durable program the
+  relaunch replays the messages since the checkpoint, so a message on which
+  `process_data` raises does so at every relaunch until the Supervisor gives up
+  on the node, and in a non-durable one the state of the node is lost: drop,
   with `self.log.warning()`, a message the node cannot use. Raise in `observe`
   only for a failure that a relaunch mends, such as a stalled connection.
 - **Methods that a node calls**, on top of `send_data` and `sleep`:
@@ -466,7 +488,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
     most one notice, and a new one replaces it; any hook or thread may set
     it. It is not part of the node state and every start of the node begins
     without one, so a notice that follows from the state is set again in
-    `restore_node_state`.
+    `restore_node_state` in a durable program, and where that state is set
+    in a non-durable one, whose nodes start with their initial state.
 - **Class attributes** tune a node (`OBSERVE_PORT`, `OBSERVE_INTERVAL_SECS`,
   `NOTICE_MAX_CHARS`, ...) and configure the `DirectoryWatcher` (`PATTERN`, ...)
   and the `ProgramLauncher` (`MAX_CONCURRENT_RUNS`, ...). The code prompt of a
@@ -475,7 +498,9 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   for one that this list does not name.
 - **Specifications of a node.** Besides `cpus`, `mem` and `time`, a node takes
   limits in its `computationalSpecs` (`input_log_max_mb`, `out_backlog_max_mb`,
-  `out_backlog_fail_mb`, `gil_switch_interval_ms`, `startup_timeout_s`), a
+  `out_backlog_fail_mb`, `gil_switch_interval_ms`, `inbound_queue_max_mb`, the
+  bound of what a node of a non-durable program has read and not yet processed,
+  and `startup_timeout_s`), a
   `ProgramLauncher` also `max_concurrent_runs` and `batch_sched`, and the
   `Supervisor` only `heartbeat_timeout_s` and `startup_timeout_s`; unset, a
   limit keeps the default of the class. Each limit, when given, is a positive
@@ -483,17 +508,18 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   number and `batch_sched` `BUILTIN` or `SLURM`: the engine refuses another
   value when it loads the program. A node has no additional specifications and
   no additional methods.
-- **Rounds and snapshots.** A snapshot is a round started by an initiator
-  (`initiator: true`), which every node checkpoints; a program of independent
-  parts needs an initiator in each. After a crash a node resumes from its
-  checkpoint and replays its input log. A `send_data` of a message larger than
-  `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) raises RuntimeError, live and
-  in a replay, naming its size, its port and the limit, which ends the node, at
-  every relaunch, until the Supervisor gives up on it: raise
-  `out_backlog_fail_mb` in the `computationalSpecs` of the node or send smaller
-  messages. While the node replays, a `send_data` that would take the outbound
-  backlog over that limit waits for room instead, with one warning in the
-  scheduler output: a node that stays in its startup with that warning has a
+- **Rounds and snapshots** (durable programs; a non-durable program has no
+  rounds, and `snapshot` refuses it). A snapshot is a round started by an
+  initiator (`initiator: true`), which every node checkpoints; a program of
+  independent parts needs an initiator in each. After a crash a node resumes
+  from its checkpoint and replays its input log. A `send_data` of a message
+  larger than `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`) raises
+  RuntimeError, live and in a replay, naming its size, its port and the limit,
+  which ends the node, at every relaunch, until the Supervisor gives up on it:
+  raise `out_backlog_fail_mb` in the `computationalSpecs` of the node or send
+  smaller messages. While the node replays, a `send_data` that would take the
+  outbound backlog over that limit waits for room instead, with one warning in
+  the scheduler output: a node that stays in its startup with that warning has a
   reader that does not read, so look at that reader, at the nodes of a cycle
   that replay at once, or at a self-loop, whose reader starts after its replay.
   The Supervisor wiring (heartbeat channels, initiator ports and the control
@@ -522,18 +548,21 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   since a launch rewrites them; fix the node given up on, then launch the
   program again.
 - **Running.** Always the built-in scheduler; `run_program` waits for the launch
-  and resumes the saved program state; `stop_program` stops in order;
-  `snapshot`, `inspect_node`, `restart_node` and `reset_program_state` act on
-  its state. `reset_output_dir` is refused on a resident program: start afresh
-  with `reset_program_state`, which sets the program state aside (or deletes it
-  with `delete`). The batch runs of a launcher node go on after `stop_program`,
-  and `reset_program_state` refuses while one runs, naming its run directory:
-  follow them with `inspect_node` (`what: runs`) until they end, or offer the
-  user to stop each one with `debasher_stop -d <run directory>`. `restart_node`
-  kills a live node, as in a crash, and has it relaunched from its last
-  checkpoint; `relaunch_node` relaunches a node that is down in a program
-  without a Supervisor; it rewrites the scheduler output of each task, where the
-  cause of its crash is, so read that first (`get_process_output`,
+  and resumes the saved program state (a non-durable program has none to resume:
+  every launch starts its nodes afresh); `stop_program` stops in order (a
+  non-durable program without a halt); `snapshot`, `inspect_node`,
+  `restart_node` and `reset_program_state` act on its state (`inspect_node`
+  shows no checkpoint or input log of a non-durable node). `reset_output_dir` is
+  refused on a resident program: start afresh with `reset_program_state`, which
+  sets the program state aside (or deletes it with `delete`). The batch runs of
+  a launcher node go on after `stop_program`, and `reset_program_state` refuses
+  while one runs, naming its run directory: follow them with `inspect_node`
+  (`what: runs`) until they end, or offer the user to stop each one with
+  `debasher_stop -d <run directory>`. `restart_node` kills a live node, as in a
+  crash, and has it relaunched from its last checkpoint (with its initial state
+  in a non-durable program); `relaunch_node` relaunches a node that is down in a
+  program without a Supervisor; it rewrites the scheduler output of each task,
+  where the cause of its crash is, so read that first (`get_process_output`,
   `kind: scheduler`), as before `restart_node` without a Supervisor. Every node
   runs at once: when the `cpus` or `mem` of all the nodes together exceed
   `builtinSchedCpus` or `builtinSchedMem`, the launch is refused before any node
@@ -565,12 +594,14 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   in the home directory, run by `run_tests`, which saves the program first.
 - `add_test` writes a skeleton: in bats, it runs the process with
   `run debasher_process <name>` and checks its status; in pytest, it loads the
-  node with `load_node`, feeds it and checks what it sent, restarts it, and, for
-  a node with an input, checks a replay with
+  node with `load_node`, feeds it and checks what it sent, and, in a durable
+  program, restarts it and, for a node with an input, checks a replay with
   `check_replay(feeds, capture_after)`, which fails unless the node sends the
   same and ends in the same node state with and without a restart after
   `capture_after` feeds (both in one process, so the order of a `set` of
-  strings, which changes only between processes, is not seen). Its `TODO`s are
+  strings, which changes only between processes, is not seen); a node of a
+  non-durable program gets neither test, since the harness refuses `restart`
+  and `check_replay` for it. Its `TODO`s are
   to be filled in with real checks, and the line under the comment "remove the
   line below, which makes a skeleton fail" (`false`, or `pytest.fail(...)`)
   removed once they are.

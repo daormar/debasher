@@ -56,6 +56,13 @@ export const DEFAULT_SCHEDULER = "BUILTIN";
 // two types accept different processes and connections.
 export type ProgramType = "general" | "resident";
 
+// The durability mode of a resident program (see "The non-durable mode" in
+// doc/design_doc_resident.md): durable, where every node keeps an input log
+// and checkpoints and comes back from a crash or a stop with its state, or
+// non-durable, where it keeps neither and starts again. Only a resident
+// program has one; the engine refuses to change it over the state of a run.
+export type Durability = "durable" | "non-durable";
+
 export interface Program {
 
   id: string;
@@ -63,6 +70,9 @@ export interface Program {
   name: string;
 
   programType: ProgramType;
+  // Only for a resident program; absent in a program saved before the mode
+  // existed, which is durable.
+  durability?: Durability;
 
   description: string;
 

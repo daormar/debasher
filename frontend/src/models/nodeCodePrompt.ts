@@ -58,19 +58,25 @@ export function buildNodeCodePrompt(
   library: NodeLibrary,
 ): string {
   const kind: NodeKind = process.nodeKind ?? "FBPProcess";
+  // The durability mode of the program decides what a crash does to the node
+  // and which rules its hooks keep (see "The non-durable mode" in
+  // doc/design_doc_resident.md)
+  const durable = program.durability !== "non-durable";
 
   const sections = [
     [
       `# Write the code of the DeBasher node \`${process.name}\``,
       "",
-      "DeBasher runs resident programs: long-lived Python nodes that exchange JSON messages through FIFOs, keep a node state, and recover from a crash with a checkpoint of that state and a replay of the messages received since. Write the code of the node described below.",
+      durable
+        ? "DeBasher runs resident programs: long-lived Python nodes that exchange JSON messages through FIFOs, keep a node state, and recover from a crash with a checkpoint of that state and a replay of the messages received since. Write the code of the node described below."
+        : "DeBasher runs resident programs: long-lived Python nodes that exchange JSON messages through FIFOs and keep a node state. This program is non-durable: its nodes keep no checkpoint and no input log, so a node that crashes or stops starts again with its initial state, and nothing is replayed. Write the code of the node described below.",
     ],
-    rulesSection(process, kind),
+    rulesSection(process, kind, durable),
     librarySection(library),
     ["## The program", "", `- Name: \`${program.name}\``, ...describedAs(program.description)],
     nodeSection(process, kind),
     portsSection(program, process),
-    codeSection(kind, draft, library),
+    codeSection(kind, draft, library, durable),
     [
       "## What the code has to do",
       "",
@@ -78,16 +84,22 @@ export function buildNodeCodePrompt(
         ? "Write the code that the description of the node asks for."
         : request.trim(),
     ],
-    commentSection(),
+    commentSection(durable),
     returnSection(),
   ];
 
   return sections.map(lines => lines.join("\n")).join("\n\n") + "\n";
 }
 
-function rulesSection(process: ProgramProcess, kind: NodeKind): string[] {
+function rulesSection(process: ProgramProcess, kind: NodeKind, durable: boolean): string[] {
   const className = nodeClassName(process.name);
   const signatures = NODE_HOOKS.map(h => `\`${h.signature}\``).join(", ");
+  const crashRule = durable
+    ? "- An exception that a hook raises ends the node with an error, with its traceback in the scheduler output. A Supervisor relaunches it, and without one it stays down until it is relaunched by hand. The relaunch replays the messages since the latest checkpoint, so a message on which `process_data` raises makes it raise again at every relaunch, until the Supervisor gives up on the node and stops the program: drop a message that the node cannot use, with `self.log.warning()`, rather than raise. Raise in `observe` only for a failure that a relaunch mends, such as a stalled connection."
+    : "- An exception that a hook raises ends the node with an error, with its traceback in the scheduler output. A Supervisor relaunches it with its initial state, and without one it stays down until it is relaunched by hand. What the node had received is not replayed, so a message that made `process_data` raise is gone with the state: still drop a message that the node cannot use, with `self.log.warning()`, rather than raise, since a raise loses the whole state of the node. Raise in `observe` only for a failure that a relaunch mends, such as a stalled connection.";
+  const stateRule = durable
+    ? "- A replay (at a relaunch after a crash, or at a launch over an output directory with state) runs `process_data` again on the messages since the latest checkpoint, so it is deterministic (no clock, random numbers, iteration over a `set` in its own order, or reads from outside that are not in the node state or the messages), and the node state holds everything that later messages depend on. A node test checks both with `check_replay` of the node harness, for the messages it feeds; both of its runs are in one process, so it does not see an order that changes only between processes, such as that of a `set` of strings."
+    : "- Nothing is replayed in a non-durable program, so `process_data` may use the clock, random numbers or reads from outside, and the node state is whatever the node keeps in memory: it is lost at a crash or a stop, and `capture_node_state` and `restore_node_state` are never called. What has to outlive the node goes into a file of its output directory (`DEBASHER_PROCESS_OUTDIR`), which the engine keeps across launches and a reset of the program state (`reset_program_state`, or Reset program state in the editor) takes away. After a crash, `observe` brings in again what is still there to observe, so `process_data` may see an observation twice. A node test cannot use `check_replay` or `restart` for this node.";
   const lines = [
     "## How the code is put together",
     "",
@@ -95,13 +107,18 @@ function rulesSection(process: ProgramProcess, kind: NodeKind): string[] {
     "- You write only the parts, each without the indentation of the class: the node preamble, the code before the class (imports, helper functions, constants); the class body (class attributes, the constructor, which calls `super().__init__()` and gives the node state its first value, and helper methods); and the body of each hook, without its `def` line.",
     `- The signatures of the hooks are fixed: ${signatures}. A hook with an empty body is left out of the class.`,
     "- The class never declares the ports of the node: the engine gives them from the options of its process (see the ports and options below).",
-    "- Use the methods of the runtime library rather than writing your own: `self.sleep()`, not `time.sleep()`, to set the pace; `observe` with `self.inject()` to bring in what the node sees outside the program, never `process_data`; and `self.set_notice()` for what whoever watches the program should know (a missing configuration file), set again in `restore_node_state` when it follows from the node state.",
+    "- Use the methods of the runtime library rather than writing your own: `self.sleep()`, not `time.sleep()`, to set the pace; `observe` with `self.inject()` to bring in what the node sees outside the program, never `process_data`; and `self.set_notice()` for what whoever watches the program should know (a missing configuration file)" +
+      (durable
+        ? ", set again in `restore_node_state` when it follows from the node state."
+        : ", set where the state it follows from is set, since every start of the node begins without a notice."),
     "- What `self.send_data()` and `self.inject()` send is strict JSON: a payload holding NaN or an infinity raises ValueError, so turn a float result that can be one into `None` or a string before sending it.",
-    "- An exception that a hook raises ends the node with an error, with its traceback in the scheduler output. A Supervisor relaunches it, and without one it stays down until it is relaunched by hand. The relaunch replays the messages since the latest checkpoint, so a message on which `process_data` raises makes it raise again at every relaunch, until the Supervisor gives up on the node and stops the program: drop a message that the node cannot use, with `self.log.warning()`, rather than raise. Raise in `observe` only for a failure that a relaunch mends, such as a stalled connection.",
-    "- A replay (at a relaunch after a crash, or at a launch over an output directory with state) runs `process_data` again on the messages since the latest checkpoint, so it is deterministic (no clock, random numbers, iteration over a `set` in its own order, or reads from outside that are not in the node state or the messages), and the node state holds everything that later messages depend on. A node test checks both with `check_replay` of the node harness, for the messages it feeds; both of its runs are in one process, so it does not see an order that changes only between processes, such as that of a `set` of strings.",
+    crashRule,
+    stateRule,
   ];
   if (kind === "FBPProcess") {
-    lines.push("- This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime` (`pass` when it has nothing to open), and to `observe` only if it looks at something outside the program, with `OBSERVE_PORT` set in the class body.");
+    lines.push(durable
+      ? "- This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime` (`pass` when it has nothing to open), and to `observe` only if it looks at something outside the program, with `OBSERVE_PORT` set in the class body."
+      : "- This node has to give a body to `process_data` and `initialize_runtime` (`pass` when it has nothing to open), and to `observe` only if it looks at something outside the program, with `OBSERVE_PORT` set in the class body. Leave `capture_node_state` and `restore_node_state` empty: a non-durable program never calls them.");
   } else {
     lines.push(`- \`${kind}\` already implements every hook, so this node mostly sets class attributes. A hook with an empty body runs the one of \`${kind}\` (shown with the code below); a body replaces it, and can call the inherited one, such as \`${superCall(NODE_HOOKS[0].signature)}\`, to keep what it does.`);
   }
@@ -327,7 +344,7 @@ function configurationNotes(option: ProgramOption, name: string): string[] {
   return notes;
 }
 
-function codeSection(kind: NodeKind, draft: NodeCode, library: NodeLibrary): string[] {
+function codeSection(kind: NodeKind, draft: NodeCode, library: NodeLibrary, durable: boolean): string[] {
   const lines = [
     "## The code to complete",
     "",
@@ -346,8 +363,10 @@ function codeSection(kind: NodeKind, draft: NodeCode, library: NodeLibrary): str
       lines.push(`${fence}python`, code, fence);
     } else if (hook && inheritsHooks(kind)) {
       lines.push(`Empty: the node runs \`${hook.name}\` of \`${kind}\`${inherited ? ", which is:" : "."}`);
-    } else if (hook && isRequiredHook(kind, hook.part)) {
+    } else if (hook && isRequiredHook(kind, hook.part, durable)) {
       lines.push("Empty, and required.");
+    } else if (hook && !durable && isRequiredHook(kind, hook.part)) {
+      lines.push("Empty: a non-durable program never calls it.");
     } else {
       lines.push("Empty.");
     }
@@ -365,7 +384,7 @@ function codeSection(kind: NodeKind, draft: NodeCode, library: NodeLibrary): str
 // How the code of a node is commented: as the runtime library documents its
 // own classes, with a docstring for each method, and a word on the node
 // state, which the hooks have to agree on.
-function commentSection(): string[] {
+function commentSection(durable: boolean): string[] {
   return [
     COMMENT_SECTION_TITLE,
     "",
@@ -373,7 +392,9 @@ function commentSection(): string[] {
     "",
     "- A docstring for each helper function and method, and for each hook or method that the node redefines (for a hook, the first line of its body): what it does, and why when it is not obvious.",
     "- A comment for each step whose reason does not follow from the code: the format of a message, a choice made for the recovery of the node or the idempotence of an effect outside the program, why something is dropped.",
-    "- A comment in the constructor on what the node state holds, which the constructor, `process_data`, `capture_node_state` and `restore_node_state` have to agree on.",
+    durable
+      ? "- A comment in the constructor on what the node state holds, which the constructor, `process_data`, `capture_node_state` and `restore_node_state` have to agree on."
+      : "- A comment in the constructor on what the node state holds, which the constructor and `process_data` have to agree on.",
     NO_REDUNDANT_COMMENTS,
   ];
 }

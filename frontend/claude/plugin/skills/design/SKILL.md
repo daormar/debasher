@@ -35,13 +35,18 @@ it in this session.
   saved program with the tools, which the next build overwrites.
 - Ask what the program has to do, if the user has not said: what comes in, what
   comes out, the steps in between, how much data, whether it runs once or keeps
-  running (a resident program), where it runs (the built-in scheduler or Slurm;
-  a program on the built-in scheduler, such as one with FIFOs, can still send a
-  heavy step to Slurm with a sequential process whose `sched` is `SLURM`, which
-  then needs `srun` where it runs). When the input holds several entries (the
-  samples of a sample sheet), ask whether they go into one run, one task each,
-  or one run each, where failures stay apart and entries can come later. Ask
-  only what changes the design, a few questions at a time.
+  running (a resident program, and then whether its nodes keep state worth
+  recovering after a crash: a durable program replays what each node received
+  since its latest checkpoint and needs snapshots and deterministic nodes, while
+  a non-durable one starts a crashed node again with its initial state, which
+  fits live statistics over a stream, a cache, or state that cannot be captured;
+  see "Durability" in the reference), where it runs (the built-in scheduler or
+  Slurm; a program on the built-in scheduler, such as one with FIFOs, can still
+  send a heavy step to Slurm with a sequential process whose `sched` is `SLURM`,
+  which then needs `srun` where it runs). When the input holds several entries
+  (the samples of a sample sheet), ask whether they go into one run, one task
+  each, or one run each, where failures stay apart and entries can come later.
+  Ask only what changes the design, a few questions at a time.
 - For the usual shapes (a chain of steps for each entry, a pool of workers,
   a step that gathers every task of another, tasks that stream to each
   other), start from the patterns of
@@ -103,6 +108,10 @@ connections of the data over ordering by hand.
   (`set_connection_display`) a connection whose line would cross others.
 - Each process gets a description that says what it does: the
   `/debasher:implement` skill writes its code from it.
+- For a resident program, set the durability mode agreed with the user
+  (`create_program` takes `durability`, and `set_program_settings` changes it)
+  before the program is first run: the engine refuses to change it over the
+  program state of a run.
 - Check the result with `validate_program`, and fix what it reports. It saves
   the program; a process with no code yet may need its code before it
   validates, which you can leave to `/debasher:implement` once you say so.

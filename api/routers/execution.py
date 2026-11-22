@@ -429,7 +429,9 @@ def _launch_resident_program(command: list[str], program: Program) -> RunProgram
         # one, the program state may still be that of the previous record,
         # which has to stay so that the next launch asks again.
         launch_record.write(program.outputDir, program, _program_option_args(program))
-        if period is not None:
+        # A non-durable program takes no snapshots: a period it kept from
+        # its durable days is left alone
+        if period is not None and program.durability != "non-durable":
             _start_periodic_snapshots(program, period)
 
     return response
@@ -441,6 +443,11 @@ class LaunchCheckResponse(BaseModel):
     # Whether the launch has to ask first: there is program state, and no
     # launch record or one that differs from the program.
     needsConfirmation: bool
+    # Whether the program declares a durability mode other than the one of
+    # the launch that left the state: the engine refuses to resume it, so
+    # only a reset is offered (see "The non-durable mode" in
+    # doc/design_doc_resident.md).
+    durabilityChanged: bool = False
 
 
 def _launch_check(program: Program) -> LaunchCheckResponse:
@@ -453,6 +460,7 @@ def _launch_check(program: Program) -> LaunchCheckResponse:
         hasProgramState=has_state,
         hasLaunchRecord=record is not None,
         needsConfirmation=needs_confirmation,
+        durabilityChanged=has_state and record is not None and launch_record.durability_changed(record, program),
     )
 
 
@@ -1346,8 +1354,15 @@ def take_snapshot(program: Program) -> SnapshotResponse:
     """
     "Take snapshot" on a live resident program: debasher_snapshot_resident
     -d <outputDir> with its default timeout, which starts one round and
-    waits until it closes at every node or the timeout passes.
+    waits until it closes at every node or the timeout passes. Refused for
+    a non-durable program, whose nodes keep no checkpoints, as the tool
+    itself refuses it.
     """
+    if program.durability == "non-durable":
+        raise HTTPException(
+            status_code=400,
+            detail="A non-durable program takes no snapshots: its nodes keep no checkpoints.",
+        )
     output, exit_code = _run_debasher_dir_tool_in_own_session(program, "debasher_snapshot_resident")
 
     epoch_match = _ROUND_EPOCH_RE.search(output)

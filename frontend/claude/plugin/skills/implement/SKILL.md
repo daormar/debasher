@@ -55,14 +55,19 @@ which one you start with.
    `self.sleep()` for the pace, `inject` from `observe` for what it sees
    outside, and `set_notice` for what whoever watches the program should know (a
    missing configuration file), set again in `restore_node_state` when it
-   follows from the node state. In `process_data`, drop a message that the node
-   cannot use, with a warning, rather than raise: an exception ends the node,
-   and the replay raises it again at every relaunch. Raise in `observe` only for
-   a failure that a relaunch mends. A directory watcher or a launcher needs
-   little code or none: its class sends on `-outrequests` and `-outdone`, so the
-   code never does. A node that reads the results of a batch run takes the run
-   directory from `run_dir` in the message on `-outdone`, rather than building
-   it again from a runs root of its own.
+   follows from the node state (in a non-durable program, where that state is
+   set, since the node starts with its initial state). In `process_data`, drop a
+   message that the node cannot use, with a warning, rather than raise: an
+   exception ends the node, and in a durable program the replay raises it again
+   at every relaunch, while in a non-durable one the state of the node is lost.
+   Raise in `observe` only for a failure that a relaunch mends. In a non-durable
+   program (see "Durability" in the reference) leave `capture_node_state` and
+   `restore_node_state` empty, since they are never called, and keep what has to
+   outlive the node in a file of `DEBASHER_PROCESS_OUTDIR`. A directory watcher
+   or a launcher needs little code or none: its class sends on `-outrequests`
+   and `-outdone`, so the code never does. A node that reads the results of a
+   batch run takes the run directory from `run_dir` in the message on
+   `-outdone`, rather than building it again from a runs root of its own.
 4. **Write a test.** `add_test` writes the skeleton of a business test into
    `test/` (bats for a process of a general program, pytest for a node). Read
    it with `read_program_file`, fill in its TODOs with a real check of what
@@ -112,10 +117,13 @@ the process ended with status 0 proves little. Aim for:
   status (`[ "${status}" -ne 0 ]`), rather than write a wrong output.
 - **Several tasks.** For a process in array or generator mode, run it as one
   task would be run, with the option values of that task.
-- **Nodes.** Feed a few packets and check what was sent; keep the restart
-  test and the replay test of the skeleton, and give `check_replay` feeds that
-  change the node state, with `capture_after` between two of them, so that it
-  checks that `process_data` is deterministic and the node state complete.
+- **Nodes.** Feed a few packets and check what was sent; in a durable program
+  keep the restart test and the replay test of the skeleton, and give
+  `check_replay` feeds that change the node state, with `capture_after` between
+  two of them, so that it checks that `process_data` is deterministic and the
+  node state complete. In a non-durable program the skeleton has no restart or
+  replay test: `restart` and `check_replay` refuse the node, which replays
+  nothing.
 - **Its own data.** Inputs written by the test under `${BATS_TEST_TMPDIR}`, or
   small files under `test/`, never files outside the home directory.
 

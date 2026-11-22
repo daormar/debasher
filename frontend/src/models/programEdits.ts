@@ -140,12 +140,16 @@ export function normalizeProgram(source: Program): Program {
     normalizeConnectedOptionValues(normalizeConnectedInputChannels(dropInvalidEdges(source)))
   );
 
-  return normalized.executionOptions.scheduler
-    ? normalized
+  // A program saved before the durability mode existed is durable, as every
+  // program was
+  const withDurability = normalized.durability ? normalized : { ...normalized, durability: "durable" as const };
+
+  return withDurability.executionOptions.scheduler
+    ? withDurability
     : {
-        ...normalized,
+        ...withDurability,
         executionOptions: {
-          ...normalized.executionOptions,
+          ...withDurability.executionOptions,
           scheduler: DEFAULT_SCHEDULER,
         },
       };
@@ -242,7 +246,7 @@ function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[
 // The fields of the program itself that an edit sets as a whole.
 export type ProgramFields = Partial<Pick<
   Program,
-  "name" | "description" | "preamble" | "sharedDirs" | "outputDir" | "executionOptions" | "programOptions"
+  "name" | "description" | "preamble" | "sharedDirs" | "outputDir" | "executionOptions" | "programOptions" | "durability"
 >>;
 
 export function setProgramFields(program: Program, changes: ProgramFields): Program {

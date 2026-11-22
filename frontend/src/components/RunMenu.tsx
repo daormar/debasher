@@ -8,7 +8,7 @@ import {
 import type { RunProgramResult } from "../api/executionApi";
 import { LaunchRecordConflict, TEST_OUTCOME_MESSAGES } from "../api/executionApi";
 import { useProgram } from "../store/ProgramContext";
-import { HARD_KILL_CONSEQUENCES, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
+import { hardKillConsequences, isDurable, orderlyStopOutcome, snapshotOutcome } from "../models/residentRun";
 import CommandOutputModal from "./CommandOutputModal";
 import ConfirmDialog from "./ConfirmDialog";
 import LaunchRecordDialog from "./LaunchRecordDialog";
@@ -80,6 +80,12 @@ const RESIDENT_ONLY = new Set<MenuItem>([
   "Reset program state",
 ]);
 
+// Offered on a durable resident program only: a non-durable one keeps no
+// checkpoints, so it takes no snapshots.
+const DURABLE_ONLY = new Set<MenuItem>([
+  "Take snapshot",
+]);
+
 // Offered on a general program only: a resident program resets its program
 // state instead, since its output directory is part of the program.
 const GENERAL_ONLY = new Set<MenuItem>([
@@ -129,6 +135,11 @@ export default function RunMenu() {
   const isResident =
     program.programType === "resident";
 
+  // A non-durable program takes no snapshots, and a stop or a kill leaves
+  // nothing to resume (see "The non-durable mode" in
+  // doc/design_doc_resident.md)
+  const durable = isDurable(program);
+
   // A request of this tab to launch, stop or kill the program has not been
   // answered yet.
   const phase = isResident ? residentPhase : runPhase;
@@ -158,7 +169,7 @@ export default function RunMenu() {
   // "Run program" on program state that another program may have produced,
   // waiting for the user's choice.
   const [launchConfirm, setLaunchConfirm] =
-    useState<{ hasLaunchRecord: boolean } | null>(null);
+    useState<{ hasLaunchRecord: boolean; durabilityChanged: boolean } | null>(null);
 
   // "Reset program state": delete the program state instead of setting it
   // aside.
@@ -201,7 +212,7 @@ export default function RunMenu() {
         if (check.needsConfirmation) {
           setPendingAction(null);
           setOpen(false);
-          setLaunchConfirm({ hasLaunchRecord: check.hasLaunchRecord });
+          setLaunchConfirm({ hasLaunchRecord: check.hasLaunchRecord, durabilityChanged: check.durabilityChanged });
           return;
         }
       } catch (err) {
@@ -231,7 +242,15 @@ export default function RunMenu() {
       // Another tab may have launched a changed program in between.
       if (err instanceof LaunchRecordConflict) {
         setOpen(false);
-        setLaunchConfirm({ hasLaunchRecord: err.hasLaunchRecord });
+        // Whether the mode changed too is asked again: the conflict does
+        // not say it, and the engine would refuse the resume
+        let durabilityChanged = false;
+        try {
+          durabilityChanged = (await checkLaunch(program)).durabilityChanged;
+        } catch {
+          // Asked as if only the program changed
+        }
+        setLaunchConfirm({ hasLaunchRecord: err.hasLaunchRecord, durabilityChanged });
         return;
       }
       const message = err instanceof Error ? err.message : "Failed to run program.";
@@ -313,7 +332,7 @@ export default function RunMenu() {
       setCommandOutput({
         title: "Stop program",
         message: isResident
-          ? orderlyStopOutcome(result.exitCode)
+          ? orderlyStopOutcome(result.exitCode, durable)
           : result.exitCode === 0
           ? "The run was stopped."
           : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
@@ -413,7 +432,7 @@ export default function RunMenu() {
       setCommandOutput({
         title: "Kill program",
         message: result.exitCode === 0
-          ? `The program was killed. ${HARD_KILL_CONSEQUENCES}`
+          ? `The program was killed. ${hardKillConsequences(durable)}`
           : `debasher_stop ended with exit code ${result.exitCode}. What it printed:`,
         output: result.output,
       });
@@ -546,7 +565,9 @@ export default function RunMenu() {
           }}
         >
 
-          {MENU_ITEMS.filter(item => isResident ? !GENERAL_ONLY.has(item) : !RESIDENT_ONLY.has(item)).map(item => (
+          {MENU_ITEMS.filter(item => isResident
+            ? !GENERAL_ONLY.has(item) && (durable || !DURABLE_ONLY.has(item))
+            : !RESIDENT_ONLY.has(item)).map(item => (
 
             <button
 
@@ -661,7 +682,7 @@ export default function RunMenu() {
             orderly stop would only reach the hard kill after its timeout.
           </p>
           <p style={{ margin: 0 }}>
-            {HARD_KILL_CONSEQUENCES}
+            {hardKillConsequences(durable)}
           </p>
         </ConfirmDialog>
       )}
@@ -669,6 +690,7 @@ export default function RunMenu() {
       {launchConfirm && (
         <LaunchRecordDialog
           hasLaunchRecord={launchConfirm.hasLaunchRecord}
+          durabilityChanged={launchConfirm.durabilityChanged}
           onResume={handleResumeChanged}
           onStartAfresh={handleStartAfresh}
           onCancel={() => setLaunchConfirm(null)}

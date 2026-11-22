@@ -1,7 +1,28 @@
 import { useEffect, useState } from "react";
 
 import { listSchedulers } from "../api/executionApi";
+import type { Durability } from "../models/program";
 import { useProgram } from "../store/ProgramContext";
+
+// The durability mode of a resident program (see "The non-durable mode" in
+// doc/design_doc_resident.md), as the dialog offers it.
+const DURABILITY_MODES: { value: Durability; label: string; description: string }[] = [
+  {
+    value: "durable",
+    label: "Durable",
+    description:
+      "Every node keeps an input log and checkpoints, and comes back from a " +
+      "crash or a stop with the state it had. Its process_data has to be " +
+      "deterministic, and the program takes snapshots regularly.",
+  },
+  {
+    value: "non-durable",
+    label: "Non-durable",
+    description:
+      "No input log, checkpoints or rounds: a node that crashes or stops " +
+      "starts again with its initial state, and nothing is replayed.",
+  },
+];
 
 interface Props {
   onClose: () => void;
@@ -19,6 +40,7 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   const {
     program,
     setExecutionOptions,
+    setDurability,
   } = useProgram();
 
   // The engine forces the built-in scheduler in oneshot mode on a resident
@@ -26,6 +48,13 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   // choose, and only the limits of the built-in scheduler apply.
   const isResident =
     program.programType === "resident";
+
+  // The durability mode, which only a resident program has; the snapshot
+  // period applies to the durable mode only
+  const [durability, setDurabilityChoice] =
+    useState<Durability>(program.durability ?? "durable");
+
+  const isDurable = durability !== "non-durable";
 
   // programEdits.ts's normalizeProgram guarantees this is never falsy, so
   // no fallback here: a fallback would just mask a genuinely empty
@@ -136,6 +165,9 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
   );
 
   function handleSave() {
+    if (isResident && durability !== (program.durability ?? "durable")) {
+      setDurability(durability);
+    }
     setExecutionOptions({
       scheduler,
       builtinSchedCpus,
@@ -268,6 +300,43 @@ export default function ExecutionOptionsEditor({ onClose }: Props) {
         )}
 
         {isResident && (
+          <>
+
+            <label style={{ fontSize: 14 }}>
+              Durability mode
+            </label>
+
+            {DURABILITY_MODES.map(({ value, label, description }) => (
+              <label
+                key={value}
+                style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 14 }}
+              >
+                <input
+                  type="radio"
+                  name="durability"
+                  value={value}
+                  checked={durability === value}
+                  onChange={() => setDurabilityChoice(value)}
+                />
+                <span>
+                  {label}
+                  <span style={{ display: "block", color: "#666", fontSize: 12 }}>
+                    {description}
+                  </span>
+                </span>
+              </label>
+            ))}
+
+            <p style={{ margin: 0, fontSize: 13, color: "#555" }}>
+              The mode is declared in the generated script. A program does
+              not change its mode over the program state of a run: "Run
+              program" then offers to reset the state and start afresh.
+            </p>
+
+          </>
+        )}
+
+        {isResident && isDurable && (
           <>
 
             <label style={{ fontSize: 14 }}>

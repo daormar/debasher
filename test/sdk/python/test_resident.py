@@ -198,3 +198,22 @@ def test_what_resident_generation_refuses_is_refused_with_its_message(tmp_path):
 
     with pytest.raises(DefinitionError, match='uses the option channel "value_desc", which a resident program does not offer'):
         prg.write(tmp_path / "home")
+
+
+def test_a_resident_program_declares_its_durability_mode(tmp_path):
+    durable = Program("prg", resident=True)
+    durable.add(Node("Acc", code=_ACCUMULATE))
+    assert durable.to_model().durability == "durable"
+    assert durable.to_topology()[0].durability is None
+
+    non_durable = Program("prg", resident=True, durability="non-durable")
+    non_durable.add(Node("Acc", code=_ACCUMULATE))
+    assert non_durable.to_model().durability == "non-durable"
+    assert non_durable.to_topology()[0].durability == "non-durable"
+
+
+def test_a_durability_mode_is_refused_for_a_general_program_and_when_it_is_neither_mode():
+    with pytest.raises(DefinitionError, match="only a resident program has a durability mode"):
+        Program("prg", durability="non-durable")
+    with pytest.raises(DefinitionError, match='"durable" or "non-durable"'):
+        Program("prg", resident=True, durability="light")

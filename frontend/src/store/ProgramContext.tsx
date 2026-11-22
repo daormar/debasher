@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { ExecutionOptions, Program } from "../models/program";
+import type { Durability, ExecutionOptions, Program } from "../models/program";
 import type {
   ProgramProcess,
   ProcessLanguage,
@@ -204,6 +204,13 @@ interface ProgramContextType {
 
   setExecutionOptions: (
     executionOptions: ExecutionOptions
+  ) => void;
+
+  // The durability mode of a resident program (see "The non-durable mode"
+  // in doc/design_doc_resident.md); the engine refuses to change it over
+  // the program state of a run.
+  setDurability: (
+    durability: Durability
   ) => void;
 
   setProgramOptions: (
@@ -610,6 +617,10 @@ export function ProgramProvider({
     setProgramFields({ executionOptions });
   }
 
+  function setDurability(durability: Durability) {
+    setProgramFields({ durability });
+  }
+
   function setProgramOptions(programOptions: Record<string, string>) {
     setProgramFields({ programOptions });
   }
@@ -801,6 +812,7 @@ export function ProgramProvider({
     setOutputDir,
 
     setExecutionOptions,
+    setDurability,
 
     setProgramOptions,
 

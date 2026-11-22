@@ -141,3 +141,30 @@ def test_a_resident_program_keeps_what_it_adds_in_its_metadata(tmp_path):
 
 def test_the_script_of_a_resident_program_declares_its_type():
     assert 'debasher::program_type "resident"' in generate_script(_resident_program())
+
+
+def test_program_metadata_saved_without_the_durability_is_durable(tmp_path):
+    saved = json.loads(_resident_program().model_dump_json())
+    del saved["durability"]
+    metadata = tmp_path / ".debasher" / "program.json"
+    metadata.parent.mkdir()
+    metadata.write_text(json.dumps(saved))
+
+    assert persistence.load_program(str(tmp_path)).durability == "durable"
+
+
+def test_a_non_durable_program_keeps_its_mode_in_its_metadata(tmp_path):
+    program = _resident_program().model_copy(update={"durability": "non-durable"})
+
+    persistence.save(str(tmp_path), program)
+
+    assert persistence.load_program(str(tmp_path)).durability == "non-durable"
+
+
+def test_the_script_of_a_non_durable_program_declares_its_mode():
+    durable = generate_script(_resident_program())
+    non_durable = generate_script(_resident_program().model_copy(update={"durability": "non-durable"}))
+
+    assert 'debasher::program_type "resident"\n' in durable
+    assert "non-durable" not in durable
+    assert 'debasher::program_type "resident" "non-durable"' in non_durable

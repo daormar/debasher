@@ -62,7 +62,11 @@ class Program:
     dflt_throttle, rerun_outdated_procs, conda_support, docker_support. A
     resident program (`resident=True`) adds nodes and a Supervisor instead
     of processes, and may ask for periodic snapshots of its runs
-    (`snapshot_every_secs`).
+    (`snapshot_every_secs`). Its durability mode (`durability`, "durable" by
+    default or "non-durable", see "The non-durable mode" in
+    doc/design_doc_resident.md) says whether its nodes keep an input log and
+    checkpoints, and come back from a crash or a stop with their state, or
+    keep neither and start again; a non-durable program takes no snapshots.
     """
 
     def __init__(
@@ -83,10 +87,20 @@ class Program:
         docker_support: bool = False,
         resident: bool = False,
         snapshot_every_secs: str = "",
+        durability: str = "durable",
     ):
         check_program_name(name)
         self.name = name
         self.resident = resident
+        if durability not in ("durable", "non-durable"):
+            raise DefinitionError(
+                f'Program "{name}": the durability mode is "durable" or "non-durable", not "{durability}".'
+            )
+        if durability != "durable" and not resident:
+            raise DefinitionError(
+                f'Program "{name}": only a resident program has a durability mode (Program(..., resident=True)).'
+            )
+        self.durability = durability
         self.description = description
         self.program_options = dict(program_options or {})
         self.preamble = preamble
@@ -397,6 +411,7 @@ class Program:
                 schema_version=topology.SCHEMA_VERSION,
                 name=self.name,
                 type="resident" if self.resident else None,
+                durability="non-durable" if self.resident and self.durability == "non-durable" else None,
                 description=self.description,
                 preamble=self.preamble,
                 env=self.env_vars,

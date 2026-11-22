@@ -24,7 +24,7 @@ if int(pydantic.VERSION.split(".")[0]) < 2:
         allow_module_level=True,
     )
 
-from api.doc_mod import parse_program_type
+from api.doc_mod import parse_program_durability, parse_program_type
 from api.models import NodeCode
 from api.option_handler_import import scan_fifo_tags
 from api.program_import import import_program_from_script, read_preamble_processes
@@ -405,3 +405,10 @@ def test_without_a_supervisor_a_control_input_fed_from_outside_makes_its_node_an
     assert stripped.initiators == {"n"}
     assert stripped.removed_labels["n"] == {"-ctl"}
     assert stripped.problems == []
+
+
+def test_the_durability_mode_is_read_from_the_module_documentation():
+    markdown = "# relay\n\n## Program Type\n\n`resident`\n\n## Durability\n\n`non-durable`\n\n## counter\n"
+    assert parse_program_durability(markdown) == "non-durable"
+    assert parse_program_durability("# relay\n\n## Program Type\n\n`resident`\n\n## Durability\n\n`durable`\n") == "durable"
+    assert parse_program_durability("# relay\n\n## Program Type\n\n`resident`\n") == "durable"

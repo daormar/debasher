@@ -44,39 +44,69 @@ export function stoppedInOrder(statuses: Record<string, string>): boolean {
   return values.length > 0 && values.every(status => status === "FINISHED");
 }
 
+// Whether a program runs in the durable mode (see "The non-durable mode" in
+// doc/design_doc_resident.md): what a stop and a crash leave differs, and so
+// do the texts below.
+export function isDurable(program: Pick<Program, "durability">): boolean {
+  return program.durability !== "non-durable";
+}
+
+// What a fresh start means in a non-durable program, where no node keeps a
+// checkpoint or an input log.
+const STARTS_AFRESH =
+  "The program is non-durable: the next launch starts every node with its " +
+  "initial state, over the files its process left.";
+
 // What a stopped program says of how it stopped, said both by the indicator
 // of the run and by get_status of the MCP.
-export const STOPPED_IN_ORDER =
-  "Program stopped in order. The next launch resumes it with nothing lost.";
+export function stoppedInOrderText(durable: boolean): string {
+  return durable
+    ? "Program stopped in order. The next launch resumes it with nothing lost."
+    : `Program stopped: every node ended. ${STARTS_AFRESH}`;
+}
 
-export const STOPPED_ABRUPTLY =
-  "Program stopped abruptly: some node did not end cleanly, after a hard " +
-  "kill, a node that failed, or a Supervisor that gave up on a node. The " +
-  "next launch resumes each node from its last checkpoint and its input " +
-  "log, and what the FIFOs held may have been lost.";
+export function stoppedAbruptlyText(durable: boolean): string {
+  return durable
+    ? "Program stopped abruptly: some node did not end cleanly, after a hard " +
+      "kill, a node that failed, or a Supervisor that gave up on a node. The " +
+      "next launch resumes each node from its last checkpoint and its input " +
+      "log, and what the FIFOs held may have been lost."
+    : "Program stopped abruptly: some node did not end cleanly, after a hard " +
+      "kill, a node that failed, or a Supervisor that gave up on a node. " +
+      STARTS_AFRESH;
+}
 
 // What a hard kill leaves, said both when the user is asked to confirm
 // "Kill program" and when an orderly stop falls back to it.
-export const HARD_KILL_CONSEQUENCES =
-  "Each node resumes from its last checkpoint and its input log, and what " +
-  "the FIFOs held may be lost, at most what a pipe holds for each business " +
-  "channel, which the nodes that read them report as a gap in the sequence " +
-  "numbers when they resume.";
+export function hardKillConsequences(durable: boolean): string {
+  return durable
+    ? "Each node resumes from its last checkpoint and its input log, and what " +
+      "the FIFOs held may be lost, at most what a pipe holds for each business " +
+      "channel, which the nodes that read them report as a gap in the sequence " +
+      "numbers when they resume."
+    : "What the nodes held in memory and what the FIFOs held is lost, and " +
+      "nothing reports it. " + STARTS_AFRESH;
+}
 
 // What the exit code of debasher_stop_resident means, for "Stop program".
-export function orderlyStopOutcome(exitCode: number | null): string {
+export function orderlyStopOutcome(exitCode: number | null, durable = true): string {
 
   if (exitCode === 0) {
-    return "Stopped in order. Every node halted in the same round, and the " +
-      "next launch resumes the program with nothing lost.";
+    return durable
+      ? "Stopped in order. Every node halted in the same round, and the " +
+        "next launch resumes the program with nothing lost."
+      : `Stopped. Every node ended, with no halt, since a non-durable program has no rounds. ${STARTS_AFRESH}`;
   }
 
   if (exitCode === 2) {
-    return "The orderly stop did not end (a node ended before it halted, or " +
-      "the timeout passed), and fell back to the hard kill of debasher_stop. " +
+    return (durable
+      ? "The orderly stop did not end (a node ended before it halted, or " +
+        "the timeout passed), and fell back to the hard kill of debasher_stop. "
+      : "The stop did not end within the timeout, and fell back to the hard " +
+        "kill of debasher_stop. ") +
       "The program has ended, but was killed. Read the error above and the " +
       "scheduler output of the node it names before launching again. " +
-      HARD_KILL_CONSEQUENCES;
+      hardKillConsequences(durable);
   }
 
   if (exitCode === 1) {

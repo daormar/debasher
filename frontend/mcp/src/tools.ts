@@ -12,7 +12,8 @@ import { normalizeProgram } from "../../src/models/programEdits";
 import { layoutProcesses } from "../../src/models/programLayout";
 import type { NamedEdit } from "../../src/models/programRefs";
 import {
-  HARD_KILL_CONSEQUENCES,
+  hardKillConsequences,
+  isDurable,
   offersRelaunchNode,
   offersRestartNode,
   orderlyStopOutcome,
@@ -21,9 +22,9 @@ import {
   restartNodeWarning,
   restartsWithBothEnds,
   snapshotOutcome,
-  STOPPED_ABRUPTLY,
-  STOPPED_IN_ORDER,
+  stoppedAbruptlyText,
   stoppedInOrder,
+  stoppedInOrderText,
 } from "../../src/models/residentRun";
 import type { TalkCandidate } from "../../src/models/residentTalk";
 import { entryText, talkCandidates } from "../../src/models/residentTalk";
@@ -373,15 +374,20 @@ const editingTools = [
       name: z.string().min(1),
       program_type: z.enum(["general", "resident"]).optional()
         .describe("general (by default) or resident; it cannot be changed afterwards."),
+      durability: z.enum(["durable", "non-durable"]).optional()
+        .describe("Resident programs only: durable (by default) or non-durable (see set_program_settings); set it before the first launch, since the engine refuses to change it over the program state of a run."),
       description: z.string().optional(),
       preamble: z.string().optional(),
       output_dir: z.string().optional(),
     },
     EDITS,
-    async (backend, { home_dir, name, program_type, description, preamble, output_dir }) => {
+    async (backend, { home_dir, name, program_type, durability, description, preamble, output_dir }) => {
       await refuseProgramIn(backend, home_dir);
+      if (durability && durability !== "durable" && program_type !== "resident") {
+        throw new Refusal("Only a resident program has a durability mode.");
+      }
       const program = {
-        ...createEmptyProgram(name, program_type ?? "general"),
+        ...createEmptyProgram(name, program_type ?? "general", durability ?? "durable"),
         description: description ?? "",
         preamble: preamble ?? "",
         outputDir: output_dir ?? "",
@@ -475,7 +481,7 @@ const editingTools = [
 
   editTool(
     "set_program_settings",
-    "Changes the settings of the program: name, description, preamble, environment variables, output directory, execution options, program options and shared directories.",
+    "Changes the settings of the program: name, description, preamble, environment variables, output directory, execution options, program options, shared directories and the durability mode of a resident program (durability).",
     {
       changes: schemas.programFields.optional(),
       env_vars: z.record(z.string(), z.string()).optional().describe("Environment variables to set, by name."),
@@ -542,9 +548,9 @@ async function processStatuses(
 // no cause in the output of the processes it killed, and the Supervisor
 // names the node it gave up on and keeps the tail of the output of each
 // node it relaunched.
-function stoppedHow(statuses: Record<string, string>, supervised: boolean): string {
+function stoppedHow(statuses: Record<string, string>, supervised: boolean, durable: boolean): string {
   if (stoppedInOrder(statuses)) {
-    return STOPPED_IN_ORDER;
+    return stoppedInOrderText(durable);
   }
   const unfinished = Object.entries(statuses).filter(([, status]) => status !== "FINISHED").map(([name]) => name);
   const where = supervised
@@ -553,7 +559,7 @@ function stoppedHow(statuses: Record<string, string>, supervised: boolean): stri
       "relaunched after a crash. A node that failed by itself left the cause in its own scheduler output."
     : "A node that failed left the cause in its own scheduler output (get_process_output, kind: scheduler); " +
       "after a hard kill, the processes killed left no cause there, since they were killed from outside.";
-  return `${STOPPED_ABRUPTLY} Not finished: ${unfinished.join(", ")}. ${where} ` +
+  return `${stoppedAbruptlyText(durable)} Not finished: ${unfinished.join(", ")}. ${where} ` +
     "Read them before launching the program again, which rewrites them.";
 }
 
@@ -638,6 +644,16 @@ const runningTools = [
         result = await savingFirst(() => backend.runProgram(program, resume_changed_program ?? false));
       } catch (err) {
         if (err instanceof LaunchRecordConflict) {
+          // A change of the durability mode is one the engine refuses to
+          // resume over: only the reset is a way out
+          const check = await backend.checkLaunch(program).catch(() => null);
+          if (check?.durabilityChanged) {
+            throw new Refusal(
+              "The output directory holds the program state of a run in the other durability mode: the " +
+              "engine refuses to resume it. Reset it with reset_program_state (confirm) to start afresh, or " +
+              "launch on another output directory."
+            );
+          }
           throw new Refusal(
             "The output directory holds program state that " +
             (err.hasLaunchRecord ? "another program produced" : "no launch record describes") +
@@ -662,7 +678,7 @@ const runningTools = [
 
   tool(
     "stop_program",
-    "Stops the run of the program. A resident program stops in order, every node halting in the same round; kill ends it at once instead, which needs confirm.",
+    "Stops the run of the program. A durable resident program stops in order, every node halting in the same round; a non-durable one stops without a halt, and its next launch starts every node afresh; kill ends it at once instead, which needs confirm.",
     { home_dir: schemas.homeDir, kill: z.boolean().optional(), confirm },
     DELETES,
     async (backend, { home_dir, kill, confirm: confirmed }) => {
@@ -676,7 +692,7 @@ const runningTools = [
       }
       if (kill) {
         if (!confirmed) {
-          throw new Refusal(`Killing the program needs confirm. ${HARD_KILL_CONSEQUENCES}`);
+          throw new Refusal(`Killing the program needs confirm. ${hardKillConsequences(isDurable(program))}`);
         }
         const { output, exitCode } = await backend.killProgram(program);
         const answer = exitCode === 0
@@ -685,7 +701,7 @@ const runningTools = [
         return withOutput(answer, output, OUTPUT_LINES);
       }
       const { output, exitCode } = await backend.stopProgram(program);
-      return withOutput(orderlyStopOutcome(exitCode), output, OUTPUT_LINES);
+      return withOutput(orderlyStopOutcome(exitCode, isDurable(program)), output, OUTPUT_LINES);
     }
   ),
 
@@ -702,7 +718,7 @@ const runningTools = [
         const phase = residentRunPhase(statuses, hasProgramState, null);
         return [
           `Run phase: ${phase}`,
-          ...(phase === "stopped" ? [stoppedHow(statuses, hasSupervisor(program.processes))] : []),
+          ...(phase === "stopped" ? [stoppedHow(statuses, hasSupervisor(program.processes), isDurable(program))] : []),
           ...(lines.length > 0 ? ["Processes:", ...lines] : []),
           ...notices.map(notice =>
             `Notice of ${notice.process}${notice.task === null ? "" : `:${notice.task}`}: ${notice.level}: ${notice.text}`
@@ -815,7 +831,7 @@ const residentTools = [
 
   tool(
     "inspect_node",
-    "What a node of a running or stopped resident program keeps: a summary, a checkpoint, its input log, or the batch runs of a launcher node.",
+    "What a node of a running or stopped resident program keeps: a summary, a checkpoint, its input log, or the batch runs of a launcher node. A node of a non-durable program keeps no checkpoint and no input log: only summary and runs apply.",
     {
       home_dir: schemas.homeDir,
       process: schemas.processName,
@@ -829,6 +845,9 @@ const residentTools = [
       const program = await programWithOutputDir(backend, home_dir);
       requireResident(program, "Inspecting a node");
       processOf(program, process);
+      if (!isDurable(program) && (what === "checkpoint" || what === "log")) {
+        throw new Refusal(`The program is non-durable: its nodes keep no checkpoints and no input log, so there is no ${what} to show.`);
+      }
       let command: InspectNodeCommand;
       switch (what ?? "summary") {
         case "checkpoint":
@@ -851,7 +870,7 @@ const residentTools = [
         throw new Refusal(error);
       }
       if (command.command === "summary") {
-        return summaryRows(result as NodeSummary)
+        return summaryRows(result as NodeSummary, isDurable(program))
           .map(row => `${row.label}: ${row.value}${row.warning ? " (warning)" : ""}`)
           .join("\n");
       }
@@ -861,12 +880,15 @@ const residentTools = [
 
   tool(
     "snapshot",
-    "Takes a snapshot of a live resident program: starts a round, which every node checkpoints, and waits for it to close.",
+    "Takes a snapshot of a live durable resident program: starts a round, which every node checkpoints, and waits for it to close. A non-durable program takes none.",
     { home_dir: schemas.homeDir },
     EDITS,
     async (backend, { home_dir }) => {
       const program = await programWithOutputDir(backend, home_dir);
       requireResident(program, "A snapshot");
+      if (!isDurable(program)) {
+        throw new Refusal("The program is non-durable: it takes no snapshots, since its nodes keep no checkpoints.");
+      }
       const { exitCode, epoch, pendingNodes, output } = await backend.takeSnapshot(program);
       return withOutput(snapshotOutcome(exitCode, epoch, pendingNodes), exitCode === 0 ? "" : output, OUTPUT_LINES);
     }
@@ -874,7 +896,7 @@ const residentTools = [
 
   tool(
     "restart_node",
-    "Kills a node of a live resident program, as in a crash, and has it relaunched from its last checkpoint. Needs confirm. Without a Supervisor, the relaunch rewrites the scheduler output of the node: read it first if it matters (get_process_output, kind: scheduler).",
+    "Kills a node of a live resident program, as in a crash, and has it relaunched: from its last checkpoint in a durable program, with its initial state in a non-durable one. Needs confirm. Without a Supervisor, the relaunch rewrites the scheduler output of the node: read it first if it matters (get_process_output, kind: scheduler).",
     { home_dir: schemas.homeDir, process: schemas.processName, confirm },
     DELETES,
     async (backend, { home_dir, process, confirm: confirmed }) => {
@@ -1034,7 +1056,7 @@ const testTools = [
 
   tool(
     "add_test",
-    "Writes the test skeleton of a process, as \"Add test\" does, into the test directory: by default test/<process>.bats for a process of a general program and test/test_<process>.py for a node, or file_name. The skeleton of a node with an input includes a test of a replay with check_replay, which checks, for the messages it feeds, that process_data is deterministic and the node state complete (both runs in one process). Fill in its TODOs, then remove the line that makes each test fail. Refused when the file exists.",
+    "Writes the test skeleton of a process, as \"Add test\" does, into the test directory: by default test/<process>.bats for a process of a general program and test/test_<process>.py for a node, or file_name. In a durable program the skeleton also restarts the node and, for a node with an input, checks a replay with check_replay, which checks, for the messages it feeds, that process_data is deterministic and the node state complete (both runs in one process); a node of a non-durable program gets neither test, since the harness refuses restart and check_replay for it. Fill in its TODOs, then remove the line that makes each test fail. Refused when the file exists.",
     {
       home_dir: schemas.homeDir,
       process: schemas.processName,

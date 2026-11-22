@@ -48,11 +48,11 @@ const cellStyle: React.CSSProperties = {
   verticalAlign: "top",
 };
 
-function SummaryView({ summary }: { summary: NodeSummary }) {
+function SummaryView({ summary, durable }: { summary: NodeSummary; durable: boolean }) {
   return (
     <table style={{ borderCollapse: "collapse", fontSize: 14 }}>
       <tbody>
-        {summaryRows(summary).map(row => (
+        {summaryRows(summary, durable).map(row => (
           <tr key={row.label} data-warning={row.warning ? "true" : undefined}>
             <th style={{ ...cellStyle, whiteSpace: "nowrap" }}>{row.label}</th>
             <td style={{ ...cellStyle, color: row.warning ? "#c0392b" : undefined }}>{row.value}</td>
@@ -170,6 +170,10 @@ export default function NodeStateModal({ process, taskIndex, onClose }: Props) {
 
   const [view, setView] = useState<View>("summary");
   const [summary, setSummary] = useState<NodeSummary | null>(null);
+  // A node of a non-durable program keeps no checkpoints and no input log:
+  // the summary is its only view
+  const durable = program.durability !== "non-durable";
+  const views = (Object.keys(VIEW_LABELS) as View[]).filter(v => durable || v === "summary");
   const [epoch, setEpoch] = useState<number | null>(null);
   const [checkpoint, setCheckpoint] = useState<NodeCheckpoint | null>(null);
   const [port, setPort] = useState("");
@@ -285,7 +289,7 @@ export default function NodeStateModal({ process, taskIndex, onClose }: Props) {
         </h3>
 
         <div style={{ display: "flex", gap: 4, borderBottom: "1px solid #ddd" }}>
-          {(Object.keys(VIEW_LABELS) as View[]).map(v => (
+          {views.map(v => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -340,7 +344,7 @@ export default function NodeStateModal({ process, taskIndex, onClose }: Props) {
           ) : isLoading ? (
             <div style={{ fontSize: 14, color: "#666" }}>Reading…</div>
           ) : view === "summary" && summary ? (
-            <SummaryView summary={summary} />
+            <SummaryView summary={summary} durable={durable} />
           ) : view === "checkpoints" ? (
             summary && summary.checkpoints.length === 0
               ? <div style={{ fontSize: 14 }}>The node retains no checkpoint yet.</div>

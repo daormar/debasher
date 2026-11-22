@@ -33,6 +33,8 @@ export interface ComputationalSpecs {
 
   gil_switch_interval_ms?: number;
 
+  inbound_queue_max_mb?: number;
+
   startup_timeout_s?: number;
 
   max_concurrent_runs?: number;

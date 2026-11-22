@@ -31,7 +31,10 @@ the web UI shows them.
   processes, Add process, Add program, Save, Run, Help, Close), the Run menu
   (output directory, execution and program options, Validate program, Run tests,
   Run program, status, stop, Reset output directory on a general program, and
-  on a resident one Kill program, Take snapshot and Reset program state), the
+  on a resident one Kill program, Reset program state and, when it is
+  durable, Take snapshot; the durability mode of a resident program is chosen
+  when the program is created and changed in its execution options, over a
+  reset program state), the
   Inspector on the right, which edits the selected process, with the "AI
   prompt" button of each code editor, the context menu of a process or an edge
   on the canvas, the Legend of the canvas, which says what its borders, marks

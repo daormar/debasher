@@ -100,6 +100,9 @@ export async function runProgram(
 }
 
 export interface LaunchCheckResult {
+  // Whether the program declares a durability mode other than the one of
+  // the launch that left the state, which the engine refuses to resume.
+  durabilityChanged: boolean;
   hasProgramState: boolean;
   hasLaunchRecord: boolean;
   // There is program state, and no launch record or one that differs from

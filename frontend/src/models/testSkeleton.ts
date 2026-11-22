@@ -75,7 +75,9 @@ export function testSkeletonSummary(program: Program, process: ProgramProcess): 
       ? `a process test (bats) that runs ${process.name} with placeholders for its options`
       : process.nodeKind === "DirectoryWatcher"
         ? `a node test (pytest) that builds ${process.name} and observes a directory for it to watch`
-        : `a node test (pytest) that builds ${process.name}, feeds it a packet${observesOutside(process) ? " and observes" : ""}, restarts it and checks a replay`;
+        : program.durability === "non-durable"
+          ? `a node test (pytest) that builds ${process.name} and feeds it a packet${observesOutside(process) ? " and observes" : ""}`
+          : `a node test (pytest) that builds ${process.name}, feeds it a packet${observesOutside(process) ? " and observes" : ""}, restarts it and checks a replay`;
   return (
     `Writes a first test for ${process.name}: ${what}. Its tests fail on purpose until you fill in its TODOs, ` +
     'real values and checks, and remove the line that makes them fail. "Run tests" runs it with the other ' +
@@ -197,9 +199,12 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
   }
   lines.push(`    return ${loadCall}`, "");
 
+  // A node of a non-durable program is never restored from its state and
+  // replays nothing: the harness refuses restart() and check_replay for it
+  const durable = program.durability !== "non-durable";
   const tests =
     process.nodeKind === "DirectoryWatcher"
-      ? watcherTests(node)
+      ? watcherTests(node, durable)
       : [
           [
             `def test_${name}_sends_what_it_should():`,
@@ -209,17 +214,21 @@ function nodeTestSkeleton(program: Program, process: ProgramProcess): string {
             ...node.sentCheck,
             ...node.fail,
           ],
-          [
-            `def test_${name}_goes_on_after_a_restart():`,
-            "    under_test = node()",
-            ...node.feed,
-            "    under_test = under_test.restart()",
-            ...node.feed,
-            "    # TODO: what the restarted node sent, from the node state it got back",
-            ...node.sentCheck,
-            ...node.fail,
-          ],
-          ...(inputs.length > 0 ? [replayTest(node, inputs[0])] : []),
+          ...(durable
+            ? [
+                [
+                  `def test_${name}_goes_on_after_a_restart():`,
+                  "    under_test = node()",
+                  ...node.feed,
+                  "    under_test = under_test.restart()",
+                  ...node.feed,
+                  "    # TODO: what the restarted node sent, from the node state it got back",
+                  ...node.sentCheck,
+                  ...node.fail,
+                ],
+              ]
+            : []),
+          ...(inputs.length > 0 && durable ? [replayTest(node, inputs[0])] : []),
           ...(observesOutside(process) ? [observeTest(node)] : []),
         ];
   for (const test of tests) {
@@ -269,11 +278,11 @@ function observeTest(node: NodeSkeleton): string[] {
 // The tests of a DirectoryWatcher, which has no input to feed and is built
 // with the directory it watches: what it brings in when a file arrives
 // there, and that after a restart it requests no file twice.
-function watcherTests(node: NodeSkeleton): string[][] {
+function watcherTests(node: NodeSkeleton, durable: boolean): string[][] {
   // The class needs the directory to watch: the test gives it tmp_path
   const build = `    under_test = node(opts={${JSON.stringify(bareName(WATCH_DIR_OPTION_LABEL))}: str(tmp_path)})`;
   const files = ["    # TODO: write in tmp_path the files that the test needs", '    (tmp_path / "TODO").write_text("TODO")'];
-  return [
+  const tests = [
     [
       `def test_${node.name}_brings_in_what_it_observes(tmp_path):`,
       build,
@@ -302,6 +311,9 @@ function watcherTests(node: NodeSkeleton): string[][] {
       ...node.fail,
     ],
   ];
+  // The restart test needs the node state, which a non-durable program
+  // never restores
+  return durable ? tests : tests.slice(0, 1);
 }
 
 function pythonList(names: string[]): string {

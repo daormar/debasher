@@ -41,6 +41,7 @@ _RESOLVED_VAR_ITEM_RE = re.compile(r"^- `(?P<name>.+)`: `(?P<value>.*)`$")
 _MODULE_SECTION_TITLES = frozenset(
     {
         "Program Type",
+        "Durability",
         _SHARED_DIRS_TITLE,
         "All Shared Directories",
         "All Module Variables",
@@ -298,21 +299,38 @@ def run_doc_mod_resolve_vars(
     return parse_resolved_vars_markdown(markdown)
 
 
+def _parse_module_section_value(markdown: str, title: str) -> str | None:
+    """The first non-empty line of the module section "## <title>" that
+    debasher_doc_mod prints, without the backticks, or None without the
+    section."""
+    in_section = False
+    for line in markdown.splitlines():
+        heading_match = _PROCESS_HEADING_RE.match(line)
+        if heading_match:
+            in_section = heading_match.group("name").strip() == title
+            continue
+        if in_section and line.strip():
+            return line.strip().strip("`")
+    return None
+
+
 def parse_program_type(markdown: str) -> str:
     """
     The program type that debasher_doc_mod prints in the "## Program Type"
     section of a module, the one that the engine resolved: "resident", or
     "general" for a module without the section or with any other type.
     """
-    in_section = False
-    for line in markdown.splitlines():
-        heading_match = _PROCESS_HEADING_RE.match(line)
-        if heading_match:
-            in_section = heading_match.group("name").strip() == "Program Type"
-            continue
-        if in_section and line.strip():
-            return "resident" if line.strip().strip("`") == "resident" else "general"
-    return "general"
+    return "resident" if _parse_module_section_value(markdown, "Program Type") == "resident" else "general"
+
+
+def parse_program_durability(markdown: str) -> str:
+    """
+    The durability mode that debasher_doc_mod prints in the "## Durability"
+    section of a resident module (see "The non-durable mode" in
+    doc/design_doc_resident.md): "non-durable", or "durable" for a module
+    without the section or with any other value.
+    """
+    return "non-durable" if _parse_module_section_value(markdown, "Durability") == "non-durable" else "durable"
 
 
 def parse_module_markdown(

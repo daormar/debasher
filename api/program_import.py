@@ -12,6 +12,7 @@ from .debasher_constants import (
 )
 from .doc_mod import (
     parse_module_markdown,
+    parse_program_durability,
     parse_program_type,
     run_doc_mod,
     run_doc_mod_all_shared_dirs,
@@ -132,6 +133,7 @@ _RESIDENT_NUMERIC_SPECS = (
     "out_backlog_max_mb",
     "out_backlog_fail_mb",
     "gil_switch_interval_ms",
+    "inbound_queue_max_mb",
     "startup_timeout_s",
     "max_concurrent_runs",
     "heartbeat_timeout_s",
@@ -517,6 +519,7 @@ class _ReadModule:
     description: str
     shared_dirs: list[str]
     program_type: str
+    durability: str
     processes: list[ProgramProcess]
     edges: list[ProgramEdge]
     available_shared_dirs: list[str]
@@ -531,6 +534,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
     name, description, shared_dirs, chunks = parse_module_markdown(markdown)
     process_chunks, seq_process_chunks = split_seq_process_chunks(chunks)
     program_type = parse_program_type(markdown)
+    durability = parse_program_durability(markdown)
 
     processes: list[ProgramProcess] = []
     pending_connections: list[tuple[str, ConnectionRef]] = []
@@ -642,6 +646,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
         description=description,
         shared_dirs=shared_dirs,
         program_type=program_type,
+        durability=durability,
         processes=processes,
         edges=edges,
         available_shared_dirs=available_shared_dirs,
@@ -731,6 +736,7 @@ def import_program_from_script(script_path: Path, debasher_mod_dir: str = "") ->
         id=str(uuid.uuid4()),
         name=read.name,
         programType=read.program_type,
+        durability=read.durability,
         description=read.description,
         preamble=_extract_preamble(script_path),
         envVars={"DEBASHER_MOD_DIR": debasher_mod_dir} if debasher_mod_dir else {},

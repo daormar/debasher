@@ -1,4 +1,4 @@
-import type { Program, ProgramType } from "../models/program";
+import type { Durability, Program, ProgramType } from "../models/program";
 import { DEFAULT_SCHEDULER } from "../models/program";
 import { layoutProcesses } from "../models/programLayout";
 import { throwIfDigestConflict } from "../api/digestConflict";
@@ -131,11 +131,16 @@ export async function getAllEnvVars(
  * Not persisted yet — just builds a blank program in memory.
  * It only gets stored once the user actually saves it.
  */
-export function createEmptyProgram(name: string, programType: ProgramType = "general"): Program {
+export function createEmptyProgram(
+  name: string,
+  programType: ProgramType = "general",
+  durability: Durability = "durable",
+): Program {
   return {
     id: crypto.randomUUID(),
     name,
     programType,
+    durability,
     description: "",
     preamble: "",
     envVars: {},

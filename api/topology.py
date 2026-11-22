@@ -179,6 +179,7 @@ class TopologySpecs(_Strict):
     out_backlog_max_mb: Optional[float] = None
     out_backlog_fail_mb: Optional[float] = None
     gil_switch_interval_ms: Optional[float] = None
+    inbound_queue_max_mb: Optional[float] = None
     startup_timeout_s: Optional[float] = None
     max_concurrent_runs: Optional[int] = None
     batch_sched: Optional[str] = None
@@ -265,6 +266,10 @@ class Topology(_Strict):
     schema_version: int
     name: str
     type: Optional[Literal["resident"]] = None
+    # The durability mode of a resident program (see "The non-durable mode"
+    # in doc/design_doc_resident.md); left out for the durable mode, the
+    # default, and for a general program.
+    durability: Optional[Literal["non-durable"]] = None
     description: str = ""
     preamble: str = ""
     env: dict[str, str] = {}
@@ -705,6 +710,7 @@ def split(program: Program) -> SplitProgram:
         schema_version=SCHEMA_VERSION,
         name=program.name,
         type="resident" if program.programType == "resident" else None,
+        durability="non-durable" if program.programType == "resident" and program.durability == "non-durable" else None,
         description=program.description,
         preamble=program.preamble,
         env=dict(program.envVars),
@@ -982,6 +988,7 @@ def join(topology: Topology, files: Mapping[str, str]) -> Program:
         id=element_id(topology.name),
         name=topology.name,
         programType="resident" if topology.type == "resident" else "general",
+        durability="non-durable" if topology.type == "resident" and topology.durability == "non-durable" else "durable",
         description=topology.description,
         preamble=topology.preamble,
         envVars=dict(topology.env),

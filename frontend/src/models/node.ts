@@ -156,8 +156,13 @@ export function emptyNodeCode(): NodeCode {
  * program. A ProgramLauncher and a DirectoryWatcher implement every hook,
  * so a body given for them overrides that of their class.
  */
-export function isRequiredHook(kind: NodeKind, part: NodeHookPart): boolean {
-  return kind === "FBPProcess" && part !== "observe";
+export function isRequiredHook(kind: NodeKind, part: NodeHookPart, durable = true): boolean {
+  if (kind !== "FBPProcess" || part === "observe") {
+    return false;
+  }
+  // A non-durable program never calls the hooks of the state (see "The
+  // non-durable mode" in doc/design_doc_resident.md)
+  return durable || (part !== "captureNodeState" && part !== "restoreNodeState");
 }
 
 /**
@@ -362,6 +367,7 @@ const NODE_SPEC_FIELDS: ResidentSpecField[] = [
   "out_backlog_max_mb",
   "out_backlog_fail_mb",
   "gil_switch_interval_ms",
+  "inbound_queue_max_mb",
   "startup_timeout_s",
 ];
 
@@ -377,6 +383,7 @@ export const RESIDENT_SPEC_LABELS: Record<ResidentSpecField, string> = {
   out_backlog_max_mb: "Outbound backlog in a checkpoint, at most (MiB)",
   out_backlog_fail_mb: "Outbound backlog that stops the node (MiB)",
   gil_switch_interval_ms: "GIL switch interval (ms)",
+  inbound_queue_max_mb: "Inbound queue bound of a non-durable node (MiB)",
   startup_timeout_s: "Startup deadline (s)",
   max_concurrent_runs: "Batch runs at a time",
   batch_sched: "Scheduler of the batch runs",

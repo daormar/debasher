@@ -123,7 +123,7 @@ function section(title: string, lines: string[]): string[] {
 // The settings of the program: everything but its processes and connections.
 export function settingsLines(program: Program): string[] {
   return [
-    `Program ${quoted(program.name)} (${program.programType})`,
+    `Program ${quoted(program.name)} (${program.programType}${program.programType === "resident" ? `, ${program.durability ?? "durable"}` : ""})`,
     `Home directory: ${program.homeDir || "(not saved)"}`,
     `Output directory: ${program.outputDir || "(not set)"}`,
     ...(program.description ? [`Description: ${program.description}`] : []),

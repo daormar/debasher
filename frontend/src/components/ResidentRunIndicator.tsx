@@ -1,9 +1,12 @@
-import { STOPPED_ABRUPTLY, STOPPED_IN_ORDER, type ResidentRunPhase } from "../models/residentRun";
+import { stoppedAbruptlyText, stoppedInOrderText, type ResidentRunPhase } from "../models/residentRun";
 
 interface Props {
   phase: Exclude<ResidentRunPhase, "new">;
   // For "stopped": whether every process finished, an orderly stop.
   inOrder: boolean;
+  // For "stopped": whether the program is durable, which decides what the
+  // next launch starts from.
+  durable: boolean;
   // Hides the indicator, and stops nothing: a resident program is meant to
   // outlive the tab.
   onHide: () => void;
@@ -15,10 +18,10 @@ const MESSAGE: Record<Exclude<ResidentRunPhase, "new" | "stopped">, string> = {
   stopping: "Stopping program…",
 };
 
-export default function ResidentRunIndicator({ phase, inOrder, onHide }: Props) {
+export default function ResidentRunIndicator({ phase, inOrder, durable, onHide }: Props) {
 
   const message = phase === "stopped"
-    ? (inOrder ? STOPPED_IN_ORDER : STOPPED_ABRUPTLY)
+    ? (inOrder ? stoppedInOrderText(durable) : stoppedAbruptlyText(durable))
     : MESSAGE[phase];
 
   return (

@@ -45,6 +45,9 @@ type Part = keyof NodeCode;
 export default function NodeCodeEditor({ process, onClose }: Props) {
 
   const { program, setNodeCode } = useProgram();
+  // The hooks of the state are never called in a non-durable program (see
+  // "The non-durable mode" in doc/design_doc_resident.md)
+  const durable = program.durability !== "non-durable";
 
   const kind: NodeKind = process.nodeKind ?? "FBPProcess";
 
@@ -87,10 +90,10 @@ export default function NodeCodeEditor({ process, onClose }: Props) {
     return {
       part: p,
       label,
-      note: hook === undefined ? undefined : isRequiredHook(kind, hook.part)
+      note: hook === undefined ? undefined : isRequiredHook(kind, hook.part, durable)
         ? "required"
         : kind === "FBPProcess"
-          ? "only to observe the outside world"
+          ? (hook.part === "observe" ? "only to observe the outside world" : "never called in a non-durable program")
           : `overrides that of ${kind}`,
     };
   });

@@ -526,7 +526,17 @@ describe("creating and importing a program", () => {
 
     await call(backend, "create_program", { home_dir: "/progs/new", name: "q", program_type: "resident" });
 
-    expect(backend.saved.get("/progs/new")).toMatchObject({ name: "q", programType: "resident", processes: [] });
+    expect(backend.saved.get("/progs/new")).toMatchObject({ name: "q", programType: "resident", processes: [], durability: "durable" });
+  });
+
+  it("creates a non-durable resident program, and refuses the mode on a general one", async () => {
+    const backend = fakeBackend();
+
+    await call(backend, "create_program", { home_dir: "/progs/nd", name: "q", program_type: "resident", durability: "non-durable" });
+    expect(backend.saved.get("/progs/nd")).toMatchObject({ programType: "resident", durability: "non-durable" });
+
+    await expect(call(backend, "create_program", { home_dir: "/progs/g", name: "g", durability: "non-durable" }))
+      .rejects.toThrow("Only a resident program has a durability mode.");
   });
 
 });
@@ -587,6 +597,20 @@ describe("running a program", () => {
     await expect(call(backend, "run_program", { home_dir: HOME })).rejects.toThrow("resume_changed_program");
   });
 
+  it("offers only the reset when the durability mode changed since the run that left the state", async () => {
+    const backend = fakeBackend([program({ programType: "resident", durability: "non-durable" })], {
+      fetchProgramStatus: async () => ({ state: "finished", output: "" }),
+      runProgram: async () => {
+        throw new LaunchRecordConflict(true);
+      },
+      checkLaunch: async () => ({ durabilityChanged: true, hasProgramState: true, hasLaunchRecord: true, needsConfirmation: true }),
+    });
+
+    const refusal = call(backend, "run_program", { home_dir: HOME });
+    await expect(refusal).rejects.toThrow("other durability mode");
+    await expect(refusal).rejects.not.toThrow("resume_changed_program");
+  });
+
   it("needs an output directory", async () => {
     const backend = fakeBackend([program({ outputDir: "" })]);
 
@@ -622,15 +646,51 @@ describe("running a program", () => {
 
 describe("talking to a resident program", () => {
 
-  function resident(): Program {
+  function resident(changes: Partial<Program> = {}): Program {
     const node = process("n", []);
     node.nodeKind = "FBPProcess";
     node.options = [
       createOption("n-in", "-in", { channel: "fifo", fifoTag: "external", value: "in_fifo" }),
       createOption("n-out", "-outd", { channel: "fifo", value: "out_fifo" }),
     ];
-    return program({ programType: "resident", processes: [node] });
+    return program({ programType: "resident", processes: [node], ...changes });
   }
+
+  it("refuses a snapshot, a checkpoint and the input log of a non-durable program", async () => {
+    const backend = fakeBackend([resident({ durability: "non-durable" })], {
+      takeSnapshot: async () => {
+        throw new Error("the tool ran");
+      },
+      inspectNode: async () => {
+        throw new Error("the tool ran");
+      },
+    });
+
+    await expect(call(backend, "snapshot", { home_dir: HOME })).rejects.toThrow("non-durable: it takes no snapshots");
+    await expect(call(backend, "inspect_node", { home_dir: HOME, process: "n", what: "checkpoint", epoch: 1 }))
+      .rejects.toThrow("no checkpoints and no input log");
+    await expect(call(backend, "inspect_node", { home_dir: HOME, process: "n", what: "log" }))
+      .rejects.toThrow("no checkpoints and no input log");
+  });
+
+  it("sets the durability mode of a resident program and describes it", async () => {
+    const backend = fakeBackend([resident()]);
+
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("(resident, durable)");
+    await call(backend, "set_program_settings", { home_dir: HOME, changes: { durability: "non-durable" } });
+    expect(savedProgram(backend).durability).toBe("non-durable");
+    expect(await text(backend, "get_program", { home_dir: HOME })).toContain("(resident, non-durable)");
+  });
+
+  it("says that a stopped non-durable program starts afresh, in its status and after a stop", async () => {
+    const backend = fakeBackend([resident({ durability: "non-durable" })], {
+      getProcessStatuses: async () => ({ statuses: { n: "FINISHED" }, runInProgress: false, hasProgramState: true, notices: [], output: "" }),
+      stopProgram: async () => ({ output: "", exitCode: 0 }),
+    });
+
+    expect(await text(backend, "get_status", { home_dir: HOME })).toContain("starts every node with its initial state");
+    expect(await text(backend, "stop_program", { home_dir: HOME })).toContain("with no halt");
+  });
 
   it("says what to do when the reset is refused for a batch run still running", async () => {
     const backend = fakeBackend([resident()], {

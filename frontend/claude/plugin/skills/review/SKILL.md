@@ -57,16 +57,21 @@ its code. Offer to run the tests when what they do matters to a finding.
   count it again with a copy of its rule (in Bash: a Python tasks file cannot
   ask), and does the options handler (array or generator) read only inputs that
   stay unchanged during the run?
-- **Nodes** of a resident program: is `process_data` deterministic, does it send
-  only from there, does what it sends hold no NaN or infinity (a float that can
-  be one checked before `send_data`), is the node state complete and
-  serializable as JSON, and are effects outside the program idempotent? Does
+- **Nodes** of a resident program: in a durable program, is `process_data`
+  deterministic, is the node state complete and serializable as JSON, and are
+  effects outside the program idempotent? In a non-durable program (see
+  "Durability" in the reference) none of that applies, but does the node keep
+  in a file of its output directory what has to outlive a crash, and does it
+  not write hooks of the state that are never called? In both, does it send
+  only from `process_data`, and does what it sends hold no NaN or infinity (a
+  float that can be one checked before `send_data`)? Does
   `process_data` drop, with a warning, a message that it cannot use, rather than
   raise, which ends the node at every relaunch? Does `observe` raise only for a
   failure that a relaunch mends? Does it wait with `self.sleep()` rather than
   `time.sleep()`, look at the outside world only in `observe` (bringing it in
-  with `inject`), and set again in `restore_node_state` a notice that follows
-  from the node state? Does a directory watcher or a launcher leave
+  with `inject`), and set again a notice that follows from the node state (in
+  `restore_node_state` in a durable program, where that state is set in a
+  non-durable one)? Does a directory watcher or a launcher leave
   `-outrequests` and `-outdone` to its class, and does a node that reads the
   results of a batch run take its directory from `run_dir` rather than build it
   again from a runs root of its own, which breaks silently once the two differ?
@@ -79,9 +84,9 @@ its code. Offer to run the tests when what they do matters to a finding.
   a comment that only repeats the code, or one that the code contradicts?
 - **Its tests.** Is there a test? Does it check the outputs, the edges of the
   input and a failure, or only that the process ended? Are `TODO`s or the line
-  that makes a skeleton fail still there? For a node with an input, does it
-  keep a test with `check_replay`, with real feeds rather than the `TODO`s of
-  the skeleton?
+  that makes a skeleton fail still there? For a node with an input of a durable
+  program, does it keep a test with `check_replay`, with real feeds rather than
+  the `TODO`s of the skeleton (a node of a non-durable program has none)?
 - **Readability**, last: names, dead code, what could be simpler. Mention it
   only when it is worth the user's time.
 

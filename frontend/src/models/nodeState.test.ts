@@ -11,6 +11,7 @@ import {
   noticeTooltip,
   offersShowBatchRuns,
   offersShowNodeState,
+  isSummaryDurable,
   summaryRows,
   wasLaunched,
   type BatchRun,
@@ -193,5 +194,37 @@ describe("the notices of the nodes", () => {
     const rows = summaryRows(summary({ notice: { level: "warning", text: "missing", set_at: null } }));
     expect(rows.find(row => row.label === "Notice")?.value).toBe("warning: missing (set unknown)");
     expect(summaryRows(summary()).find(row => row.label === "Notice")?.value).toBe("none");
+  });
+});
+
+describe("the summary of a node of a non-durable program", () => {
+  const nonDurableInfo = nodeInfo({
+    durability: "non-durable",
+    limits: { input_log_max_bytes: 100 * MiB, out_backlog_max_bytes: 8 * MiB, out_backlog_fail_bytes: 64 * MiB, inbound_queue_max_bytes: 50 * MiB },
+    out_backlog_bytes: { outf: 9 * MiB },
+  });
+
+  it("says the mode and leaves out the checkpoints, the halt, the input log and the replay", () => {
+    const rows = summaryRows(summary({ durability: "non-durable", checkpoints: [], node_info: nonDurableInfo }));
+    const labels = rows.map(row => row.label);
+    expect(labels).toEqual(["Task", "Durability", "Incarnation started", "Latest heartbeat tick", "Outbound backlog", "Inbound queue bound", "Notice"]);
+    expect(rows.find(row => row.label === "Durability")!.value).toMatch(/no checkpoints and no input log/);
+    expect(rows.find(row => row.label === "Inbound queue bound")!.value).toMatch(/50\.0 MiB/);
+  });
+
+  it("warns of the outbound backlog only at the limit of a durable node", () => {
+    const backlog = summaryRows(summary({ durability: "non-durable", node_info: nonDurableInfo })).find(row => row.label === "Outbound backlog")!;
+    expect(backlog.value).not.toMatch(/checkpoints are skipped/);
+    expect(backlog.warning).toBeFalsy();
+    expect(warnings(summary({ node_info: nodeInfo({ out_backlog_bytes: { outf: 9 * MiB } }) }))).toContain("Outbound backlog");
+  });
+
+  it("takes the mode from what the node reported, and from the program when it reported nothing", () => {
+    expect(isSummaryDurable(summary({ durability: "non-durable" }), true)).toBe(false);
+    expect(isSummaryDurable(summary({ node_info: nonDurableInfo }), true)).toBe(false);
+    expect(isSummaryDurable(summary({ durability: "durable" }), false)).toBe(true);
+    expect(isSummaryDurable(summary({ node_info: null }), false)).toBe(false);
+    expect(summaryRows(summary({ node_info: null, checkpoints: [] }), false).map(row => row.label)).toContain("Durability");
+    expect(summaryRows(summary(), true).map(row => row.label)).toContain("Latest checkpoint");
   });
 });

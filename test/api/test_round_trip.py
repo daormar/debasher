@@ -947,3 +947,13 @@ def test_the_wiring_of_a_generator_counted_by_its_tasks_survives_the_round_trip(
     from test_resident_generation import _generator_fanout
 
     _assert_model_round_trip(_generator_fanout(with_supervisor, generator_initiator), tmp_path)
+
+
+def test_a_non_durable_module_is_imported_in_its_mode_and_generated_in_it():
+    debasher_mod_dir = str(_ENGINE_TEST_DIR)
+
+    imported = import_program_from_script(_ENGINE_TEST_DIR / "debasher_non_durable_ref.sh", debasher_mod_dir)
+
+    assert imported.programType == "resident"
+    assert imported.durability == "non-durable"
+    assert _generate_and_import(imported, debasher_mod_dir).durability == "non-durable"

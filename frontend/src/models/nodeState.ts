@@ -7,12 +7,17 @@ import type { ProgramEdge } from "./edge";
 
 export interface NodeInfo {
   runtime_class: string;
+  // The durability mode of the program (see "The non-durable mode" in
+  // doc/design_doc_resident.md), which says which limits are in force;
+  // absent in the file of a node written before the mode existed.
+  durability?: "durable" | "non-durable";
   started_at: number;
   heartbeat_interval_secs: number;
   limits: {
     input_log_max_bytes: number;
     out_backlog_max_bytes: number;
     out_backlog_fail_bytes: number;
+    inbound_queue_max_bytes?: number;
   };
   // Only for a launcher node: its runs root, and PROCESS, the process that
   // it runs alone, or null when it runs the whole general program.
@@ -41,6 +46,9 @@ export interface NodeNotice extends Notice {
 
 export interface NodeSummary {
   task_state: "alive" | "finished" | "down" | "not_launched";
+  // The mode of the program as the node last reported it, null when it has
+  // reported nothing yet.
+  durability?: "durable" | "non-durable" | null;
   checkpoints: { epoch: number; written_at: number | null }[];
   capture_pos: number | null;
   halted_epoch: number | null;
@@ -138,18 +146,20 @@ const TASK_STATE_TEXT: Record<NodeSummary["task_state"], string> = {
   not_launched: "not launched",
 };
 
-function outboundBacklogRows(info: NodeInfo): SummaryRow[] {
+function outboundBacklogRows(info: NodeInfo, durable: boolean): SummaryRow[] {
   const { out_backlog_max_bytes: max, out_backlog_fail_bytes: fail } = info.limits;
   const ports = Object.entries(info.out_backlog_bytes);
   const total = ports.reduce((sum, [, bytes]) => sum + bytes, 0);
   const perPort = ports.map(([port, bytes]) => `${port}: ${formatBytes(bytes)}`).join(", ");
+  // Only a durable node skips a checkpoint over OUT_BACKLOG_MAX_BYTES
   return [
     {
       label: "Outbound backlog",
-      value:
-        `${formatBytes(total)}${perPort ? ` (${perPort})` : ""}; checkpoints are skipped above ` +
-        `${formatBytes(max)}, the node fails above ${formatBytes(fail)}`,
-      warning: total > max,
+      value: durable
+        ? `${formatBytes(total)}${perPort ? ` (${perPort})` : ""}; checkpoints are skipped above ` +
+          `${formatBytes(max)}, the node fails above ${formatBytes(fail)}`
+        : `${formatBytes(total)}${perPort ? ` (${perPort})` : ""}; the node fails above ${formatBytes(fail)}`,
+      warning: durable && total > max,
     },
   ];
 }
@@ -158,7 +168,7 @@ function outboundBacklogRows(info: NodeInfo): SummaryRow[] {
 // nature in a node that is not alive, and warns only in one that is: one
 // still replaying its input log, or one that runs but does not tick
 // (suspended, kept off the CPU, or inside a call that keeps the GIL).
-function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
+function nodeInfoRows(info: NodeInfo | null, alive: boolean, durable: boolean): SummaryRow[] {
   if (info === null) {
     return [{
       label: "Node info",
@@ -171,14 +181,20 @@ function nodeInfoRows(info: NodeInfo | null, alive: boolean): SummaryRow[] {
       label: "Latest heartbeat tick",
       value: info.stale && alive
         ? `${formatTime(info.updated_at)}, ${Math.round(info.age_secs)} s ago: older than two ` +
-          "heartbeat intervals, so the node is still replaying its input log, or runs but does " +
+          `heartbeat intervals, so the node ${durable ? "is still replaying its input log, or " : ""}runs but does ` +
           "not tick (suspended, kept off the CPU, or inside a call that keeps the GIL)"
         : `${formatTime(info.updated_at)}, ${Math.round(info.age_secs)} s ago`,
       warning: info.stale && alive,
     },
-    ...outboundBacklogRows(info),
+    ...outboundBacklogRows(info, durable),
   ];
-  if (info.checkpoints_skipped_since !== null) {
+  if (!durable && info.limits.inbound_queue_max_bytes !== undefined) {
+    rows.push({
+      label: "Inbound queue bound",
+      value: `the readers wait above ${formatBytes(info.limits.inbound_queue_max_bytes)} read and not yet processed`,
+    });
+  }
+  if (durable && info.checkpoints_skipped_since !== null) {
     rows.push({
       label: "Checkpoints skipped",
       value: `none written since epoch ${info.checkpoints_skipped_since}, because of the size of the outbound backlog`,
@@ -203,12 +219,42 @@ function inputLogRow(summary: NodeSummary): SummaryRow {
   };
 }
 
+// Whether the node whose summary this is runs in a durable program: as its
+// node info file says, or as the program says when the node has written
+// none yet.
+export function isSummaryDurable(summary: NodeSummary, programDurable = true): boolean {
+  const reported = summary.durability ?? summary.node_info?.durability;
+  return reported ? reported !== "non-durable" : programDurable;
+}
+
 // The summary of a node, in the order in which "Show node state" lists it.
-export function summaryRows(summary: NodeSummary): SummaryRow[] {
+// A node of a non-durable program keeps no checkpoints and no input log, so
+// the rows about them are left out and the mode is said instead.
+export function summaryRows(summary: NodeSummary, programDurable = true): SummaryRow[] {
+  const durable = isSummaryDurable(summary, programDurable);
+  const taskRow = { label: "Task", value: TASK_STATE_TEXT[summary.task_state], warning: summary.task_state === "down" };
+  const noticeRow = {
+    label: "Notice",
+    value: summary.notice
+      ? `${summary.notice.level}: ${summary.notice.text} (set ${formatTime(summary.notice.set_at)})`
+      : "none",
+  };
+  if (!durable) {
+    return [
+      taskRow,
+      {
+        label: "Durability",
+        value: "non-durable: the node keeps no checkpoints and no input log, takes part in no " +
+          "round, and starts again with its initial state after a crash or a stop",
+      },
+      ...nodeInfoRows(summary.node_info, summary.task_state === "alive", false),
+      noticeRow,
+    ];
+  }
   const latest = summary.checkpoints.at(-1);
   return [
-    { label: "Task", value: TASK_STATE_TEXT[summary.task_state], warning: summary.task_state === "down" },
-    ...nodeInfoRows(summary.node_info, summary.task_state === "alive"),
+    taskRow,
+    ...nodeInfoRows(summary.node_info, summary.task_state === "alive", true),
     {
       label: "Latest checkpoint",
       value: latest
@@ -220,12 +266,7 @@ export function summaryRows(summary: NodeSummary): SummaryRow[] {
       value: summary.halted_epoch === null ? "no" : `at epoch ${summary.halted_epoch}`,
     },
     inputLogRow(summary),
-    {
-      label: "Notice",
-      value: summary.notice
-        ? `${summary.notice.level}: ${summary.notice.text} (set ${formatTime(summary.notice.set_at)})`
-        : "none",
-    },
+    noticeRow,
     {
       label: "To replay",
       value: summary.input_log.to_replay === null

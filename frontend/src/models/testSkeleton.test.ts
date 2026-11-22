@@ -204,3 +204,35 @@ describe("the skeleton of a node that observes the outside world", () => {
     });
   });
 });
+
+describe("the skeleton of a node test of a non-durable program", () => {
+  const acc = process("Accumulate", [
+    createOption("numbers", "-numbers", { channel: "fifo", fifoTag: "external" }),
+    createOption("outsum", "-outsum", { direction: "output", channel: "fifo" }),
+  ], { nodeKind: "FBPProcess" });
+  const watcher = process("Watch", [
+    createOption("watchdir", "-watchdir", { commandLine: true }),
+    createOption("outrequests", "-outrequests", { direction: "output", channel: "fifo" }),
+  ], { nodeKind: "DirectoryWatcher" });
+  const nonDurable = { ...program("resident", [acc, watcher]), durability: "non-durable" as const };
+
+  it("has no restart and no replay test, which the harness refuses for such a node", () => {
+    const skeleton = testSkeleton(nonDurable, acc);
+    expect(skeleton).toContain("def test_Accumulate_sends_what_it_should():");
+    expect(skeleton).not.toContain("restart()");
+    expect(skeleton).not.toContain("check_replay");
+    expect(skeleton.match(/pytest\.fail\(/g)).toHaveLength(1);
+  });
+
+  it("gives a watcher its observation test alone", () => {
+    const skeleton = testSkeleton(nonDurable, watcher);
+    expect(skeleton).toContain("def test_Watch_brings_in_what_it_observes(tmp_path):");
+    expect(skeleton).not.toContain("requests_nothing_twice_after_a_restart");
+    expect(skeleton).not.toContain("restart()");
+  });
+
+  it("says what the skeleton does without a restart or a replay", () => {
+    expect(testSkeletonSummary(nonDurable, acc)).toContain("builds Accumulate and feeds it a packet.");
+    expect(testSkeletonSummary(program("resident", [acc]), acc)).toContain("restarts it and checks a replay");
+  });
+});

@@ -66,6 +66,15 @@ describe("validateEdits", () => {
     ])).toEqual([]);
   });
 
+  it("refuses a durability mode on a general program, and takes it on a resident one", () => {
+    expect(validateEdits(program(), [{ op: "setProgramFields", changes: { durability: "non-durable" } }]))
+      .toEqual(["Only a resident program has a durability mode."]);
+    expect(validateEdits(program(), [{ op: "setProgramFields", changes: { durability: "durable" } }])).toEqual([]);
+    expect(validateEdits({ ...program(), programType: "resident", processes: [], seqProcesses: [] }, [
+      { op: "setProgramFields", changes: { durability: "non-durable" } },
+    ])).toEqual([]);
+  });
+
   it("refuses a name that a process or a sequential process has, whatever its case", () => {
     expect(validateEdits(program(), [{ op: "addProcess", process: process("A", []) }]))
       .toEqual(["A process with this name already exists."]);

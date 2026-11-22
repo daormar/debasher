@@ -83,6 +83,7 @@ RESIDENT_COMP_SPEC_NAMES = (
     "out_backlog_max_mb",
     "out_backlog_fail_mb",
     "gil_switch_interval_ms",
+    "inbound_queue_max_mb",
     "startup_timeout_s",
     "max_concurrent_runs",
     "batch_sched",
@@ -180,10 +181,13 @@ def _add_document_module_func(name, description):
     return lines
 
 
-def _add_program_type_func(name):
+def _add_program_type_func(name, durability):
     """The module-level function that makes a module a resident program; a
-    general program writes none, since a module without one is general."""
-    return [f"{name}{MODULE_PROGRAM_TYPE_SUFFIX}()", "{", f'{INDENT}debasher::program_type "resident"', "}"]
+    general program writes none, since a module without one is general. The
+    durability mode goes as the second argument only when it is not the
+    default, so that a durable program is declared as it always was."""
+    mode = ' "non-durable"' if durability == "non-durable" else ""
+    return [f"{name}{MODULE_PROGRAM_TYPE_SUFFIX}()", "{", f'{INDENT}debasher::program_type "resident"{mode}', "}"]
 
 
 def _fifo_tag_flag(option) -> str:
@@ -1320,7 +1324,7 @@ def _build_script(
 
     # Add the program type of a resident program
     if program.programType == "resident":
-        lines.extend(_add_program_type_func(program.name))
+        lines.extend(_add_program_type_func(program.name, program.durability))
         lines.extend(["", ""])
 
     # Add process functions

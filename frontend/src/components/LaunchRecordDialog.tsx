@@ -3,6 +3,11 @@ interface Props {
   // from the program; with none, the web UI cannot tell which program
   // produced the program state.
   hasLaunchRecord: boolean;
+  // Whether the program declares a durability mode other than the one of
+  // the launch that left the state: the engine refuses to resume it, so
+  // only a fresh start is offered (see "The non-durable mode" in
+  // doc/design_doc_resident.md).
+  durabilityChanged: boolean;
   onResume: () => void;
   onStartAfresh: () => void;
   onCancel: () => void;
@@ -13,6 +18,7 @@ interface Props {
 // "The directories of a resident program" in doc/design_doc_webui.md).
 export default function LaunchRecordDialog({
   hasLaunchRecord,
+  durabilityChanged,
   onResume,
   onStartAfresh,
   onCancel,
@@ -59,13 +65,22 @@ export default function LaunchRecordDialog({
               "comes from a run launched outside the web UI."}
         </p>
 
-        <p style={{ margin: 0 }}>
-          A node resumes from its checkpoint and replays its input log with the
-          code that it has now: a changed restore_node_state may not read an old
-          node state, a changed process_data replays the input log to another
-          result, and a change of the command line options, such as the number
-          of tasks of an array, needs a fresh start.
-        </p>
+        {durabilityChanged ? (
+          <p style={{ margin: 0 }}>
+            The durability mode of the program changed since then. A program
+            does not change its mode over the state of a run: the engine
+            refuses the launch until the program state is reset, so only a
+            fresh start is offered.
+          </p>
+        ) : (
+          <p style={{ margin: 0 }}>
+            A node resumes from its checkpoint and replays its input log with the
+            code that it has now: a changed restore_node_state may not read an old
+            node state, a changed process_data replays the input log to another
+            result, and a change of the command line options, such as the number
+            of tasks of an array, needs a fresh start.
+          </p>
+        )}
 
         <div
           style={{
@@ -84,9 +99,11 @@ export default function LaunchRecordDialog({
             Reset the program state and start afresh
           </button>
 
-          <button onClick={onResume}>
-            Resume with this program
-          </button>
+          {!durabilityChanged && (
+            <button onClick={onResume}>
+              Resume with this program
+            </button>
+          )}
 
         </div>
 

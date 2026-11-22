@@ -312,8 +312,9 @@ refer to it.
   preparing the run or, with the built-in scheduler for a general program,
   running it; one that only validates the program does not count.
 - **orderly stop**: the stop of a resident program with
-  `debasher_stop_resident`, which halts every node in one round before stopping
-  it, so that the next launch resumes the program with nothing lost.
+  `debasher_stop_resident`, which, in a durable program, halts every node in one
+  round before stopping it, so that the next launch resumes the program with
+  nothing lost; in a non-durable program it stops the nodes without a halt.
 - **hard kill**: the stop of a program with `debasher_stop`, which stops the
   `debasher_exec` of the run if it still runs and then kills every process at
   once; for a resident program, what its FIFOs held may be lost.
@@ -331,6 +332,11 @@ refer to it.
 - **notice**: as defined in the design of resident programs: the one message,
   `info` or `warning`, that the code of a node leaves for whoever watches the
   program, and which the canvas node shows with a mark.
+- **durability mode**: as defined in the design of resident programs (see "The
+  non-durable mode" in `doc/design_doc_resident.md`): the **durable mode**,
+  where every node keeps checkpoints and an input log and comes back from a
+  crash or a stop with its state, or the **non-durable mode**, where it keeps
+  neither and starts afresh; `Program.durability`.
 - **unconnected FIFO**: a FIFO option with no edge and whose label does not name
   a fanout family, whose other end is an external end in the sense of the
   engine, left to someone outside the program, such as a person using "Talk to
@@ -2635,6 +2641,18 @@ would leave in the program what the new type refuses. Script generation writes
 the module's `_program_type` function for a resident program, and import reads
 it.
 
+**Durability mode.** `Program.durability` is `durable` or `non-durable`, the
+durability mode of a resident program (see "The non-durable mode" in
+`doc/design_doc_resident.md`), and `durable` for program metadata saved without
+it; a general program ignores it. The user chooses it in the dialog that
+creates a resident program, and changes it in "Set execution options", since
+the mode is a property of the program that a user may want to change once the
+program exists, unlike its type. Script generation writes it as the second
+argument of `program_type`, only when it is `non-durable`, so that a durable
+program is declared as it always was, and import reads it from the
+"## Durability" section that `debasher_doc_mod` prints. In `program.yaml` the
+field `durability` holds `non-durable`, and is left out otherwise.
+
 **Node kinds.** Every process of a resident program is a node of one node kind
 (`ProgramProcess.nodeKind`), chosen when the process is added: `FBPProcess`, a
 business node; `ProgramLauncher`, which launches a general program for every
@@ -2799,10 +2817,11 @@ the function of every node. Fanout families apply unchanged.
 
 **Specifications.** `ComputationalSpecs` gains optional fields, shown only for
 the node kinds that read them: the limits of a node (`input_log_max_mb`,
-`out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms`) and
-`startup_timeout_s` for every node, `max_concurrent_runs` and `batch_sched`
-for a `ProgramLauncher`, and `heartbeat_timeout_s` and `startup_timeout_s` for
-the `Supervisor`. The engine checks their values when it loads the program.
+`out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms` and
+`inbound_queue_max_mb`) and `startup_timeout_s` for every node,
+`max_concurrent_runs` and `batch_sched` for a `ProgramLauncher`, and
+`heartbeat_timeout_s` and `startup_timeout_s` for the `Supervisor`. The engine
+checks their values when it loads the program.
 
 **Additional specifications and methods.** A process of a resident program
 offers neither the additional specifications of a general process nor its
@@ -3086,6 +3105,12 @@ launched.
 - With program state and no launch record, as when the state comes from a run
   launched outside the web UI, the frontend asks all the same, and says that it
   cannot tell which program produced the state.
+- When the durability mode of the program differs from the one declared in the
+  script of the launch record, the engine refuses the launch over the state (see
+  "The non-durable mode" in `doc/design_doc_resident.md`), so the dialog says
+  that the mode changed and offers only to reset the program state and start
+  afresh. `/launch-check` says so in `durabilityChanged`, read from the
+  `program_type` line of the recorded script.
 
 The backend finds the program state by the names that the engine gives to it
 in the output directory, the same that `debasher_reset_resident` takes away,
@@ -3176,7 +3201,9 @@ during the stop does not interrupt it. The options `-x`, `--kill` and
 `Supervisor`. The frontend tells the user what the exit code of the tool means:
 
 - 0: an orderly stop. Every node halted in the same round, and the next launch
-  resumes the program with nothing lost.
+  resumes the program with nothing lost. In a non-durable program, where the
+  tool stops the nodes without a halt, the text says instead that every node
+  ended and that the next launch starts every node afresh.
 - 2: the orderly stop did not end (a node ended before it halted, or the timeout
   passed), and the tool fell back to the hard kill of `debasher_stop`. The
   program has ended, but was killed: each node resumes from its last checkpoint
@@ -3189,7 +3216,12 @@ during the stop does not interrupt it. The options `-x`, `--kill` and
 hard kill, after the user confirms it with the same warning as for exit code 2.
 It stays as an action of its own, next to "Stop program", for a program known
 to be stuck, whose orderly stop would only reach the hard kill after the
-timeout.
+timeout. The warning depends on the mode: in a durable program, each node
+resumes from its checkpoint and its input log and a gap in the FIFOs is
+reported; in a non-durable one, what the nodes held and what the FIFOs held is
+lost, nothing reports it, and the next launch starts every node afresh. The
+indicator of a stopped program says the same of the next launch, whether the
+program stopped in order or abruptly.
 
 Both actions are offered only while there is a run in progress, where "Stop
 program" for a general program needs only an output directory. The orderly
@@ -3264,12 +3296,16 @@ would compete with. The backend reads the `.id` and `.finished` files by the
 names that the engine gives to them, as the `Supervisor` does, and would have
 to change with them.
 
-**Snapshots.** The nodes of a resident program write checkpoints and prune
-their input logs only when a round closes, and a round starts only when a
+**Snapshots.** The nodes of a durable resident program write checkpoints and
+prune their input logs only when a round closes, and a round starts only when a
 trigger comes from outside the program. `debasher_snapshot_resident` writes
 that trigger (see "`debasher_snapshot_resident`: rounds from outside the
 program" in `doc/design_doc_resident.md`). With no rounds, the input logs grow
-until their size cap stops the nodes. The web UI starts rounds in two ways.
+until their size cap stops the nodes. A non-durable program takes no
+snapshots: the run menu does not offer "Take snapshot", `/snapshot` refuses it
+as the tool does, the dialog of the execution options hides the snapshot
+period, and `/run` starts no periodic snapshots whatever snapshot period its
+execution options hold. The web UI starts rounds in two ways.
 
 "Take snapshot" starts one round: it runs
 `debasher_snapshot_resident -d <output directory>` within the request, with
@@ -3419,6 +3455,14 @@ a node, shows what the node keeps in its execdir, read only, in three views:
   its connected inputs, named as the input log records them: the option name
   without its leading dash), together with the ports of the records read,
   which add the control port of an initiator, not in the model.
+
+In a non-durable program the node keeps no checkpoints and no input log, and
+`debasher_inspect_resident` refuses the commands that show them (see below), so
+the dialog offers the summary alone. The summary says the mode in a row of its
+own, in place of the rows of the checkpoints, the halt, the input log and the
+replay, and gives `inbound_queue_max_bytes`, the limit that this mode has
+instead of the cap of the log. The mode comes from the node info file, which
+the node writes, or from the program when the node has written none yet.
 
 The action is offered on every node but the `Supervisor`, which keeps no node
 state, and enabled once the node has been launched, whatever the run phase: a
@@ -4256,7 +4300,9 @@ code (see "The program model of a resident program"). The code prompt of a node
 follows that of a process, with three differences that come from the code of a
 node: it is made of parts, it keeps a contract with the runtime library, and it
 may inherit hooks from its class. After a title and a sentence on what a
-resident program is, it says:
+resident program is (which adds, when the program is non-durable, that its
+nodes keep no checkpoint and no input log and start afresh after a crash or a
+stop), it says:
 
 1. **How the code is put together.** The class of the node, named after its
    process, the node kind it derives from, and the order in which script
@@ -4271,7 +4317,13 @@ resident program is, it says:
    than code of its own: `self.sleep()` for the pace, `observe` with
    `self.inject()` for what the node sees outside the program, and
    `self.set_notice()` for a notice, set again in `restore_node_state` when it
-   follows from the node state.
+   follows from the node state. The rules of a crash and of the state follow
+   the mode of the program: in a durable one, that a replay runs `process_data`
+   again, so it is deterministic and the node state complete, which
+   `check_replay` checks; in a non-durable one, that nothing is replayed, so
+   `process_data` may use the clock or random numbers, the state is lost with a
+   crash, the two hooks of the state stay empty, and what has to outlive the
+   node goes into a file of its output directory.
 2. **The runtime library.** The node reference of its node kind.
 3. **The program**, its name and description, and **the node**: its name, its
    class, its node kind, its description, and whether it runs as several

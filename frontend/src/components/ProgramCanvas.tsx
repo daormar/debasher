@@ -977,6 +977,7 @@ export default function ProgramCanvas() {
               <ResidentRunIndicator
                 phase={residentPhase}
                 inOrder={inOrder}
+                durable={program.durability !== "non-durable"}
                 onHide={() => setHiddenIndicator(indicatorKey)}
               />
             </Panel>

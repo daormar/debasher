@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ProgramProcess } from "./process";
 import {
+  hardKillConsequences,
+  isDurable,
   offersRelaunchNode,
   offersRestartNode,
   orderlyStopOutcome,
@@ -9,7 +11,9 @@ import {
   restartNodeWarning,
   restartsWithBothEnds,
   snapshotOutcome,
+  stoppedAbruptlyText,
   stoppedInOrder,
+  stoppedInOrderText,
 } from "./residentRun";
 
 describe("residentRunPhase", () => {
@@ -50,6 +54,28 @@ describe("orderlyStopOutcome", () => {
     expect(orderlyStopOutcome(2)).not.toMatch(/^Stopped in order/);
     expect(orderlyStopOutcome(1)).toMatch(/error of usage or setup/);
     expect(orderlyStopOutcome(7)).toMatch(/exit code 7/);
+  });
+});
+
+describe("the texts of a non-durable program", () => {
+  it("say that the next launch starts afresh, and never promise a resume", () => {
+    expect(orderlyStopOutcome(0, false)).toMatch(/^Stopped\. Every node ended, with no halt/);
+    expect(orderlyStopOutcome(0, false)).toMatch(/starts every node with its initial state/);
+    expect(orderlyStopOutcome(0, false)).not.toMatch(/resumes/);
+    expect(orderlyStopOutcome(2, false)).toMatch(/fell back to the hard kill/);
+    expect(orderlyStopOutcome(2, false)).not.toMatch(/checkpoint/);
+    expect(stoppedInOrderText(false)).toMatch(/starts every node with its initial state/);
+    expect(stoppedAbruptlyText(false)).toMatch(/^Program stopped abruptly/);
+    expect(stoppedAbruptlyText(false)).not.toMatch(/checkpoint/);
+    expect(hardKillConsequences(false)).toMatch(/nothing reports it/);
+    expect(hardKillConsequences(true)).toMatch(/last checkpoint/);
+  });
+
+  it("are those of a durable program unless the program says non-durable", () => {
+    expect(isDurable({ durability: "non-durable" })).toBe(false);
+    expect(isDurable({ durability: "durable" })).toBe(true);
+    expect(isDurable({})).toBe(true);
+    expect(stoppedInOrderText(true)).toMatch(/resumes it with nothing lost/);
   });
 });
 

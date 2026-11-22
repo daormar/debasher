@@ -255,3 +255,12 @@ describe("edits as data", () => {
   });
 
 });
+
+describe("the durability mode of a program", () => {
+  it("is durable for a program saved before the mode existed, and kept otherwise", () => {
+    const saved = program();
+    delete saved.durability;
+    expect(normalizeProgram(saved).durability).toBe("durable");
+    expect(normalizeProgram({ ...program(), durability: "non-durable" }).durability).toBe("non-durable");
+  });
+});

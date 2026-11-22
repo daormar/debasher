@@ -6,7 +6,8 @@
 # its own output directory, trace.jsonl, since a non-durable node keeps no
 # input log that a test could read as the trace. A relaunch of count
 # starts its count again from 1, which the trace shows. sup supervises
-# both and has a manual trigger port, which it drops every trigger of.
+# both and has a manual trigger port, which it drops every trigger of. Its
+# class has no body of its own, so that the web UI can import the program.
 
 debasher_non_durable_ref_shared_dirs()
 {
@@ -162,8 +163,7 @@ from debasher_runtime_lib import Supervisor
 
 
 class Sup(Supervisor):
-    HEARTBEAT_CHECK_INTERVAL_SECS = 0.5
-    HEARTBEAT_TIMEOUT_SECS = 3
+    pass
 
 
 Sup().run()

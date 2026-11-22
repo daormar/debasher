@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Program, ProgramType } from "../models/program";
+import type { Durability, Program, ProgramType } from "../models/program";
 import { createEmptyProgram } from "../storage/programStorage";
 import NewProgramDialog from "./NewProgramDialog";
 import LoadProgramDialog from "./LoadProgramDialog";
@@ -18,8 +18,8 @@ export default function HomeScreen({ onOpen, runMessage, onDismissRunMessage }: 
   const [isLoadProgramOpen, setLoadProgramOpen] = useState(false);
   const [isImportProgramOpen, setImportProgramOpen] = useState(false);
 
-  function handleCreate(name: string, programType: ProgramType) {
-    onOpen(createEmptyProgram(name, programType));
+  function handleCreate(name: string, programType: ProgramType, durability: Durability) {
+    onOpen(createEmptyProgram(name, programType, durability));
   }
 
   return (

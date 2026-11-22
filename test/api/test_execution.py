@@ -1385,3 +1385,64 @@ def test_a_general_program_that_the_engine_refuses_is_reported_before_anything_i
     assert response.exitCode == 1
     assert "option not found for process Step" in response.output
     assert not (tmp_path / "launched").exists()
+
+
+# --- a non-durable program ----------------------------------------------------------
+
+
+def test_the_durability_of_a_launch_record_is_read_from_its_script():
+    assert launch_record.durability_of_script('x_program_type()\n{\n    debasher::program_type "resident"\n}\n') == "durable"
+    assert launch_record.durability_of_script(
+        'x_program_type()\n{\n    debasher::program_type "resident" "non-durable"\n}\n'
+    ) == "non-durable"
+    assert launch_record.durability_of_script("# no declaration\n") == "durable"
+
+
+def test_a_program_whose_mode_changed_asks_and_says_that_the_mode_changed(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    program = _launched(_relay(tmp_path))
+    _with_program_state(tmp_path)
+
+    unchanged = execution.launch_check(program)
+    assert not unchanged.needsConfirmation and not unchanged.durabilityChanged
+
+    changed = execution.launch_check(program.model_copy(update={"durability": "non-durable"}))
+    assert changed.needsConfirmation and changed.durabilityChanged
+
+    # Another change of the program is not a change of the mode
+    assert not execution.launch_check(_with_code(program, "pass")).durabilityChanged
+
+    # The other way round: the record of a non-durable program, and a durable one
+    non_durable_home = tmp_path / "non_durable"
+    non_durable_home.mkdir()
+    non_durable = _launched(_relay(non_durable_home, durability="non-durable"))
+    _with_program_state(non_durable_home)
+    assert not execution.launch_check(non_durable).durabilityChanged
+    back = execution.launch_check(non_durable.model_copy(update={"durability": "durable"}))
+    assert back.needsConfirmation and back.durabilityChanged
+
+
+def test_a_non_durable_program_starts_no_periodic_snapshots(tmp_path, monkeypatch):
+    _fake_debasher_exec(tmp_path, monkeypatch, "echo launched")
+    started = []
+    monkeypatch.setattr(execution, "_start_periodic_snapshots", lambda program, period: started.append(period))
+    options = ExecutionOptions(scheduler="BUILTIN", snapshotEverySecs="2")
+
+    assert execution.run_program(_relay(tmp_path, durability="non-durable", executionOptions=options)).exitCode == 0
+    assert started == []
+
+    # A durable program with the same period, in a home of its own
+    durable_home = tmp_path / "durable"
+    durable_home.mkdir()
+    assert execution.run_program(_relay(durable_home, executionOptions=options)).exitCode == 0
+    assert started == ["2"]
+
+
+def test_a_snapshot_of_a_non_durable_program_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        execution, "_run_debasher_dir_tool_in_own_session", lambda program, tool: pytest.fail("the tool ran")
+    )
+    with pytest.raises(execution.HTTPException) as refused:
+        execution.take_snapshot(_relay(tmp_path, durability="non-durable"))
+    assert refused.value.status_code == 400
+    assert "non-durable" in refused.value.detail

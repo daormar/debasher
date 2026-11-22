@@ -105,6 +105,7 @@ class ComputationalSpecs(BaseModel):
     out_backlog_max_mb: Optional[float] = None
     out_backlog_fail_mb: Optional[float] = None
     gil_switch_interval_ms: Optional[float] = None
+    inbound_queue_max_mb: Optional[float] = None
     startup_timeout_s: Optional[float] = None
     # A ProgramLauncher only.
     max_concurrent_runs: Optional[int] = None
@@ -329,6 +330,11 @@ class Program(BaseModel):
     # two types accept different processes and connections. Program
     # metadata saved without it is a general program.
     programType: Literal["general", "resident"] = "general"
+    # Only for a resident program: its durability mode (see "The non-durable
+    # mode" in doc/design_doc_resident.md), which script generation writes as
+    # the second argument of program_type. Durable for program metadata saved
+    # without it, and ignored for a general program.
+    durability: Literal["durable", "non-durable"] = "durable"
     description: str = ""
     # The digest of the artifact that the program was loaded from, or last
     # saved as (see persistence.artifact_digest): every request that writes

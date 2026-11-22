@@ -285,3 +285,25 @@ describe("buildNodeCodePrompt", () => {
       .toBe(buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library));
   });
 });
+
+describe("the code prompt of a node of a non-durable program", () => {
+  const nonDurable = { ...program, durability: "non-durable" } as unknown as Program;
+
+  it("says that nothing is replayed, and which hooks the node writes", () => {
+    const prompt = buildNodeCodePrompt(nonDurable, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("This program is non-durable: its nodes keep no checkpoint and no input log");
+    expect(prompt).toContain("Nothing is replayed in a non-durable program, so `process_data` may use the clock");
+    expect(prompt).toContain("Leave `capture_node_state` and `restore_node_state` empty: a non-durable program never calls them.");
+    expect(prompt).toContain("A node test cannot use `check_replay` or `restart` for this node.");
+    expect(prompt).not.toContain("so it is deterministic (no clock");
+    expect(prompt).not.toContain("The relaunch replays the messages since the latest checkpoint");
+  });
+
+  it("keeps the rules of a replay for a durable program", () => {
+    const prompt = buildNodeCodePrompt(program, accumulate, emptyNodeCode(), "", library);
+    expect(prompt).toContain("recover from a crash with a checkpoint of that state and a replay");
+    expect(prompt).toContain("so it is deterministic (no clock");
+    expect(prompt).toContain("This node has to give a body to `process_data`, `capture_node_state`, `restore_node_state` and `initialize_runtime`");
+    expect(prompt).not.toContain("non-durable");
+  });
+});

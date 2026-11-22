@@ -610,7 +610,11 @@ the editor starts once the program is launched), and adds nodes instead
 of processes: a `Node`, or the `Supervisor`. It refuses a `Process`, and
 a general program refuses a node, when they are added, so that a
 Python description that mixes them is reported at that line rather than by
-script generation later.
+script generation later. Its durability mode (`durability`, `durable` by
+default or `non-durable`, see "The non-durable mode" in
+`doc/design_doc_resident.md`) goes into the topology as the editor writes it,
+only when it is `non-durable`; a general program refuses one, as it refuses a
+node.
 
 A `Node(name, code=<node file>, description="", options=[...], base_dir=)` is a
 process whose code is a node file, with its invariant part, its interface and

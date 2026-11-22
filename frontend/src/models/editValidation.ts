@@ -185,6 +185,17 @@ function editProblem(program: Program, edit: EditOp): string | null {
       return null;
 
     case "setProgramFields":
+      // Only a resident program has a durability mode (see "The non-durable
+      // mode" in doc/design_doc_resident.md)
+      if (
+        edit.changes.durability !== undefined &&
+        edit.changes.durability !== "durable" &&
+        program.programType !== "resident"
+      ) {
+        return "Only a resident program has a durability mode.";
+      }
+      return null;
+
     case "setEnvVar":
       return null;
 

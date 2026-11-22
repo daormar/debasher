@@ -25,6 +25,7 @@ export const httpBackend = {
   fetchProgramStatus: execution.fetchProgramStatus,
   getProcessStatuses: execution.getProcessStatuses,
   runProgram: execution.runProgram,
+  checkLaunch: execution.checkLaunch,
   stopProgram: execution.stopProgram,
   killProgram: execution.killProgram,
   getProcessStdout: execution.getProcessStdout,

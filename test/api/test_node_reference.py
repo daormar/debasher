@@ -25,7 +25,7 @@ def test_a_business_node_gets_the_contract_of_its_hooks():
 
     assert reference.startswith("### FBPProcess\n\nThe base class of every node")
     assert "`def process_data(self, port_name, packet)`\n\nProcesses one message" in reference
-    assert "It must be deterministic" in reference
+    assert "In a durable program it must be deterministic" in reference
     assert "`def send_data(self, tag, payload)`" in reference
     assert "- `OBSERVE_PORT = None`: The name under which what observe() brings in" in reference
     assert "DirectoryWatcher" not in reference
