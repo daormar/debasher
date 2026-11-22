@@ -7,9 +7,9 @@ toc: true
 toc-depth: 2
 ---
 
-This document describes the design of resident programs and the guarantees
-they give. Where a mechanism is not yet fully designed or built, its own
-section says so.
+This document describes the design of resident programs and the guarantees they
+give. Where a mechanism is not yet fully designed or built, its own section says
+so.
 
 # Introduction
 
@@ -223,12 +223,12 @@ So do the entries below that refer to it.
   numbers), rounds and checkpoints, and supervision (the `Supervisor`). See
   "Layers of the design".
 - **durability**: what two layers give together, the recovery of a node and
-  rounds and checkpoints: a node that comes back from a crash or a stop with
-  the state it had. The durability level says which failures it survives (see
+  rounds and checkpoints: a node that comes back from a crash or a stop with the
+  state it had. The durability level says which failures it survives (see
   "Failure model").
 - **memo**: a file in which a node keeps the answer to a call that is not
-  deterministic, with a key that comes from the message, so that a replay
-  reads it instead of calling again (see "Calls that are not deterministic").
+  deterministic, with a key that comes from the message, so that a replay reads
+  it instead of calling again (see "Calls that are not deterministic").
 
 ## Messages
 
@@ -355,10 +355,10 @@ So do the entries below that refer to it.
   triggers the halt. Then waits for every node's halted marker to go past its
   baseline, and signals each node. Falls back to `debasher_stop`'s hard kill
   past its own `--timeout`.
-- **`debasher_snapshot_resident`**: the tool that starts a snapshot in a
-  running program from outside it, with or without a `Supervisor`, once or
-  every given number of seconds (see "`debasher_snapshot_resident`: rounds
-  from outside the program").
+- **`debasher_snapshot_resident`**: the tool that starts a snapshot in a running
+  program from outside it, with or without a `Supervisor`, once or every given
+  number of seconds (see "`debasher_snapshot_resident`: rounds from outside the
+  program").
 - **in transit**: a `DATA` message sent before its sender captured its state and
   received after its receiver captured its own.
 - **channel state**: `channel_state`, the copy that a node keeps, in the
@@ -376,14 +376,14 @@ So do the entries below that refer to it.
   `<execdir>/checkpoints/` (`checkpoints_<idx>/` for a task of an array, see
   execdir) when a round closes. It holds a schema version, the epoch, the
   `node_state`, the `channel_state` and the engine's own bookkeeping:
-  `capture_pos`, `closed_ports`, `out_seq`, `last_seq` and the outbound
-  backlog, `out_backlog` (see "State capture and checkpoint schema"). Only the
-  last `CHECKPOINT_RETENTION` are kept.
+  `capture_pos`, `closed_ports`, `out_seq`, `last_seq` and the outbound backlog,
+  `out_backlog` (see "State capture and checkpoint schema"). Only the last
+  `CHECKPOINT_RETENTION` are kept.
 - **outbound backlog, `out_backlog`**: the `DATA` that `send_data` has numbered
-  and queued and that the writer thread of its port has not yet finished
-  writing into the FIFO, on all the output ports of the node (G5). The node
-  keeps it live in `_unwritten`. When a round captures the node state, it takes
-  a copy, which the checkpoint stores as `out_backlog`:
+  and queued and that the writer thread of its port has not yet finished writing
+  into the FIFO, on all the output ports of the node (G5). The node keeps it
+  live in `_unwritten`. When a round captures the node state, it takes a copy,
+  which the checkpoint stores as `out_backlog`:
   `{tag: [{"seq":, "payload":}, ...]}`, decoded from each queued line. Without
   it, a crash right after the capture would destroy those messages for good,
   with no trace (see "Both endpoints of a channel crashed" in the Contract's
@@ -420,10 +420,10 @@ So do the entries below that refer to it.
 - **torn tail**: part of a record, with no newline, at the end of a segment,
   which a process that dies in the middle of a write (a `kill -9`, a crash), or
   a write that fails halfway (a full disk), leaves. It can happen at any record
-  size. Nothing is written after it, since no incarnation appends to an
-  existing segment and a log refuses every append after a failed write, and
-  replay ignores it. A line that ends in a newline is a complete record and has
-  to parse, or the log is corrupt (see "Log structure and record format").
+  size. Nothing is written after it, since no incarnation appends to an existing
+  segment and a log refuses every append after a failed write, and replay
+  ignores it. A line that ends in a newline is a complete record and has to
+  parse, or the log is corrupt (see "Log structure and record format").
 - **replay**: re-executing `process_data` on the `DATA` records after
   `capture_pos`, in log order, when a node starts. It reads from disk and writes
   nothing to the log.
@@ -499,18 +499,18 @@ So do the entries below that refer to it.
 - **relaunch**: starting a new incarnation of a node, by the `Supervisor`
   (through `debasher_launch_process`) or by hand. It is the same operation as
   the first launch: there is no recovery mode.
-- **clean start**: a start of a resident program with none of the state that
-  its earlier runs left, as on its first run. That state is the checkpoints,
-  the input log, the halted marker and the notice of each node, and the output
+- **clean start**: a start of a resident program with none of the state that its
+  earlier runs left, as on its first run. That state is the checkpoints, the
+  input log, the halted marker and the notice of each node, and the output
   directory of each process. `debasher_reset_resident` gives one to the whole
   program (see "`debasher_reset_resident`: a clean start"). A relaunch and a
   resume after a halt keep that state, so neither is a clean start.
 - **recovery**: what a relaunched node does at startup: open its FIFOs, load its
   latest checkpoint, `restore_node_state`, `initialize_runtime`, start its
-  writer threads, replay the input log after `capture_pos`, then start its
-  other threads. Localized recovery is the policy: only the downed node is
-  relaunched. A **global rollback** would instead rewind every node to the last
-  consistent cut; it is future work.
+  writer threads, replay the input log after `capture_pos`, then start its other
+  threads. Localized recovery is the policy: only the downed node is relaunched.
+  A **global rollback** would instead rewind every node to the last consistent
+  cut; it is future work.
 - **heartbeat**: the `INTERACT` command that a healthy node sends the
   `Supervisor` every `HEARTBEAT_INTERVAL_SECS` from the moment its threads
   start. The `Supervisor` declares a node down when they stop for
@@ -559,8 +559,8 @@ So do the entries below that refer to it.
   which life of the launcher node the directory belongs to.
 - **registration**: the file `.launcher/registrations/<position>.json` in the
   output directory of the process of a launcher node, written when the request
-  at that position registers a batch run, and which names its run directory.
-  The registrations of a node are its queue of batch runs.
+  at that position registers a batch run, and which names its run directory. The
+  registrations of a node are its queue of batch runs.
 - **life**: the time between two clean starts of the program, as seen by a
   launcher node, identified by `life_id`, a random string kept in a file of the
   output directory of its process; `debasher_reset_resident` removes it, so
@@ -656,10 +656,10 @@ are built ("The tests of the Contract").
 
 ## Layers of the design
 
-The design is built in four layers (see the Glossary), each resting on the
-ones before it. This section says what each layer gives and whether a program
-can do without it today. The obligations of module authors, further on, say
-which layer needs each of them.
+The design is built in four layers (see the Glossary), each resting on the ones
+before it. This section says what each layer gives and whether a program can do
+without it today. The obligations of module authors, further on, say which layer
+needs each of them.
 
 - **The base.** Nodes, the channels between them and the envelopes on those
   channels, and the threads of a node (see "Overview of the class"). It runs a
@@ -669,11 +669,11 @@ which layer needs each of them.
   processes it (see "Input log"), and a node that starts over an output
   directory that holds state replays its log. The sequence numbers let a
   receiver drop what a replay sends again, and notice a loss. `HELLO` lets a
-  reader drop the fragment of a writer that died in the middle of a message
-  (see "Reconnecting after a node failure"). The replay runs at every start
-  over an output directory that holds state, unless `debasher_reset_resident`
-  ran first. With no round to prune it, the input log grows until
-  `INPUT_LOG_MAX_BYTES` stops the reader that reaches it.
+  reader drop the fragment of a writer that died in the middle of a message (see
+  "Reconnecting after a node failure"). The replay runs at every start over an
+  output directory that holds state, unless `debasher_reset_resident` ran first.
+  With no round to prune it, the input log grows until `INPUT_LOG_MAX_BYTES`
+  stops the reader that reaches it.
 - **Rounds and checkpoints.** A round saves a checkpoint at every node (see
   "Chandy-Lamport barrier propagation"). The checkpoint prunes the input log and
   bounds the replay, and a halt round gives an ordered shutdown and its resume.
@@ -682,13 +682,13 @@ which layer needs each of them.
   program that is ever given an ordered shutdown uses them.
 - **Supervision.** The `Supervisor` notices a node down and relaunches it (see
   "`Supervisor` class"). It also holds the business channels, so that what a
-  FIFO holds outlives both its endpoints (see "Holding the business
-  channels"). A program may have no `Supervisor`, and `-no-hold-fifos` turns
-  the holding off. Without a `Supervisor`, a node is relaunched only by hand.
+  FIFO holds outlives both its endpoints (see "Holding the business channels").
+  A program may have no `Supervisor`, and `-no-hold-fifos` turns the holding
+  off. Without a `Supervisor`, a node is relaunched only by hand.
 
-Of the four layers, only supervision is optional. A program with the base
-alone, without the input log and checkpoints, is not possible today (see "A
-mode without durability" in Future work).
+Of the four layers, only supervision is optional. A program with the base alone,
+without the input log and checkpoints, is not possible today (see "A mode
+without durability" in Future work).
 
 ## Failure model
 
@@ -714,8 +714,8 @@ working, and which failures they do not cover.
   other nodes' volatile memory, such as logging at the sender or replication
   with quorums; this design has neither.)
   - An exception that recurs. `process_data` is deterministic, so an exception
-    it raises on a message comes back when the relaunch replays that message,
-    in the main thread. Every relaunch then dies in its startup, until the
+    it raises on a message comes back when the relaunch replays that message, in
+    the main thread. Every relaunch then dies in its startup, until the
     `Supervisor` gives the node up. Only an exception that does not recur, such
     as a failure outside the graph that is gone at the replay, ends in a
     recovery.
@@ -723,17 +723,17 @@ working, and which failures they do not cover.
   filesystem under the program's output directory (it keeps what was written:
   checkpoints, input logs, markers). Resident programs run on a single machine
   (BUILTIN scheduler only), so network partitions do not apply.
-- **Durability level: process crashes only.** Nothing is
-  `fsync`ed anywhere, so logs and checkpoints survive the crash of a process but
-  not the crash or power loss of the machine; see the note below on what `fsync`
-  is and what it would cost.
+- **Durability level: process crashes only.** Nothing is `fsync`ed anywhere, so
+  logs and checkpoints survive the crash of a process but not the crash or power
+  loss of the machine; see the note below on what `fsync` is and what it would
+  cost.
 - **Not tolerated**: machine crash or power loss (see above), disk corruption,
   and processes that misbehave instead of crashing (Byzantine faults).
 - **The `Supervisor` is not itself supervised.** If it dies, the nodes keep
-  running with their state, but nobody relaunches a crashed node, and no FIFO
-  is held (see held FIFO in the Glossary), until the `Supervisor` is
-  relaunched by hand. No mechanism covers this (see "Supervising the
-  `Supervisor`" in Future work).
+  running with their state, but nobody relaunches a crashed node, and no FIFO is
+  held (see held FIFO in the Glossary), until the `Supervisor` is relaunched by
+  hand. No mechanism covers this (see "Supervising the `Supervisor`" in Future
+  work).
 
 **Note on `fsync`, and why the level above is the one chosen.** When a process
 writes to a file, the operating system copies the data into its own memory, the
@@ -780,11 +780,10 @@ The obligations themselves, and when each applies:
   depend on wall-clock time, randomness, thread timing, or external reads,
   unless whatever it reads is part of the captured state or of the message
   stream, or a memo of the answers to its calls (see "Calls that are not
-  deterministic").
-  Recovery re-executes it, so a non-deterministic `process_data` silently
-  diverges from what it did before the crash. It matters wherever a replay runs:
-  at every start over an output directory that holds state, unless
-  `debasher_reset_resident` ran first.
+  deterministic"). Recovery re-executes it, so a non-deterministic
+  `process_data` silently diverges from what it did before the crash. It matters
+  wherever a replay runs: at every start over an output directory that holds
+  state, unless `debasher_reset_resident` ran first.
 - **A node sends only inside `process_data`**, in reaction to a message that it
   receives. The framework enforces it: `send_data` raises `RuntimeError` when it
   is called anywhere else, or from a thread other than the one running
@@ -792,23 +791,23 @@ The obligations themselves, and when each applies:
   port from outside (see "source" in the Glossary).
 - **`capture_node_state()` is complete and `restore_node_state()` exact**:
   everything that influences future behavior round-trips through them. It
-  matters as soon as a round runs, and `debasher_stop_resident` always runs
-  one, the halt, whose checkpoint the resume restores. A relaunch restores the
-  latest checkpoint too.
+  matters as soon as a round runs, and `debasher_stop_resident` always runs one,
+  the halt, whose checkpoint the resume restores. A relaunch restores the latest
+  checkpoint too.
 - **Effects outside the graph are idempotent**: replay re-executes
   `process_data`, so anything it does outside the FIFOs (writing a file
-  elsewhere, calling a service) can happen more than once. It matters wherever
-  a replay runs, as determinism does, and no test can check it in general.
+  elsewhere, calling a service) can happen more than once. It matters wherever a
+  replay runs, as determinism does, and no test can check it in general.
 - **Messages are serializable as strict JSON, of any size up to
   `OUT_BACKLOG_FAIL_BYTES` (`out_backlog_fail_mb`), measured on the encoded
   line.** The framework enforces it: `send_data` raises `ValueError` for a NaN
   or an infinity, and `RuntimeError` for a message over
-  `OUT_BACKLOG_FAIL_BYTES`. A message larger
-  than `PIPE_BUF` (4096 bytes on Linux) being written when its sender crashes
-  can leave a truncated fragment in the FIFO. The reader drops it thanks to the
-  resync line (see the Glossary) that every writer incarnation sends first,
-  and the sender's replay regenerates the message. Only the framework writes
-  to these channels; an external writer must send complete lines.
+  `OUT_BACKLOG_FAIL_BYTES`. A message larger than `PIPE_BUF` (4096 bytes on
+  Linux) being written when its sender crashes can leave a truncated fragment in
+  the FIFO. The reader drops it thanks to the resync line (see the Glossary)
+  that every writer incarnation sends first, and the sender's replay regenerates
+  the message. Only the framework writes to these channels; an external writer
+  must send complete lines.
 - **Every fifo is defined by the process that writes it, through an output
   option, except one fed from outside the program**. Its reader defines that one
   through an input option with a fifo tag, `--control` for commands and
@@ -830,28 +829,26 @@ as one to a language model. A replay would make the call again and could get
 another answer. Three patterns keep `process_data` deterministic over what the
 node has recorded, with nothing added to the framework:
 
-- The call in `observe()`. `process_data` records the request in the node
-  state, so that a relaunch finds it, and hands it to `observe()` through a
-  queue of the class, the one thing that the two threads share;
-  `restore_node_state` puts the pending requests back in that queue.
-  `observe()` makes the call and brings the answer in with `inject()`, with the
-  identifier of its request, so the input log records it as an input, which
-  the replay finds there (see "Observing the outside world"). An observation
-  may enter more than once, so `process_data` acts on the first answer to a
-  request and drops the others.
-- The call in a node of its own. The request goes out on a FIFO, and the
-  answer comes back on another, through a cycle. The reader of the answer logs
-  it as any message. The node that calls is a process that is not resident,
-  or a resident node whose replay sends its answers again, which the reader
-  drops as duplicates (G5).
-- A memo of the node. `process_data` keeps each answer in a file of its own,
-  and reads it there before it calls again. Four conditions make it hold:
-  - the file is outside the node state, which survives only as of a
-    checkpoint;
+- The call in `observe()`. `process_data` records the request in the node state,
+  so that a relaunch finds it, and hands it to `observe()` through a queue of
+  the class, the one thing that the two threads share; `restore_node_state` puts
+  the pending requests back in that queue. `observe()` makes the call and brings
+  the answer in with `inject()`, with the identifier of its request, so the
+  input log records it as an input, which the replay finds there (see "Observing
+  the outside world"). An observation may enter more than once, so
+  `process_data` acts on the first answer to a request and drops the others.
+- The call in a node of its own. The request goes out on a FIFO, and the answer
+  comes back on another, through a cycle. The reader of the answer logs it as
+  any message. The node that calls is a process that is not resident, or a
+  resident node whose replay sends its answers again, which the reader drops as
+  duplicates (G5).
+- A memo of the node. `process_data` keeps each answer in a file of its own, and
+  reads it there before it calls again. Four conditions make it hold:
+  - the file is outside the node state, which survives only as of a checkpoint;
   - it is written before any `send_data` that depends on the answer, so that a
     crash in between leaves nothing sent;
-  - its key comes from the message, such as the identifier of a request, so
-    that a replay finds it;
+  - its key comes from the message, such as the identifier of a request, so that
+    a replay finds it;
   - it is under the output directory of the process, so that
     `debasher_reset_resident` takes it away with the rest of the state.
 
@@ -906,15 +903,15 @@ guarantee in words and never cite these numbers, which may change.
   its checkpoint and replays from its input log only what it processed after
   capturing it. A crash during a round aborts it at the node that crashed (see
   "A crash while a round is open" in the limits below).
-- **G7, bounded detection**: a node whose process is verifiably gone is
-  noticed within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy
-  (one of its reader, writer, brain or observation threads died) is noticed
-  within `HEARTBEAT_TIMEOUT_SECS` plus one `HEARTBEAT_CHECK_INTERVAL_SECS`,
-  since the checker thread of the `Supervisor` looks at it once per tick.
-  Before its first heartbeat, a node has its startup deadline instead of
-  `HEARTBEAT_TIMEOUT_SECS`. These bounds hold while the `Supervisor` itself
-  runs on time (see "Failure detection"). Once noticed, a node is relaunched
-  up to `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
+- **G7, bounded detection**: a node whose process is verifiably gone is noticed
+  within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node alive but unhealthy (one of its
+  reader, writer, brain or observation threads died) is noticed within
+  `HEARTBEAT_TIMEOUT_SECS` plus one `HEARTBEAT_CHECK_INTERVAL_SECS`, since the
+  checker thread of the `Supervisor` looks at it once per tick. Before its first
+  heartbeat, a node has its startup deadline instead of
+  `HEARTBEAT_TIMEOUT_SECS`. These bounds hold while the `Supervisor` itself runs
+  on time (see "Failure detection"). Once noticed, a node is relaunched up to
+  `MAX_RELAUNCH_ATTEMPTS` times before the escalation.
 - **G8, detected, never silent**: when a guarantee cannot be kept, the node or
   the `Supervisor` raises an error that stops the affected part, instead of
   continuing with silently wrong state. Such a case is a gap in a channel's
@@ -936,8 +933,7 @@ failure of the machine) and only for nodes that keep the "Obligations of module
 authors" (a deterministic `process_data`, idempotent effects outside the graph).
 
 The limits are numbered so that this document can cite them. Tests and code
-comments state a limit in words and never cite these numbers, which may
-change.
+comments state a limit in words and never cite these numbers, which may change.
 
 1. **Both endpoints of a channel crashed while no other process held the FIFO.**
    What a FIFO holds is destroyed only when no process holds it open.
@@ -967,9 +963,8 @@ change.
      came from inputs before `capture_pos`, which the replay does not reach. Its
      `out_seq` counts it as sent, so it is not sent again. If some of it was
      still unread in the FIFO, it is lost. The reader finds the hole in the
-     sequence numbers when a later message, or the marker of a round, arrives
-     on that channel (G8). Ways to repair more are in "Future work", none
-     designed.
+     sequence numbers when a later message, or the marker of a round, arrives on
+     that channel (G8). Ways to repair more are in "Future work", none designed.
    - Where it cannot happen. Nodes that are not adjacent may crash together with
      no such loss. Two nodes joined only by the channels of a cycle cannot lose
      messages this way either. A round closes on one of their channels only
@@ -1019,24 +1014,24 @@ change.
      source keeps it open: the reader of the next incarnation finds it as a
      fragment that no `HELLO` follows, which stops that reader.
 4. **Stuck but alive.** A node that is alive and whose work makes no progress is
-   not detected, whether a thread of it is blocked (an endless loop, a
-   deadlock) or what it observes outside has stopped.
+   not detected, whether a thread of it is blocked (an endless loop, a deadlock)
+   or what it observes outside has stopped.
    - Why. The heartbeat proves that the threads of the node are alive, not that
      they make progress.
    - What a module can do today, for what it observes outside. An `observe()`
      that raises when what it watches has not moved for a while ends the
      observation thread. The node is then no longer healthy, and the
-     `Supervisor` relaunches it. The cause is in the traceback, which the log
-     of the `Supervisor` copies (see "Relaunching a downed node"). Other
-     threads of the node that log a lot can push it out of the lines copied.
-     Only the module knows when silence is a failure, such as when a sequencer
-     stops sending data during a scan of its pores.
+     `Supervisor` relaunches it. The cause is in the traceback, which the log of
+     the `Supervisor` copies (see "Relaunching a downed node"). Other threads of
+     the node that log a lot can push it out of the lines copied. Only the
+     module knows when silence is a failure, such as when a sequencer stops
+     sending data during a scan of its pores.
    - A relaunch that never ends. The relaunched node sends a heartbeat, which
      sets its count of relaunches back to 0. If what it watches is still
      stopped, `observe()` raises again after the same while, and the node is
-     relaunched for ever, with no escalation. A module that wants a bound
-     counts its own attempts in a file of its output directory and, once
-     they are over it, stops raising and sets a notice instead.
+     relaunched for ever, with no escalation. A module that wants a bound counts
+     its own attempts in a file of its output directory and, once they are over
+     it, stops raising and sets a notice instead.
    - A blocked brain thread. Nothing detects it today (see "A check that the
      brain thread makes progress" in Future work).
 5. **A long call that keeps the GIL looks like a dead node.** While
@@ -1081,10 +1076,10 @@ change.
      place of the mirror log. It holds what arrived on the channel, and reading
      it takes nothing from the channel (the `log` command of
      `debasher_inspect_resident`, "Show node state" in the web UI).
-   - A channel read outside the program. What a node writes into it is
-     recorded nowhere. Only reading the FIFO shows it ("Talk to FIFOs" in the
-     web UI), and reading takes it from the channel (see "Observing and
-     talking to a live program" in `doc/design_doc_webui.md`).
+   - A channel read outside the program. What a node writes into it is recorded
+     nowhere. Only reading the FIFO shows it ("Talk to FIFOs" in the web UI),
+     and reading takes it from the channel (see "Observing and talking to a live
+     program" in `doc/design_doc_webui.md`).
 9. **A round that a newer one replaces** leaves the nodes that had not closed it
    without a checkpoint for its epoch, so that epoch has no complete cut. The
    round that replaced it does complete, at every node it reaches, and that is
@@ -1151,11 +1146,11 @@ reference program under random kills of its nodes, and each guarantee has a
 focused test of its own. Both drive real runs of `debasher_exec`, not mocks. How
 the tests are built is in the next section, "The tests of the Contract".
 
-The reference program, `test/engine/debasher_chaos_ref.sh`, has the shapes
-that matter: a cycle, a source, a sink, and a fan-in node with more than one
-input port. The fan-in node keeps a node state, and its `process_data` is
-sensitive to the order across ports. The program has three business nodes and
-a `Supervisor`, `sup`:
+The reference program, `test/engine/debasher_chaos_ref.sh`, has the shapes that
+matter: a cycle, a source, a sink, and a fan-in node with more than one input
+port. The fan-in node keeps a node state, and its `process_data` is sensitive to
+the order across ports. The program has three business nodes and a `Supervisor`,
+`sup`:
 
 ```
         the test (a source)
@@ -1174,9 +1169,9 @@ a `Supervisor`, `sup`:
          +---------+
 ```
 
-Each node sends heartbeats to `sup`. `sup` has an initiator port to `fanin`
-and a manual trigger port fed from outside. It holds the FIFOs of the three
-business channels, unless the program is given `-no-hold-fifos`.
+Each node sends heartbeats to `sup`. `sup` has an initiator port to `fanin` and
+a manual trigger port fed from outside. It holds the FIFOs of the three business
+channels, unless the program is given `-no-hold-fifos`.
 
 `fanin` keeps a node state of two parts. One is a count of the messages it has
 processed on each port. The other is a digest that folds every message it has
@@ -1186,33 +1181,29 @@ it also sends to `loop`, which sends it back. So `fanin` processes each value
 twice, once on `ext` and once on `loop_in`, and `k` values make `2k` copies at
 `sink`. The input log of `sink` is the trace of the run.
 
-The chaos test runs the reference program and kills random nodes with
-`kill -9` at random moments: several at once, adjacent pairs, and while a
-snapshot round is open. The `Supervisor` relaunches them, and the run is
-halted and resumed.
+The chaos test runs the reference program and kills random nodes with `kill -9`
+at random moments: several at once, adjacent pairs, and while a snapshot round
+is open. The `Supervisor` relaunches them, and the run is halted and resumed.
 
-**Pass criterion.** A run with no loss passes when the trace shows that
-`fanin` processed what was sent to it, each message once and in order, and
-kept its state. A run with a loss passes only as "The exception" below says.
+**Pass criterion.** A run with no loss passes when the trace shows that `fanin`
+processed what was sent to it, each message once and in order, and kept its
+state. A run with a loss passes only as "The exception" below says.
 
 - Per port. On each port of `fanin`, the messages that the trace shows it
-  processed are exactly the sequence that the writer of that port sent, in
-  the order it sent them, with no duplicate and none missing.
+  processed are exactly the sequence that the writer of that port sent, in the
+  order it sent them, with no duplicate and none missing.
 - Node state. The state that `fanin` sends with each copy, its state after
-  processing that message, goes on across every relaunch and resume, as if
-  the node had never stopped.
+  processing that message, goes on across every relaunch and resume, as if the
+  node had never stopped.
 - Interleaving. The whole trace only has to be some interleaving of the
-  sequences of the ports, never a match with one frozen run. Which
-  interleaving comes out is a race between independent writers, even with no
-  failure.
-- The exception. Limits 1 and 3 can lose a message beyond repair. The chaos
-  test reaches limit 1 with `-no-hold-fifos` (see "Holding the business
-  channels"). A run that hits either passes if it ends with an error of G8
-  that names the channel, and the numbers of the missing messages when it can
-  tell them.
-- The source. The test, the source of `ext`, numbers what it sends (see
-  limit 2, "External inputs"), so a message lost at that port ends in that
-  error too.
+  sequences of the ports, never a match with one frozen run. Which interleaving
+  comes out is a race between independent writers, even with no failure.
+- The exception. Limits 1 and 3 can lose a message beyond repair. The chaos test
+  reaches limit 1 with `-no-hold-fifos` (see "Holding the business channels"). A
+  run that hits either passes if it ends with an error of G8 that names the
+  channel, and the numbers of the missing messages when it can tell them.
+- The source. The test, the source of `ext`, numbers what it sends (see limit 2,
+  "External inputs"), so a message lost at that port ends in that error too.
 - What always fails. A different result with no error (a message duplicated,
   lost or altered that nobody reported), and a run that never ends and reports
   nothing.
@@ -1242,33 +1233,33 @@ check its trace and its checkpoints.
 
 Four kinds of thread of the test act on the run:
 
-- The feeder (`ExtFeeder`) is a source outside the program. It writes the
-  values 1 to `k` into `ext`, each numbered with its value. It keeps the FIFO
-  open for the whole run, so that what is unread survives a crash of `fanin`.
-  While `fanin` is down, a write fails at once, and the feeder writes the same
-  value again until `fanin` reopens the FIFO. So no value is lost or
-  duplicated on its way into the FIFO. One lost after `fanin` has read it is
-  reported by its number (see limit 2, "External inputs").
+- The feeder (`ExtFeeder`) is a source outside the program. It writes the values
+  1 to `k` into `ext`, each numbered with its value. It keeps the FIFO open for
+  the whole run, so that what is unread survives a crash of `fanin`. While
+  `fanin` is down, a write fails at once, and the feeder writes the same value
+  again until `fanin` reopens the FIFO. So no value is lost or duplicated on its
+  way into the FIFO. One lost after `fanin` has read it is reported by its
+  number (see limit 2, "External inputs").
 - The snapshot pacer (`SnapshotPacer`) writes `start_snapshot` into the manual
   trigger port of `sup` at a steady beat while the feed lasts. So rounds close,
   checkpoints are written and logs are pruned during the run, and the kills of
   the test land before, during and after a round.
 - The tailer (`SinkTailer`) follows the input log of `sink` from the start of
-  the run, segment after segment. Pruning deletes the segments of an
-  incarnation of `sink` once a later checkpoint covers them, so a log read
-  after the run would miss part of the trace.
-- The output tailers (`SchedOutTailer`), one per node that may be killed,
-  follow the output of each such node from the start of the run, since a
-  relaunch truncates it. They run only in the tests that kill nodes.
+  the run, segment after segment. Pruning deletes the segments of an incarnation
+  of `sink` once a later checkpoint covers them, so a log read after the run
+  would miss part of the trace.
+- The output tailers (`SchedOutTailer`), one per node that may be killed, follow
+  the output of each such node from the start of the run, since a relaunch
+  truncates it. They run only in the tests that kill nodes.
 
 A run with no kill ends with `halt_and_wait_for_finished`, which runs
 `debasher_stop_resident` and waits for `sup` to end. A run with random kills
-ends with `halt_and_check_trace`. It runs the same tool, and looks in the
-output of the nodes for the error of a loss: a gap that names its range, or a
-fragment that no `HELLO` follows. Each loss has to come from a node that was
-killed. With no loss, the halt has to end cleanly, and the trace has to meet
-`assert_trace_matches`. With a loss, the halt may not complete, since the
-reader that found it has stopped, and the trace has to meet
+ends with `halt_and_check_trace`. It runs the same tool, and looks in the output
+of the nodes for the error of a loss: a gap that names its range, or a fragment
+that no `HELLO` follows. Each loss has to come from a node that was killed. With
+no loss, the halt has to end cleanly, and the trace has to meet
+`assert_trace_matches`. With a loss, the halt may not complete, since the reader
+that found it has stopped, and the trace has to meet
 `assert_trace_with_reported_losses`. The test of a loss engineered on purpose
 does not halt: it waits for the escalation of `sup` to end the program.
 
@@ -1284,16 +1275,16 @@ Four functions check the trace:
 - `assert_trace_with_reported_losses` is the exception, for a run in which a
   killed node reported a loss. The trace is a gapless prefix of the sequence
   numbers of its channel, which ends before the gap if the gap is that of
-  `sink`. On each port, the values are in order, with no duplicate and none
-  that was never sent. The state of `fanin` is restored.
+  `sink`. On each port, the values are in order, with no duplicate and none that
+  was never sent. The state of `fanin` is restored.
 - `assert_engineered_gap_trace` does the same for a loss engineered on purpose,
   in the case of limit 1, "Both endpoints of a channel crashed". When the error
   names a range, the prefix ends exactly where it begins; otherwise the prefix
   only has to be shorter than the `2k` copies.
 
-The checks rest on the values and on the state of `fanin`. Of the four, only
-the two after a loss read the sequence numbers, to check the prefix that a
-loss leaves. The test of channel order reads them too.
+The checks rest on the values and on the state of `fanin`. Of the four, only the
+two after a loss read the sequence numbers, to check the prefix that a loss
+leaves. The test of channel order reads them too.
 
 One more check reads the checkpoints instead of the trace.
 `assert_checkpoints_form_a_consistent_cut` takes the checkpoints that one round
@@ -1357,54 +1348,53 @@ gives the fields type by type, `DATA`, `BARRIER`, `INTERACT`, `CLOSE` and
 `HELLO`, and then the field that no type has. The paragraph after it says how
 the reader thread checks them.
 
-- `DATA.seq`: the sender's per-channel sequence number (G5 in the Contract,
-  see "Input log"), absent when the sender does not number what it sends.
+- `DATA.seq`: the sender's per-channel sequence number (G5 in the Contract, see
+  "Input log"), absent when the sender does not number what it sends.
 - `DATA.payload`: free-form, whatever the business logic wants;
-  `process_data(port_name, packet)` (see "`FBPProcess` class") receives
-  it already deserialized. The reader thread never looks at it.
+  `process_data(port_name, packet)` (see "`FBPProcess` class") receives it
+  already deserialized. The reader thread never looks at it.
 - `BARRIER.payload.epoch`: identifies the round; enough for the initiator (see
   "Chandy-Lamport barrier propagation") to recognize, in a cycle, that the
   marker coming back through its own input port is its own (no need to carry the
   initiator's identity).
-- `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown
-  (see "Ordered shutdown") instead of a snapshot.
+- `BARRIER.payload.halt`: reuses the same `BARRIER` as an ordered shutdown (see
+  "Ordered shutdown") instead of a snapshot.
 - `BARRIER.payload.last_seq`: the `out_seq` of the sender for that channel when
-  it captured its state, left out when the sender does not number what it
-  sends. Every message that this number counts was queued before the marker,
-  so it goes ahead of the marker on the channel. A reader that has accepted
-  fewer has lost the rest, and it stops with the error of a gap (G5, G8),
-  before it logs the marker.
+  it captured its state, left out when the sender does not number what it sends.
+  Every message that this number counts was queued before the marker, so it goes
+  ahead of the marker on the channel. A reader that has accepted fewer has lost
+  the rest, and it stops with the error of a gap (G5, G8), before it logs the
+  marker.
 - `INTERACT.payload.command`/`args`: an open catalog, extended as needed by
   whichever sections trigger it (`start_snapshot`, `shutdown`, `heartbeat`,
   `checkpoint_saved`, ...). `start_snapshot` and `shutdown` take an optional
   `args.epoch`, an integer (see numbered trigger in the Glossary).
 - `CLOSE.payload.last_seq`: the sender's last `out_seq` for that channel, left
   out when the sender does not number what it sends (see `CLOSE` in the
-  Glossary). Sent by a writer when it has finished for good; a halt sends
-  none. The reader hands it to the brain thread in order and then drops
-  whatever follows it (a `Supervisor` reader delivers it).
+  Glossary). Sent by a writer when it has finished for good; a halt sends none.
+  The reader hands it to the brain thread in order and then drops whatever
+  follows it (a `Supervisor` reader delivers it).
 - `HELLO`: empty payload, sent as the first line of every incarnation of a
-  writer, together with a leading blank line (see "resync line" in the
-  Glossary; the transport decision of "Reconnecting after a node failure").
-  Consumed by the reader thread.
+  writer, together with a leading blank line (see "resync line" in the Glossary;
+  the transport decision of "Reconnecting after a node failure"). Consumed by
+  the reader thread.
 - No `port_name` field on any type: each reader thread (see "`FBPProcess`
   class") already knows which port a message came from by construction (it is
   dedicated to that FIFO); it gets attached once the message enters the inbound
   queue, not in the wire format.
 
 The reader thread checks these fields before anything else sees the envelope:
-`seq` and `last_seq` are integers when present, `epoch` is an integer and
-`halt` a boolean, `command` is a string, and the payload of every type but
-`DATA` is an object. An envelope that is JSON but malformed (a field of the
-wrong type, a missing key, an unknown type) is dropped with a warning, and the
-reader goes on, unless it follows the fragment of a dead writer, which only a
-`HELLO` excuses. Only a writer outside the program can send one, and nothing of
-it can be recovered: what it meant to say is lost, with the warning as its only
-trace. A line that is not JSON is another matter: it is dropped only as the
-fragment of a dead writer before a `HELLO`, and otherwise ends the reader (see
-"Wire format"). The arguments of a command are checked by its handler, since
-the catalog is open: a trigger whose epoch is not an integer is ignored with a
-warning.
+`seq` and `last_seq` are integers when present, `epoch` is an integer and `halt`
+a boolean, `command` is a string, and the payload of every type but `DATA` is an
+object. An envelope that is JSON but malformed (a field of the wrong type, a
+missing key, an unknown type) is dropped with a warning, and the reader goes on,
+unless it follows the fragment of a dead writer, which only a `HELLO` excuses.
+Only a writer outside the program can send one, and nothing of it can be
+recovered: what it meant to say is lost, with the warning as its only trace. A
+line that is not JSON is another matter: it is dropped only as the fragment of a
+dead writer before a `HELLO`, and otherwise ends the reader (see "Wire format").
+The arguments of a command are checked by its handler, since the catalog is
+open: a trigger whose epoch is not an integer is ignored with a warning.
 
 ## Channel topology
 
@@ -1503,8 +1493,8 @@ follows from them and from the tags, with nothing read from Python.
 way as `--mirror`, stored in a registry of its own:
 
 - no tag: written by its owner, and read by the process at the other end, if
-  any, through an input port: a heartbeat channel when the `Supervisor` reads
-  it (see "`Supervisor` class"), and otherwise a business channel;
+  any, through an input port: a heartbeat channel when the `Supervisor` reads it
+  (see "`Supervisor` class"), and otherwise a business channel;
 - `--control`: a channel whose reader's end is a control port. Its writer is the
   `Supervisor`, which owns it (an initiator port), or someone outside the
   program, and then the reader owns it;
@@ -1543,13 +1533,13 @@ other end of every fifo is known:
 
 1. Every node can be reached from an initiator, a node with a control port,
    through business channels in the direction in which they carry a marker.
-2. Every tagged fifo is used as its tag says. A fifo tagged `--external` has
-   its other end outside the program, so that its owner reads it. A fifo tagged
+2. Every tagged fifo is used as its tag says. A fifo tagged `--external` has its
+   other end outside the program, so that its owner reads it. A fifo tagged
    `--control` either has its other end outside, and its owner reads it, or is
    owned by the `Supervisor` and read by a node.
-3. The owner of a fifo defines it through an output option, except a tagged
-   fifo fed from outside, which it defines through an input option. A fifo that
-   a node reads from outside and that lacks its tag is refused by this rule.
+3. The owner of a fifo defines it through an output option, except a tagged fifo
+   fed from outside, which it defines through an input option. A fifo that a
+   node reads from outside and that lacks its tag is refused by this rule.
 4. No fifo is declared with `--mirror` (see "Why the log is not built on the
    mirror tap").
 
@@ -1566,33 +1556,31 @@ cannot be reached.
 
 ## Ports from the engine
 
-Once the program is loaded and its channels are checked, the engine gives
-each task of an `FBPProcess`, and the `Supervisor`, its ports, taken from the
-same registries and tags (`debasher::_register_resident_task_ports`). For a
-node:
+Once the program is loaded and its channels are checked, the engine gives each
+task of an `FBPProcess`, and the `Supervisor`, its ports, taken from the same
+registries and tags (`debasher::_register_resident_task_ports`). For a node:
 
-- The owner of a fifo has an output port on the option through which it
-  defines it, or, for a tagged fifo fed from outside, an input port, which is
-  also a control or an external port, as its tag says.
+- The owner of a fifo has an output port on the option through which it defines
+  it, or, for a tagged fifo fed from outside, an input port, which is also a
+  control or an external port, as its tag says.
 - The process at the other end, when it is a node, has an input port on the
   option through which it reads the fifo (`DEBASHER_FIFO_READER_OPTS`), which is
   also a control port if the fifo is tagged `--control`.
 - The output port whose other end is the `Supervisor` is the node's
   `SUPERVISOR_PORT`. A node with more than one is refused when the program is
   loaded, since a node has a single heartbeat channel. In a program with a
-  `Supervisor`, a node with none is refused too: it would run unsupervised,
-  with nothing to say so. This is what a task of an array beyond those the
-  `Supervisor` connects to would do, when the option that sizes the
-  heartbeat channels of the `Supervisor` says fewer tasks than the array
-  builds.
+  `Supervisor`, a node with none is refused too: it would run unsupervised, with
+  nothing to say so. This is what a task of an array beyond those the
+  `Supervisor` connects to would do, when the option that sizes the heartbeat
+  channels of the `Supervisor` says fewer tasks than the array builds.
 
 For the `Supervisor`, the same fifos seen from its end:
 
 - A fifo without a tag that a node defines and the `Supervisor` reads is the
-  heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its
-  key and the option through which the `Supervisor` reads it as its value.
-- A fifo that the `Supervisor` defines with the tag `--control` and a node
-  reads is an initiator port, an entry of `INITIATOR_PORTS`.
+  heartbeat channel of that node: an entry of `NODE_PORTS`, the node as its key
+  and the option through which the `Supervisor` reads it as its value.
+- A fifo that the `Supervisor` defines with the tag `--control` and a node reads
+  is an initiator port, an entry of `INITIATOR_PORTS`.
 - A fifo that the `Supervisor` defines with the tag `--control` and that is fed
   from outside the program is its `MANUAL_TRIGGER_PORT`. A `Supervisor` with
   more than one, or with one and no initiator port, is refused when the program
@@ -1609,15 +1597,15 @@ A `Supervisor` of more than one task is refused too (see "Port declaration and
 node identity").
 
 With them goes the startup deadline of each node whose computational
-specifications give one, `startup_timeout_s` (see "Computational
-specifications of a resident process"), into `NODE_STARTUP_TIMEOUT_SECS`,
-which "Failure detection" uses.
+specifications give one, `startup_timeout_s` (see "Computational specifications
+of a resident process"), into `NODE_STARTUP_TIMEOUT_SECS`, which "Failure
+detection" uses.
 
-So the heartbeat channels need no tag of their own: the role of the process
-at each end, which the engine already knows, says which fifo is which. With
-the options of the module as the only place that says what the ports are, a
-program whose number of nodes comes from the command line has a `Supervisor`
-that watches as many nodes as there are, with no code that depends on it.
+So the heartbeat channels need no tag of their own: the role of the process at
+each end, which the engine already knows, says which fifo is which. With the
+options of the module as the only place that says what the ports are, a program
+whose number of nodes comes from the command line has a `Supervisor` that
+watches as many nodes as there are, with no code that depends on it.
 
 The ports of a node may form a fanout family (see the Glossary of
 `doc/design_doc_engine.md`), such as `-outf-ith`, defined in a loop over an
@@ -1687,19 +1675,19 @@ defines a node by writing a subclass of it that redefines a few hooks (see
 (see "`ProgramLauncher`: batch runs from a node").
 
 `FBPProcess` derives in turn from `_PortWorker`
-(`engine/debasher_runtime_transport.py`), which it shares with the
-`Supervisor` (see "`Supervisor` class"). `_PortWorker` holds what any process
-of a resident program needs to talk over its FIFOs, whatever its role:
+(`engine/debasher_runtime_transport.py`), which it shares with the `Supervisor`
+(see "`Supervisor` class"). `_PortWorker` holds what any process of a resident
+program needs to talk over its FIFOs, whatever its role:
 
-- parsing `argv` into `self.opts`, taking the ports from the engine and
-  checking them;
+- parsing `argv` into `self.opts`, taking the ports from the engine and checking
+  them;
 - the logger, `self.log`, and the computational specifications that set class
   attributes of the process (see "Computational specifications of a resident
   process");
-- opening the FIFOs, one reader thread per input port feeding the shared
-  inbound queue, one writer thread per output port with its own outbound queue
-  (both of them handling `HELLO` and `CLOSE`, see "Channel topology"), and the
-  brain thread, whose loop each subclass supplies;
+- opening the FIFOs, one reader thread per input port feeding the shared inbound
+  queue, one writer thread per output port with its own outbound queue (both of
+  them handling `HELLO` and `CLOSE`, see "Channel topology"), and the brain
+  thread, whose loop each subclass supplies;
 - `start_threads()` and `stop_threads()`, which start and stop all of them
   (`run()` of `FBPProcess` starts the writer threads earlier, see "Startup
   sequence: `run()`").
@@ -1968,10 +1956,10 @@ Future work).
 
 ## Computational specifications of a resident process
 
-The computational specifications that a program gives to
-`add_debasher_process`, next to `cpus`, `mem` and `time`, also configure a
-process of a resident program. This list gives them by who they are for, and
-ends with the one limit that no specification sets:
+The computational specifications that a program gives to `add_debasher_process`,
+next to `cpus`, `mem` and `time`, also configure a process of a resident
+program. This list gives them by who they are for, and ends with the one limit
+that no specification sets:
 
 - For a node, the limits of a node (see the Glossary), class attributes of
   `FBPProcess` with a default each, that a module can redefine in its class and
@@ -2022,8 +2010,8 @@ A node acts only in reaction to what it receives, but some have to watch
 something outside the program: a directory where files arrive, a queue, the
 batch runs a launcher node started. What such a node sees is different every
 time it looks, so looking cannot happen in `process_data`, which a replay runs
-again. It happens in `observe()`, a hook that a class may define, on a thread
-of its own, the observation thread, every `OBSERVE_INTERVAL_SECS` or when
+again. It happens in `observe()`, a hook that a class may define, on a thread of
+its own, the observation thread, every `OBSERVE_INTERVAL_SECS` or when
 `observe_now()` wakes it, and only while the node is live, never in a replay.
 What `observe()` sees enters the node as an input:
 
@@ -2036,8 +2024,8 @@ What `observe()` sees enters the node as an input:
   `process_data`, which decides what the node does about it; a replay finds it
   in the log, and does not look at the world again.
 - `inject()` returns once the observation is in the input log: whatever
-  `observe()` records after it returns, that it reported something for
-  example, never gets ahead of what the node has logged.
+  `observe()` records after it returns, that it reported something for example,
+  never gets ahead of what the node has logged.
 - The observe port is a name, not a fifo: the node does not read it from a
   channel, rounds never wait on it, and the program does not declare it. A name
   that is also one of the node's input ports stops the node when it is created,
@@ -2048,8 +2036,8 @@ What `observe()` sees enters the node as an input:
   with no observe port may observe only to act, and `inject()` then raises
   `RuntimeError`. It raises `RuntimeError` from `process_data` too, since an
   input that processing made would be made again by every replay.
-- The observation thread counts in the health of the node, like the others:
-  if `observe()` raises, the thread ends and the heartbeat stops.
+- The observation thread counts in the health of the node, like the others: if
+  `observe()` raises, the thread ends and the heartbeat stops.
 
 After a crash, `observe()` does not know what it had brought in, and brings it
 in again. `process_data` drops what it already acted on, keeping it in its node
@@ -2150,17 +2138,17 @@ module that wants it to derives from it and sets one.
 
 ## State capture and checkpoint schema
 
-A checkpoint is what a node keeps on disk to come back to the state it had
-when a round opened at it. This section says what a checkpoint holds and why,
-and which checkpoint a node accepts when it starts. How a round opens and
-closes is in "Chandy-Lamport barrier propagation", and how the file reaches
-the disk in "Checkpoint persistence".
+A checkpoint is what a node keeps on disk to come back to the state it had when
+a round opened at it. This section says what a checkpoint holds and why, and
+which checkpoint a node accepts when it starts. How a round opens and closes is
+in "Chandy-Lamport barrier propagation", and how the file reaches the disk in
+"Checkpoint persistence".
 
-What a round captures is taken at one moment: when the round opens at the
-node, on the brain thread, while it handles the envelope that opens it (a
-marker or a trigger). The file is written only when the round closes, once a
-marker has arrived on every pending port; meanwhile the node goes on
-processing. A checkpoint is a JSON object with these fields:
+What a round captures is taken at one moment: when the round opens at the node,
+on the brain thread, while it handles the envelope that opens it (a marker or a
+trigger). The file is written only when the round closes, once a marker has
+arrived on every pending port; meanwhile the node goes on processing. A
+checkpoint is a JSON object with these fields:
 
 - `schema_version`: the `CHECKPOINT_SCHEMA_VERSION` of the class that wrote it.
 - `epoch`: the round.
@@ -2171,13 +2159,13 @@ processing. A checkpoint is a JSON object with these fields:
   never runtime resources (connections, sockets, file handles), which
   `initialize_runtime()` builds again at every start (see "Startup sequence:
   `run()`"). A restore passes it, and only it, to `restore_node_state()`.
-- `capture_pos`: the position in the input log of the envelope that opened
-  the round (see "Arrival and positions").
-- `closed_ports`: the input ports whose `CLOSE` the brain thread had
-  processed by then (see "`CLOSE` and closed ports").
-- `out_seq` and `last_seq`: for each output port, the last sequence number
-  sent, and for each input port, the last one that the brain thread had
-  processed (see "Sequence numbers in the input log").
+- `capture_pos`: the position in the input log of the envelope that opened the
+  round (see "Arrival and positions").
+- `closed_ports`: the input ports whose `CLOSE` the brain thread had processed
+  by then (see "`CLOSE` and closed ports").
+- `out_seq` and `last_seq`: for each output port, the last sequence number sent,
+  and for each input port, the last one that the brain thread had processed (see
+  "Sequence numbers in the input log").
 - `out_backlog`: the copy of the outbound backlog (see the Glossary).
 - `channel_state`: for each port that was pending in the round, a copy of the
   `DATA` that arrived on it while it was still pending (before its marker).
@@ -2234,17 +2222,17 @@ after a node failure").
    `_find_wiring_problem()`, if any (see "Notices").
 5. Looks for the most recent checkpoint. If there is one, it calls
    `restore_node_state()`, restores the closed ports and the counters of
-   sequence numbers, and queues the outbound backlog of the checkpoint; if
-   not, it starts from default values.
+   sequence numbers, and queues the outbound backlog of the checkpoint; if not,
+   it starts from default values.
 6. Calls `initialize_runtime()`, always.
 7. Opens the input log.
 8. Starts the writer threads, so that what the replay sends drains while it
    replays. The backlog of the checkpoint still reaches the neighbors first,
    since it was queued before the replay and each port has one queue.
-9. Replays the input log after the `capture_pos` of the checkpoint, all of it
-   if there was none (see "Input log"). While replaying, a `send_data` that
-   would take the backlog over `OUT_BACKLOG_FAIL_BYTES` waits for room, unless
-   the message alone is larger than the limit (see "Checkpoint persistence").
+9. Replays the input log after the `capture_pos` of the checkpoint, all of it if
+   there was none (see "Input log"). While replaying, a `send_data` that would
+   take the backlog over `OUT_BACKLOG_FAIL_BYTES` waits for room, unless the
+   message alone is larger than the limit (see "Checkpoint persistence").
 10. Starts the other threads. If this fails, it stops the threads that are
     running and raises the error, since they would otherwise keep the process
     alive doing nothing.
@@ -2338,12 +2326,12 @@ without an epoch, written by an actor outside the program straight into the FIFO
 of an initiator, is still numbered from that initiator's own counter. Where the
 rounds of several initiators meet, it can still lead to the same wait.
 
-A round has to be able to reach every node from an initiator, or it never
-opens at the nodes it cannot reach and never closes at the nodes they write
-to. The engine checks it when the program is loaded, and refuses a program in
-which a node cannot be reached (see "Validation when the program is loaded").
-So, in a program without cycles, every node with no business input has to be
-an initiator, since no marker can reach it otherwise.
+A round has to be able to reach every node from an initiator, or it never opens
+at the nodes it cannot reach and never closes at the nodes they write to. The
+engine checks it when the program is loaded, and refuses a program in which a
+node cannot be reached (see "Validation when the program is loaded"). So, in a
+program without cycles, every node with no business input has to be an
+initiator, since no marker can reach it otherwise.
 
 ## Ordered shutdown
 
@@ -2465,10 +2453,9 @@ launch of the node resumes it, whether it is a new run after a halt or the
 ## Checkpoint persistence
 
 This section says where the checkpoints of a node live, how one reaches the
-disk, how many are kept, and what happens when one cannot be written or
-loaded. It ends with the two limits on the outbound backlog, which the
-checkpoints carry: one on the size of a checkpoint, the other on the memory
-of the node.
+disk, how many are kept, and what happens when one cannot be written or loaded.
+It ends with the two limits on the outbound backlog, which the checkpoints
+carry: one on the size of a checkpoint, the other on the memory of the node.
 
 A node keeps its checkpoints in a directory of its own,
 `__exec__/<process_name>/checkpoints/` (`_get_checkpoints_dir()`), not among the
@@ -2477,29 +2464,29 @@ files that the engine already writes there
 its own, `checkpoints_<idx>/`, next to those of the other tasks (see execdir in
 the Glossary). Each checkpoint is a file named by its epoch, `<epoch>.json`.
 
-When a round closes, `_save_checkpoint()` writes the checkpoint into a
-temporary file and renames it into place (`os.replace`), so that a crash of
-the process leaves the new checkpoint whole or not at all, never a part of it.
-It then keeps the `CHECKPOINT_RETENTION` checkpoints (3 by default) with the
-highest epochs, deletes the others (`_prune_old_checkpoints()`) and prunes the
-input log up to what the oldest of them needs (see "Pruning and the size
-cap"). When the node has a `SUPERVISOR_PORT`, `_on_epoch_closed()` tells the
-`Supervisor` with an `INTERACT {"command": "checkpoint_saved"}` that carries
-the epoch and the path, never the checkpoint itself.
+When a round closes, `_save_checkpoint()` writes the checkpoint into a temporary
+file and renames it into place (`os.replace`), so that a crash of the process
+leaves the new checkpoint whole or not at all, never a part of it. It then keeps
+the `CHECKPOINT_RETENTION` checkpoints (3 by default) with the highest epochs,
+deletes the others (`_prune_old_checkpoints()`) and prunes the input log up to
+what the oldest of them needs (see "Pruning and the size cap"). When the node
+has a `SUPERVISOR_PORT`, `_on_epoch_closed()` tells the `Supervisor` with an
+`INTERACT {"command": "checkpoint_saved"}` that carries the epoch and the path,
+never the checkpoint itself.
 
 A checkpoint that cannot be written stops the node as an exception of
 `process_data` does: a node state that JSON cannot serialize raises a
 `TypeError`, and a full disk an `OSError`, which ends the brain thread. The
 round is over at the node all the same. The heartbeat reports the dead thread,
-and the `Supervisor` relaunches the node, which restores its previous
-checkpoint and replays a longer part of its input log. A temporary file left
-behind is never loaded, since its name is not an epoch.
+and the `Supervisor` relaunches the node, which restores its previous checkpoint
+and replays a longer part of its input log. A temporary file left behind is
+never loaded, since its name is not an epoch.
 
-On startup, the node loads the checkpoint with the highest epoch among the
-files named `<integer>.json` (`_load_latest_checkpoint()`); if that one does
-not load, the startup fails (see "State capture and checkpoint schema"). A
-node does not tell a first launch from a relaunch: with no checkpoint, it
-starts from default values (see "Startup sequence: `run()`").
+On startup, the node loads the checkpoint with the highest epoch among the files
+named `<integer>.json` (`_load_latest_checkpoint()`); if that one does not load,
+the startup fails (see "State capture and checkpoint schema"). A node does not
+tell a first launch from a relaunch: with no checkpoint, it starts from default
+values (see "Startup sequence: `run()`").
 
 The outbound backlog is held in memory and copied into every checkpoint, and a
 reader that does not keep up makes it grow. Two limits bound it: a soft one on
@@ -2598,8 +2585,7 @@ which ports a test names. It then lists what a node under test offers, says
 where the text that the harness runs differs from that of a run and what
 `check_replay` cannot see, and closes with what the harness does not check.
 
-`load_node(process, opts=None, inputs=(), outputs=())` builds a node under
-test:
+`load_node(process, opts=None, inputs=(), outputs=())` builds a node under test:
 
 - It takes the heredoc of `process` from the program file named by
   `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`.
@@ -2655,17 +2641,17 @@ the `Supervisor` and any port that the test leaves out are not ports of the node
 under test. `send_data` on one of them raises `ValueError`, as it does for a
 port that a node does not have.
 
-The harness does not require the line that starts the node: a heredoc that
-lacks it passes a node test and is refused when the program is loaded (see
-"Defining a node").
+The harness does not require the line that starts the node: a heredoc that lacks
+it passes a node test and is refused when the program is loaded (see "Defining a
+node").
 
 A node under test offers:
 
 - `feed(port, packet)`: calls `process_data(port, packet)` on the calling
   thread, marked as the brain thread is, so that `send_data` works during the
   call and only then. The packet first makes a round trip through JSON, so that
-  the node gets what would arrive through a FIFO: a tuple arrives as a list.
-  The port is one of `inputs`, or the observe port of the node (`OBSERVE_PORT`),
+  the node gets what would arrive through a FIFO: a tuple arrives as a list. The
+  port is one of `inputs`, or the observe port of the node (`OBSERVE_PORT`),
   standing for something that `observe()` would have brought in; any other is
   refused. When `process_data` raises, what it sent before stays in `sent`.
 - `observe()`: runs the `observe()` of the node once on the calling thread, as
@@ -2681,10 +2667,10 @@ A node under test offers:
   `DirectoryWatcher` sees grow, then stay the same for `STABLE_OBSERVATIONS`
   observations in a row before it is brought in.
 - `sent(port)`: the payloads that the node has sent on `port` since it was
-  built, decoded from the lines that `send_data` queued. The harness takes
-  each line off the outbound queue as soon as `process_data` returns, and
-  counts it as written, so the outbound backlog never fills, however many
-  packets a test feeds.
+  built, decoded from the lines that `send_data` queued. The harness takes each
+  line off the outbound queue as soon as `process_data` returns, and counts it
+  as written, so the outbound backlog never fills, however many packets a test
+  feeds.
 - `restart()`: captures the node state and makes a round trip of it through
   JSON, as a checkpoint does. It builds a new node under test with the same
   options and ports, whose `observe()` remembers nothing of the earlier one, as
@@ -2705,24 +2691,24 @@ A node under test offers:
   and that the node state holds everything that later messages depend on.
 - `node`: the instance itself, for a test that looks at its attributes.
 
-In a node under test, `sleep()` returns at once, as it does while a node
-replays its input log: the pace of a node is not business logic. The node logs
-to its standard error as always, which pytest captures.
+In a node under test, `sleep()` returns at once, as it does while a node replays
+its input log: the pace of a node is not business logic. The node logs to its
+standard error as always, which pytest captures.
 
 The text that the harness runs differs from that of a run in two cases, both
 rare in a node. A heredoc whose delimiter is not quoted (`<<EOF`) has its
 variables expanded by Bash when it is printed, in the shell of
-`debasher_get_node_source` rather than in that of the task. And the code
-before the class runs with the environment and the `argv` of pytest, since the
-harness gives the node its own only when it calls the node.
+`debasher_get_node_source` rather than in that of the task. And the code before
+the class runs with the environment and the `argv` of pytest, since the harness
+gives the node its own only when it calls the node.
 
 `check_replay` runs both nodes in the process of the test, so it sees only the
 non-determinism that shows within one process. What changes only from one
 process to another is not seen: the order in which a `set` of strings is
-iterated depends on `PYTHONHASHSEED`, the same for both nodes, while a
-relaunch runs in a new process. A test therefore feeds the inputs on which a
-non-deterministic choice would show, and a node never lets the order of a
-`set` decide what it sends.
+iterated depends on `PYTHONHASHSEED`, the same for both nodes, while a relaunch
+runs in a new process. A test therefore feeds the inputs on which a
+non-deterministic choice would show, and a node never lets the order of a `set`
+decide what it sends.
 
 The harness checks nothing of the framework: sequence numbers, rounds, the input
 log, `CLOSE`, the heartbeat and the limits of a node are left to the tests of
@@ -2744,9 +2730,9 @@ that replays it (see "Log structure and record format").
 
 That use sets what the log has to guarantee:
 
-- A message is logged when a reader thread takes it from its FIFO, not when
-  the brain thread reaches it, so that what waits in the inbound queue, which
-  has no limit, survives a crash of the node.
+- A message is logged when a reader thread takes it from its FIFO, not when the
+  brain thread reaches it, so that what waits in the inbound queue, which has no
+  limit, survives a crash of the node.
 - A node has one log, not one per port, in the order in which the brain thread
   processes its envelopes, so that a replay processes the messages of every port
   in the same order as the first execution.
@@ -2842,19 +2828,19 @@ been processed yet.
 ## Recovery: startup and replay
 
 Three of the steps of "Startup sequence: `run()`" recover a node from its
-checkpoint and its input log, whether it is relaunched after a crash or
-resumed after a halt:
+checkpoint and its input log, whether it is relaunched after a crash or resumed
+after a halt:
 
-1. Step 5 restores the latest checkpoint (see "Checkpoint persistence"),
-   which gives `capture_pos`; with no checkpoint, `capture_pos` is 0 and the
-   node state is the default one.
+1. Step 5 restores the latest checkpoint (see "Checkpoint persistence"), which
+   gives `capture_pos`; with no checkpoint, `capture_pos` is 0 and the node
+   state is the default one.
 2. Step 7 opens the input log (`_InputLog.recover`). It reads only the last
    segment that has a complete record, and deletes a segment with no complete
-   record (an empty file, or only a torn tail), since the next record would
-   take its position and collide with its name. If there is a checkpoint and
-   the log ends below its `capture_pos`, the startup stops with a `ValueError`
-   (see below). Otherwise the next position is one more than the position of
-   the last complete record.
+   record (an empty file, or only a torn tail), since the next record would take
+   its position and collide with its name. If there is a checkpoint and the log
+   ends below its `capture_pos`, the startup stops with a `ValueError` (see
+   below). Otherwise the next position is one more than the position of the last
+   complete record.
 3. Step 9 replays the log (`FBPProcess._replay_input_log`): every `DATA` record
    above `capture_pos` goes through `process_data()`, in log order, what had
    been processed before the crash and what had arrived but not yet been
@@ -2889,17 +2875,16 @@ is a node that has received nothing yet, and starts from position 1.
 
 Pruning keeps the input log from growing for ever. The log is a directory of
 segment files (see "Log structure and record format"), and pruning it deletes
-whole files, never part of one. The checkpoints are pruned too, but they are
-not segmented: there is one file per epoch, and only the
-`CHECKPOINT_RETENTION` with the highest epochs are kept (see "Checkpoint
-persistence"). This section describes the pruning of the log, and then its
-size cap.
+whole files, never part of one. The checkpoints are pruned too, but they are not
+segmented: there is one file per epoch, and only the `CHECKPOINT_RETENTION` with
+the highest epochs are kept (see "Checkpoint persistence"). This section
+describes the pruning of the log, and then its size cap.
 
-A recovery replays the log from the `capture_pos` of the checkpoint it
-restores, so a record is needed while a retained checkpoint has its
-`capture_pos` below the position of the record. The one that needs the most of
-the log is the oldest retained checkpoint: every record at or below its
-`capture_pos` is reflected in all of them, and can go.
+A recovery replays the log from the `capture_pos` of the checkpoint it restores,
+so a record is needed while a retained checkpoint has its `capture_pos` below
+the position of the record. The one that needs the most of the log is the oldest
+retained checkpoint: every record at or below its `capture_pos` is reflected in
+all of them, and can go.
 
 The log is pruned right after each checkpoint is written, since that is when the
 oldest retained checkpoint changes. A segment can go once all its records are at
@@ -3032,11 +3017,10 @@ two counters per input port (Glossary). `last_seq` is the last number that the
 brain thread has processed, and is captured with the node state into the
 checkpoint. `_accepted_seq` is the last number that a reader thread has
 accepted: it runs ahead of `last_seq`, and it is the one that the dedup check
-consults, since a reader decides before the brain thread sees the
-message. At startup both start at the checkpoint's `last_seq`, and the replay
-advances them over the numbered `DATA` after `capture_pos`, up to what the
-reader threads had accepted before the crash, whether the brain thread had
-processed it or not.
+consults, since a reader decides before the brain thread sees the message. At
+startup both start at the checkpoint's `last_seq`, and the replay advances them
+over the numbered `DATA` after `capture_pos`, up to what the reader threads had
+accepted before the crash, whether the brain thread had processed it or not.
 
 The numbers do not cover every loss. A reader thread takes a block from its FIFO
 and logs its messages in one write; between the two, the messages exist only in
@@ -3134,10 +3118,9 @@ a node whose sole connection is the `Supervisor`. Restarting the whole program,
 with a new `debasher_exec` against the same output directory, has none of these
 problems: the engine recreates every FIFO, and every node opens them anew.
 
-Reconnecting also needs every endpoint to know what the `Supervisor` learns
-from `.finished`: whether a peer's silence means "crashed, will return" or
-"finished on purpose". The rest of this section is that signal and its
-consequences.
+Reconnecting also needs every endpoint to know what the `Supervisor` learns from
+`.finished`: whether a peer's silence means "crashed, will return" or "finished
+on purpose". The rest of this section is that signal and its consequences.
 
 ## `CLOSE`: telling a finished peer from a crashed one
 
@@ -3156,8 +3139,8 @@ program does (see "A node that finishes for good" in Future work). So only a
 writer outside the program sends it, on an external or a control port.
 
 The reader hands `CLOSE` to the brain thread in order, like any other envelope,
-so it is logged and its port can leave the barrier's pending set. Why the
-reader then keeps reading and drops what follows instead of ending, and what
+so it is logged and its port can leave the barrier's pending set. Why the reader
+then keeps reading and drops what follows instead of ending, and what
 `closed_ports` records, is in "`CLOSE` and closed ports".
 
 A process that exits with an error (an exception in its main thread, a non-zero
@@ -3607,8 +3590,8 @@ done, never taken for a crashed one and relaunched.
 Once its `.finished` is seen, the node is done: it is never checked again,
 neither its heartbeat nor its PID, and `on_node_down` is never called for it.
 This is what keeps an ordered shutdown from looking like a crash: a node that
-stops on purpose stops sending heartbeats and leaves its `.finished` behind,
-and the two together tell it from a node that failed.
+stops on purpose stops sending heartbeats and leaves its `.finished` behind, and
+the two together tell it from a node that failed.
 
 The same state tells the `Supervisor` when to stop. Once every node of
 `NODE_PORTS` is resolved, done or given up on (see "Relaunching a downed node"),
@@ -3635,11 +3618,10 @@ The default runs an installed tool,
 `debasher_launch_process -d <outdir> -p <process> [-t <idx>]`
 (`engine/debasher_launch_process.sh`, in `libexec`), which calls
 `debasher_builtin_sched::_launch`, the function of the built-in scheduler that
-launched the node the first time. The tool takes the output
-directory of the program, not that of the process, and the index of the task
-for a node named with one; without `-t` it passes `NO_ARRAY_TASK`. A relaunch
-is therefore the same operation as the first launch, as "Startup sequence:
-`run()`" requires.
+launched the node the first time. The tool takes the output directory of the
+program, not that of the process, and the index of the task for a node named
+with one; without `-t` it passes `NO_ARRAY_TASK`. A relaunch is therefore the
+same operation as the first launch, as "Startup sequence: `run()`" requires.
 
 Running the process script of the node, `__exec__/<node>/<node>`, again would
 not do, since the script does not carry what changes from one launch to the
@@ -3904,8 +3886,8 @@ must not wait for ever on it.
   that must never happen, not merely should not.
 
 The tool checks every name of `-x` and `--kill` before it touches anything. A
-name that is no node of the program is an error, and the tool ends with 1.
-Such names are those of no process, or of a process that is not a node (the
+name that is no node of the program is an error, and the tool ends with 1. Such
+names are those of no process, or of a process that is not a node (the
 `Supervisor` among them), a task index for a process of one task, and an index
 that is not a task of the process.
 
@@ -3929,26 +3911,25 @@ The stop goes in seven steps:
    the record would show its fresh marker as the baseline. The wait of step 5
    would then last until the deadline and end in the hard kill.
 2. If `--kill` was given, it kills the nodes that it names.
-3. If the program has a `Supervisor` and `--keep-supervisor` was not given,
-   the tool stops it, with a stop signal to its whole process group (see
-   below). Then it waits for the `Supervisor`'s `.finished`. The `Supervisor`
-   stops on a stop signal for this reason (see "Clean-completion detection").
-   Stopping it keeps it from relaunching a node that the tool is about to stop.
-   A `Supervisor` that has already ended (its `.finished` is there) is not
-   waited for. Neither is one that does not run (no `.id`, an empty one, or
-   one whose process has ended): it relaunches nothing, and the `.finished`
-   of one that crashed would never come. The tool warns about it and goes
-   on.
+3. If the program has a `Supervisor` and `--keep-supervisor` was not given, the
+   tool stops it, with a stop signal to its whole process group (see below).
+   Then it waits for the `Supervisor`'s `.finished`. The `Supervisor` stops on a
+   stop signal for this reason (see "Clean-completion detection"). Stopping it
+   keeps it from relaunching a node that the tool is about to stop. A
+   `Supervisor` that has already ended (its `.finished` is there) is not waited
+   for. Neither is one that does not run (no `.id`, an empty one, or one whose
+   process has ended): it relaunches nothing, and the `.finished` of one that
+   crashed would never come. The tool warns about it and goes on.
 4. It writes `shutdown` into every node's own control ports, listed in its
    control ports file (see the Glossary). Most nodes have none, and the round
    reaches them from elsewhere in the graph. The trigger is numbered with the
    time in milliseconds (see numbered trigger in the Glossary), so that every
    initiator halts in the same round.
 5. It waits for every node's halted marker to go past its baseline. It never
-   waits for the marker to exist: a node that halted in an earlier halt,
-   already resumed, would already show one.
-6. It reads every node's `.id` again, not reusing any read earlier. It sends
-   a stop signal to each node that still runs.
+   waits for the marker to exist: a node that halted in an earlier halt, already
+   resumed, would already show one.
+6. It reads every node's `.id` again, not reusing any read earlier. It sends a
+   stop signal to each node that still runs.
 7. It waits for every node's own `.finished`.
 
 The same deadline, from `--timeout`, bounds the check of the names, the finding
@@ -4006,21 +3987,20 @@ fifo fed from outside. Every node of a program that loads is reached from an
 initiator (see "Validation when the program is loaded"). So the tool needs
 nothing else to reach every node.
 
-It then waits, up to `--timeout` seconds (60 by default), until every node has
-a checkpoint of that epoch or of a newer one. A newer round replaces an open
-one. A node that the newer round reaches before the older one closes at it
-writes a checkpoint of the newer epoch only. That checkpoint is more recent
-than the one asked for, and the node can recover from it. So the tool counts it
-as well. Once every node has a checkpoint, the tool prints the epoch and
-returns 0.
+It then waits, up to `--timeout` seconds (60 by default), until every node has a
+checkpoint of that epoch or of a newer one. A newer round replaces an open one.
+A node that the newer round reaches before the older one closes at it writes a
+checkpoint of the newer epoch only. That checkpoint is more recent than the one
+asked for, and the node can recover from it. So the tool counts it as well. Once
+every node has a checkpoint, the tool prints the epoch and returns 0.
 
 Otherwise, without `--every`, the tool returns 2
 (`DEBASHER_SNAPSHOT_RESIDENT_NOT_CLOSED_EXIT`). Code 1 is kept for usage and
 setup errors. The tool returns 2 in three cases. If `--timeout` passes, an error
 names the nodes that have no checkpoint. If a trigger cannot be written, an
 error names the control port, or the node whose control ports file never came.
-In both cases a warning then says that the round did not close at every node.
-If the program stops while the tool waits, the warning says instead that the
+In both cases a warning then says that the round did not close at every node. If
+the program stops while the tool waits, the warning says instead that the
 program stopped before the round closed at every node.
 
 Several things keep a round from closing. A round does not close at a node that
@@ -4083,13 +4063,13 @@ gets `__reset__/<timestamp>_1/`, and so on. `--delete` deletes it instead. An
 output directory that is already empty is left where it is. So a reset of a
 program with nothing left to reset takes nothing away, and says so.
 
-A reset that fails part way does not undo what it took away before the
-failure. The error says so. Running the tool again completes the reset: it sets
-aside, or deletes, what is left, and does not find what the failed reset already
-took away. What the failed reset set aside stays in its own `__reset__`
-directory, apart from what the second one sets aside. Until then some nodes are
-reset and others are not, the state that resetting one node would leave. So the
-program must not be started in between, and nothing stops it.
+A reset that fails part way does not undo what it took away before the failure.
+The error says so. Running the tool again completes the reset: it sets aside, or
+deletes, what is left, and does not find what the failed reset already took
+away. What the failed reset set aside stays in its own `__reset__` directory,
+apart from what the second one sets aside. Until then some nodes are reset and
+others are not, the state that resetting one node would leave. So the program
+must not be started in between, and nothing stops it.
 
 The tool acts only on a stopped program. It refuses while a `debasher_exec`
 holds the lock of the output directory to prepare or run the program, as
@@ -4106,12 +4086,12 @@ scheduler of a run and stop it.
 ## `debasher_inspect_resident`: what a node keeps
 
 `debasher_inspect_resident` shows what a node of a resident program keeps. It
-shows it to a person at the command line and to the web UI, which shows what
-the tool prints (see "Observing and talking to a live program" in
+shows it to a person at the command line and to the web UI, which shows what the
+tool prints (see "Observing and talking to a live program" in
 `doc/design_doc_webui.md`). The section first describes the two forms of the
 tool and what the first one refuses, and how the tool reads the files of a node
-without disturbing it. It then describes the node info file, which a node
-writes for this tool, and each of the commands and the exit codes of the tool.
+without disturbing it. It then describes the node info file, which a node writes
+for this tool, and each of the commands and the exit codes of the tool.
 
 ```
 debasher_inspect_resident -d <outdir> -p <process> [-t <idx>] <command>
@@ -4300,8 +4280,8 @@ it). `notices` is given with `-p` or `-t`. Another command is given without
 
 # `ProgramLauncher`: batch runs from a node
 
-A resident program processes a stream of messages. A general program processes
-a batch of inputs and ends. A launcher node joins the two. Every request it
+A resident program processes a stream of messages. A general program processes a
+batch of inputs and ends. A launcher node joins the two. Every request it
 receives launches the same general program, with the options of the request, in
 a run directory of its own. A bioinformatics system is the case in view. A BAM
 file arrives, and the pipeline that analyses it runs once for it, while other
@@ -4352,8 +4332,8 @@ them, so each value has a single source:
   the node launches instead of the whole program (see "A single process").
 - `-runsdir`, optional, is the runs root, an absolute path. By default the runs
   root is the output directory of the process. The engine keeps that directory
-  across launches of a node (see "Ordered shutdown"), and exports it to the
-  node as `DEBASHER_PROCESS_OUTDIR`.
+  across launches of a node (see "Ordered shutdown"), and exports it to the node
+  as `DEBASHER_PROCESS_OUTDIR`.
 
 A module that always launches the same program fixes `-pfile` in the
 `define_opts` of the process (`define_opt "-pfile" "pipeline.sh" optlist`). One
@@ -4366,12 +4346,12 @@ options of its process, not inside its code.
 A relative `-pfile` is looked for as the engine looks for a module that another
 module loads. It is looked for first in the directory of the module that
 declares the node, where a program keeps its files. The engine exports that
-directory to the node as `DEBASHER_PROCESS_MODULE_DIR`. It is then looked for
-in the directories of `DEBASHER_MOD_DIR`. So a program can launch one that
-another module keeps, at the price of depending on how the machine is set up.
-The node runs the engine's own search for this, `debasher_resolve_pfile`, from
-the directory of the module. An absolute path is accepted with a warning, since
-it ties the program to one machine.
+directory to the node as `DEBASHER_PROCESS_MODULE_DIR`. It is then looked for in
+the directories of `DEBASHER_MOD_DIR`. So a program can launch one that another
+module keeps, at the price of depending on how the machine is set up. The node
+runs the engine's own search for this, `debasher_resolve_pfile`, from the
+directory of the module. An absolute path is accepted with a warning, since it
+ties the program to one machine.
 
 The node stops when it is created in four cases:
 
@@ -4435,18 +4415,18 @@ Without `-process`, the options follow `--pfile`, `--outdir` and `--sched` on
 the command line of `debasher_exec`. It reads its arguments one by one, and
 keeps the last value of an option given twice. So a request may not give an
 option that `debasher_exec` reads itself, such as `--outdir` or `--wait`, as a
-name or as a value. Otherwise it could run the program elsewhere, launch
-another one, or change how `debasher_exec` waits for it. The launcher keeps the
-list of those options, and a test keeps it in step with `debasher_exec`. Any
-other name is passed on, those that start with `--` included. With `-process`,
-the options follow `--` and reach the process function alone. The same names
-are refused there too, so that a request follows one rule.
+name or as a value. Otherwise it could run the program elsewhere, launch another
+one, or change how `debasher_exec` waits for it. The launcher keeps the list of
+those options, and a test keeps it in step with `debasher_exec`. Any other name
+is passed on, those that start with `--` included. With `-process`, the options
+follow `--` and reach the process function alone. The same names are refused
+there too, so that a request follows one rule.
 
 The node logs as an error, and drops, these requests:
 
 - a payload that is not a JSON object;
-- `opts` that is not an object, a name in it that does not start with a dash,
-  or a value that is not a string;
+- `opts` that is not an object, a name in it that does not start with a dash, or
+  a value that is not a string;
 - a name or a value in `opts` that `debasher_exec` reads itself;
 - `run` that is given, not `null`, but is not a non-empty string, or that is
   absolute;
@@ -4533,8 +4513,8 @@ new incarnation. A halt and its resume keep it too. Only a clean start begins a
 new life. The identifier cannot be part of the node state: a node that crashes
 before its first checkpoint would generate another one in its replay.
 
-A run directory belongs to the request that wrote its `launch.json`. The rule
-of ownership decides by that file:
+A run directory belongs to the request that wrote its `launch.json`. The rule of
+ownership decides by that file:
 
 - With no `launch.json`, the request registers the batch run.
 - With a `launch.json` of the same life and the same position, the request is
@@ -4549,11 +4529,11 @@ never on whether a batch run is still going on. So a replay decides the same
 way.
 
 `life_id` tells the requests of a life from those of the one before. After a
-clean start, the input log begins again from its first position. A run
-directory under an absolute runs root is out of the reach of
-`debasher_reset_resident`. It still holds a `launch.json` with a position of the
-old log. Without the identifier, a new request at that position would be taken
-for the one that wrote it, and never launched.
+clean start, the input log begins again from its first position. A run directory
+under an absolute runs root is out of the reach of `debasher_reset_resident`. It
+still holds a `launch.json` with a position of the old log. Without the
+identifier, a new request at that position would be taken for the one that wrote
+it, and never launched.
 
 ## Launching from the queue on disk
 
@@ -4569,18 +4549,17 @@ are registered, in the order of their positions. The node has
 `MAX_CONCURRENT_RUNS` slots (1 by default), and a batch run holds one while it
 runs. Each one runs
 `debasher_exec --pfile <program> --outdir <run directory> --sched <scheduler>`
-with the options of its request. It runs in a session of
-its own, so that the batch run outlives a crash of the node and a stop of the
-resident program. The scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for
-the resident program itself. So the batch runs do not depend on the scheduler
-that a machine would pick on its own. `SLURM` sends them to a cluster. A program
-sets both in the computational specifications of the process,
-`max_concurrent_runs` and `batch_sched`, like the limits of a node (see
-"Computational specifications of a resident process"). When it loads the
-program, the engine checks that the first is a positive whole number and the
-second one of the schedulers that `debasher_exec` knows. The node checks the
-first again when it is created, since a node built without the engine has not
-been through that check.
+with the options of its request. It runs in a session of its own, so that the
+batch run outlives a crash of the node and a stop of the resident program. The
+scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
+itself. So the batch runs do not depend on the scheduler that a machine would
+pick on its own. `SLURM` sends them to a cluster. A program sets both in the
+computational specifications of the process, `max_concurrent_runs` and
+`batch_sched`, like the limits of a node (see "Computational specifications of a
+resident process"). When it loads the program, the engine checks that the first
+is a positive whole number and the second one of the schedulers that
+`debasher_exec` knows. The node checks the first again when it is created, since
+a node built without the engine has not been through that check.
 
 How a batch run is going is read from its run directory alone, whatever the
 scheduler. A relaunched node has lost what its previous incarnation held in
@@ -4599,9 +4578,9 @@ started, `<pid>@<start time>`, as the engine keeps the id of a task of the
 built-in scheduler (see "The built-in scheduler" in `doc/design_doc_engine.md`).
 Once the shell has ended, as by a restart of the machine, the system may give
 its PID to another process. A PID alone would then make the batch run look
-running for as long as that process lives: not launched again, not reported,
-and holding a slot. Without `ps`, the id is the PID alone. A shell that has
-already ended when its start time is read gets an empty id, and never runs.
+running for as long as that process lives: not launched again, not reported, and
+holding a slot. Without `ps`, the id is the PID alone. A shell that has already
+ended when its start time is read gets an empty id, and never runs.
 
 The node writes `launcher.pid` once `ps` has given that start time. A node that
 goes down in between, a short window (the time that `ps` takes), finds no
@@ -4683,12 +4662,12 @@ goes on from there. When a batch run is launched is not part of the node state.
 It does not need to be the same in a replay, since the node sends nothing when
 it launches.
 
-A registration counts only while it can be read and the `launch.json` of its
-run directory records its position. The node and `debasher_inspect_resident`
-apply the same rule. The node writes `launch.json` before the registration, and
-renames each into place (see "The run directory and who owns it"), so a crash
-of the node leaves either none or a whole one. Only a change by hand, or a
-failure of the machine, makes a registration stop counting:
+A registration counts only while it can be read and the `launch.json` of its run
+directory records its position. The node and `debasher_inspect_resident` apply
+the same rule. The node writes `launch.json` before the registration, and
+renames each into place (see "The run directory and who owns it"), so a crash of
+the node leaves either none or a whole one. Only a change by hand, or a failure
+of the machine, makes a registration stop counting:
 
 - A run directory removed by hand, while its registration stays, leaves no
   `launch.json`. `observe()` skips that batch run, and logs it as an error once
@@ -4699,10 +4678,10 @@ failure of the machine, makes a registration stop counting:
   `launch.json`, so it registers the directory with its own position. The old
   registration then no longer counts, and the directory is the batch run of the
   new request, launched once.
-- A registration that cannot be read (its name is not a position, or its
-  content is not a registration) comes only from a failure of the machine, such
-  as a power loss, or from a hand edit. A `.json.tmp` that a crash left before
-  its rename is not a registration at all. `observe()` skips a registration that
+- A registration that cannot be read (its name is not a position, or its content
+  is not a registration) comes only from a failure of the machine, such as a
+  power loss, or from a hand edit. A `.json.tmp` that a crash left before its
+  rename is not a registration at all. `observe()` skips a registration that
   cannot be read, and logs a warning once in each incarnation. Its batch run is
   not launched, and no end is reported for it.
 
@@ -4751,15 +4730,14 @@ runs in its node state. The set holds positions, not names. A later request may
 name a removed run directory again (see "Launching from the queue on disk"), and
 the end of its batch run is announced too. An event with no run or position is
 dropped, and logged as an error. `process_data` then sends
-`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`
-on `DONE_PORT`. `run_dir` is the absolute path of the run directory, so that the
-node that reads the results of the batch run does not have to know the runs
-root. `status` is `finished` for an exit code of 0 and `failed` for any other.
-The message on `DONE_PORT` is then an ordinary message of a channel: it is
-numbered like any other, replayed, and part of the rounds. A replay sends the
-same `run_dir`, which follows from the runs root and the name of the run alone.
-This holds as long as the runs root does not change between launches of the
-node.
+`{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `DONE_PORT`.
+`run_dir` is the absolute path of the run directory, so that the node that reads
+the results of the batch run does not have to know the runs root. `status` is
+`finished` for an exit code of 0 and `failed` for any other. The message on
+`DONE_PORT` is then an ordinary message of a channel: it is numbered like any
+other, replayed, and part of the rounds. A replay sends the same `run_dir`,
+which follows from the runs root and the name of the run alone. This holds as
+long as the runs root does not change between launches of the node.
 
 - A node that goes down after writing the event and before marking the run
   directory writes the event again when it comes back. `process_data` drops the
@@ -4767,8 +4745,8 @@ node.
   replay, which finds both in the log in the same order, drops it too. So the
   event may arrive more than once, but the message on `DONE_PORT` goes out once.
 - A batch run that ends while the node is down still leaves its `exit_code`,
-  since its shell outlives the node. When the node comes back, `observe()`
-  finds it, and the message on `DONE_PORT` goes out.
+  since its shell outlives the node. When the node comes back, `observe()` finds
+  it, and the message on `DONE_PORT` goes out.
 - A launcher node without `DONE_PORT` brings in no event.
 
 The set of announced runs only grows. A node keeps one position for each batch
@@ -4788,8 +4766,8 @@ kept as the record of the batch runs of the node, which
 
 Both are limits of the design. The remedy is a clean start of the resident
 program (see "`debasher_reset_resident`: a clean start"). With the default runs
-root, it also sets the run directories aside (see
-"Stopping and resetting a launcher node").
+root, it also sets the run directories aside (see "Stopping and resetting a
+launcher node").
 
 ## A single process
 
@@ -4828,10 +4806,10 @@ resetting the resident program do to them, and to the bookkeeping of the node,
 and why a reset waits for them.
 
 Stopping the resident program, by a halt or by a signal, does not stop the batch
-runs that it launched. They run in sessions of their own, and
-`debasher_status` and `debasher_stop` reach them on their run directories. When
-the program is resumed, `observe()` finds them running, or ended with no exit
-code, and goes on as above.
+runs that it launched. They run in sessions of their own, and `debasher_status`
+and `debasher_stop` reach them on their run directories. When the program is
+resumed, `observe()` finds them running, or ended with no exit code, and goes on
+as above.
 
 `debasher_reset_resident` empties the output directory of the process. That
 takes away the registrations, the file of `life_id` and, with the default runs
@@ -4860,10 +4838,10 @@ refuse for it (see "Launching from the queue on disk").
 # Future work
 
 Nothing in this chapter is built. Each item says, in short, what it would give
-and what it would need. The items are grouped by what they touch: the
-detection of failures and the `Supervisor`, rounds and the tools, durability
-and recovery beyond the Contract, the model of a node, the testing of a node,
-and performance and languages.
+and what it would need. The items are grouped by what they touch: the detection
+of failures and the `Supervisor`, rounds and the tools, durability and recovery
+beyond the Contract, the model of a node, the testing of a node, and performance
+and languages.
 
 ## Detecting failures and supervising
 
@@ -4877,11 +4855,11 @@ and performance and languages.
     `observe()`, which alone knows when silence is a failure.
   - No false positive for a quiet node. A node with an empty inbound queue is
     never flagged.
-  - A long `process_data`. As for the GIL (see "A long call that keeps the
-    GIL looks like a dead node" in the Contract's limits), the timeout goes
-    above the longest call.
-  - When to build it. Only if a blocked brain thread turns out to be a case
-    that a program meets.
+  - A long `process_data`. As for the GIL (see "A long call that keeps the GIL
+    looks like a dead node" in the Contract's limits), the timeout goes above
+    the longest call.
+  - When to build it. Only if a blocked brain thread turns out to be a case that
+    a program meets.
 - **A dead thread ends the process.** When a thread of a node has died, the
   heartbeat thread would log the cause and end the process with an error. An
   exception and a crash would then be the same (see "A node with a dead thread
@@ -4902,9 +4880,9 @@ and performance and languages.
   `Supervisor` has given up on it, with the tail of the scheduler output of each
   crash. The `Supervisor` would write it into a file that a tool can read, not
   only into its log.
-  - What it gives. The web UI can show it (see "Observing and talking to a
-    live program" in `doc/design_doc_webui.md`), and the file outlives a new
-    launch of the `Supervisor`, which rewrites its log.
+  - What it gives. The web UI can show it (see "Observing and talking to a live
+    program" in `doc/design_doc_webui.md`), and the file outlives a new launch
+    of the `Supervisor`, which rewrites its log.
 
 ## Rounds and the tools
 
@@ -4929,18 +4907,18 @@ and performance and languages.
 - **A single ordered shutdown at a time.** `debasher_stop_resident` would take a
   lock in the output directory, so that a second ordered shutdown of the same
   program waits for the first or is refused.
-  - Why. Today a second stop, from another tab of the web UI or from the
-    command line, stops the `Supervisor` and writes its own `shutdown` in the
-    middle of the first (see "A program that outlives the tab" in
+  - Why. Today a second stop, from another tab of the web UI or from the command
+    line, stops the `Supervisor` and writes its own `shutdown` in the middle of
+    the first (see "A program that outlives the tab" in
     `doc/design_doc_webui.md`).
 - **A single periodic `debasher_snapshot_resident`.** The tool would leave its
-  PID in the output directory while it runs, and refuse a second `--every`
-  while that PID is alive.
+  PID in the output directory while it runs, and refuse a second `--every` while
+  that PID is alive.
   - Why. Two `--every` on the same output directory start rounds that replace
-    each other, so that none closes (see "A round that a newer one replaces"
-    in the Contract's limits).
-  - What else it gives. The web UI could find the tool, to change the period
-    of a running program.
+    each other, so that none closes (see "A round that a newer one replaces" in
+    the Contract's limits).
+  - What else it gives. The web UI could find the tool, to change the period of
+    a running program.
 - **A `Supervisor` that serializes rounds.** It would track which nodes have
   reported `checkpoint_saved` for an epoch (today it only logs it), and leave
   out the nodes that finished. It would relay a trigger only when the previous
@@ -4952,10 +4930,9 @@ and performance and languages.
     into the fifo of an initiator, a timer, a `Supervisor` relaunched by hand, a
     node relaunched in the middle of a round.
   - Why it may never be worth it. The `Supervisor` relays a manual trigger
-    without interpreting it, and serializing means interpreting
-    `start_snapshot` and `shutdown`. How to do that for the triggers that a
-    person writes is not clear, and it would cover only the nodes that report
-    to the `Supervisor`.
+    without interpreting it, and serializing means interpreting `start_snapshot`
+    and `shutdown`. How to do that for the triggers that a person writes is not
+    clear, and it would cover only the nodes that report to the `Supervisor`.
 
 ## Durability and recovery beyond the Contract
 
@@ -4982,8 +4959,8 @@ and performance and languages.
   - A change of mode. Only over a clean output directory: a launch over the
     state of a run in the other mode is refused.
   - Where the switches go. A null input log, the load and the save of a
-    checkpoint, the rounds (a snapshot refused, a halt that drains the
-    channels with no checkpoint), the filter of duplicates of a reader, and
+    checkpoint, the rounds (a snapshot refused, a halt that drains the channels
+    with no checkpoint), the filter of duplicates of a reader, and
     `ProgramLauncher`.
   - Two points of design. One is a new incarnation of a writer, announced by its
     `HELLO`, which would restart the numbers of its channels, a thing that must
@@ -4991,10 +4968,10 @@ and performance and languages.
     shutdown promises with no checkpoint.
   - Its cost. Mostly around the runtime: the engine, the tools, the web UI, a
     second contract, rtdocs, the guidance of an AI, and tests in both modes.
-  - The need first. Before it is built, the need it serves has to be named:
-    one that neither a general program of processes joined by FIFOs nor the
-    closest approach of today (see "Durability cannot be turned off" in the
-    Contract's limits) meets.
+  - The need first. Before it is built, the need it serves has to be named: one
+    that neither a general program of processes joined by FIFOs nor the closest
+    approach of today (see "Durability cannot be turned off" in the Contract's
+    limits) meets.
 - **Global (coordinated) rollback, as a fallback to localized recovery.** Detect
   a violation of the Contract, stop, rewind every node to the last consistent
   cut, and resume. Localized recovery (see "Reconnecting after a node failure")
@@ -5013,17 +4990,17 @@ and performance and languages.
     start"), a script run on the files while the program is stopped, with no
     special mode in the startup sequence, which always loads the highest epoch
     and replays the log.
-  - The target epoch. One for each subgraph that no channel joins to the rest
-    of the program: the highest present in the checkpoints of every node of
-    the subgraph. No message crosses between two such subgraphs, so cuts of
+  - The target epoch. One for each subgraph that no channel joins to the rest of
+    the program: the highest present in the checkpoints of every node of the
+    subgraph. No message crosses between two such subgraphs, so cuts of
     different epochs in each still make a consistent cut of the program. Each
     node sets aside its checkpoints above the target, which belong to a round
-    that not every node completed. The target has to lie in
-    the checkpoints that every node retains (`CHECKPOINT_RETENTION`), so the
-    interval between snapshots bounds how far back a rollback goes.
+    that not every node completed. The target has to lie in the checkpoints that
+    every node retains (`CHECKPOINT_RETENTION`), so the interval between
+    snapshots bounds how far back a rollback goes.
   - The input log. Its records above the position that the target checkpoint
-    reflects go too, or the startup would replay them, a local recovery of
-    every node with the duplicates it brings.
+    reflects go too, or the startup would replay them, a local recovery of every
+    node with the duplicates it brings.
   - The channel state. The messages in transit at the cut were sent by nodes
     that, once restored, do not send them again. So they are delivered again:
     the script appends them to the input log of their reader, after the target
@@ -5064,15 +5041,14 @@ and performance and languages.
     restores.
   - A log at the sender. The writer keeps what it sent until its reader has it
     in a checkpoint, the alternative ruled out in "Input log". It repairs
-    everything, but needs a way back from the reader and coordination to
-    delete.
+    everything, but needs a way back from the reader and coordination to delete.
   - More holders. Every node also holds a read end of the channels of its
     neighbors. A channel then loses what it holds only if its two endpoints and
     every holder are down within one recovery, far less likely when the crashes
     are independent. Who holds which channel, and how a node learns the paths of
     FIFOs that are not its own, are to be settled.
-  - The global rollback above, which rewinds both nodes and delivers again,
-    from the channel state, what was in transit at the cut.
+  - The global rollback above, which rewinds both nodes and delivers again, from
+    the channel state, what was in transit at the cut.
 - **Keeping on disk the part of a line already read when its reader dies.** A
   line longer than `PIPE_BUF`, read in more than one read, is in memory in part
   until its last read. If the reader dies meanwhile, the rest reaches the
@@ -5090,17 +5066,17 @@ and performance and languages.
     what follows in the FIFO. The exception is when the last complete record of
     the log is of its port with a position of at least `start`. Then the process
     died between the two steps, and the line is already in the log.
-  - A piece missing. A process killed between a read and the write of that
-    part leaves a piece missing from the middle of the line, and the joined
-    line can still be valid JSON. So the writer would state, in each line
-    longer than `PIPE_BUF`, its length and a checksum, checked on a joined
-    line; one that fails the check is a fragment, dropped if a `HELLO` follows.
+  - A piece missing. A process killed between a read and the write of that part
+    leaves a piece missing from the middle of the line, and the joined line can
+    still be valid JSON. So the writer would state, in each line longer than
+    `PIPE_BUF`, its length and a checksum, checked on a joined line; one that
+    fails the check is a fragment, dropped if a `HELLO` follows.
 
 ## The model of a node
 
 - **An alias of a node.** A process added with `alias` or `ext_alias`, whose
-  code is that of another process, so that the same code runs as two nodes
-  with options of their own.
+  code is that of another process, so that the same code runs as two nodes with
+  options of their own.
   - Why it is refused today. The engine looks for the Python heredoc of every
     process under the name of that process
     (`debasher::_get_resident_process_source`), and finds none for an alias.
@@ -5109,23 +5085,23 @@ and performance and languages.
     code. The web UI would then offer it (see "Future work" in
     `doc/design_doc_webui.md`).
 - **A dynamic number of nodes.** A node created during the run, one per open
-  conversation, issue or user, with a state, a checkpoint and a life of its
-  own, as the `spawn` of Erlang. The topology is fixed before the run starts
-  (see "Ports from the engine"), and nothing in the engine launches a process
-  during a run. How such nodes would live with rounds and the `Supervisor`
-  (channels, checkpoints and ports per node, created and retired while a round
-  may be open) is to be studied, and for Python nodes the mechanism could be
-  entirely different.
+  conversation, issue or user, with a state, a checkpoint and a life of its own,
+  as the `spawn` of Erlang. The topology is fixed before the run starts (see
+  "Ports from the engine"), and nothing in the engine launches a process during
+  a run. How such nodes would live with rounds and the `Supervisor` (channels,
+  checkpoints and ports per node, created and retired while a round may be open)
+  is to be studied, and for Python nodes the mechanism could be entirely
+  different.
   - What answers most cases today, and what a program of agents should use
     first:
     - one node whose node state is a dictionary indexed by a key that each
       message carries (the conversation). It needs nothing new: the node state
-      is whatever `capture_node_state()` returns, and the replay brings it up
-      to date. It serves many conversations, one at a time, with a checkpoint
-      that grows with the open ones, and a crash of the node takes every
-      conversation down until it is relaunched. The runtime library could
-      offer it as a subclass that hands `process_data` the state of one key,
-      under the same obligation of determinism;
+      is whatever `capture_node_state()` returns, and the replay brings it up to
+      date. It serves many conversations, one at a time, with a checkpoint that
+      grows with the open ones, and a crash of the node takes every conversation
+      down until it is relaunched. The runtime library could offer it as a
+      subclass that hands `process_data` the state of one key, under the same
+      obligation of determinism;
     - several such nodes, as the tasks of an array, behind a node that sends
       each message to the task chosen by a stable hash of its key modulo K. The
       hash is `zlib.crc32`, not the `hash` of Python, which is salted per
@@ -5138,9 +5114,8 @@ and performance and languages.
   records a `CLOSE`, in `closed_ports`. `capture_node_state()` and
   `restore_node_state()` never see it, so a module cannot react to the end of a
   channel, to emit a final result for instance.
-  - What it needs. A hook called in the order of the input log and replayed,
-    as `process_data` is, so that what the module builds from it survives a
-    crash.
+  - What it needs. A hook called in the order of the input log and replayed, as
+    `process_data` is, so that what the module builds from it survives a crash.
 - **A node that finishes for good.** No node does today. `run()` returns only on
   a stop signal, which sends no `CLOSE` since the node may be resumed later. So
   a program runs until `debasher_stop_resident` stops it, and the handling of
@@ -5153,34 +5128,33 @@ and performance and languages.
   - The replay. The decision falls at a position of the input log, so that a
     relaunch reaches it again at the same point.
   - The order of the ending. Write what is still queued and in the outbound
-    backlog, then `CLOSE` on every output port, then exit. A crash in between
-    is recovered by a relaunch that repeats the steps; a second `CLOSE` is
+    backlog, then `CLOSE` on every output port, then exit. A crash in between is
+    recovered by a relaunch that repeats the steps; a second `CLOSE` is
     harmless, since a reader drops everything that follows the first.
   - Rounds. A node that has finished takes no part in later rounds, but a
     consistent cut of a later epoch needs its state: a checkpoint saved when it
-    finishes, valid for every later epoch, in which its channels are empty.
-    Only a global rollback or the inspection of a cut needs it.
+    finishes, valid for every later epoch, in which its channels are empty. Only
+    a global rollback or the inspection of a cut needs it.
   - Files. A halt and a finish for good would leave the same `.finished`, which
     the `Supervisor` counts as done in both cases. But a resume launches every
-    node again, so a node that finished needs a marker of its own, as the
-    halted marker, for its relaunch to end at once or not to happen; a clean
-    start removes it.
-  - The end of the program. Once every node has finished, the `Supervisor`
-    finds them all done and exits.
+    node again, so a node that finished needs a marker of its own, as the halted
+    marker, for its relaunch to end at once or not to happen; a clean start
+    removes it.
+  - The end of the program. Once every node has finished, the `Supervisor` finds
+    them all done and exits.
   - Held FIFOs. The `Supervisor` releases them only when it ends (see "Holding
-    the business channels"); knowing that a node finished, it could release
-    the FIFOs of the input channels of that node at once.
-- **A signal from a reader that stops for good.** A signal from a reader to
-  its writer, symmetric to `CLOSE`, would let the writer stop sending on that
-  port.
+    the business channels"); knowing that a node finished, it could release the
+    FIFOs of the input channels of that node at once.
+- **A signal from a reader that stops for good.** A signal from a reader to its
+  writer, symmetric to `CLOSE`, would let the writer stop sending on that port.
   - Why. A writer cannot tell a reader that stopped for good from one that
     crashed (see "The reader-dies direction"), so it keeps queueing until
     `OUT_BACKLOG_FAIL_BYTES` stops it with an error.
   - What it needs. A way back from the reader to the writer, since a channel is
     one FIFO, one way.
 - **Outputs that leave `process_data` as a result.** `process_data` would hand
-  its outputs to the framework as a result (a list, values yielded one by
-  one, or a parameter that exists only during the call), instead of calling
+  its outputs to the framework as a result (a list, values yielded one by one,
+  or a parameter that exists only during the call), instead of calling
   `send_data`.
   - What it gives. A send outside a handler becomes impossible by construction,
     where the rule that a node acts only inside `process_data` (see "source" in
@@ -5189,14 +5163,14 @@ and performance and languages.
     a replay gives the outputs of the first execution (G8), so that determinism
     is checked and not only assumed. And it could leave out of a replay what was
     already delivered.
-  - What it does not give. An output does not become durable, since it stays
-    in memory until its writer thread writes it, and a sender is not slowed
-    down, since the outbound queue has no limit.
+  - What it does not give. An output does not become durable, since it stays in
+    memory until its writer thread writes it, and a sender is not slowed down,
+    since the outbound queue has no limit.
   - Its cost. The model that module authors write against, and every test that
     calls `send_data` from outside a handler.
-- **Resuming with a changed program.** The engine would record, at every
-  launch, what the state of the program depends on, and warn or refuse when a
-  resume differs from it.
+- **Resuming with a changed program.** The engine would record, at every launch,
+  what the state of the program depends on, and warn or refuse when a resume
+  differs from it.
   - Why. `debasher_exec` resumes from the checkpoints and input logs with
     whatever module it is given. A `restore_node_state` that no longer reads the
     old state, a `process_data` that replays to another result, other ports or
@@ -5204,8 +5178,8 @@ and performance and languages.
     web UI compares the program with the one that produced the state (see "The
     directories of a resident program" in `doc/design_doc_webui.md`); the
     command line does not.
-- **What a launcher node leaves out** (see "`ProgramLauncher`: batch runs from
-  a node").
+- **What a launcher node leaves out** (see "`ProgramLauncher`: batch runs from a
+  node").
   - A command to launch again a batch run that failed, which `observe()` never
     does on its own.
   - Priorities, or a limit shared by several launcher nodes, beyond the
@@ -5224,25 +5198,24 @@ and performance and languages.
   its launches simulated: what it asked to launch, with which options, and how
   the test says that each batch run ended.
 - **A restart of every node, with no test written for it.** The test runner
-  would check `restart()` on every node of a program; the harness would need
-  the options that the constructor of each node reads.
+  would check `restart()` on every node of a program; the harness would need the
+  options that the constructor of each node reads.
 
 ## Performance and languages
 
 - **Python without the GIL.** The free-threaded build of CPython (`python3.14t`)
   runs the threads of a node in parallel.
-  - What it gives. The reader threads decode and log their lines while the
-    brain thread runs `process_data`, which helps a node with many ports and
-    much traffic. The heartbeat thread goes on during a long call of a C
-    extension that keeps the GIL, and the limit "A long call that keeps the GIL
-    looks like a dead node" of the Contract would go away. The window of
-    "Messages read from a FIFO but not yet written to the input log" would not
-    include the wait for the GIL, and `GIL_SWITCH_INTERVAL_SECS` would have no
-    effect.
+  - What it gives. The reader threads decode and log their lines while the brain
+    thread runs `process_data`, which helps a node with many ports and much
+    traffic. The heartbeat thread goes on during a long call of a C extension
+    that keeps the GIL, and the limit "A long call that keeps the GIL looks like
+    a dead node" of the Contract would go away. The window of "Messages read
+    from a FIFO but not yet written to the input log" would not include the wait
+    for the GIL, and `GIL_SWITCH_INTERVAL_SECS` would have no effect.
   - What it needs. The runtime library uses only the standard library, and
-    guards what its threads share with queues, events and locks, never with
-    the GIL, so it is expected to run on that build as it is. Its tests and
-    chaos tests, run many times on that build, would bring out any race.
+    guards what its threads share with queues, events and locks, never with the
+    GIL, so it is expected to run on that build as it is. Its tests and chaos
+    tests, run many times on that build, would bring out any race.
   - What it does not give. A node with one busy thread gains nothing and pays
     the small cost of that build, and an extension not marked as safe without
     the GIL turns it back on for its whole process.
@@ -5266,16 +5239,16 @@ and performance and languages.
     recognizes the role of a node by something other than a Python class
     (`debasher::_classify_resident_process_role`) and builds its binary, with a
     toolchain from conda or the system.
-  - One library for every language. The runtime library written once, in
-    Rust, with a C interface: the threads, the input log, the barrier, the
-    checkpoints and the files of a node. Each language adds a thin layer with
-    the hooks and the calls of a node. The protocol would then have a single
-    implementation, a new language would cost only that layer, and the Python
-    runtime library could rest on it, its threads never waiting for the GIL.
-    Rust brings no runtime or garbage collector into the process of another
-    language, which Go does. The price is a compiled package for every
-    platform, which conda can distribute, and a crossing into the code of
-    another language for every message.
+  - One library for every language. The runtime library written once, in Rust,
+    with a C interface: the threads, the input log, the barrier, the checkpoints
+    and the files of a node. Each language adds a thin layer with the hooks and
+    the calls of a node. The protocol would then have a single implementation, a
+    new language would cost only that layer, and the Python runtime library
+    could rest on it, its threads never waiting for the GIL. Rust brings no
+    runtime or garbage collector into the process of another language, which Go
+    does. The price is a compiled package for every platform, which conda can
+    distribute, and a crossing into the code of another language for every
+    message.
   - What stays in Python. The `Supervisor`, since what it needs of a node is
     that protocol and the files of the engine. And the language of a node by
     default, the one that most module authors and AI assistants write best. A
@@ -5283,5 +5256,5 @@ and performance and languages.
     node that waits on the outside world, or whose heavy work is already
     compiled code, gains nothing.
   - The limit beyond. Above some rate of messages the limit moves to the
-    protocol itself, one envelope and one record per message, which only
-    larger packets push back, in any language.
+    protocol itself, one envelope and one record per message, which only larger
+    packets push back, in any language.
