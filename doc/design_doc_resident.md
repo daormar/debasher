@@ -84,8 +84,8 @@ and so do the entries below that refer to it.
 
 - **resident program**: a program whose `_program_type` is `resident`:
   long-lived, stateful Python processes joined by FIFOs, always run by the
-  built-in scheduler, and covered by the Contract. A **general program** is a
-  DeBasher program as before, with none of this.
+  built-in scheduler, and covered by the Contract. A **general program** is any
+  other DeBasher program, with none of this.
 - **node**: a process of a resident program seen as a vertex of its
   communication graph, named by its process name when the process has a single
   task, and by `(process_name, task_idx)`, written `<process>:<idx>`, when it
@@ -135,9 +135,10 @@ and so do the entries below that refer to it.
 - **source**: whatever puts `DATA` into an input port of a node without being a
   node of the program: a person writing into a FIFO, an external program, a test
   harness. A node acts only inside `process_data`, in reaction to what it
-  receives, and never sends on its own initiative (`send_data` raises anywhere
-  else), so a source is always outside the graph of nodes, and what enters
-  through it is an external input (see "Limits and non-goals").
+  receives, and never sends on its own initiative (`send_data` raises
+  `RuntimeError` anywhere else), so a source is always outside the graph of
+  nodes, and what enters through it is an external input (see "Limits and
+  non-goals").
 - **root**: a node that no node sends `DATA` to, not even itself through a
   self-loop. Its input ports, if it has any, are control ports or are written
   from outside the program, by a source. It can start a round, and its part of a
@@ -145,8 +146,8 @@ and so do the entries below that refer to it.
 - **relay**: a node with one input port and one output port whose `process_data`
   sends on the output what it received on the input, one message out for each
   message in. It is the simplest node that has both an input log and outputs, so
-  tests and measurements use it as the node in the middle; a real node would
-  transform the data, or send zero or several messages per input.
+  the tests use it as the node in the middle; a real node would transform the
+  data, or send zero or several messages per input.
 - **`Supervisor`**: the optional process (0 or 1 per program, of a single task)
   that receives heartbeats, relaunches downed nodes and can start rounds. It is
   not itself supervised.
@@ -446,10 +447,10 @@ and so do the entries below that refer to it.
 - **reader thread**: one per input port. It reads and decodes lines, consumes
   `HELLO`, drops with a warning an envelope that is malformed or of a type its
   port does not carry (see "Fields of each type" and "Channel topology"), and
-  hands everything else to the inbound queue (with the input-log
-  redesign, after appending the record to the log). After a `CLOSE` it goes on
-  reading but drops everything that follows. It ends only when its node stops,
-  or on an error of its stream or of its input log (see "Ghost connections").
+  hands everything else to the inbound queue (after appending the record to the
+  input log). After a `CLOSE` it goes on reading but drops everything that
+  follows. It ends only when its node stops, or on an error of its stream or of
+  its input log (see "Ghost connections").
 - **writer thread**: one per output port, with its own **outbound queue**. It
   sends `HELLO` first and, when its node has finished for good (not at a halt),
   `CLOSE` last. A writer whose peer is down and whose pipe is full blocks, so it
@@ -637,7 +638,7 @@ they are computed again as a restore queues the backlog of the checkpoint).
 
 The mechanisms that provide the guarantees below are designed in the sections
 after this one. The Contract applies to programs whose `_program_type` is
-`resident`; general programs keep today's behavior.
+`resident`; it does not apply to general programs.
 
 The purpose of this section is that "reliable" has a precise meaning here:
 within the stated assumptions, either the guarantees hold, or the violation is
@@ -734,7 +735,7 @@ working, and which failures they do not cover.
   relaunched by hand. No mechanism covers this (see "Supervising the
   `Supervisor`" in Future work).
 
-**Note on `fsync`, and why the level above is enough for now.** When a process
+**Note on `fsync`, and why the level above is the one chosen.** When a process
 writes to a file, the operating system copies the data into its own memory, the
 page cache, and answers at once. It writes the data to disk later. `fsync`
 forces that write and returns only when the data is on disk. If a process dies,
@@ -762,8 +763,8 @@ alone.
 
 | Obligation | Needed by | Who checks it |
 |---|---|---|
-| A node sends only inside `process_data` | the recovery of a node | the framework, when the node runs (`send_data` raises) |
-| Messages are strict JSON, of bounded size | the base | the framework, when the node runs (`send_data` raises) |
+| A node sends only inside `process_data` | the recovery of a node | the framework, when the node runs (`send_data` raises `RuntimeError`) |
+| Messages are strict JSON, of bounded size | the base | the framework, when the node runs (`send_data` raises `ValueError`, `TypeError` or `RuntimeError`) |
 | The two rules of the fifos | the base | the engine, when the program is loaded |
 | `process_data` is deterministic | the recovery of a node | the tests of the program, with `check_replay` |
 | A complete `capture_node_state()` and an exact `restore_node_state()` | rounds and checkpoints | the tests of the program, with `restart()` (the round trip) and `check_replay` |
@@ -919,11 +920,11 @@ guarantee in words and never cite these numbers, which may change.
   channel's sequence numbers, a marker or a `CLOSE` that follows messages that
   never arrived, a fragment that no `HELLO` follows, a checkpoint with another
   schema version, an input log over its size cap, an input log that does not
-  reach its latest checkpoint, an exhausted relaunch budget), the node
-  or the `Supervisor` raises an error that stops the affected part, instead of
-  continuing with silently wrong state. What happens after that stop is manual
-  today; the planned fallback is a coordinated global rollback to the last
-  consistent cut, **not built** (see Future work).
+  reach its latest checkpoint, an exhausted relaunch budget), the node or the
+  `Supervisor` raises an error that stops the affected part, instead of
+  continuing with silently wrong state. What happens after that stop is manual.
+  A global rollback to the last consistent cut is future work (see "Global
+  (coordinated) rollback, as a fallback to localized recovery").
 
 ## Limits and non-goals
 
@@ -1055,8 +1056,8 @@ change.
    - What stops. The part of the work of the dead thread stops, and nothing
      replaces it. With a dead brain thread, the node processes nothing; with a
      dead reader, nothing more of its port; with a dead observation thread,
-     nothing more of the outside world. With a dead writer, the outbound
-     backlog of its port fills until `send_data` raises.
+     nothing more of the outside world. With a dead writer, the outbound backlog
+     of its port fills until `send_data` raises `RuntimeError`.
    - Its readers. They go on logging what arrives, until the input log reaches
      `INPUT_LOG_MAX_BYTES`, where they stop with an error (G8).
    - What shows it. The node info file says that the node is not healthy, and
@@ -1321,20 +1322,20 @@ sections, cited along the way.
 
 ## Wire format
 
-The format is JSON Lines: one JSON object per line, with `\n` as delimiter,
-in UTF-8. Always serializing via `json.dumps` guarantees that a `\n` embedded in
+The format is JSON Lines: one JSON object per line, with `\n` as delimiter, in
+UTF-8. Always serializing via `json.dumps` guarantees that a `\n` embedded in
 the `payload` comes out escaped, so the line delimiter is safe with any payload.
 Every writer of the engine (the runtime, the tools for resident programs and
 "Talk to FIFOs" in the web UI) writes strict JSON (RFC 8259): a payload that
 holds a NaN or an infinity, which Python's `json.dumps` would write as `NaN` or
-`Infinity`, is refused when it is sent (`send_data` raises, as for any payload
-that is not JSON, and "Talk to FIFOs" refuses what the user typed). The reader
-thread of a node takes what Python's `json.loads` takes, so such a value written
-from outside the program still reaches the node, which cannot send it on. A line
-that is not valid UTF-8 is treated as one that is not JSON: it is dropped as the
-fragment of a writer killed in the middle of a message when a `HELLO` follows
-it, and otherwise it ends the reader thread; it never reaches the node altered
-(see "The resync line (`HELLO`)").
+`Infinity`, is refused when it is sent (`send_data` raises `ValueError`, and
+`TypeError` for any payload that is not JSON, and "Talk to FIFOs" refuses what
+the user typed). The reader thread of a node takes what Python's `json.loads`
+takes, so such a value written from outside the program still reaches the node,
+which cannot send it on. A line that is not valid UTF-8 is treated as one that
+is not JSON: it is dropped as the fragment of a writer killed in the middle of a
+message when a `HELLO` follows it, and otherwise it ends the reader thread; it
+never reaches the node altered (see "The resync line (`HELLO`)").
 
 There are five envelope types, each its own line/message (none nests inside
 another, so the reader thread can dispatch by looking only at `type`, without
@@ -1639,13 +1640,13 @@ nodes=fanin=hb_fanin,loop=hb_loop,sink=hb_sink;initiators=outtrig_fanin;manual_t
 `EXTERNAL_PORTS` and `SUPERVISOR_PORT` on the instance from it, and the
 `Supervisor` `NODE_PORTS`, `INITIATOR_PORTS`, `MANUAL_TRIGGER_PORT`,
 `NODE_STARTUP_TIMEOUT_SECS` and `HOLD_FIFOS`, before anything uses them
-(`_take_ports_from_engine`). The options of the module are then the only
-place that says what the ports of a process are: a class that declares any
-of them, even with the same value, stops the process with an error. A
-process built without the engine, as the unit tests build them, gets no such
-variable and takes its ports from the attributes of its class. The order of a
-list means nothing, in the variable or in the class: every use of a port list
-is port by port.
+(`_take_ports_from_engine`). The options of the module are then the only place
+that says what the ports of a process are: a class that declares any of them,
+even with the same value, stops the process with a `ValueError`. A process built
+without the engine, as the unit tests build them, gets no such variable and
+takes its ports from the attributes of its class. The order of a list means
+nothing, in the variable or in the class: every use of a port list is port by
+port.
 
 ## What the fifo tags leave out
 
@@ -1730,24 +1731,24 @@ node test builds a node without the engine to check its business logic.
   module author.
 - **Port declaration**: the ports of a node are lists of option names,
   `INPUT_PORTS`/`OUTPUT_PORTS` (e.g. `["inf"]`), with `CONTROL_PORTS`,
-  `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node
-  run by the engine takes all five from it, and its class must not declare
-  any (see "Ports from the engine"); a node built without the engine, as the
-  unit tests build them, declares them as class attributes. `_PortWorker`
-  parses `argv` generically when the node is built, into a `self.opts` name ->
-  value dict (the engine's existing `-optname value` CLI convention, untouched);
-  `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths
-  to open reader/writer threads on. Any other option (e.g. a plain
-  `-threshold` value, or one from the command line of the program) stays
-  available in `self.opts` with no special handling. A flag, an option given
-  with no value (`explain_flag`, `define_flag`), is listed in the class's
-  `FLAGS`, by name without the dash, since `argv` alone cannot tell it from
-  an option whose value starts with a dash; it is `True` in `self.opts` when
-  it is given. `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only
-  commands (see control port in the Glossary); `EXTERNAL_PORTS` names which are
-  fed only from outside the program (see external port in the Glossary); a name
-  in either list that is not an input port, or a `SUPERVISOR_PORT` that is not
-  an output port, is refused when the node is built.
+  `EXTERNAL_PORTS` and `SUPERVISOR_PORT` (a single name) beside them. A node run
+  by the engine takes all five from it, and its class must not declare any (see
+  "Ports from the engine"); a node built without the engine, as the unit tests
+  build them, declares them as class attributes. `_PortWorker` parses `argv`
+  generically when the node is built, into a `self.opts` name -> value dict (the
+  engine's `-optname value` convention of the command line);
+  `INPUT_PORTS`/`OUTPUT_PORTS` tell it which of those entries are FIFO paths to
+  open reader/writer threads on. Any other option (e.g. a plain `-threshold`
+  value, or one from the command line of the program) stays available in
+  `self.opts` with no special handling. A flag, an option given with no value
+  (`explain_flag`, `define_flag`), is listed in the class's `FLAGS`, by name
+  without the dash, since `argv` alone cannot tell it from an option whose value
+  starts with a dash; it is `True` in `self.opts` when it is given.
+  `CONTROL_PORTS` names which of the `INPUT_PORTS` carry only commands (see
+  control port in the Glossary); `EXTERNAL_PORTS` names which are fed only from
+  outside the program (see external port in the Glossary); a name in either list
+  that is not an input port, or a `SUPERVISOR_PORT` that is not an output port,
+  is refused when the node is built.
 - **Threads**: one reader thread per `INPUT_PORTS` entry, each reading its
   FIFO in blocks of up to `_READ_BLOCK_BYTES`, cutting them into lines and
   handing all the envelopes of a block to `_on_arrivals`, which records them in
@@ -1817,16 +1818,17 @@ node test builds a node without the engine to check its business logic.
   ignored, it never aborts the process (the command catalog, "Control envelope",
   is deliberately open-ended).
 - **Logging**: `FBPProcess` exposes a preconfigured `self.log` (Python's stdlib
-  `logging`), which `_PortWorker` sets up, same pattern as the existing
-  `dispatch` process in `data/programs/dynamic_fanout_dispatcher.py` (stderr
-  output, format including thread name, useful here since the process is
-  inherently multi-threaded). The framework itself logs its own lifecycle
-  events (thread start/stop, barrier epoch open/close, checkpoint saved,
-  heartbeat) with it. Level is configurable via a plain `-log-level` option,
-  declared by the module author in `_explain_opts`/`_define_opts` exactly like
-  any other option (the convention of `debasher_dynamic_fanout_fifos.sh`): the
-  engine has no mechanism for it, it is just another entry in `self.opts`; a
-  sensible default applies if the module does not declare it.
+  `logging`), which `_PortWorker` sets up as the `dispatch` process of
+  `data/programs/dynamic_fanout_dispatcher.py` sets up its own (stderr output,
+  format including thread name, useful here since the process is inherently
+  multi-threaded). The framework itself logs its own lifecycle events (thread
+  start/stop, barrier epoch open/close, checkpoint saved, heartbeat) with it.
+  Level is configurable via a plain `--log-level` option (the runtime drops the
+  leading dashes of a name, so `-log-level` works too), declared by the module
+  author in `_explain_opts`/`_define_opts` exactly like any other option (the
+  convention of `debasher_dynamic_fanout_fifos.sh`): the engine has no mechanism
+  for it, it is just another entry in `self.opts`; a sensible default applies if
+  the module does not declare it.
 - **Periodic snapshots come from outside the node**: a node never starts a
   round on its own; every round starts with a trigger, relayed by the
   `Supervisor` or written from outside the program. A program in which nothing
@@ -1889,7 +1891,8 @@ framework keep the state that a node captures in step with what it has sent:
 - `process_data(port_name, packet)` runs on the brain thread, once for each
   `DATA`, in the order of the input log, and on the thread that called `run()`
   while the node replays that log. It is the only place from which a node sends,
-  with `send_data(port_name, payload)`, which raises anywhere else.
+  with `send_data(port_name, payload)`, which raises `RuntimeError` anywhere
+  else.
 - `capture_node_state()` runs on the brain thread, when a round opens, and the
   runtime keeps a deep copy of what it returns.
 - `restore_node_state(node_state)` and `initialize_runtime()` run on the thread
@@ -1953,11 +1956,10 @@ ends with the one limit that no specification sets:
   (see "Holding the business channels"), and a margin, `FD_MARGIN`, for the
   rest. That number follows from the program, and grows with it when a fan-in
   node or a `Supervisor` has as many ports as the command line says, so nobody
-  has to give it: before it opens anything, the process raises its soft limit
-  to what it needs (`_raise_fd_limit`), which it may do up to its hard limit.
-  When the hard limit is lower, it stops with an error that gives both numbers,
-  and the hard limit has to be raised for the session that launches the
-  program.
+  has to give it: before it opens anything, the process raises its soft limit to
+  what it needs (`_raise_fd_limit`), which it may do up to its hard limit. When
+  the hard limit is lower, it raises a `RuntimeError` that gives both numbers,
+  and the hard limit has to be raised for the session that launches the program.
 
 For example,
 `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00; out_backlog_fail_mb=128"`.
@@ -2003,9 +2005,9 @@ What `observe()` sees enters the node as an input:
   it is a property of the node, that it observes something, not a port to
   connect.
 - A class that does not define `observe()` has no observation thread, and one
-  with no observe port may observe only to act, `inject()` being then an
-  error. `inject()` is an error from `process_data` too, since an input that
-  processing made would be made again by every replay.
+  with no observe port may observe only to act, and `inject()` then raises
+  `RuntimeError`. It raises `RuntimeError` from `process_data` too, since an
+  input that processing made would be made again by every replay.
 - The observation thread counts in the health of the node, like the others:
   if `observe()` raises, the thread ends and the heartbeat stops.
 
@@ -2052,11 +2054,11 @@ it away with `clear_notice()`.
 - **One notice, not a log.** A node has at most one notice, kept in its notice
   file (see the Glossary), and a new one replaces the previous one, so that the
   notice says how the node is now and never grows. `level` is `info` or
-  `warning`, anything else being an error. The text is cut at `NOTICE_MAX_CHARS`
-  characters, 1000, with a warning in the log, since a notice that is too long
-  is a fault of the code of the node, not a reason to stop it. The file holds
-  `{"level": ..., "text": ..., "set_at": ...}`, `set_at` being the time at which
-  the notice was set.
+  `warning`, and anything else raises `ValueError`. The text is cut at
+  `NOTICE_MAX_CHARS` characters, 1000, with a warning in the log, since a notice
+  that is too long is a fault of the code of the node, not a reason to stop it.
+  The file holds `{"level": ..., "text": ..., "set_at": ...}`, `set_at` being
+  the time at which the notice was set.
 - **From any hook and any thread.** Any hook may set or clear it, `observe()`
   included. The node keeps a copy of its notice in memory and writes the file
   into a temporary file renamed into place, the comparison, the write and the
@@ -2556,11 +2558,11 @@ def test_a_replay_gives_the_same_sums():
 test:
 
 - It takes the heredoc of `process` from the program file named by
-  `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`,
-  a tool of `libexec` that loads the module and prints what
-  `debasher::_get_resident_process_source` gives: the text that the engine
-  runs, since both take it from the same heredoc provider (the method
-  `_heredoc_py` of the process, or its legacy variable). The text of each
+  `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`, a
+  tool of `libexec` that loads the module and prints what
+  `debasher::_get_resident_process_source` gives: the text that the engine runs,
+  since both take it from the same heredoc provider (the method `_heredoc_py` of
+  the process, or the older form, the variable `<process>_py`). The text of each
   process is taken once in a test session, since loading the module is what
   costs time.
 - It parses the heredoc with Python's `ast` module and leaves out the line
@@ -2602,11 +2604,11 @@ share one process. The directory of the module is what a relative path of the
 node is resolved against, such as the `-watchdir` of a `DirectoryWatcher`.
 
 The test names the ports because the harness does not build the options of the
-program, which is what tells the engine which options of a process are ports.
-A test names only the ports whose traffic it checks: a control port, the port
-to the `Supervisor` and any port that the test leaves out are not ports of the
-node under test, and `send_data` on one of them fails, as it does for a port
-that a node does not have.
+program, which is what tells the engine which options of a process are ports. A
+test names only the ports whose traffic it checks: a control port, the port to
+the `Supervisor` and any port that the test leaves out are not ports of the node
+under test, and `send_data` on one of them raises `ValueError`, as it does for a
+port that a node does not have.
 
 The harness does not require the line that starts the node: a heredoc that
 lacks it passes a node test and is refused when the program is loaded (see
@@ -2623,39 +2625,39 @@ A node under test offers:
   refused. When `process_data` raises, what it sent before stays in `sent`.
 - `observe()`: runs the `observe()` of the node once on the calling thread, as
   the observation thread would at the end of an interval, and then calls
-  `process_data` with what it brought in with `inject()`, in order and under
-  the observe port, as the brain thread would; it returns what was brought in,
-  after the same round trip through JSON as a message. The harness takes what
-  `inject()` hands to the input log instead of writing it there, and leaves
-  the checks of `inject()` as they are: one from `process_data`, or in a node
-  without an observe port, still raises. A node that does not define
-  `observe()` is refused. Since a test calls it, it can make the outside world
-  change between two observations, such as a file that a `DirectoryWatcher`
-  sees grow, then stay the same for `STABLE_OBSERVATIONS` observations in a
-  row before it is brought in.
+  `process_data` with what it brought in with `inject()`, in order and under the
+  observe port, as the brain thread would; it returns what was brought in, after
+  the same round trip through JSON as a message. The harness takes what
+  `inject()` hands to the input log instead of writing it there, and leaves the
+  checks of `inject()` as they are: one from `process_data`, or in a node
+  without an observe port, still raises `RuntimeError`. A node that does not
+  define `observe()` is refused. Since a test calls it, it can make the outside
+  world change between two observations, such as a file that a
+  `DirectoryWatcher` sees grow, then stay the same for `STABLE_OBSERVATIONS`
+  observations in a row before it is brought in.
 - `sent(port)`: the payloads that the node has sent on `port` since it was
   built, decoded from the lines that `send_data` queued. The harness takes
   each line off the outbound queue as soon as `process_data` returns, and
   counts it as written, so the outbound backlog never fills, however many
   packets a test feeds.
 - `restart()`: captures the node state and makes a round trip of it through
-  JSON, as a checkpoint does; builds a new node under test with the same
-  options and ports, whose `observe()` remembers nothing of the earlier one,
-  as after a crash, so a test can check that `process_data` drops what the new
-  node brings in again; restores the state into it and calls
-  `initialize_runtime()`, the order in which `run()` starts a relaunched node;
-  and returns the new node, whose `sent` starts empty. It raises when the new
-  node captures a node state other than the one it was restored from, since
-  recovery relies on that round trip.
+  JSON, as a checkpoint does; builds a new node under test with the same options
+  and ports, whose `observe()` remembers nothing of the earlier one, as after a
+  crash, so a test can check that `process_data` drops what the new node brings
+  in again; restores the state into it and calls `initialize_runtime()`, the
+  order in which `run()` starts a relaunched node; and returns the new node,
+  whose `sent` starts empty. It raises `AssertionError` when the new node
+  captures a node state other than the one it was restored from, since recovery
+  relies on that round trip.
 - `check_replay(feeds, capture_after)`: checks what a replay needs of the node.
   It feeds the `(port, packet)` pairs of `feeds` to a new node, and the same to
   another new node restarted (as `restart()` does) after the first
   `capture_after` of them. Both must send the same on every port and end in the
-  same node state. It raises at the first port, or at the node state, that
-  differs, and `ValueError` when `capture_after` is not between 0 and the
-  number of feeds; its restart raises as `restart()` does. So it checks that
-  `process_data` is deterministic over what it receives, and that the node
-  state holds everything that later messages depend on.
+  same node state. It raises `AssertionError` at the first port, or at the node
+  state, that differs, and `ValueError` when `capture_after` is not between 0
+  and the number of feeds; its restart raises `AssertionError` as `restart()`
+  does. So it checks that `process_data` is deterministic over what it receives,
+  and that the node state holds everything that later messages depend on.
 - `node`: the instance itself, for a test that looks at its attributes.
 
 In a node under test, `sleep()` returns at once, as it does while a node
@@ -2808,14 +2810,14 @@ resumed after a halt:
    the log ends below its `capture_pos`, the startup stops with a `ValueError`
    (see below). Otherwise the next position is one more than the position of
    the last complete record.
-3. Step 9 replays the log (`FBPProcess._replay_input_log`): every `DATA`
-   record above `capture_pos` goes through `process_data()`, in log order,
-   what had been processed before the crash and what had arrived but not yet
-   been processed, with no distinction between the two. A `CLOSE` record adds
-   its port to `closed_ports`, unless it is a control port, and the other
-   kinds of envelope are not replayed. A `DATA` record on a port that is
-   already closed is an error, since nothing is logged after a `CLOSE`. The
-   replay reads from disk and writes nothing to the log.
+3. Step 9 replays the log (`FBPProcess._replay_input_log`): every `DATA` record
+   above `capture_pos` goes through `process_data()`, in log order, what had
+   been processed before the crash and what had arrived but not yet been
+   processed, with no distinction between the two. A `CLOSE` record adds its
+   port to `closed_ports`, unless it is a control port, and the other kinds of
+   envelope are not replayed. A `DATA` record on a port that is already closed
+   raises `ValueError`, since nothing is logged after a `CLOSE`. The replay
+   reads from disk and writes nothing to the log.
 
 The replay starts at the last segment whose name is at most `capture_pos + 1`,
 and stops the startup with a `ValueError` if the log starts above that, if the
@@ -3359,21 +3361,21 @@ initiator that does not recognize a command handles it in its own
 The `Supervisor` holds the FIFO of every business channel between two nodes, a
 held FIFO in the Glossary, through a read end that it opens without blocking
 (`O_RDONLY | O_NONBLOCK`) and never reads (`_open_held_fifos`). A FIFO keeps
-what it holds for as long as some process has it open, and discards it only
-when every descriptor of it is closed. Each endpoint of a channel holds both
-of its ends (see "Ghost connections"), so the crash of one endpoint loses
-nothing; the `Supervisor`, a third holder, keeps what the FIFO holds while
-both endpoints are down at once. The relaunched reader finds it there, and
-what the relaunched writer sends again from its input log comes after it, with
-the same numbers, as duplicates that the reader drops (G5), so nothing is new
-on either side of the channel. The ends of the FIFO are also as before: a
+what it holds for as long as some process has it open, and discards it only when
+every descriptor of it is closed. Each endpoint of a channel holds both of its
+ends (see "Ghost connections"), so the crash of one endpoint loses nothing; the
+`Supervisor`, a third holder, keeps what the FIFO holds while both endpoints are
+down at once. The relaunched reader finds it there, and what the relaunched
+writer sends again from its input log comes after it, with the same numbers, as
+duplicates that the reader drops (G5), so nothing is new on either side of the
+channel. The ends of what the FIFO holds behave as when one endpoint crashes: a
 fragment that a writer killed in the middle of a line leaves at the end is
 followed by the `HELLO` of its next incarnation (see "The resync line"), which
-sends that whole message again, since a message leaves the outbound backlog
-only once it is written whole; a fragment at the start, the rest of a line
-that the reader had begun to take when it died, is the limit of "Messages read
-from a FIFO but not yet written to the input log" (see the Contract's limits),
-as when the reader alone crashes.
+sends that whole message again, since a message leaves the outbound backlog only
+once it is written whole; a fragment at the start, the rest of a line that the
+reader had begun to take when it died, is the limit of "Messages read from a
+FIFO but not yet written to the input log" (see the Contract's limits), as when
+the reader alone crashes.
 
 The engine gives the FIFOs to hold, `HOLD_FIFOS`, with the other ports of the
 `Supervisor` (see "Ports from the engine"): every fifo without a tag whose two
@@ -3387,7 +3389,7 @@ for the node while it is down. A fifo to hold is not an option of the
 `Supervisor`, so the engine names it by its path under the fifo directory of
 the program, `<owner process>/<fifo>`, which the `Supervisor` resolves against
 the output directory that it already finds from its own execdir. A fifo that is
-missing stops the `Supervisor` with an error.
+missing stops the `Supervisor` with a `FileNotFoundError`.
 
 The `Supervisor` holds the FIFOs when it starts, right after it opens the FIFOs
 of its own ports (an open that never blocks) and before any of its threads
@@ -3518,11 +3520,11 @@ Nothing supervises the `Supervisor` (see "Failure model"), so it must not live
 on without its brain thread, deaf to the heartbeats while its checker thread
 declares healthy nodes down, or without its checker thread, blind to the nodes
 that do go down. An exception that ends either thread is logged and ends the
-`Supervisor` with an error (its `run()` raises one that carries it), which then
-counts as a `Supervisor` that died: the nodes keep running, unsupervised, until
-it is relaunched by hand. What a writer of its channels can get wrong, a
-malformed command or a type that does not belong there, is dropped by the
-reader before it reaches the brain thread (see "Fields of each type").
+`Supervisor` with an error (its `run()` raises a `RuntimeError` that carries
+it), which then counts as a `Supervisor` that died: the nodes keep running,
+unsupervised, until it is relaunched by hand. What a writer of its channels can
+get wrong, a malformed command or a type that does not belong there, is dropped
+by the reader before it reaches the brain thread (see "Fields of each type").
 
 A node that exits with an error on purpose leaves the same signs as one that
 crashes (no `.finished`, no more heartbeats, a dead PID), and both are treated
@@ -4544,9 +4546,9 @@ and holding a slot. Without `ps`, the id is the PID alone. A shell that has
 already ended when its start time is read gets an empty id, and never runs.
 
 The node writes `launcher.pid` once `ps` has given that start time. A node that
-goes down in between, a window of a few milliseconds, finds no `launcher.pid`
-when it comes back. It launches the batch run a second time. What follows
-depends on the batch run:
+goes down in between, a short window (the time that `ps` takes), finds no
+`launcher.pid` when it comes back. It launches the batch run a second time. What
+follows depends on the batch run:
 
 - For a whole program, the second `debasher_exec` waits
   `DEBASHER_EXEC_LOCK_WAIT_SECS` for the lock of the first, which keeps it while
