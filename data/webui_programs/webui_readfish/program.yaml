@@ -1,0 +1,155 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/_static/schema/program-1.json
+schema_version: 1
+name: webui_readfish
+type: resident
+description: >-
+  Example built with the web UI: a resident program around readfish, the adaptive
+  sampling tool of nanopore sequencing. Acquire runs readfish as a child process and
+  ends it when its stream of reads dies in silence, so that the Supervisor relaunches
+  it; Watch sends each file that the sequencer writes to Launch, which summarizes it
+  with the general program webui_read_lengths; Report joins what readfish says and
+  what the files show in one timeline. Without a sequencer, Acquire runs a stand-in.
+execution:
+  snapshot_every_secs: '60'
+processes:
+  Sup:
+    description: >-
+      Watches Acquire, Watch, Launch and Report and relaunches them if they go down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 120, y: 60}
+  Acquire:
+    description: >-
+      Runs readfish (the command of -command; by default the stand-in fake_readfish.py
+      next to this program) as a child process and reads its log: each batch of reads
+      and each change of phase of the sequencer go to Report as events. In the
+      sequencing phase, -stall-timeout-s seconds with no batch is a stall; in a mux
+      scan, only -scan-timeout-s seconds are; a readfish that gives nothing for
+      -start-timeout-s seconds after its start, or that ends, is one too. On a stall
+      the node ends readfish and raises, and the Supervisor relaunches it; after
+      -max-attempts relaunches with no reads at all it stops raising and leaves a
+      notice. Notes written by hand into -notes go to Report like the events.
+    code: Acquire.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    initiator: true
+    position: {x: 120, y: 260}
+    options:
+      -command:
+        type: string
+        description: >-
+          the command that runs readfish, without --log-file (the stand-in by default)
+        cmdline: true
+        mandatory: false
+      -stall-timeout-s:
+        type: string
+        description: >-
+          seconds without a batch of reads, in the sequencing phase, that make a stall
+          (60 by default)
+        cmdline: true
+        mandatory: false
+      -scan-timeout-s:
+        type: string
+        description: >-
+          seconds in a mux scan or another phase that is not sequencing that make a
+          stall (900 by default)
+        cmdline: true
+        mandatory: false
+      -start-timeout-s:
+        type: string
+        description: >-
+          seconds after the start of readfish without a first batch that make a stall
+          (300 by default)
+        cmdline: true
+        mandatory: false
+      -max-attempts:
+        type: string
+        description: >-
+          relaunches in a row with no reads at all after which the node stops raising
+          and leaves a notice (5 by default)
+        cmdline: true
+        mandatory: false
+      -notes:
+        type: string
+        description: notes written from outside the program, one per message
+        value: notes
+        channel: fifo
+        fifo_tag: external
+      -outevents:
+        type: string
+        description: the events of readfish and the notes, to Report
+        value: events
+        channel: fifo
+  Watch:
+    description: >-
+      Watches the directory given by -watchdir, where the sequencer writes its read
+      files, and sends a request for each file once it is complete.
+    code: Watch.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: DirectoryWatcher
+    initiator: true
+    position: {x: 120, y: 460}
+    options:
+      -watchdir:
+        type: string
+        description: directory where the read files arrive, given on the command line
+        cmdline: true
+      -outrequests:
+        type: string
+        description: one request for each complete read file
+        value: requests
+        channel: fifo
+  Launch:
+    description: >-
+      Runs webui_read_lengths once for each read file, and sends a message when each
+      batch run ends.
+    code: Launch.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00', max_concurrent_runs: 2}
+    kind: ProgramLauncher
+    position: {x: 380, y: 460}
+    options:
+      -pfile:
+        type: string
+        description: >-
+          the general program to run, next to this program's home directory
+        value: ../webui_read_lengths/webui_read_lengths.sh
+      -requests:
+        type: string
+        description: the requests of Watch, one batch run each
+        from: Watch.-outrequests
+      -outdone:
+        type: string
+        description: a message for each batch run that ends
+        value: done
+        channel: fifo
+  Report:
+    description: >-
+      Keeps one timeline of the run: the launches, stalls and phases of readfish from
+      the events of Acquire, and the summary of each read file from the batch runs of
+      Launch. It writes it to timeline.json in its output directory, and sends on
+      -outtimeline each incident, each file and a status line every -status-every-s
+      seconds of event time.
+    code: Report.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: FBPProcess
+    position: {x: 380, y: 260}
+    options:
+      -inevents:
+        type: string
+        description: the events of Acquire
+        from: Acquire.-outevents
+      -indone:
+        type: string
+        description: the messages of the batch runs that end
+        from: Launch.-outdone
+      -status-every-s:
+        type: string
+        description: seconds of event time between two status lines (60 by default)
+        cmdline: true
+        mandatory: false
+      -outtimeline:
+        type: string
+        description: >-
+          the incidents, the files and the status lines, read outside the program
+        value: timeline
+        channel: fifo

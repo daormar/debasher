@@ -636,7 +636,12 @@ hand). A node whose source can stall while its process stays alive (a
 stream that gives no more data and does not close) raises in ``observe``
 once it has seen nothing for too long, and the relaunch reconnects. The
 :doc:`webui_stream_stall` shows such a node, and lets you try a stall, a
-frozen node and the limits of a node by hand.
+frozen node and the limits of a node by hand. The :doc:`webui_readfish`
+does the same around a real tool, readfish, whose stream of reads from a
+sequencer dies in silence now and then: its node runs readfish as a
+child process, reads its log, tells the silence of a scan of the pores
+from a stall, and bounds the relaunches of a readfish that never gives a
+read.
 
 Notices
 ^^^^^^^
@@ -859,3 +864,5 @@ of the repository. They were built with the web interface, and
    webui_stream_stall
 
    webui_live_stats
+
+   webui_readfish

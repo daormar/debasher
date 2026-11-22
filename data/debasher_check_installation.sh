@@ -212,6 +212,96 @@ check_watched_program()
 }
 
 ########
+# Check that the resident program `pfile` around readfish, webui_readfish,
+# launched with its stand-in of readfish and watching a directory, carries a
+# note written into the external input of Acquire and the summary of a text
+# file of read lengths left in the watched directory to its timeline; then
+# stop it in order and check that every process finished.
+check_readfish_program()
+{
+    local tmpdir=$1
+    local pfile=$2
+    local outdirname=$3
+    local outdir="${tmpdir}/${outdirname}"
+    local watchdir="${tmpdir}/${outdirname}_watched"
+    local status_out="${tmpdir}/${outdirname}_status.out"
+    local output_file="${tmpdir}/${outdirname}_output.out"
+    local timeout_secs=60
+    local ret=0
+
+    echo -n "## Checking $("${BASENAME}" "${pfile}") (resident) ... "
+
+    "${MKDIR}" -p "${watchdir}"
+    "${debasher_bindir}/debasher_exec" --pfile "${pfile}" \
+                                       --outdir "${outdir}" \
+                                       -watchdir "${watchdir}" \
+                                       > "${tmpdir}/${outdirname}_exec.out" 2>&1 || ret=1
+
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "inprogress" ${timeout_secs} "${status_out}" || ret=124
+    fi
+
+    local reader_pid=""
+    if test $ret -eq 0 ; then
+        local fifos_dir="${outdir}/__fifos__"
+        local notes_path=$("${FIND}" "${fifos_dir}" -name "notes")
+        local output_path=$("${FIND}" "${fifos_dir}" -name "timeline")
+        "${CAT}" "${output_path}" > "${output_file}" &
+        reader_pid=$!
+
+        # A note by hand follows the path of the events of readfish, and a
+        # file of read lengths the path of the files of the sequencer: one
+        # batch run of webui_read_lengths, whose summary Report records
+        "${TIMEOUT}" ${timeout_secs}s "${BASH}" -c 'printf "{\"type\": \"DATA\", \"payload\": %s}\n" "$1" > "$2"' \
+                _ '{"text":"by hand"}' "${notes_path}" || ret=124
+        printf '300\n500\n4000\n8000\n' > "${watchdir}/.first.txt"
+        "${MV}" "${watchdir}/.first.txt" "${watchdir}/first.txt"
+
+        if test $ret -eq 0 ; then
+            ret=124
+            local i
+            for ((i = 0; i < timeout_secs; i++)); do
+                if "${GREP}" -q -F '"payload": {"kind": "note", "text": "by hand"}}' "${output_file}" 2>/dev/null \
+                   && "${GREP}" -q -F '"run": "first", "status": "finished", "exit_code": 0, "file": ' "${output_file}" 2>/dev/null \
+                   && "${GREP}" -q -F '"count": 4, "total_bases": 12800, "median": 2250, "n50": 8000, "short_fraction": 0.5}}' "${output_file}" 2>/dev/null; then
+                    ret=0
+                    break
+                fi
+                "${SLEEP}" 1
+            done
+        fi
+    fi
+
+    "${debasher_bindir}/debasher_stop_resident" -d "${outdir}" --timeout ${timeout_secs} \
+                                                > "${tmpdir}/${outdirname}_stop.out" 2>&1
+    if test $? -ne 0 && test $ret -eq 0 ; then
+        ret=1
+    fi
+    if test $ret -eq 0 ; then
+        wait_for_every_process "${outdir}" "finished" ${timeout_secs} "${status_out}" || ret=1
+    fi
+
+    if test -n "${reader_pid}" ; then
+        kill "${reader_pid}" 2>/dev/null
+        wait "${reader_pid}" 2>/dev/null
+    fi
+
+    case $ret in
+        0)
+            echo "OK"
+            ;;
+        124)
+            echo "Timed Out"
+            ;;
+        *)
+            echo "Failed"
+            ;;
+    esac
+    echo ""
+    return $ret
+}
+
+########
 # Runs debasher_test on the program directory `prgdir`, with the options
 # `test_opts` if given, which passes when every test passes or the program
 # has none. The check is skipped when the tool of a kind of test that the
@@ -840,6 +930,13 @@ progname="webui_live_stats"
 check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
                        "${progname}" "readings" '{"value":5}' \
                        "stats" '{"source": "hand", "value": 5, "count": 1, "mean": 5.0}'
+count_check_status $?
+
+# Check webui_readfish, a resident program around readfish, here its
+# stand-in: a note written by hand and the summary of a file of read lengths
+# left in the watched directory reach its timeline
+progname="webui_readfish"
+check_readfish_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" "${progname}"
 count_check_status $?
 
 # Check webui_conda_example, a general program whose process activates a

@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/_static/schema/program-1.json
+schema_version: 1
+name: webui_read_lengths
+description: >-
+  Example built with the web UI: a general program that summarizes the lengths of
+  the reads of one file of a sequencing run (POD5, FAST5, or a text file with one
+  length per line); webui_readfish runs it once for each file that the sequencer
+  writes.
+processes:
+  read_lengths:
+    description: >-
+      Writes a JSON summary of the lengths of the reads of -infile: count, median,
+      N50 and the fraction of reads shorter than -short-bases, which says whether
+      adaptive sampling was at work when the file was written.
+    code: read_lengths.py
+    specs: {cpus: 1, mem: 512, time: '01:00:00'}
+    position: {x: 120, y: 160}
+    options:
+      -infile:
+        type: string
+        description: the file of reads, given by the request of the launcher
+        cmdline: true
+      -samples-per-base:
+        type: string
+        description: signal samples per base for POD5 and FAST5 (10 by default)
+        cmdline: true
+        mandatory: false
+      -short-bases:
+        type: string
+        description: a read under this many bases is short (1000 by default)
+        cmdline: true
+        mandatory: false
+      -outsummary:
+        type: file
+        description: the JSON summary
+        value: ${process_outdir}/summary.json
