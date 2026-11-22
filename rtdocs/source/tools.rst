@@ -211,9 +211,11 @@ the pytest to run instead of those found when DeBasher was configured.
 Running the tests writes nothing into ``<prgdir>``. The programs
 ``webui_batch_greet`` and ``webui_conda_example`` (bats tests, the
 second of a process that runs in a Conda environment),
-``webui_running_sum`` and ``webui_watch_tally`` (pytest tests, the
-second of a ``DirectoryWatcher``), installed under
-``<prefix>/share/debasher/webui_programs``, carry examples.
+``webui_running_sum``, ``webui_watch_tally`` and
+``webui_stream_stall`` (pytest tests, the second of a
+``DirectoryWatcher``, the third of a node whose ``observe`` raises),
+installed under ``<prefix>/share/debasher/webui_programs``, carry
+examples.
 
 debasher_proc_dataset
 ^^^^^^^^^^^^^^^^^^^^^^

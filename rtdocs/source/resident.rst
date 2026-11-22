@@ -543,6 +543,14 @@ receive names that do not repeat. A module that only needs to set
 any other node. The :doc:`webui_watch_tally` shows a complete program
 with a ``DirectoryWatcher``, and its tests.
 
+If ``observe`` raises, the node stops sending heartbeats, as a node
+that crashed does, and the ``Supervisor`` relaunches it. A node whose
+source can stall while its process stays alive (a stream that gives no
+more data and does not close) raises in ``observe`` once it has seen
+nothing for too long, and the relaunch reconnects. The
+:doc:`webui_stream_stall` shows such a node, and lets you try a stall,
+a frozen node and the limits of a node by hand.
+
 Notices
 ^^^^^^^
 
@@ -698,6 +706,10 @@ For example:
 DeBasher checks, when it loads the program, that each value given is a
 positive number.
 
+The :doc:`webui_stream_stall` sets small limits on its input log and
+its outbound backlog on purpose, so that each of them can be reached
+by hand.
+
 What Is Guaranteed and What Is Not
 ----------------------------------
 
@@ -729,7 +741,10 @@ And these are its limits:
 * What enters from outside is delivered at most once (see `Writing
   Into a Program From Outside`_ above).
 * A node that is alive but stuck, in an endless loop for example, goes
-  on sending heartbeats and is not detected.
+  on sending heartbeats and is not detected. A source that stalls with
+  the node alive is detected only if ``observe`` checks its progress and
+  raises, as the node ``Acquire`` of the :doc:`webui_stream_stall` does
+  with its stream.
 * A resident program runs on a single machine, with the built-in
   scheduler: Slurm is not supported.
 
@@ -747,3 +762,5 @@ of the repository. They were built with the web interface, and
    webui_batch_launcher
 
    webui_watch_tally
+
+   webui_stream_stall

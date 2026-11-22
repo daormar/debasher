@@ -48,6 +48,11 @@ webui_skip_py/value_reader.sh	\
 webui_skip_py/value_reader_skip.py	\
 webui_skip_py/value_writer.sh	\
 webui_skip_py/webui_skip_py.sh	\
+webui_stream_stall/Acquire.py	\
+webui_stream_stall/Tally.py	\
+webui_stream_stall/program.yaml	\
+webui_stream_stall/test/test_stream_stall.py	\
+webui_stream_stall/webui_stream_stall.sh	\
 webui_watch_tally/Tally.py	\
 webui_watch_tally/Watch.py	\
 webui_watch_tally/program.yaml	\

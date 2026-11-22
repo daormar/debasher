@@ -1,0 +1,77 @@
+# yaml-language-server: $schema=https://debasher.readthedocs.io/en/latest/_static/schema/program-1.json
+schema_version: 1
+name: webui_stream_stall
+type: resident
+description: >-
+  Example built with the web UI: a resident program to try by hand, whose node Acquire
+  reads a fake stream of reads that can stall, as the stream of a sequencer may
+  do with the process alive, and notices it, so that the Supervisor relaunches it;
+  a second node tallies the reads and decides on each.
+execution:
+  snapshot_every_secs: '10'
+processes:
+  Acquire:
+    description: >-
+      Reads a fake stream of reads, and reads written by hand into -reads, and sends
+      each one to Tally. It raises when the stream gives nothing for -stall-timeout-s,
+      so that the Supervisor relaunches it and the relaunch reconnects. The stream
+      stalls once a file stall exists in the output directory of the process, or
+      after -stall-after reads of a connection.
+    code: Acquire.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00', out_backlog_max_mb: 0.5, out_backlog_fail_mb: 1}
+    kind: FBPProcess
+    initiator: true
+    position: {x: 100, y: 260}
+    options:
+      -reads:
+        type: string
+        description: reads written from outside the program, one per message
+        value: reads
+        channel: fifo
+        fifo_tag: external
+      -chunk-interval-ms:
+        type: string
+        description: milliseconds between two reads of the stream (20 by default)
+        cmdline: true
+        mandatory: false
+      -stall-after:
+        type: string
+        description: >-
+          reads after which every connection stalls (0, never, by default)
+        cmdline: true
+        mandatory: false
+      -stall-timeout-s:
+        type: string
+        description: >-
+          seconds with no read after which the node raises (5 by default)
+        cmdline: true
+        mandatory: false
+      -outreads:
+        type: string
+        description: every read, to Tally
+        value: acquired
+        channel: fifo
+  Tally:
+    description: >-
+      Counts the reads by channel, keeps the ids of the last ones, and sends a decision
+      for each read, as readfish takes one.
+    code: Tally.py
+    specs: {cpus: 1, mem: 256, time: '01:00:00', input_log_max_mb: 4}
+    kind: FBPProcess
+    position: {x: 340, y: 260}
+    options:
+      -inreads:
+        type: string
+        description: the reads of Acquire
+        from: Acquire.-outreads
+      -outdecisions:
+        type: string
+        description: a decision for each read, read outside the program
+        value: decisions
+        channel: fifo
+  Sup:
+    description: >-
+      Watches Acquire and Tally and relaunches them if they go down.
+    specs: {cpus: 1, mem: 256, time: '01:00:00'}
+    kind: Supervisor
+    position: {x: 100, y: 60}

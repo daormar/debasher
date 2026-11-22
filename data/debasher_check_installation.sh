@@ -823,6 +823,15 @@ check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${prognam
                        "report" '{"run": "r1", "status": "finished", "finished": 1, "failed": 0}'
 count_check_status $?
 
+# Check webui_stream_stall, a resident program whose node Acquire reads a
+# fake stream: a read written by hand on channel 0, which the stream never
+# uses, is the first read of its channel that Tally decides on
+progname="webui_stream_stall"
+check_resident_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" \
+                       "${progname}" "reads" '{"id":"by-hand","channel":0,"length":300}' \
+                       "decisions" '{"id": "by-hand", "decision": "unblock", "channel_reads": 1}'
+count_check_status $?
+
 # Check webui_conda_example, a general program whose process activates a
 # conda environment, which the run creates if it does not exist
 progname="webui_conda_example"
