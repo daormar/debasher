@@ -969,6 +969,11 @@ debasher::_export_process_env()
     # class (see debasher::_register_resident_task_ports); empty for any
     # other process
     export DEBASHER_PROCESS_PORTS="${DEBASHER_RESIDENT_TASK_PORTS[${processname}${DEBASHER_ASSOC_ARRAY_ELEM_SEP}${task_idx}]:-}"
+    # The durability mode of a resident program, which its module
+    # declares, so that a node keeps an input log and checkpoints or
+    # neither (see DEBASHER_DURABILITY_*); the exec context of the script
+    # carries it, so a relaunch gets it too
+    export DEBASHER_PROGRAM_DURABILITY="${DEBASHER_PROGRAM_DURABILITY}"
 }
 
 ########

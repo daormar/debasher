@@ -36,7 +36,13 @@ from debasher_runtime_envelope import (
     decode_envelope,
     encode_data,
 )
-from debasher_runtime_transport import _PortWorker, _STOP, _join_until
+from debasher_runtime_transport import (
+    DURABILITY_DURABLE,
+    DURABILITY_NON_DURABLE,
+    _PortWorker,
+    _STOP,
+    _join_until,
+)
 from debasher_runtime_inputlog import LogCapReached, _InputLog
 
 # What a replay has asked of the notice so far when it has asked nothing
@@ -173,9 +179,13 @@ class FBPProcess(_PortWorker):
 
     A node acts only in reaction to what it receives: the framework calls
     process_data() once for each message, and a node sends only from
-    there. After a crash, the node is restored from its latest checkpoint
-    and process_data() is called again for every message received since,
-    in the same order, so that the node returns to the state it had.
+    there. In a durable program (the default), after a crash the node is
+    restored from its latest checkpoint and process_data() is called again
+    for every message received since, in the same order, so that the node
+    returns to the state it had. In a non-durable program (declared with
+    program_type "resident" "non-durable") the node keeps no checkpoint and
+    no input log: after a crash it starts again with its initial state, and
+    capture_node_state() and restore_node_state() are never called.
     """
 
     # Its ports are option names, without their leading dash(es) (e.g.
@@ -262,6 +272,25 @@ class FBPProcess(_PortWorker):
     # quarter of INPUT_LOG_MAX_BYTES when that is less (see _open_input_log).
     INPUT_LOG_SEGMENT_BYTES = 4 * 1024 * 1024
 
+    # In a non-durable program nothing is logged, so the cap of the input
+    # log does not bound what the node has read and not yet processed. This
+    # bound does: a reader thread that has a block to queue waits, under
+    # _arrival_lock, while the lines on the inbound queue weigh this much
+    # or more, so the pressure goes back into its fifo and from there into
+    # the backlog of the writer, whose OUT_BACKLOG_FAIL_BYTES names a reader
+    # that does not keep up (see _wait_for_room_in_inbound_queue). The queue
+    # can pass the bound by the block that was waiting. Not used in a durable
+    # program.
+    #: The size, in bytes, of the messages that the node has read and not
+    #: yet processed, over which its reader threads wait, in a non-durable
+    #: program (100 MiB by default; in a durable program the cap of the
+    #: input log bounds them). A program sets it for one of its processes
+    #: with the computational specification `inbound_queue_max_mb`.
+    INBOUND_QUEUE_MAX_BYTES = 100 * 1024 * 1024
+    # How often a reader thread that waits for room on the inbound queue
+    # looks at it again (see _wait_for_room_in_inbound_queue).
+    _INBOUND_POLL_SECS = 0.1
+
     # Total size, across every output port, of the DATA that send_data has
     # numbered but the writer thread has not yet finished writing (the
     # outbound backlog, see _unwritten). The first limit only decides how
@@ -311,6 +340,7 @@ class FBPProcess(_PortWorker):
         "out_backlog_max_mb": ("OUT_BACKLOG_MAX_BYTES", 1024 * 1024),
         "out_backlog_fail_mb": ("OUT_BACKLOG_FAIL_BYTES", 1024 * 1024),
         "gil_switch_interval_ms": ("GIL_SWITCH_INTERVAL_SECS", 0.001),
+        "inbound_queue_max_mb": ("INBOUND_QUEUE_MAX_BYTES", 1024 * 1024),
     }
 
     # The field of DEBASHER_PROCESS_PORTS that gives each of the class
@@ -425,6 +455,17 @@ class FBPProcess(_PortWorker):
         # start_threads() when the node is driven without run().
         self._arrival_lock = threading.Lock()
         self._input_log = None
+        # In a non-durable program there is no log to give the positions:
+        # the last one given to a queued envelope, from 0 at each
+        # incarnation, under _arrival_lock (see _log_arrivals)
+        self._queued_pos = 0
+        # The bytes of the lines on the inbound queue, in a non-durable
+        # program, and what a reader thread waits on while they are over
+        # INBOUND_QUEUE_MAX_BYTES; the brain thread takes each line off the
+        # count as it dequeues it (see _wait_for_room_in_inbound_queue)
+        self._inbound_bytes = 0
+        self._inbound_sizes = {}
+        self._inbound_room = threading.Condition(self._arrival_lock)
         # Position of the envelope that the brain thread is processing, 0 before
         # the first one. Only the brain thread reads or writes it.
         self._current_pos = 0
@@ -498,12 +539,14 @@ class FBPProcess(_PortWorker):
     def run(self):
         """
         Runs the node until it is told to stop. The Python code of the
-        process calls it once, after creating the node. It restores the
-        node from its latest checkpoint with restore_node_state(), calls
-        initialize_runtime(), calls process_data() again for every message
-        received since that checkpoint, and then processes what arrives.
-        Raises RuntimeError, which ends the process with an error, once a
-        thread of the node has died.
+        process calls it once, after creating the node. In a durable
+        program it restores the node from its latest checkpoint with
+        restore_node_state(), calls initialize_runtime(), calls
+        process_data() again for every message received since that
+        checkpoint, and then processes what arrives. In a non-durable
+        program it calls initialize_runtime() and processes what arrives:
+        there is no checkpoint and no input log. Raises RuntimeError, which
+        ends the process with an error, once a thread of the node has died.
         """
         # Full startup sequence: install the SIGTERM handler -> open every
         # FIFO -> find the most recent checkpoint if any ->
@@ -552,23 +595,32 @@ class FBPProcess(_PortWorker):
             self.log.warning("%s", problem)
             self.set_notice(problem, level="warning")
 
-        checkpoint = self._load_latest_checkpoint()
-        capture_pos = 0
-        if checkpoint is not None:
-            capture_pos = checkpoint.capture_pos
-            self._restore_checkpoint(checkpoint)
-            self.log.info("restored checkpoint for epoch %s", checkpoint.epoch)
+        # A non-durable node has no checkpoint to restore and no log to
+        # open or replay: every incarnation starts with the initial state
+        # that its constructor gave it, over whatever its process left in
+        # its output directory
+        if not self._durable:
+            self.log.info("non-durable program: no checkpoint and no input log, starting with default values")
+            self.initialize_runtime()
+            self._start_writer_threads()
         else:
-            self.log.info("no checkpoint found, starting with default values")
+            checkpoint = self._load_latest_checkpoint()
+            capture_pos = 0
+            if checkpoint is not None:
+                capture_pos = checkpoint.capture_pos
+                self._restore_checkpoint(checkpoint)
+                self.log.info("restored checkpoint for epoch %s", checkpoint.epoch)
+            else:
+                self.log.info("no checkpoint found, starting with default values")
 
-        self.initialize_runtime()
+            self.initialize_runtime()
 
-        self._open_input_log(capture_pos)
-        self._start_writer_threads()
-        self._replay_input_log(capture_pos)
-        # A writer may have died while the log was replayed
-        if self._thread_error is not None:
-            self._stop_after_dead_thread()
+            self._open_input_log(capture_pos)
+            self._start_writer_threads()
+            self._replay_input_log(capture_pos)
+            # A writer may have died while the log was replayed
+            if self._thread_error is not None:
+                self._stop_after_dead_thread()
 
         # A failure while the threads start stops those already started, so
         # that the readers stop between blocks before the process ends
@@ -652,7 +704,7 @@ class FBPProcess(_PortWorker):
         that writes it again is started.
         """
         self._write_control_ports_file()
-        if self._input_log is None:
+        if self._durable and self._input_log is None:
             self._open_input_log(0)
         self._closed_at_start_ports = frozenset(self._closed_ports)
         super().start_threads()
@@ -709,6 +761,10 @@ class FBPProcess(_PortWorker):
             out_backlog_bytes = dict(self._unwritten_port_bytes)
         info = {
             "runtime_class": self._RUNTIME_CLASS,
+            # The mode of the program, which says which of the limits below
+            # are in force: the input log and the size of a checkpoint in a
+            # durable program, the inbound queue in a non-durable one
+            "durability": DURABILITY_DURABLE if self._durable else DURABILITY_NON_DURABLE,
             "started_at": self._started_at,
             "heartbeat_interval_secs": self.HEARTBEAT_INTERVAL_SECS,
             "limits": {
@@ -716,6 +772,7 @@ class FBPProcess(_PortWorker):
                 "out_backlog_max_bytes": self.OUT_BACKLOG_MAX_BYTES,
                 "out_backlog_fail_bytes": self.OUT_BACKLOG_FAIL_BYTES,
                 "gil_switch_interval_secs": self.GIL_SWITCH_INTERVAL_SECS,
+                "inbound_queue_max_bytes": self.INBOUND_QUEUE_MAX_BYTES,
             },
             **self._get_node_info_extra(),
             "updated_at": time.time(),
@@ -781,9 +838,11 @@ class FBPProcess(_PortWorker):
         """
         Brings `payload`, something that observe() saw, into the node as a
         message: process_data() receives it with OBSERVE_PORT as its
-        `port_name`. The message is recorded like any other, so that a
-        replay after a crash receives it again without looking at the
-        world again. It returns once the message is recorded. It raises
+        `port_name`. In a durable program the message is recorded like any
+        other, so that a replay after a crash receives it again without
+        looking at the world again, and it returns once the message is
+        recorded; in a non-durable one it returns once the message is
+        queued. It raises
         when called from process_data(), since an input made by processing
         would be made again by every replay, or when the class has no
         OBSERVE_PORT; and ValueError when `payload` holds NaN or an
@@ -837,11 +896,12 @@ class FBPProcess(_PortWorker):
         the envelopes, across the reader threads of every port.
         """
         with self._arrival_lock:
-            if self._input_log is None:
+            if self._durable and self._input_log is None:
                 raise RuntimeError(
                     f"{type(self).__name__}: an envelope arrived before the input log was opened"
                 )
             accepted, close_checks, gap = self._filter_by_seq(tag, envelopes)
+            self._wait_for_room_in_inbound_queue()
             positions = self._log_arrivals(tag, accepted)
             self._queue_arrivals(tag, accepted, positions)
             # A CLOSE is checked only now, after it is itself durably logged
@@ -862,6 +922,15 @@ class FBPProcess(_PortWorker):
         whose last_seq is above the last one accepted. After a gap it
         returns only what came before it.
         """
+        # In a non-durable program the numbers say nothing across a relaunch:
+        # a relaunched writer numbers from 1 again, a relaunched reader has
+        # no number to compare with, and the fifo that a Supervisor held
+        # through a crash of both hands the reader the end of the old
+        # numbering and then the start of the new one, all of it good data
+        # in order. Within one pair of incarnations a fifo loses nothing. So
+        # nothing is compared: not a DATA, not a marker, not a CLOSE.
+        if not self._durable:
+            return list(envelopes), [], None
         accepted_envelopes = []
         close_checks = []
         for envelope, line in envelopes:
@@ -924,6 +993,13 @@ class FBPProcess(_PortWorker):
         write none of them is queued, and at the size cap only the
         ones logged before it are.
         """
+        # In a non-durable program nothing is written: the positions come
+        # from a counter of this incarnation, so that the brain thread and
+        # a launcher node still see each envelope numbered in its order
+        if not self._durable:
+            positions = list(range(self._queued_pos + 1, self._queued_pos + 1 + len(accepted)))
+            self._queued_pos += len(accepted)
+            return positions
         # Every envelope of the block goes in one write, so that none of them
         # waits in memory for the others to be logged: what a reader has taken
         # from its fifo and not yet logged is lost if the process dies (see the
@@ -949,9 +1025,38 @@ class FBPProcess(_PortWorker):
             ) from None
 
     def _queue_arrivals(self, tag, accepted, positions):
-        """Queues for the brain thread the envelopes that were given `positions`."""
-        for pos, (envelope, _) in zip(positions, accepted):
+        """Queues for the brain thread the envelopes that were given
+        `positions`; in a non-durable program it also counts the size of
+        each line, by position, which the brain thread takes off the count
+        when it dequeues the envelope."""
+        for pos, (envelope, line) in zip(positions, accepted):
+            if not self._durable:
+                self._inbound_bytes += len(line)
+                self._inbound_sizes[pos] = len(line)
             self._inbound_queue.put((pos, tag, envelope.type, envelope.payload, envelope.seq))
+
+    def _wait_for_room_in_inbound_queue(self):
+        """
+        In a non-durable program, waits, under _arrival_lock, while the
+        lines on the inbound queue weigh INBOUND_QUEUE_MAX_BYTES or more,
+        so that what the node has read and not yet processed stays bounded:
+        the fifo of the waiting reader fills, and then the backlog of its
+        writer. Returns at once in a durable program, where the cap of the
+        input log bounds it, and once the node is stopping.
+        """
+        if self._durable:
+            return
+        warned = False
+        while self._inbound_bytes >= self.INBOUND_QUEUE_MAX_BYTES and not self._stopping.is_set():
+            if not warned:
+                self.log.warning(
+                    "the inbound queue holds %d bytes, over INBOUND_QUEUE_MAX_BYTES (%d): "
+                    "waiting for the brain thread to catch up",
+                    self._inbound_bytes,
+                    self.INBOUND_QUEUE_MAX_BYTES,
+                )
+                warned = True
+            self._inbound_room.wait(self._INBOUND_POLL_SECS)
 
     def _check_close_claims(self, tag, close_checks):
         """Raises if a CLOSE claims to have sent more than was accepted."""
@@ -970,6 +1075,11 @@ class FBPProcess(_PortWorker):
             if queued is _STOP:
                 break
             pos, port_name, envelope_type, payload, seq = queued
+            if not self._durable:
+                # Room for the readers that wait on the bound of the queue
+                with self._inbound_room:
+                    self._inbound_bytes -= self._inbound_sizes.pop(pos, 0)
+                    self._inbound_room.notify_all()
             self._current_pos = pos
             if envelope_type == TYPE_DATA:
                 if seq is not None:
@@ -1316,6 +1426,16 @@ class FBPProcess(_PortWorker):
         epoch = payload["epoch"]
         halt = payload["halt"]
 
+        # A non-durable node takes part in no round: it has nothing to
+        # checkpoint, and it forwards no marker, so the round goes no further
+        if not self._durable:
+            self.log.warning(
+                "ignoring the marker of round %s on port %r: a non-durable program has no rounds",
+                epoch,
+                port_name,
+            )
+            return
+
         if self._round is not None and epoch == self._round.epoch:
             self._round.pending.discard(port_name)
         elif self._may_round_open(
@@ -1399,6 +1519,12 @@ class FBPProcess(_PortWorker):
         the rules of rounds allow it, and closes it at once when no port is
         pending. Ignores the trigger once the node has halted.
         """
+        if not self._durable:
+            self.log.warning(
+                "ignoring a %s trigger: a non-durable program has no rounds",
+                "shutdown" if halt else "start_snapshot",
+            )
+            return
         if self._halted.is_set():
             self.log.warning("ignoring a trigger: this node has already halted")
             return
@@ -1734,16 +1860,18 @@ class FBPProcess(_PortWorker):
         `port_name` (or under OBSERVE_PORT, from observe()). `packet` is
         the value that the sender gave to send_data(), already decoded from
         JSON. It is the only place from which the node sends, with
-        send_data(). It must be deterministic: given the same node state
-        and the same messages, it makes the same new state and sends the
-        same messages, since a replay after a crash calls it again for
-        every message received since the latest checkpoint. It must not
-        depend on the time, on randomness or on reads from outside the
-        program, and whatever it does outside its FIFOs (writing a file,
-        calling a service) may be done more than once. An exception that it
-        raises ends the node with an error, and the replay at the relaunch
-        calls it again on the same message: drop, with a warning, a message
-        that the node cannot use, rather than raise.
+        send_data(). In a durable program it must be deterministic: given
+        the same node state and the same messages, it makes the same new
+        state and sends the same messages, since a replay after a crash
+        calls it again for every message received since the latest
+        checkpoint. It must not then depend on the time, on randomness or
+        on reads from outside the program, and whatever it does outside its
+        FIFOs (writing a file, calling a service) may be done more than
+        once. In a non-durable program nothing is replayed, and none of
+        this is required. An exception that it raises ends the node with an
+        error; in a durable program the replay at the relaunch calls it
+        again on the same message: drop, with a warning, a message that the
+        node cannot use, rather than raise.
         """
         raise NotImplementedError
 
@@ -1753,7 +1881,8 @@ class FBPProcess(_PortWorker):
         one message to the next, as a value that JSON can serialize. It is
         called when a round opens, and what it returns is saved in a
         checkpoint of the node. The runtime copies it at once, so it may
-        return the objects of the node themselves.
+        return the objects of the node themselves. Never called in a
+        non-durable program, which a node need not write it for.
         """
         raise NotImplementedError
 
@@ -1762,8 +1891,9 @@ class FBPProcess(_PortWorker):
         Sets the node state from `node_state`, what capture_node_state()
         returned, when the node starts from a checkpoint. It must rebuild
         the state exactly. It is not called when the node starts with no
-        checkpoint, so the constructor sets the initial state. It cannot
-        send.
+        checkpoint, so the constructor sets the initial state, and never in
+        a non-durable program, which a node need not write it for. It
+        cannot send.
         """
         raise NotImplementedError
 
@@ -1787,7 +1917,9 @@ class FBPProcess(_PortWorker):
         process_data(): it enters as an input, which a replay receives
         again. After a crash, observe() may bring in again what it had
         already brought in, so process_data() keeps in the node state what
-        it has acted on, and drops a repetition. If observe() raises, the
+        it has acted on, and drops a repetition; in a non-durable program
+        that memory is lost with the crash, and what is still there to
+        observe is brought in again. If observe() raises, the
         node ends with an error, as a node that crashed does, and a
         Supervisor relaunches it: raise only for a failure that a relaunch
         mends, such as a stalled connection.

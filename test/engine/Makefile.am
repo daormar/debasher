@@ -11,6 +11,7 @@ test_dedup.py test_out_backlog.py test_close_seq.py test_dead_thread.py	\
 resident_run.py chaos_ref.py debasher_chaos_ref.sh		\
 test_chaos.py test_guarantees.py test_stop_resident.py		\
 test_snapshot_resident.py					\
+test_non_durable.py test_non_durable_run.py debasher_non_durable_ref.sh	\
 test_halt_ref.py debasher_halt_ref.sh				\
 test_array_ref.py debasher_array_ref.sh debasher_array_gen_ref.sh	\
 test_fanout_cmdline_ref.py debasher_fanout_cmdline_ref.sh		\

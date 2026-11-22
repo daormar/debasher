@@ -383,9 +383,21 @@ stop_resident_program()
     local supervisor
     local -a nodes=()
     debasher::_resident_tool_find_supervisor_and_nodes "${absdirname}" "${excluded_csv}" "${deadline}" supervisor nodes || return 1
+
+    # A non-durable program has no rounds: nothing to halt, no halted marker
+    # to wait for. Its nodes are stopped as they are, and the next launch
+    # starts every one of them afresh
+    local halt=1
+    if debasher::_is_non_durable_program; then
+        halt=0
+        echo "The program is ${DEBASHER_DURABILITY_NON_DURABLE}: stopping its nodes without a halt (the next launch starts every node afresh)" >&2
+    fi
+
     # The baselines first, before anything that could make a node halt
     local -A baselines=()
-    capture_halted_marker_baselines "${absdirname}" nodes baselines
+    if [ ${halt} -eq 1 ]; then
+        capture_halted_marker_baselines "${absdirname}" nodes baselines
+    fi
 
     kill_nodes "${absdirname}" killed_nodes
 
@@ -396,8 +408,8 @@ stop_resident_program()
     # the rounds of several initiators reach waits for markers of one epoch.
     # A step that fails ends the chain in the fallback below
     if stop_supervisor_if_any "${absdirname}" "${supervisor}" "${keep_supervisor}" "${deadline}" \
-        && debasher::_resident_tool_trigger_every_node "${absdirname}" nodes shutdown "$(debasher::_now_ms)" "${deadline}" \
-        && wait_for_every_halted_marker "${absdirname}" nodes baselines "${deadline}" \
+        && { [ ${halt} -eq 0 ] || debasher::_resident_tool_trigger_every_node "${absdirname}" nodes shutdown "$(debasher::_now_ms)" "${deadline}"; } \
+        && { [ ${halt} -eq 0 ] || wait_for_every_halted_marker "${absdirname}" nodes baselines "${deadline}"; } \
         && stop_every_node_and_wait_for_finished "${absdirname}" nodes "${deadline}"
     then
         echo "Every node of ${dirname} stopped cleanly."

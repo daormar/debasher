@@ -395,3 +395,27 @@ _write_node_state() {
     local -a words=($(echo "x y z"))
     [ "${#words[@]}" -eq 3 ]
 }
+
+# --- debasher::_resident_program_has_state -------------------------------
+
+@test "a program has state when some node has a path that the reset would take away" {
+    _set_up_program
+    run debasher::_resident_program_has_state "${outdir}"
+    [ "${status}" -eq 1 ]
+
+    mkdir -p "${outdir}/arr"
+    echo kept > "${outdir}/arr/kept.txt"
+    run debasher::_resident_program_has_state "${outdir}"
+    [ "${status}" -eq 0 ]
+}
+
+@test "a program whose nodes left only checkpoints has state, one with empty output directories has none" {
+    _set_up_program
+    mkdir -p "${outdir}/solo" "${outdir}/arr"
+    run debasher::_resident_program_has_state "${outdir}"
+    [ "${status}" -eq 1 ]
+
+    _write_node_state solo
+    run debasher::_resident_program_has_state "${outdir}"
+    [ "${status}" -eq 0 ]
+}

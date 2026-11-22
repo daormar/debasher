@@ -132,8 +132,6 @@ fi
 # output directory, which is removed unless creating an environment failed.
 prepare_environments()
 {
-    DEBASHER_QUIET_MODULE_LOADING=1
-    debasher::load_debasher_module "${pfile}" >&2 || fail_to_run "cannot load ${pfile}"
     debasher::_exec_program_func_for_module "${pfile}" >&2 || fail_to_run "cannot define the program of ${pfile}"
 
     if [ ${conda_support} -eq 1 ]; then
@@ -157,11 +155,20 @@ if [ ${#pytest_files[@]} -gt 0 ] && [ -z "${pytest_tool}" ]; then
     fail_to_run "the program has pytest tests, and pytest was not found: set DEBASHER_PYTEST"
 fi
 
+# The module, for the type of the program and, with --conda-support or
+# --docker-support, for its environments
+DEBASHER_QUIET_MODULE_LOADING=1
+debasher::load_debasher_module "${pfile}" >&2 || fail_to_run "cannot load ${pfile}"
+debasher::_resolve_program_type "${pfile}" >&2 || fail_to_run "cannot resolve the type of ${pfile}"
+
 # What the tests need: the program file, the test helpers, the tools of
 # the engine (those of libexec for the node harness), the conda that
-# configure found and the Python modules of the engine. Nothing is written into the program directory: pytest runs
-# without its cache and without bytecode
+# configure found and the Python modules of the engine, and the durability
+# mode of the program, which the node harness gives each node under test.
+# Nothing is written into the program directory: pytest runs without its
+# cache and without bytecode
 export DEBASHER_TEST_PFILE="${pfile}"
+export DEBASHER_PROGRAM_DURABILITY="${DEBASHER_PROGRAM_DURABILITY}"
 export DEBASHER_BATS_HELPERS="${debasher_pkglibdir}/debasher_bats_helpers"
 export PATH="${debasher_bindir}:${PATH}"
 export DEBASHER_LIBEXECDIR="${debasher_libexecdir}"

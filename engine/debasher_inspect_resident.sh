@@ -245,6 +245,16 @@ inspect_resident_node()
         return 1
     fi
 
+    # A node of a non-durable program keeps no checkpoints and no input log
+    case "$1" in
+        checkpoint|log)
+            if debasher::_is_non_durable_program; then
+                echo "Error: the program in ${dirname} is ${DEBASHER_DURABILITY_NON_DURABLE}: its nodes keep no checkpoints and no input log, so there is no $1 to show" >&2
+                return 1
+            fi
+            ;;
+    esac
+
     # Refuses a process never launched, which has no script
     local node
     node=$(get_node_of_process "${absdirname}" "${processname}" "${task_idx}") || return 1

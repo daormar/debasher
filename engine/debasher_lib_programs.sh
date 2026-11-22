@@ -114,13 +114,68 @@ debasher::_add_sched_to_serialized_cmdline()
     local serialized_cmdline=$1
     local sched=$2
 
-    # Whole-argument match: the separator on both sides keeps "--sched"
+    debasher::_add_opt_to_serialized_cmdline_unless_given "${serialized_cmdline}" "--sched" "${sched}"
+}
+
+########
+# Reads the durability mode of the run that the command line file names
+# (see debasher::_add_durability_to_serialized_cmdline): "durable" when
+# the file carries no --durability option, as the file of a general
+# program, or of a run before the option existed, does.
+#
+# $1 - Command line file.
+debasher::_get_durability_from_command_line_file()
+{
+    local command_line_file=$1
+    local qcmdline=$(debasher::_get_quoted_cmdline_from_command_line_file "${command_line_file}")
+    local durability
+    if durability=$(debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--durability"); then
+        echo "${durability}"
+    else
+        echo "${DEBASHER_DURABILITY_DURABLE}"
+    fi
+}
+
+########
+# Adds "--durability <mode>" to a command line serialized with
+# debasher::_serialize_args, unless it already carries the option, and
+# echoes the result. debasher_exec uses it to save, in the command line
+# file of a resident program, the durability mode the program runs with,
+# which its module declares: the next debasher_exec on the same output
+# directory refuses to change the mode over the state of this run, and
+# the tools that operate on the directory read the mode from the file.
+#
+# $1 - Serialized command line.
+# $2 - Durability mode to add if the command line does not give one.
+debasher::_add_durability_to_serialized_cmdline()
+{
+    local serialized_cmdline=$1
+    local durability=$2
+
+    debasher::_add_opt_to_serialized_cmdline_unless_given "${serialized_cmdline}" "--durability" "${durability}"
+}
+
+########
+# Adds an option with a value to a command line serialized with
+# debasher::_serialize_args, unless the command line already carries the
+# option, and echoes the result.
+#
+# $1 - Serialized command line.
+# $2 - Option name.
+# $3 - Option value.
+debasher::_add_opt_to_serialized_cmdline_unless_given()
+{
+    local serialized_cmdline=$1
+    local opt=$2
+    local value=$3
+
+    # Whole-argument match: the separator on both sides keeps the option
     # from matching inside another argument.
     local wrapped="${DEBASHER_ARG_SEP}${serialized_cmdline}${DEBASHER_ARG_SEP}"
-    if [[ "${wrapped}" == *"${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}"* ]]; then
+    if [[ "${wrapped}" == *"${DEBASHER_ARG_SEP}${opt}${DEBASHER_ARG_SEP}"* ]]; then
         echo "${serialized_cmdline}"
     else
-        echo "${serialized_cmdline}${DEBASHER_ARG_SEP}--sched${DEBASHER_ARG_SEP}${sched}"
+        echo "${serialized_cmdline}${DEBASHER_ARG_SEP}${opt}${DEBASHER_ARG_SEP}${value}"
     fi
 }
 
@@ -190,6 +245,20 @@ debasher::_set_scheduler_of_run()
         return 1
     }
     debasher::_set_debasher_scheduler "${sched}"
+}
+
+########
+# Sets the durability mode of the run in the given output directory, the one
+# that its command line file records (see
+# debasher::_add_durability_to_serialized_cmdline), so that a tool that acts
+# on a resident program acts in the mode the program runs with, whatever
+# its module declares now.
+debasher::_set_durability_of_run()
+{
+    local dirname=$1
+    local command_line_file="${dirname}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    DEBASHER_PROGRAM_DURABILITY=$(debasher::_get_durability_from_command_line_file "${command_line_file}") || return 1
 }
 
 ########
@@ -301,40 +370,71 @@ debasher::_exec_program_func_for_module()
 
 ########
 # Public: Sets the type of the program being defined ("general" or
-# "resident", see DEBASHER_PROGRAM_TYPE_* in debasher_lib.sh). Meant to
-# be called from a module's `_program_type` method.
+# "resident", see DEBASHER_PROGRAM_TYPE_* in debasher_lib.sh) and, for a
+# resident program, its durability mode ("durable", the default, or
+# "non-durable", see DEBASHER_DURABILITY_*). Meant to be called from a
+# module's `_program_type` method.
 #
 # $1 - Program type.
+# $2 - Durability mode of a resident program (optional).
 #
 # Examples
 #
 #    program_type "resident"
+#    program_type "resident" "non-durable"
 debasher::program_type()
 {
     local type=$1
+    local durability=${2:-}
 
     if [ "${type}" != "${DEBASHER_PROGRAM_TYPE_GENERAL}" ] && [ "${type}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
         echo "Error: invalid program type '${type}' (expected '${DEBASHER_PROGRAM_TYPE_GENERAL}' or '${DEBASHER_PROGRAM_TYPE_RESIDENT}'). Aborting execution..." >&2
         exit 1
     fi
 
+    if [ -n "${durability}" ]; then
+        # Only a resident program has a durability mode: a general program
+        # keeps no state across runs
+        if [ "${type}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+            echo "Error: a durability mode ('${durability}') applies to a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program only. Aborting execution..." >&2
+            exit 1
+        fi
+        if [ "${durability}" != "${DEBASHER_DURABILITY_DURABLE}" ] && [ "${durability}" != "${DEBASHER_DURABILITY_NON_DURABLE}" ]; then
+            echo "Error: invalid durability mode '${durability}' (expected '${DEBASHER_DURABILITY_DURABLE}' or '${DEBASHER_DURABILITY_NON_DURABLE}'). Aborting execution..." >&2
+            exit 1
+        fi
+    fi
+
     DEBASHER_PROGRAM_TYPE="${type}"
+    DEBASHER_PROGRAM_DURABILITY="${durability:-${DEBASHER_DURABILITY_DURABLE}}"
 }
 
 ########
 # Public: Sets the type of the program being defined, from the
-# `program_type` method of its module.
+# `program_type` method of its module, and the durability mode of a
+# resident program.
 #
 # $1 - Program type: "general" (the default, when the module defines no
 #      `program_type` method) or "resident".
+# $2 - Durability mode of a resident program: "durable" (the default) or
+#      "non-durable" (optional).
 #
 # Examples
 #
 #    program_type "resident"
+#    program_type "resident" "non-durable"
 #
 # The function does not return any value. It aborts the execution when
-# given any other type.
+# given any other type or mode, or a mode for a general program.
 program_type() { debasher::program_type "$@"; }
+
+########
+# Whether the program being defined is a resident program in the
+# non-durable mode (see DEBASHER_DURABILITY_* in debasher_lib.sh).
+debasher::_is_non_durable_program()
+{
+    [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ] && [ "${DEBASHER_PROGRAM_DURABILITY}" = "${DEBASHER_DURABILITY_NON_DURABLE}" ]
+}
 
 ########
 # Resolves and, if defined, invokes the top-level pfile's

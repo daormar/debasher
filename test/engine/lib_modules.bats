@@ -310,3 +310,22 @@ EOM
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"a module with the same name is already loaded from ${mod_dir}/dup.sh"* ]]
 }
+
+# --- debasher::_show_module_documentation: the type and the mode -----------
+
+@test "the documentation of a resident module gives its durability mode after its type" {
+    declare -g DEBASHER_PROGRAM_TYPE="resident"
+    declare -g DEBASHER_PROGRAM_DURABILITY="non-durable"
+    run debasher::_show_module_documentation "${cwd_dir}/mymod.sh" 0
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *"## Program Type"*'`resident`'*"## Durability"*'`non-durable`'* ]]
+}
+
+@test "the documentation of a general module has no durability section" {
+    declare -g DEBASHER_PROGRAM_TYPE="general"
+    declare -g DEBASHER_PROGRAM_DURABILITY="durable"
+    run debasher::_show_module_documentation "${cwd_dir}/mymod.sh" 0
+    [ "${status}" -eq 0 ]
+    [[ "${output}" == *'`general`'* ]]
+    [[ "${output}" != *"Durability"* ]]
+}

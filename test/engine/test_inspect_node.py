@@ -511,3 +511,28 @@ def test_a_command_it_does_not_understand_is_an_error(execdir, command, capsys):
     ]
     assert inspect.main(argv) == 1
     assert capsys.readouterr().err.startswith("Error: ")
+
+
+def test_the_summary_of_a_node_of_a_non_durable_program(tmp_path):
+    d = tmp_path / "__exec__" / "relay"
+    d.mkdir(parents=True)
+    info = _node_info(durability="non-durable")
+    info["limits"] = {
+        "out_backlog_fail_bytes": 200,
+        "gil_switch_interval_secs": 0.0005,
+        "inbound_queue_max_bytes": 5000,
+    }
+    (d / "node_info").write_text(json.dumps(info))
+
+    result = _run(d, "summary")
+
+    assert result["durability"] == "non-durable"
+    assert result["checkpoints"] == []
+    assert result["input_log"]["segments"] == 0
+    assert result["input_log"]["max_bytes"] is None
+    assert result["node_info"]["limits"]["inbound_queue_max_bytes"] == 5000
+
+
+def test_the_summary_of_a_durable_node_says_so(execdir):
+    (execdir / "node_info").write_text(json.dumps(_node_info(durability="durable")))
+    assert _run(execdir, "summary")["durability"] == "durable"

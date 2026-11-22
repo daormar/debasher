@@ -400,6 +400,15 @@ class Supervisor(_PortWorker):
         # the rounds of several initiators reach waits for markers of one
         # epoch, not of several.
         command = payload["command"]
+        # The nodes of a non-durable program take part in no round and would
+        # ignore the trigger one by one: it is dropped here, once, with the
+        # reason in the log of the Supervisor
+        if not self._durable:
+            self.log.warning(
+                "dropping a %r trigger from the manual trigger port: a non-durable program has no rounds",
+                command,
+            )
+            return
         args = self._stamp_epoch(payload.get("args"))
         for port in self.INITIATOR_PORTS:
             self._send_interact(port, command, args)

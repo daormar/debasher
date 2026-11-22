@@ -56,6 +56,13 @@ wins: it says precisely what is promised.
   the violation is detected and reported, instead of the program carrying on
   with silently wrong state.
 
+A resident program declares one of two durability modes (see the Glossary). The
+durable mode, the default, gives everything above. The non-durable mode gives a
+program with no state worth keeping, or with state that cannot be captured, the
+same nodes, channels, observation and supervision, with no input log, no
+checkpoints and no rounds: a crash loses the state of the node, and the node
+starts again (see "The non-durable mode" in the Contract).
+
 The Glossary comes first, with the meaning of the words that the rest uses. The
 Contract follows: it says precisely what these goals do and do not promise. Then
 comes the design of the mechanism that provides them, from the wire up. It
@@ -84,8 +91,9 @@ So do the entries below that refer to it.
 
 - **resident program**: a program whose `_program_type` is `resident`:
   long-lived, stateful Python processes joined by FIFOs, always run by the
-  built-in scheduler, and covered by the Contract. A **general program** is any
-  other DeBasher program, with none of this.
+  built-in scheduler, and covered by the Contract. It runs in one of two
+  durability modes (see below). A **general program** is any other DeBasher
+  program, with none of this.
 - **node**: a process of a resident program seen as a vertex of its
   communication graph. It is named by its process name when the process has a
   single task. When the process has several tasks (an array, whose options are
@@ -214,10 +222,12 @@ So do the entries below that refer to it.
   `checkpoints_<idx>/`, `log_<idx>/`, `halted_<idx>`, `control_ports_<idx>`,
   `node_info_<idx>` and `notice_<idx>` (`_get_execdir_entry`).
 - **limits of a node**: `INPUT_LOG_MAX_BYTES`, `OUT_BACKLOG_MAX_BYTES`,
-  `OUT_BACKLOG_FAIL_BYTES` and `GIL_SWITCH_INTERVAL_SECS`, class attributes of
-  `FBPProcess` that a module can redefine and that the computational
-  specifications of a process can set for that process of a program (see
-  "Computational specifications of a resident process").
+  `OUT_BACKLOG_FAIL_BYTES`, `GIL_SWITCH_INTERVAL_SECS` and
+  `INBOUND_QUEUE_MAX_BYTES`, class attributes of `FBPProcess` that a module can
+  redefine and that the computational specifications of a process can set for
+  that process of a program (see "Computational specifications of a resident
+  process"). The first two are in force in the durable mode and the last one in
+  the non-durable mode (see durability mode).
 - **layer**: one of the four parts in which the design is built, each resting on
   the ones before it. The four are the base (nodes, channels, envelopes,
   threads), the recovery of a node (the input log, its replay, the sequence
@@ -227,6 +237,16 @@ So do the entries below that refer to it.
   rounds and checkpoints: a node that comes back from a crash or a stop with the
   state it had. The durability level says which failures it survives (see
   "Failure model").
+- **durability mode**: which layers a resident program has, declared by its
+  module as the second argument of `program_type`. In the **durable mode**,
+  `program_type "resident"` or `program_type "resident" "durable"`, the program
+  has the four layers. In the **non-durable mode**,
+  `program_type "resident" "non-durable"`, it has the base and supervision, and
+  no input log, checkpoints or rounds: a node that comes back from a crash or a
+  stop starts with its initial state (see "The non-durable mode"). The engine
+  exports the mode to every process of the program as
+  `DEBASHER_PROGRAM_DURABILITY` and records it in the saved command line of the
+  run, and a program does not change its mode over the state of a run.
 - **memo**: a file in which a node keeps the answer to a call that is not
   deterministic, with a key that comes from the message, so that a replay reads
   it instead of calling again (see "Calls that are not deterministic").
@@ -545,26 +565,36 @@ So do the entries below that refer to it.
 - **launcher node**: a node of class `ProgramLauncher`, which launches a general
   program once for each request it receives (see "`ProgramLauncher`: batch runs
   from a node").
+- **watcher node**: a node of class `DirectoryWatcher`, which sends a request
+  for each file that arrives in a directory, once the file is complete (see
+  "Observing the outside world").
 - **batch run**: one execution of the general program of a launcher node, with
   the options of one request, by `debasher_exec` on a directory of its own,
   outside the resident program's scheduling.
 - **port of requests**: an input port of a launcher node that carries data, that
   is, one that is not a control port. Each message on it is a request for a
   batch run (see "Requests and run directories").
-- **set of announced runs**: the node state of a launcher node, the positions of
-  the requests whose batch run has ended and whose end the node has announced on
-  `DONE_PORT` (see "The end of a batch run as an input event").
+- **request number**: the number that a launcher node gives each request it
+  registers, which names its registration and, when the request names no run
+  directory, its run directory. In the durable mode it is the position of the
+  request in the input log, which a replay gives it again. In the non-durable
+  mode it comes from a counter that the node keeps in a file of the output
+  directory of its process, since positions start again with every incarnation
+  (see "The run directory and who owns it").
+- **set of announced runs**: the node state of a launcher node, the request
+  numbers of the requests whose batch run has ended and whose end the node has
+  announced on `DONE_PORT` (see "The end of a batch run as an input event").
 - **runs root**: the directory under which a launcher node places its batch
   runs: the output directory of its process, or the absolute path that the
   option `-runsdir` of its process gives.
 - **run directory**: the output directory of one batch run, `<runs root>/<run>`,
-  where `<run>` is a relative path that the request names, or else the position
-  of the request in the input log. Its `launch.json` records which request of
-  which life of the launcher node the directory belongs to.
-- **registration**: the file `.launcher/registrations/<position>.json` in the
-  output directory of the process of a launcher node, written when the request
-  at that position registers a batch run, and which names its run directory. The
-  registrations of a node are its queue of batch runs.
+  where `<run>` is a relative path that the request names, or else the request
+  number. Its `launch.json` records which request of which life of the launcher
+  node the directory belongs to.
+- **registration**: the file `.launcher/registrations/<request number>.json` in
+  the output directory of the process of a launcher node, written when the
+  request with that number registers a batch run, and which names its run
+  directory. The registrations of a node are its queue of batch runs.
 - **life**: the time between two clean starts of the program, as seen by a
   launcher node, identified by `life_id`, a random string kept in a file of the
   output directory of its process; `debasher_reset_resident` removes it, so
@@ -636,13 +666,21 @@ checkpoint. `_unwritten_bytes` and `_unwritten_port_bytes` are the size of
 `_unwritten` on all ports together and on each port. The first is what
 `OUT_BACKLOG_FAIL_BYTES` is checked against, the second what its error names and
 what the node info file reports by port. Both are derived from `_unwritten`, and
-they are computed again as a restore queues the backlog of the checkpoint.
+they are computed again as a restore queues the backlog of the checkpoint. Two
+more belong to the non-durable mode alone, where there is no checkpoint at all:
+`_queued_pos`, the last position given to a queued envelope, from 0 at each
+incarnation, and `_inbound_bytes`, the size of the lines on the inbound queue,
+which the reader threads add to and the brain thread takes from (see "Arrival
+and positions").
 
 # Contract: assumptions, guarantees and non-goals
 
 The mechanisms that provide the guarantees below are designed in the sections
 after this one. The Contract applies to programs whose `_program_type` is
-`resident`; it does not apply to general programs.
+`resident`; it does not apply to general programs. It is written for the durable
+mode, the default; "The non-durable mode" says, by the layers that this mode
+lacks, which of its obligations and guarantees apply there, and states the two
+that are its own.
 
 The purpose of this section is that "reliable" has a precise meaning here:
 within the stated assumptions, either the guarantees hold, or the violation is
@@ -654,9 +692,10 @@ This section states what it assumes, what it promises and where the promise
 ends. It covers the layers that give the guarantees ("Layers of the design"),
 the failures it tolerates ("Failure model") and what the code of a module must
 do in return ("Obligations of module authors"). Then come the guarantees
-themselves ("Guarantees") and where they stop ("Limits and non-goals"). Last, it
-says how they are shown to hold ("Acceptance") and how the tests that show them
-are built ("The tests of the Contract").
+themselves ("Guarantees"), where they stop ("Limits and non-goals") and what
+remains of both in a program without durability ("The non-durable mode"). Last,
+it says how they are shown to hold ("Acceptance") and how the tests that show
+them are built ("The tests of the Contract").
 
 ## Layers of the design
 
@@ -690,9 +729,12 @@ needs each of them.
   A program may have no `Supervisor`, and `-no-hold-fifos` turns the holding
   off. Without a `Supervisor`, a node is relaunched only by hand.
 
-Of the four layers, only supervision is optional. A program with the base alone,
-without the input log and checkpoints, is not possible today (see "A mode
-without durability" in Future work).
+The durability mode of a program (see the Glossary) says which layers it has.
+The durable mode has the four, with supervision optional. The non-durable mode
+has the base and supervision, again optional, and neither the recovery of a node
+nor rounds and checkpoints (see "The non-durable mode"). A program with the base
+alone and nothing of the other three is the non-durable mode without a
+`Supervisor`.
 
 ## Failure model
 
@@ -763,7 +805,7 @@ alone.
 
 | Obligation | Needed by | Who checks it |
 |---|---|---|
-| A node sends only inside `process_data` | the recovery of a node | the framework, when the node runs (`send_data` raises `RuntimeError`) |
+| A node sends only inside `process_data` | the base | the framework, when the node runs (`send_data` raises `RuntimeError`) |
 | Messages are strict JSON, of bounded size | the base | the framework, when the node runs (`send_data` raises `ValueError`, `TypeError` or `RuntimeError`) |
 | The two rules of the fifos | the base | the engine, when the program is loaded |
 | `process_data` is deterministic | the recovery of a node | the tests of the program, with `check_replay` |
@@ -788,7 +830,11 @@ The obligations themselves, and when each applies:
   receives. The framework enforces it: `send_data` raises `RuntimeError` when it
   is called anywhere else, or from a thread other than the one running
   `process_data`. What starts the activity of a program is written into an input
-  port from outside (see "source" in the Glossary).
+  port from outside (see "source" in the Glossary). The rule belongs to the
+  base, not to the recovery of a node, although the replay rests on it: it is
+  what makes a node a component that acts only on its inputs, with everything it
+  reacts to entering through a port or through `inject()`, in both durability
+  modes.
 - **`capture_node_state()` is complete and `restore_node_state()` exact**:
   everything that influences future behavior round-trips through them. It
   matters as soon as a round runs, and `debasher_stop_resident` always runs one,
@@ -986,7 +1032,8 @@ comments state a limit in words and never cite these numbers, which may change.
    does (`seq`, from 1, one more for each message, never reused). The receiver
    checks those numbers as on any other channel. So a message lost at the
    boundary, in the window of limit 3, is reported (G8) and not lost silently.
-   What a source sends without numbers gets no such check.
+   What a source sends without numbers gets no such check, and nor does
+   anything in the non-durable mode, where no number is compared.
 3. **Messages read from a FIFO but not yet written to the input log** when a
    node crashes. Such a message is lost, since its sender considers it
    delivered, and the sequence numbers of G5 show the hole (G8).
@@ -1004,6 +1051,9 @@ comments state a limit in words and never cite these numbers, which may change.
      disk is in "Future work").
    - Closing the window. A FIFO offers no way to look at what it holds without
      taking it, so the window can be made short but not closed.
+   - In the non-durable mode. With no log, the window is everything the node
+     has read and not yet processed, up to `INBOUND_QUEUE_MAX_BYTES`, and the
+     loss is not reported (see "The non-durable mode").
    - A stop instead of a crash. A node may be stopped with a stop signal (see
      the Glossary) instead of killed, and then it loses less. A reader stops
      only between two blocks, and hands over every message of the block it
@@ -1117,16 +1167,151 @@ comments state a limit in words and never cite these numbers, which may change.
       launch of the program, rewrites the `.sched_out` of the `Supervisor` too,
       with the tails it held (see "What the `Supervisor` knows of each node, on
       disk" in Future work).
-12. **Durability cannot be turned off.** No setting removes the input log and
-    its replay (see "Layers of the design"). Rounds and checkpoints are avoided
-    only by starting none, an ordered shutdown needs one, and with a
-    `Supervisor` its escalation starts a halt round.
-    - The closest today. Start no snapshot, raise `input_log_max_mb`, stop with
-      `debasher_stop` rather than `debasher_stop_resident`, and reset the
-      program before each launch (see "`debasher_reset_resident`: a clean
-      start"). A crash still replays the whole input log, so the obligations of
-      determinism remain.
-    - Beyond it. See "A mode without durability" in Future work.
+
+## The non-durable mode
+
+A program whose state is not worth keeping across a crash, or whose state cannot
+be captured, still wants the model of a node: hooks, ports from the engine,
+`send_data`, `observe()` and `inject()`, notices, the node harness, a
+`Supervisor` that relaunches, a launcher node and a watcher node. In the durable
+mode that program pays for what it does not use: its nodes have to be
+deterministic and to capture and restore their state, and its input logs grow
+until a round prunes them, so something has to start rounds for as long as it
+runs. The non-durable mode gives it the base and supervision alone (see "Layers
+of the design"). This section says how a program declares the mode, what a node
+does and does not do in it, what the Contract promises there, and what the tools
+do.
+
+**The declaration.** The module declares the mode as the second argument of
+`program_type`: `program_type "resident" "non-durable"`; without a second
+argument, or with `"durable"`, the program is durable. The engine refuses any
+other value, and a mode given for a general program, when it loads the module.
+The mode is a property of the program and not of the launch, because the code is
+written against it: a node of a non-durable program need not write
+`capture_node_state()` and `restore_node_state()`, so it cannot run durably,
+while a durable node runs non-durably unchanged. Nor is it a property of a node:
+sequence numbers, `HELLO` and rounds are agreements between the two ends of a
+channel, which the two modes keep differently. The engine exports the mode to
+every process of the program as `DEBASHER_PROGRAM_DURABILITY`, next to the ports
+(see "Ports from the engine"), and the exec context of the process scripts
+carries it, so a relaunch gets it too. A node built without the engine, as the
+node harness builds them, is durable unless told otherwise.
+
+**The record and a change of mode.** `debasher_exec` records the mode of a run
+in the saved command line of the output directory, as it records the effective
+scheduler, so that the tools and the next launch read it there (`--durability
+<mode>`; given on the command line, the option has to agree with the
+declaration, so that the saved command line stays a command line that
+`debasher_exec` accepts). A program does not change its mode over the state of a
+run: a non-durable launch would leave the checkpoints and input logs of a
+durable run on disk, stale, for a later durable launch to resume from, and a
+durable launch would take what the processes of a non-durable run left in their
+output directories for its own. So `debasher_exec` refuses a launch whose mode
+differs from the one recorded when some node has state, the same paths that
+`debasher_reset_resident` takes away, and names that tool: after a reset there
+is no state, and the mode may change.
+
+**What a node does not do.** In the non-durable mode a node keeps no input log
+and no checkpoints, and takes part in no round:
+
+- It writes nothing when an envelope arrives. Positions still number the
+  envelopes, from a counter of the incarnation, so that the brain thread and a
+  launcher node see each envelope numbered in its order (see "Arrival and
+  positions").
+- It restores nothing and replays nothing at its start: every incarnation
+  starts with the state that its constructor gives it, over whatever its process
+  left in its output directory, which the engine keeps as in the durable mode
+  (see "Startup sequence: `run()`").
+- A trigger that reaches it, and a marker that arrives, are logged as a warning
+  and ignored, and the marker is not forwarded. No halted marker is ever
+  written. The `Supervisor` of a non-durable program drops a trigger of its
+  manual trigger port in the same way (see "Manual trigger port").
+- Its readers compare no sequence number. The writer numbers what it sends, from
+  1 at each incarnation, so that the wire is the same in both modes, but a
+  number says nothing across a relaunch: a relaunched writer starts at 1 again,
+  a relaunched reader has nothing to compare with, and a FIFO that the
+  `Supervisor` held through the crash of both ends hands the new reader the end
+  of the old numbering and then the start of the new one, all of it good data
+  in order. Within one pair of incarnations a FIFO loses nothing. The claim of a
+  marker or of a `CLOSE` is not checked either (see "Sequence numbers in the
+  input log").
+- What it has read and not yet processed is bounded by `INBOUND_QUEUE_MAX_BYTES`
+  instead of by the cap of a log: a reader thread with a block to queue waits
+  while the lines on the inbound queue weigh that much or more, so the pressure
+  goes back into its FIFO and from there into the outbound backlog of its
+  writer, where `OUT_BACKLOG_FAIL_BYTES` names a reader that does not keep up
+  (see "Arrival and positions").
+
+Everything else of a node is the same: the ports and their checks, the
+envelopes, the threads, `send_data` only inside `process_data`, the limit of the
+outbound backlog, `OUT_BACKLOG_FAIL_BYTES`, `observe()`, `inject()`, notices,
+the node info file (which says the mode) and the control ports file. A dead
+thread ends the process as in the durable mode, and the `Supervisor` relaunches
+it.
+
+**What the Contract promises.** The failure model is the same. Of the
+obligations, those that the base needs remain (strict JSON, the two rules of the
+fifos, sends only inside `process_data`); determinism, idempotence and a
+complete capture and restore are needed by the layers that this mode lacks, and
+are not required, so the two hooks of the state are never called and need not be
+written. Of the guarantees, G1 and G2 hold, since they are of the base, and G7
+holds, since it is of supervision; G3, G4, G5 and G6 are of the layers that this
+mode lacks and do not apply. G8 is reduced to what the base and supervision
+detect: a node that cannot go on ends with an error (an exception in a hook, a
+dead thread, a backlog over its limit) and an exhausted relaunch budget stops
+the program, but a message lost at a crash is not reported, since nothing counts
+the messages. Two guarantees are this mode's own:
+
+- **N1, what a crash loses**: the state of the node, what it had taken from its
+  FIFOs and not yet processed, and what it had numbered and not yet written.
+  What its channels hold reaches the new incarnation, while some process holds
+  the FIFO (the other end, or the `Supervisor`, see "Holding the business
+  channels"), so the crash of one node loses nothing that was already in a FIFO.
+  The `Supervisor` relaunches the node with its initial state.
+- **N2, what a stop gives**: `debasher_stop_resident` stops the `Supervisor`
+  and then signals every node. A reader stops between two blocks and the brain
+  thread drains its queue, so a node processes what it had taken before it ends;
+  what that processing sends may not leave the node, since the writer threads
+  stop at the same moment, and what the FIFOs hold is destroyed with their last
+  holder. The next launch starts every node afresh, over the files its process
+  left (see "`debasher_stop_resident`: the ordered shutdown tool").
+
+Of the limits, limit 3 becomes, in this mode, the messages read but not yet
+processed: the window of a crash is what the node holds in memory, with no log
+to shorten it, and nothing reports the loss. Limit 1 reduces to N1: with no
+holder, what the FIFO held is destroyed, nothing is sent again and nothing
+reports it. Limit 2 applies as written, except that no number of a source is
+checked. Limit 7 loses its second case, since there is no input log to read in
+place of a mirror log. Limits 8 and 9 do not apply, since there are no rounds.
+The others apply as written. Both N1 and N2 have the focused end-to-end test
+that "Acceptance" asks of a guarantee: real runs of a reference program of their
+own, `test/engine/debasher_non_durable_ref.sh`
+(`test/engine/test_non_durable_run.py`), gated as the chaos test is.
+
+**The launcher node and the watcher node.** The queue of a launcher node is on
+disk, so a request that `process_data` registered is launched once across
+crashes and stops in this mode too. A request in flight at a crash is lost (N1).
+The request number comes from a counter kept on disk, since positions start
+again with every incarnation, and the rule of ownership drops a request whose
+run directory already has a `launch.json`, with a warning: there is no replay
+that could bring the same request again, so an existing owner is another
+request, such as one that a relaunched `DirectoryWatcher` sends again (see "The
+run directory and who owns it"). The end of a batch run is announced at least
+once, since the set of announced runs is lost with the state (see "The end of a
+batch run as an input event"). A `DirectoryWatcher` that is relaunched brings in
+again every complete file of its directory and sends a request for each, which
+the launcher drops (see "Observing the outside world").
+
+**The tools.** `debasher_stop_resident` stops the program without a halt: it
+skips the halted marker baselines, the trigger and the wait for the halted
+markers, and keeps the stop of the `Supervisor`, the stop signals, the wait for
+every `.finished` and the fallback with its exit code.
+`debasher_snapshot_resident` refuses the program, since no node of it would
+close a round. `debasher_inspect_resident` reports the mode in its summary, with
+no checkpoints and an empty input log, and refuses its `checkpoint` and `log`
+commands. `debasher_reset_resident` is unchanged: it takes away what the
+processes left in their output directories and the notices, and finds no
+checkpoint or log.
 
 ## Acceptance: how reliability is shown
 
@@ -1588,7 +1773,9 @@ node identity").
 With them goes the startup deadline of each node whose computational
 specifications give one, `startup_timeout_s` (see "Computational specifications
 of a resident process"), into `NODE_STARTUP_TIMEOUT_SECS`, which "Failure
-detection" uses.
+detection" uses. Every process of the program, the `Supervisor` included, also
+gets the durability mode of the program, `DEBASHER_PROGRAM_DURABILITY`, from the
+exec context of its script (see "The non-durable mode").
 
 So the heartbeat channels need no tag of their own: the role of the process at
 each end, which the engine already knows, says which fifo is which. With the
@@ -1987,6 +2174,8 @@ that no specification sets:
   - `gil_switch_interval_ms` sets `GIL_SWITCH_INTERVAL_SECS`, 0.5 ms by default
     (see limit 3, "Messages read from a FIFO but not yet written to the input
     log", in the Contract).
+  - `inbound_queue_max_mb` sets `INBOUND_QUEUE_MAX_BYTES`, 100 MiB by default,
+    in force in the non-durable mode only (see "Arrival and positions").
 - For a node: `startup_timeout_s`, its startup deadline in seconds, which the
   engine passes to the `Supervisor` (see "Failure detection").
 - For the `Supervisor`: `heartbeat_timeout_s` and `startup_timeout_s` (see
@@ -2069,8 +2258,8 @@ time have stayed the same for `STABLE_OBSERVATIONS` observations in a row. A
 file whose name starts with a dot never counts. A module whose files are
 complete in another way (a companion file, a rename at the end of a copy)
 redefines `is_complete()`. `request_for()` makes the request from the path. A
-watcher without the output port `REQUESTS_PORT` sends nothing, and says so in a
-notice (see "Notices").
+watcher node without the output port `REQUESTS_PORT` sends nothing, and says so
+in a notice (see "Notices").
 
 A file is known by its path alone, until a clean start of the program. A file
 removed that arrives again under the same name, with other contents, gets no
@@ -2083,7 +2272,12 @@ another request owns (see "The run directory and who owns it"). The node state
 keeps one path per file brought in, also of those that are gone, so a checkpoint
 grows with them. `debasher_reset_resident` forgets them with the rest of the
 node state (a run directory under an absolute runs root stays, see "Stopping and
-resetting a launcher node").
+resetting a launcher node"). In the non-durable mode that memory is lost with
+every crash: a relaunched watcher node brings in again every complete file of
+its directory and sends a request for each, which the launcher node drops, since
+the run directory already has a batch run (see "The run directory and who owns
+it"). So a file gets one batch run as long as it stays in the directory until
+its request is registered.
 
 ## Notices
 
@@ -2259,6 +2453,14 @@ after a node failure").
 A SIGTERM during the startup is honored when the startup ends, since the replay
 does not look at it. Only a `send_data` that waits for room stops waiting, since
 it looks at `_stop_signaled` too.
+
+In the non-durable mode (see "The non-durable mode") steps 5, 7 and 9 do not
+exist: after the FIFOs and the notice, `run()` calls `initialize_runtime()`,
+starts the writer threads and then the other threads, with no checkpoint looked
+for and no log opened. A checkpoint or a log that a durable run left in the
+execdir is not read; `debasher_exec` refuses to launch over one in any case
+(see "The non-durable mode"). Whether an incarnation is the first or a relaunch
+shows in nothing: every one starts with the initial state of the node.
 
 A clean start is an external operation: it is enough to remove what the nodes of
 the program find at startup, with no flag or special logic in the process or the
@@ -2603,7 +2805,8 @@ which ports a test names. It then lists what a node under test offers, says
 where the text that the harness runs differs from that of a run and what
 `check_replay` cannot see, and closes with what the harness does not check.
 
-`load_node(process, opts=None, inputs=(), outputs=())` builds a node under test:
+`load_node(process, opts=None, inputs=(), outputs=(), durable=None)` builds a
+node under test:
 
 - It takes the heredoc of `process` from the program file named by
   `DEBASHER_TEST_PFILE`, through `debasher_get_node_source <pfile> <process>`.
@@ -2642,15 +2845,19 @@ where the text that the harness runs differs from that of a run and what
   as the engine would, in `DEBASHER_PROCESS_PORTS` (see "Ports from the
   engine"). The execdir of the node is a temporary directory.
 - It calls `initialize_runtime()`, as `run()` does before any thread starts.
+- It gives the node the durability mode of its program (see "The non-durable
+  mode"): `durable`, or, left `None`, what `debasher_test` exports as
+  `DEBASHER_PROGRAM_DURABILITY` after it resolves the type of the program, so
+  that a node is tested as its program runs it.
 
 Whenever the harness calls the node (its constructor, `initialize_runtime()`,
 `feed`, `observe` and `restart`), it sets the environment that the engine gives
-a node. That environment holds its ports, its execdir and the directory of its
-module, which is that of the program file, with no computational specifications
-and no task index. Afterwards the harness puts back what the test had, since
-several nodes under test share one process. The directory of the module is what
-a relative path of the node is resolved against, such as the `-watchdir` of a
-`DirectoryWatcher`.
+a node. That environment holds its ports, its execdir, the directory of its
+module, which is that of the program file, and the durability mode, with no
+computational specifications and no task index. Afterwards the harness puts back
+what the test had, since several nodes under test share one process. The
+directory of the module is what a relative path of the node is resolved against,
+such as the `-watchdir` of a `DirectoryWatcher`.
 
 The test names the ports because the harness does not build the options of the
 program, which is what tells the engine which options of a process are ports. A
@@ -2707,6 +2914,9 @@ A node under test offers:
   and the number of feeds. Its restart raises `AssertionError` as `restart()`
   does. So it checks that `process_data` is deterministic over what it receives,
   and that the node state holds everything that later messages depend on.
+  `restart()` and `check_replay` raise `RuntimeError` for a node of a
+  non-durable program, which is never restored from its state and replays
+  nothing: there is no replay to check.
 - `node`: the instance itself, for a test that looks at its attributes.
 
 In a node under test, `sleep()` returns at once, as it does while a node replays
@@ -2842,6 +3052,23 @@ Every queued envelope gets a position, starting at 1; `HELLO` never reaches the
 queue. A trigger arrives as an envelope through `_on_arrivals`, so that
 `capture_pos` (see the Glossary) is always defined; 0 means that nothing had
 been processed yet.
+
+In the non-durable mode the same path runs with no log. Under the same lock,
+`_on_arrivals` gives the envelopes of the block consecutive positions from a
+counter of the incarnation, `_queued_pos`, from 1, and queues them, so that the
+brain thread, and a launcher node, still see each envelope numbered in the order
+of its processing; the counter starts again with every incarnation. Before it
+queues the block, a reader thread waits while the lines on the inbound queue
+weigh `INBOUND_QUEUE_MAX_BYTES` or more (`_inbound_bytes`, which the brain
+thread takes each line off as it dequeues it, under the same lock, and a
+condition on that lock that it notifies): in the durable mode the cap of the
+input log bounds what the node has read and not yet processed, and in this mode
+this wait does, up to the bound plus the block that was waiting. The pressure
+goes back into the FIFO of the waiting reader and from there into the outbound
+backlog of its writer, where `OUT_BACKLOG_FAIL_BYTES` names a reader that does
+not keep up (see "Checkpoint persistence"). A stop ends the wait. The bound is
+about memory, not about the window of a crash, which "Sequence numbers in the
+input log" discusses: a bounded queue shortens nothing there.
 
 ## Recovery: startup and replay
 
@@ -3048,17 +3275,31 @@ receiver notices it: the next message skips its number, or the next marker of a
 round says that more were sent than arrived (G8). This is limit 3 of the
 Contract, "Messages read from a FIFO but not yet written to the input log".
 
+In the non-durable mode a reader compares no number. There is no checkpoint to
+restore `last_seq` from and no log to advance it over, so a relaunched reader
+has nothing to compare an arriving number with, and a relaunched writer numbers
+from 1 again, so a comparison could only produce false duplicates or false gaps.
+A FIFO that the `Supervisor` held through the crash of both ends hands the new
+reader the end of the old numbering and then the start of the new one, all of it
+good data in order. Within one pair of incarnations a FIFO loses nothing, so
+there is nothing for the numbers to detect, and they are not read: not those of
+a `DATA`, not the claim of a marker, not that of a `CLOSE`. The writer numbers
+what it sends all the same, so that the wire is the same in both modes and a
+reader outside the program sees one format (see "The non-durable mode").
+
 Four other designs were weighed and left out. A bounded inbound queue, between
 the reader threads and the brain thread, would not shorten that window. What a
 reader has taken from the FIFO is in memory whatever the size of the queue. A
-bound would only make the reader wait with a block in its hands. A log at the
-sender, kept until the receiver acknowledges each message, would close the
-window, but needs the two processes to coordinate, and the sender to delete what
-each receiver has acknowledged. A second log, of the order in which the brain
-thread processes the envelopes, would only be needed if something reordered them
-between their arrival and their processing, and nothing does. Accepting the loss
-of what waits in the inbound queue, instead of logging on arrival, would lose
-messages exactly when a node is busy, the worst time for it.
+bound would only make the reader wait with a block in its hands (the non-durable
+mode has one, for the memory of the node, not for this window, see "Arrival and
+positions"). A log at the sender, kept until the receiver acknowledges each
+message, would close the window, but needs the two processes to coordinate, and
+the sender to delete what each receiver has acknowledged. A second log, of the
+order in which the brain thread processes the envelopes, would only be needed if
+something reordered them between their arrival and their processing, and nothing
+does. Accepting the loss of what waits in the inbound queue, instead of logging
+on arrival, would lose messages exactly when a node is busy, the worst time for
+it.
 
 ## Why the log is not built on the mirror tap
 
@@ -3358,7 +3599,7 @@ because a resident program may be made of several independent subgraphs. A
 marker never leaves the subgraph of the initiator that opened its round. So the
 module wires the `Supervisor` to one initiator in each subgraph that it has to
 reach. Only the relay of the manual trigger writes into them (see "Manual
-trigger channel"): when a trigger arrives there, the `Supervisor` sends it to
+trigger port"): when a trigger arrives there, the `Supervisor` sends it to
 every initiator it lists. Its escalation does not use them:
 `debasher_stop_resident` writes its `shutdown` into the control port of every
 node from outside (see "Escalation on a permanent node failure"). The list is
@@ -3401,6 +3642,12 @@ The `Supervisor` checks no more of the command than that it is a string (see
 commands is open everywhere else in this design (see "Control envelope"). An
 initiator that does not recognize a command handles it in its own
 `_on_interact`, which logs a warning and ignores it, and never aborts.
+
+In a non-durable program (see "The non-durable mode") the `Supervisor` relays
+nothing: it drops every trigger of the manual trigger port with a warning in its
+log, once, instead of letting every initiator ignore it. A trigger written by
+hand into a control port of a node is ignored by the node in the same way, so
+its only trace is in the log of that node.
 
 ## Holding the business channels
 
@@ -3847,7 +4094,10 @@ one node keeps, and changes nothing. The `Supervisor` also uses
 `debasher_stop_resident`, to stop what remains of a program once it gives up on
 a node (see "Escalation on a permanent node failure"). The four share the code
 that loads the program and finds its nodes
-(`engine/debasher_lib_resident_tools.sh`). Two of them, `debasher_stop_resident`
+(`engine/debasher_lib_resident_tools.sh`), which reads the scheduler and the
+durability mode of the run from its saved command line, so that a tool acts in
+the mode the program was launched in, whatever its module declares now (see
+"The non-durable mode"). Two of them, `debasher_stop_resident`
 and `debasher_snapshot_resident`, also share the code that writes a trigger into
 the control ports of the nodes.
 
@@ -3956,6 +4206,14 @@ The stop goes in seven steps:
    stop signal to each node that still runs.
 7. It waits for every node's own `.finished`.
 
+In a non-durable program (see "The non-durable mode") there is no halt: no node
+takes part in a round, and no halted marker is ever written. The tool says so,
+skips steps 1, 4 and 5, and keeps the rest: the kill of `--kill`, the stop of
+the `Supervisor`, the stop signals, the wait for every `.finished`, the deadline
+and the fallback with its exit code. Every node ends with the state it had lost
+anyway, and the next launch starts every one afresh. The escalation of the
+`Supervisor` runs the tool unchanged.
+
 The same deadline, from `--timeout`, bounds the check of the names, the finding
 of the nodes and every step. A step from the third on that fails sends the tool
 to the fallback at once, without waiting for the deadline. One such failure is a
@@ -4050,6 +4308,10 @@ whether some node still runs. It returns 0 once none does, after
 It is a process outside the program: nothing relaunches it. A program that is
 resumed needs it started again.
 
+The tool refuses a non-durable program (see "The non-durable mode"), with an
+error and exit code 1, before it looks for the nodes: none of them keeps a
+checkpoint, so no round would close at any of them.
+
 ## `debasher_reset_resident`: a clean start
 
 `debasher_reset_resident` takes a stopped resident program back to its first
@@ -4070,7 +4332,10 @@ tool takes all of them away, together with the notice of the node (see
 "Notices"). It does so for every task of every process, the `Supervisor`
 included. It leaves the output directory of each process empty, as the engine
 leaves it before a first run. It does not reach the files that a module writes
-outside the output directory of its process.
+outside the output directory of its process. In a non-durable program it finds
+no checkpoint, log or halted marker, and takes away what the processes left in
+their output directories and the notices; a reset is also what lets a program
+change its durability mode (see "The non-durable mode").
 
 It resets the whole program, never one node. A node that starts afresh numbers
 its channels from the start again (G5). A reader that kept its own checkpoint
@@ -4137,7 +4402,10 @@ array process, whose tasks are nodes of their own, and refused for any other.
 The tool refuses a process that the program does not have, and one that was
 never launched on this output directory (it has no script). It refuses an index
 that is not below the number of tasks. It refuses the `Supervisor`, which keeps
-no node state: what it knows is in its log, its scheduler output.
+no node state: what it knows is in its log, its scheduler output. For a node of
+a non-durable program it refuses the commands `checkpoint` and `log`, since the
+node keeps neither (see "The non-durable mode"); its `summary` reports the mode,
+with no checkpoints and an empty input log.
 
 The tool only reads. It writes nothing, takes no lock and sends nothing to the
 node. So it works the same on a live program as on a stopped one, and no node
@@ -4170,12 +4438,14 @@ precisely when it grows too large (see "Checkpoint persistence"). The node
 writes both into its node info file (see the Glossary), a JSON object:
 
 ```
-{"runtime_class": "ProgramLauncher", "started_at": 1790000000.5,
+{"runtime_class": "ProgramLauncher", "durability": "durable",
+ "started_at": 1790000000.5,
  "heartbeat_interval_secs": 5,
  "limits": {"input_log_max_bytes": 104857600,
             "out_backlog_max_bytes": 8388608,
             "out_backlog_fail_bytes": 67108864,
-            "gil_switch_interval_secs": 0.0005},
+            "gil_switch_interval_secs": 0.0005,
+            "inbound_queue_max_bytes": 104857600},
  "launcher": {"runs_root": "/data/out/launch", "process": null},
  "updated_at": 1790000123.4,
  "out_backlog_bytes": {"outdone": 0},
@@ -4184,12 +4454,16 @@ writes both into its node info file (see the Glossary), a JSON object:
 
 Some of its fields do not change during an incarnation. `runtime_class` is the
 class of the runtime library that the class of the node derives from
-(`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`). `started_at` is the
-time at which this incarnation ended its startup. `heartbeat_interval_secs` and
-`limits` are what their names say. `launcher`, only for a launcher node, gives
-its runs root and the process that its `-process` names, if any, which `runs`,
-and `debasher_reset_resident` before a reset, need. The node first writes the
-file when its threads start, next to its control ports file.
+(`FBPProcess`, `ProgramLauncher` or `DirectoryWatcher`). `durability` is the
+mode of the program (see "The non-durable mode"), which says which of the limits
+are in force: `input_log_max_bytes` and `out_backlog_max_bytes` in the durable
+mode, `inbound_queue_max_bytes` in the non-durable one, the other two in both.
+`started_at` is the time at which this incarnation ended its startup.
+`heartbeat_interval_secs` and `limits` are what their names say. `launcher`,
+only for a launcher node, gives its runs root and the process that its
+`-process` names, if any, which `runs`, and `debasher_reset_resident` before a
+reset, need. The node first writes the file when its threads start, next to its
+control ports file.
 
 The heartbeat thread writes the file again, whole, at every tick, with the
 figures that change. It does so whether the program has a `Supervisor` or not.
@@ -4267,8 +4541,8 @@ segment, its line number and why it does not parse.
 
 `runs` is for a launcher node only. It gives its runs root and every batch run
 that it has registered and that still counts (see "Launching from the queue on
-disk"), in the order of their positions. For each batch run it gives its
-position, its name, its run directory, its state (`registered`, `running`,
+disk"), in the order of their request numbers. For each batch run it gives its
+request number, its name, its run directory, its state (`registered`, `running`,
 `finished`, `failed` or `stopped`) and, once it has ended, its exit code. The
 registrations come from `.launcher/registrations/` in the output directory of
 the process, and the runs root and the process that `-process` names, if any,
@@ -4339,7 +4613,7 @@ one to what it does, and to the section that explains it:
 | `initialize_runtime()` | Creates the list of registrations, and reads the identifier of its life (`.launcher/life_id`) or creates it, before the replay | "The run directory and who owns it" |
 | `process_data()` | A request, on a port of requests: registers it (its `launch.json` and its registration). The end of a batch run, on `RUNS_DONE_PORT`: announces it on `DONE_PORT`, once | "Requests and run directories", "The run directory and who owns it", "The end of a batch run as an input event" |
 | `observe()` | At every pass: reads the state of every batch run, writes the exit code that is still missing, brings in the ends, and launches the batch runs that fit | "Launching from the queue on disk", "The end of a batch run as an input event" |
-| `capture_node_state()`, `restore_node_state()` | Save and restore the set of announced runs (the positions of their requests), all that the node state holds | "The end of a batch run as an input event" |
+| `capture_node_state()`, `restore_node_state()` | Save and restore the set of announced runs (the request numbers of their requests), all that the node state holds | "The end of a batch run as an input event" |
 
 A module needs to write none of these hooks. The class of a launcher node needs
 no body (`pass`), or only class attributes such as `OBSERVE_INTERVAL_SECS`. A
@@ -4424,9 +4698,9 @@ optional:
   option names, with their leading dash, and whose values are strings. Without
   it, the general program is launched with no options.
 - `run` is the name of the run directory: a relative path of plain names, none
-  of which is empty or starts with a dot. Without it, the name is the position
-  of the request in the input log. A replay gives the request the same position,
-  so the name does not change.
+  of which is empty or starts with a dot. Without it, the name is the request
+  number (see the Glossary), which a replay gives the request again in the
+  durable mode, so the name does not change.
 
 Other fields are ignored. For example:
 
@@ -4471,33 +4745,36 @@ request that a run directory belongs to.
 writes. The first is `launch.json`, in the run directory of the batch run,
 `<runs root>/<run>`. It holds `life_id`, the position of the request in the
 input log and its options. There is one `launch.json` for each batch run. The
-second write is the registration, `.launcher/registrations/<position>.json`, in
-the output directory of the process. It holds the name of the run directory.
-Each file is written to a temporary one and renamed into place. Both writes are
-idempotent: a replay of the same request writes the same content to the same
-paths.
+second write is the registration, `.launcher/registrations/<request
+number>.json`, in the output directory of the process. It holds the name of the
+run directory. Each file is written to a temporary one and renamed into place.
+Both writes are idempotent: a replay of the same request writes the same content
+to the same paths.
 
 The two files answer different questions. `launch.json` says which request the
 run directory belongs to, and with which options the batch run is launched. The
 registrations say which batch runs the node has to see to, and in which order,
-as long as the `launch.json` of the run directory records their position. They
-are its queue (see "Launching from the queue on disk"). The node cannot find its
-batch runs by listing the runs root instead. An absolute runs root may be
-shared, and hold the directories of other nodes or of earlier lives. A run name
-may be a path (`s17/v2`), so an entry of the root is not always a run directory.
-A listing gives no order either.
+as long as the `launch.json` of the run directory records their request number.
+They are its queue (see "Launching from the queue on disk"). The node cannot
+find its batch runs by listing the runs root instead. An absolute runs root may
+be shared, and hold the directories of other nodes or of earlier lives. A run
+name may be a path (`s17/v2`), so an entry of the root is not always a run
+directory. A listing gives no order either.
 
 `.launcher/` holds all the bookkeeping of the node. No run directory can clash
 with it, since no run name starts with a dot. With the default runs root, the
 output directory of the process holds both `.launcher/` and the run directories.
-Say that the node has received two requests: one with `"run": "s17"` at position
-7, and one without `run` at position 8. Its output directory then looks like
-this:
+Say that the node has received two requests: one with `"run": "s17"` with the
+request number 7, and one without `run` with the request number 8. In the
+durable mode the request number of a request is its position in the input log,
+which a replay gives it again (see request number in the Glossary). Its output
+directory then looks like this:
 
 ```
 <output directory of the process>/    the runs root, by default
 |-- .launcher/
 |   |-- life_id
+|   |-- request_counter             only in the non-durable mode (see below)
 |   `-- registrations/
 |       |-- 7.json                    {"run": "s17"}
 |       `-- 8.json                    {"run": "8"}
@@ -4540,8 +4817,8 @@ A run directory belongs to the request that wrote its `launch.json`. The rule of
 ownership decides by that file:
 
 - With no `launch.json`, the request registers the batch run.
-- With a `launch.json` of the same life and the same position, the request is
-  the one that wrote it, processed again by a replay, and nothing changes.
+- With a `launch.json` of the same life and the same request number, the request
+  is the one that wrote it, processed again by a replay, and nothing changes.
 - With any other `launch.json`, the request is logged as an error and dropped:
   another request, or a request of another life, owns the directory. A request
   that wants to analyse the same input again with other options names another
@@ -4550,6 +4827,20 @@ ownership decides by that file:
 The rule of ownership depends only on what the input log and the directory hold,
 never on whether a batch run is still going on. So a replay decides the same
 way.
+
+In the non-durable mode (see "The non-durable mode") there is no input log, and
+the positions of an incarnation start at 1 again, so a position cannot name a
+registration or a run directory: a second incarnation would overwrite the
+registration of the first. The request number then comes from a counter that
+the node keeps in `.launcher/request_counter`: the last number given, read in
+`initialize_runtime()`, and written, into a temporary file renamed into place,
+before the request registers anything, so that a crash in between skips a
+number and never reuses one. The second case of the rule of ownership cannot
+occur, since nothing replays a request: any existing `launch.json` belongs to
+another request, and the request is dropped. It is logged as a warning, not as
+an error, since a relaunched `DirectoryWatcher` sends its requests again (see
+"Observing the outside world"). `life_id` is kept as in the durable mode, for
+the inspection of the node and for a run directory under an absolute runs root.
 
 `life_id` tells the requests of a life from those of the one before. After a
 clean start, the input log begins again from its first position. A run directory
@@ -4568,7 +4859,7 @@ the states one by one, what the node does with a batch run that has ended, and
 which registrations count.
 
 The node's `observe()`, on its observation thread, launches the batch runs that
-are registered, in the order of their positions. The node has
+are registered, in the order of their request numbers. The node has
 `MAX_CONCURRENT_RUNS` slots (1 by default), and a batch run holds one while it
 runs. Each one runs
 `debasher_exec --pfile <program> --outdir <run directory> --sched <scheduler>`
@@ -4686,8 +4977,8 @@ It does not need to be the same in a replay, since the node sends nothing when
 it launches.
 
 A registration counts only while it can be read and the `launch.json` of its run
-directory records its position. The node and `debasher_inspect_resident` apply
-the same rule. The node writes `launch.json` before the registration, and
+directory records its request number. The node and `debasher_inspect_resident`
+apply the same rule. The node writes `launch.json` before the registration, and
 renames each into place (see "The run directory and who owns it"), so a crash of
 the node leaves either none or a whole one. Only a change by hand, or a failure
 of the machine, makes a registration stop counting:
@@ -4696,17 +4987,16 @@ of the machine, makes a registration stop counting:
   `launch.json`. `observe()` skips that batch run, and logs it as an error once
   in each incarnation. It takes no slot. It is not launched, since its options
   were in `launch.json`. No end is reported for it on `DONE_PORT`. The same
-  holds when `-runsdir` names another absolute runs root.
-- A later request may name the removed run directory again. It finds no
-  `launch.json`, so it registers the directory with its own position. The old
-  registration then no longer counts, and the directory is the batch run of the
-  new request, launched once.
-- A registration that cannot be read (its name is not a position, or its content
-  is not a registration) comes only from a failure of the machine, such as a
-  power loss, or from a hand edit. A `.json.tmp` that a crash left before its
-  rename is not a registration at all. `observe()` skips a registration that
-  cannot be read, and logs a warning once in each incarnation. Its batch run is
-  not launched, and no end is reported for it.
+  holds when `-runsdir` names another absolute runs root. - A later request may
+  name the removed run directory again. It finds no `launch.json`, so it
+  registers the directory with its own request number. The old registration then
+  no longer counts, and the directory is the batch run of the new request,
+  launched once. - A registration that cannot be read (its name is not a
+  position, or its content is not a registration) comes only from a failure of
+  the machine, such as a power loss, or from a hand edit. A `.json.tmp` that a
+  crash left before its rename is not a registration at all. `observe()` skips a
+  registration that cannot be read, and logs a warning once in each incarnation.
+  Its batch run is not launched, and no end is reported for it.
 
 Only a request after the last checkpoint is processed again by a replay (see
 "Recovery: startup and replay"). With no `launch.json`, such a request owns the
@@ -4735,7 +5025,7 @@ node sends only from `process_data`, whose calls the input log records and a
 replay reproduces. So the end of a batch run enters the node as what it is, an
 event from outside the program. Once the exit code is written, `observe()`
 brings `{"run": ..., "pos": ..., "exit_code": ...}` in with `inject()`, with
-`pos` the position of the request that registered the batch run, under
+`pos` the request number of the request that registered the batch run, under
 `RUNS_DONE_PORT` (`runs_done`), its observe port. Only then, once the event is
 logged, does `observe()` mark the run directory as notified, with a file
 `notified`.
@@ -4748,11 +5038,11 @@ handles the event, after `inject()` has returned. A pass in between would bring
 the end in again. `notified` is written by the thread that reads it, the
 observation thread, right after the fact that it records.
 
-`process_data`, on `RUNS_DONE_PORT`, adds that position to the set of announced
-runs in its node state. The set holds positions, not names. A later request may
-name a removed run directory again (see "Launching from the queue on disk"), and
-the end of its batch run is announced too. An event with no run or position is
-dropped, and logged as an error. `process_data` then sends
+`process_data`, on `RUNS_DONE_PORT`, adds that request number to the set of
+announced runs in its node state. The set holds request numbers, not names. A
+later request may name a removed run directory again (see "Launching from the
+queue on disk"), and the end of its batch run is announced too. An event with no
+run or position is dropped, and logged as an error. `process_data` then sends
 `{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}` on `DONE_PORT`.
 `run_dir` is the absolute path of the run directory, so that the node that reads
 the results of the batch run does not have to know the runs root. `status` is
@@ -4764,21 +5054,24 @@ long as the runs root does not change between launches of the node.
 
 - A node that goes down after writing the event and before marking the run
   directory writes the event again when it comes back. `process_data` drops the
-  second one, since its position is already in the set of announced runs. A
-  replay, which finds both in the log in the same order, drops it too. So the
+  second one, since its request number is already in the set of announced runs.
+  A replay, which finds both in the log in the same order, drops it too. So the
   event may arrive more than once, but the message on `DONE_PORT` goes out once.
+  In the non-durable mode the set of announced runs is lost with the state, so
+  the end is announced twice in that case: at least once (see "The non-durable
+  mode").
 - A batch run that ends while the node is down still leaves its `exit_code`,
   since its shell outlives the node. When the node comes back, `observe()` finds
   it, and the message on `DONE_PORT` goes out.
 - A launcher node without `DONE_PORT` brings in no event.
 
-The set of announced runs only grows. A node keeps one position for each batch
-run whose end it ever announced, in memory and in every checkpoint. Pruning it
-would need to know that no event can bring an end in again. The two events of a
-crash between `inject()` and `notified` may straddle a checkpoint, with
-`notified` already written when the state is captured. A capture that left out
-the position of a run with `notified` would let the second event, live or in a
-replay, announce its end again.
+The set of announced runs only grows. A node keeps one request number for each
+batch run whose end it ever announced, in memory and in every checkpoint.
+Pruning it would need to know that no event can bring an end in again. The two
+events of a crash between `inject()` and `notified` may straddle a checkpoint,
+with `notified` already written when the state is captured. A capture that left
+out the position of a run with `notified` would let the second event, live or in
+a replay, announce its end again.
 
 The list of registrations only grows too. Each pass of `observe()` reads a few
 files of every registered batch run, and checks whether its shell is alive,
@@ -4961,31 +5254,6 @@ and languages.
     after a failure of the machine, to its last consistent cut.
   - Second step. `fsync` of the input log every few messages (group commit),
     which also protects the work since that snapshot, at a cost in throughput.
-- **A mode without durability.** A program would run with the base and
-  supervision alone, with no input log, rounds or checkpoints (see "Layers of
-  the design").
-  - What it gives. No obligation of determinism, idempotence or capture and
-    restore. A crash loses the state of the node and what was in transit, and
-    the `Supervisor` relaunches it with an empty state.
-  - Its form. A switch of the run, with a default of the program and an option
-    of the launch, recorded in `command_line.sh`, as the scheduler of the run
-    is. A node is written the same way in both modes.
-  - A change of mode. Only over a clean output directory: a launch over the
-    state of a run in the other mode is refused.
-  - Where the switches go. A null input log, the load and the save of a
-    checkpoint, the rounds (a snapshot refused, a halt that drains the channels
-    with no checkpoint), the filter of duplicates of a reader, and
-    `ProgramLauncher`.
-  - Two points of design. One is a new incarnation of a writer, announced by its
-    `HELLO`, which would restart the numbers of its channels, a thing that must
-    never happen in a program with durability. The other is what an ordered
-    shutdown promises with no checkpoint.
-  - Its cost. Mostly around the runtime: the engine, the tools, the web UI, a
-    second contract, rtdocs, the guidance of an AI, and tests in both modes.
-  - The need first. Before it is built, the need it serves has to be named: one
-    that neither a general program of processes joined by FIFOs nor the closest
-    approach of today (see limit 12, "Durability cannot be turned off", in the
-    Contract) meets.
 - **Global (coordinated) rollback, as a fallback to localized recovery.** Detect
   a violation of the Contract, stop, rewind every node to the last consistent
   cut, and resume. Localized recovery (see "Reconnecting after a node failure")

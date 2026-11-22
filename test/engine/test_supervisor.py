@@ -1449,3 +1449,20 @@ def test_the_checker_loop_hands_the_time_between_its_ticks_to_the_stall_credit(m
         checker.join(timeout=2)
 
     assert all(gap >= 0.05 for gap in gaps)
+
+
+def test_in_a_non_durable_program_a_manual_trigger_is_dropped_with_a_warning(monkeypatch, caplog):
+    class Sup(lib.Supervisor):
+        NODE_PORTS = {}
+        INITIATOR_PORTS = ["init_a"]
+
+    monkeypatch.setenv("DEBASHER_PROGRAM_DURABILITY", "non-durable")
+    proc = Sup(opts={"init_a": "/tmp/a"})
+    proc.log.addHandler(caplog.handler)
+    try:
+        proc._on_manual_trigger({"command": "start_snapshot", "args": {}})
+    finally:
+        proc.log.removeHandler(caplog.handler)
+
+    assert proc._outbound_queues["init_a"].empty()
+    assert "non-durable program has no rounds" in caplog.text

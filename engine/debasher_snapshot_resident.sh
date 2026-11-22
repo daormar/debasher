@@ -264,6 +264,13 @@ snapshot_resident_program()
 
     debasher::_resident_tool_load_program "${absdirname}" debasher_snapshot_resident || return 1
 
+    # The nodes of a non-durable program keep no checkpoints, so no round
+    # would close at any of them
+    if debasher::_is_non_durable_program; then
+        echo "Error: the program in ${dirname} is ${DEBASHER_DURABILITY_NON_DURABLE}: it takes no snapshots, since its nodes keep no checkpoints" >&2
+        return 1
+    fi
+
     # The deadline of finding the nodes and, without --every, of the round;
     # with --every each round gets its own
     local wait_secs=${every_secs:-${timeout_secs}}

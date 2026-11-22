@@ -584,6 +584,15 @@ debasher::_show_module_documentation()
     echo "\`${DEBASHER_PROGRAM_TYPE}\`"
     echo ""
 
+    # A resident program also has a durability mode, which the method sets
+    # together with the type
+    if [ "${DEBASHER_PROGRAM_TYPE}" = "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "## Durability"
+        echo ""
+        echo "\`${DEBASHER_PROGRAM_DURABILITY}\`"
+        echo ""
+    fi
+
     if [ "${show_shrdirs}" = 1 ]; then
         echo "## Shared Directories"
         debasher::_show_module_shared_dirs "${modulename}"

@@ -157,7 +157,7 @@ def summary(node, process, task_state):
     segments = log.list_segments()
     input_log = {
         "bytes": sum(size for _, size in segments),
-        "max_bytes": info["limits"]["input_log_max_bytes"] if info else None,
+        "max_bytes": info["limits"].get("input_log_max_bytes") if info else None,
         "segments": len(segments),
         "first_pos": None,
         "last_pos": None,
@@ -180,6 +180,10 @@ def summary(node, process, task_state):
         "process": process,
         "task": node.task_idx,
         "task_state": task_state,
+        # The mode of the program as the node last reported it: a
+        # non-durable node keeps no checkpoints and no input log, so the
+        # fields below are empty for it
+        "durability": info.get("durability") if info else None,
         "checkpoints": [
             {"epoch": epoch, "written_at": _get_mtime(path)} for epoch, path in checkpoints
         ],

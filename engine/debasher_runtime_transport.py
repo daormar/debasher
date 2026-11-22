@@ -58,6 +58,28 @@ from debasher_runtime_envelope import (
 # than reusing e.g. None (a legitimate DATA payload).
 _STOP = object()
 
+# The durability modes of a resident program (see "The non-durable mode" in
+# doc/design_doc_resident.md), as the engine exports the one of the program
+# in DEBASHER_PROGRAM_DURABILITY.
+DURABILITY_DURABLE = "durable"
+DURABILITY_NON_DURABLE = "non-durable"
+
+
+def _read_durability():
+    """
+    The durability mode of the program from DEBASHER_PROGRAM_DURABILITY:
+    durable when the variable is not set or empty (a process built without
+    the engine). Raises ValueError for any other value, which the engine
+    never exports.
+    """
+    durability = os.environ.get("DEBASHER_PROGRAM_DURABILITY") or DURABILITY_DURABLE
+    if durability not in (DURABILITY_DURABLE, DURABILITY_NON_DURABLE):
+        raise ValueError(
+            f"DEBASHER_PROGRAM_DURABILITY is {durability!r}: the durability mode of a "
+            f"program is {DURABILITY_DURABLE!r} or {DURABILITY_NON_DURABLE!r}"
+        )
+    return durability
+
 
 def _get_deadline(timeout):
     """The time.monotonic() by which a wait of `timeout` seconds ends, or
@@ -222,6 +244,10 @@ class _PortWorker:
     _OWN_FLAGS = ()
 
     def __init__(self, argv=None, opts=None):
+        # The durability mode of the program, which its module declares and
+        # the engine exports; durable when nothing exports it, as for a
+        # node built without the engine
+        self._durable = _read_durability() == DURABILITY_DURABLE
         # Before anything reads the ports: the checks below, and the queue
         # built for each output port
         self._take_ports_from_engine(os.environ.get("DEBASHER_PROCESS_PORTS", ""))

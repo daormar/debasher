@@ -79,6 +79,10 @@ debasher::_resident_tool_load_program()
         return 1
     fi
 
+    # The mode the run was launched in, from its command line file, over the
+    # one the module declares now, as the scheduler of the run is read
+    debasher::_set_durability_of_run "${absdirname}" || return 1
+
     debasher::_exec_program_func_for_module "${pfile}"
 }
 
@@ -471,6 +475,23 @@ debasher::_resident_tool_list_state_paths_of_process()
     if [ -d "${outdir}" ] && [ -n "$("${FIND}" "${outdir}" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
         echo "${outdir}"
     fi
+}
+
+########
+# Whether some process of the loaded program (DEBASHER_PROGRAM_PROCESSES)
+# has state in the output directory $1: a path that
+# debasher::_resident_tool_list_state_paths_of_process lists, the same that
+# debasher_reset_resident takes away. Returns 1 when none has.
+debasher::_resident_program_has_state()
+{
+    local absdirname=$1
+
+    local processname paths
+    for processname in "${!DEBASHER_PROGRAM_PROCESSES[@]}"; do
+        paths=$(debasher::_resident_tool_list_state_paths_of_process "${absdirname}" "${processname}") || return 1
+        [ -z "${paths}" ] || return 0
+    done
+    return 1
 }
 
 ########

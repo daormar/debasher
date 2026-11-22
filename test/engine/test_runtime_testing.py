@@ -490,3 +490,37 @@ def test_a_node_whose_state_after_the_replay_differs_is_reported():
 def test_check_replay_refuses_a_restart_outside_the_feeds():
     with pytest.raises(ValueError, match="capture_after"):
         _node(ACCUMULATE).check_replay(_FEEDS, capture_after=4)
+
+
+# --- a node of a non-durable program ---------------------------------------------
+
+
+def test_a_node_of_a_non_durable_program_is_built_as_the_engine_runs_it():
+    node_class = testing._load_node_class("Accumulate", ACCUMULATE)
+    node = testing.NodeUnderTest(node_class, {}, ["numbers"], ["outsum"], durable=False)
+    assert node.node._durable is False
+    node.feed("numbers", 3)
+    assert node.sent("outsum") == [3]
+
+
+def test_restart_and_check_replay_refuse_a_node_of_a_non_durable_program():
+    node_class = testing._load_node_class("Accumulate", ACCUMULATE)
+    node = testing.NodeUnderTest(node_class, {}, ["numbers"], ["outsum"], durable=False)
+    with pytest.raises(RuntimeError, match="non-durable program"):
+        node.restart()
+    with pytest.raises(RuntimeError, match="non-durable program"):
+        node.check_replay([("numbers", 1)], 0)
+
+
+def test_load_node_takes_the_durability_of_the_program_from_debasher_test(tmp_path, monkeypatch):
+    program = tmp_path / "prg.sh"
+    program.write_text("")
+    monkeypatch.setenv("DEBASHER_TEST_PFILE", str(program))
+    monkeypatch.setattr(testing, "_get_node_source", lambda pfile, process: ACCUMULATE)
+
+    monkeypatch.setenv("DEBASHER_PROGRAM_DURABILITY", "non-durable")
+    assert testing.load_node("Accumulate", inputs=["numbers"], outputs=["outsum"]).node._durable is False
+    monkeypatch.delenv("DEBASHER_PROGRAM_DURABILITY")
+    assert testing.load_node("Accumulate", inputs=["numbers"], outputs=["outsum"]).node._durable is True
+    # The test may still say otherwise
+    assert testing.load_node("Accumulate", inputs=["numbers"], outputs=["outsum"], durable=False).node._durable is False

@@ -891,3 +891,52 @@ def test_the_registrations_that_cannot_be_read_are_given_apart():
 
     registrations, unreadable = launcher_mod._read_registrations("/nonexistent")
     assert (registrations, unreadable) == ([], [])
+
+
+# --- a launcher node of a non-durable program --------------------------------------
+
+
+@pytest.fixture
+def non_durable(monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROGRAM_DURABILITY", "non-durable")
+
+
+def test_in_a_non_durable_program_the_request_number_comes_from_a_counter_on_disk(outdir, non_durable):
+    node = _node()
+    _request(node, 1, {"opts": {"-a": "x"}})
+    _request(node, 2, {"opts": {"-a": "y"}})
+    with open(outdir / ".launcher" / "request_counter") as f:
+        assert f.read().strip() == "2"
+
+    # A relaunched node, whose positions start at 1 again, goes on counting
+    relaunched = _node()
+    _request(relaunched, 1, {"opts": {"-a": "z"}})
+
+    assert _launch_record(outdir, "3") == {"life_id": node._life_id, "pos": 3, "opts": {"-a": "z"}}
+    for number in (1, 2, 3):
+        assert (outdir / ".launcher" / "registrations" / f"{number}.json").exists()
+
+
+def test_in_a_non_durable_program_a_run_directory_with_a_batch_run_is_not_registered_again(
+    outdir, non_durable, caplog
+):
+    node = _node()
+    _request(node, 1, {"opts": {"-a": "x"}, "run": "s17"})
+    # The same request again, as from a relaunched DirectoryWatcher, with
+    # the same life and the same request number as a replay would have
+    relaunched = _node()
+    _request(relaunched, 1, {"opts": {"-a": "x"}, "run": "s17"})
+
+    assert _launch_record(outdir, "s17") == {"life_id": node._life_id, "pos": 1, "opts": {"-a": "x"}}
+    assert not (outdir / ".launcher" / "registrations" / "2.json").exists()
+    assert "already has a batch run" in caplog.text
+    assert "belongs to another request" not in caplog.text
+    assert caplog.records[-1].levelname == "WARNING"
+
+
+def test_in_a_durable_program_the_request_number_is_the_position(outdir, monkeypatch):
+    monkeypatch.delenv("DEBASHER_PROGRAM_DURABILITY", raising=False)
+    node = _node()
+    _request(node, 7, {"opts": {}})
+    assert _launch_record(outdir, "7")["pos"] == 7
+    assert not (outdir / ".launcher" / "request_counter").exists()

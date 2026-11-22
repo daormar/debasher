@@ -57,7 +57,7 @@ DEBASHER_PROCSPECS_SEP=";"
 # a Supervisor, the startup deadline of a node, or of every node for a
 # Supervisor, and the batch runs a launcher node runs at a time, given per
 # process with add_debasher_process. Each, when given, is a positive number.
-DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms heartbeat_timeout_s startup_timeout_s max_concurrent_runs"
+DEBASHER_RESIDENT_COMP_SPEC_NAMES="input_log_max_mb out_backlog_max_mb out_backlog_fail_mb gil_switch_interval_ms inbound_queue_max_mb heartbeat_timeout_s startup_timeout_s max_concurrent_runs"
 # The scheduler with which a launcher node runs its batch runs, one of those
 # debasher_exec takes in --sched; the built-in one when not given
 DEBASHER_BATCH_SCHED_COMP_SPEC_NAME="batch_sched"
@@ -254,6 +254,16 @@ DEBASHER_MODULE_METHODS=(
 # Supervisor.
 DEBASHER_PROGRAM_TYPE_GENERAL="general"
 DEBASHER_PROGRAM_TYPE_RESIDENT="resident"
+
+# DURABILITY MODES OF A RESIDENT PROGRAM
+#
+# "durable" (default) keeps an input log and checkpoints at every node, so
+# that a node comes back from a crash or a stop with the state it had;
+# "non-durable" keeps neither, and a node comes back with its initial state
+# (see "The non-durable mode" in doc/design_doc_resident.md). Declared by
+# the module as the second argument of program_type.
+DEBASHER_DURABILITY_DURABLE="durable"
+DEBASHER_DURABILITY_NON_DURABLE="non-durable"
 
 # FIFO-RELATED CONSTANTS
 #
@@ -505,6 +515,11 @@ declare -a DEBASHER_PROGRAM_FUNC_FOR_MODULE_PFILE_STACK
 # invoked, so a composed sub-module's own `_program_type` has no
 # effect
 declare DEBASHER_PROGRAM_TYPE="${DEBASHER_PROGRAM_TYPE_GENERAL}"
+
+# Declare variable to store the durability mode of the current program
+# (see DEBASHER_DURABILITY_* above); only a resident program has one, and
+# only its top-level pfile's `_program_type` method sets it
+declare DEBASHER_PROGRAM_DURABILITY="${DEBASHER_DURABILITY_DURABLE}"
 
 # Declare associative array to store processes added to a program
 declare -A DEBASHER_PROGRAM_PROCESSES

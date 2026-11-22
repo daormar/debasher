@@ -35,6 +35,7 @@ from debasher_runtime_envelope import decode_envelope
 from debasher_runtime_fbp import FBPProcess
 from debasher_runtime_launcher import ProgramLauncher
 from debasher_runtime_supervisor import Supervisor
+from debasher_runtime_transport import DURABILITY_DURABLE, DURABILITY_NON_DURABLE
 from debasher_runtime_watcher import DirectoryWatcher
 
 
@@ -64,10 +65,15 @@ _REFUSED_KINDS = (Supervisor, ProgramLauncher)
 _source_cache = {}
 
 
-def load_node(process, opts=None, inputs=(), outputs=()):
+def load_node(process, opts=None, inputs=(), outputs=(), durable=None):
     """
     Builds the node of the process `process` of the program file that
     DEBASHER_TEST_PFILE names, and returns it as a NodeUnderTest.
+
+    `durable` says whether the node runs as in a durable program (True) or
+    in a non-durable one (False, where nothing is replayed and restart()
+    and check_replay() do not apply). Left None, it is what the program
+    declares, which debasher_test exports as DEBASHER_PROGRAM_DURABILITY.
 
     `opts` gives the options of the node, by name with or without the
     leading dash; a value True is a flag. `inputs` and `outputs` are its
@@ -87,7 +93,9 @@ def load_node(process, opts=None, inputs=(), outputs=()):
         )
     node_class = _load_node_class(process, _get_node_source(pfile, process))
     module_dir = os.path.dirname(os.path.abspath(pfile))
-    under_test = NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs), module_dir)
+    if durable is None:
+        durable = os.environ.get("DEBASHER_PROGRAM_DURABILITY", DURABILITY_DURABLE) != DURABILITY_NON_DURABLE
+    under_test = NodeUnderTest(node_class, opts or {}, list(inputs), list(outputs), module_dir, durable)
     with under_test._use_node_env():
         under_test.node.initialize_runtime()
     return under_test
@@ -181,12 +189,15 @@ class NodeUnderTest:
     gives what it gave without one, and `node` is the instance itself.
     """
 
-    def __init__(self, node_class, opts, inputs, outputs, module_dir=None):
+    def __init__(self, node_class, opts, inputs, outputs, module_dir=None, durable=True):
         self._node_class = node_class
         self._opts = dict(opts)
         self._inputs = inputs
         self._outputs = outputs
         self._module_dir = module_dir
+        # Whether the node runs as in a durable program: in a non-durable
+        # one there is no replay, so restart() and check_replay() refuse
+        self._durable = durable
         # The execdir of the node, where it may leave a notice: nothing is
         # written into the program directory
         self._tmpdir = tempfile.TemporaryDirectory(prefix="debasher_node_")
@@ -218,6 +229,7 @@ class NodeUnderTest:
             "DEBASHER_PROCESS_COMP_SPECS": None,
             "DEBASHER_PROCESS_TASK_IDX": None,
             "DEBASHER_PROCESS_MODULE_DIR": self._module_dir,
+            "DEBASHER_PROGRAM_DURABILITY": DURABILITY_DURABLE if self._durable else DURABILITY_NON_DURABLE,
         }
         saved = {name: os.environ.get(name) for name in env}
         try:
@@ -321,11 +333,16 @@ class NodeUnderTest:
         state makes a round trip through JSON, as a checkpoint does, and a
         new node with the same options and ports restores it and then runs
         initialize_runtime(). Raises AssertionError when the new node
-        captures a state other than the one it was restored from.
+        captures a state other than the one it was restored from, and
+        RuntimeError for a node of a non-durable program, which is never
+        restored from its state.
         """
+        self._refuse_if_non_durable("restart")
         with self._use_node_env():
             node_state = _round_trip_through_json(self.node.capture_node_state())
-        restarted = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
+        restarted = NodeUnderTest(
+            self._node_class, self._opts, self._inputs, self._outputs, self._module_dir, self._durable
+        )
         with restarted._use_node_env():
             restarted.node.restore_node_state(_round_trip_through_json(node_state))
             restarted.node.initialize_runtime()
@@ -344,9 +361,12 @@ class NodeUnderTest:
         same node state whether or not it is restarted (see restart) after
         the first `capture_after` of them. Both runs use new nodes built as
         this one was, in this process. Raises AssertionError at the first
-        port, or at the node state, that differs, and ValueError when
-        `capture_after` is not between 0 and the number of feeds.
+        port, or at the node state, that differs, ValueError when
+        `capture_after` is not between 0 and the number of feeds, and
+        RuntimeError for a node of a non-durable program, where nothing is
+        replayed.
         """
+        self._refuse_if_non_durable("check_replay")
         if not 0 <= capture_after <= len(feeds):
             raise ValueError(
                 f"check_replay: capture_after is {capture_after}: give a number "
@@ -386,10 +406,19 @@ class NodeUnderTest:
 
     def _build_new(self):
         """A new node built as this one was, initialized as load_node does."""
-        new = NodeUnderTest(self._node_class, self._opts, self._inputs, self._outputs, self._module_dir)
+        new = NodeUnderTest(
+            self._node_class, self._opts, self._inputs, self._outputs, self._module_dir, self._durable
+        )
         with new._use_node_env():
             new.node.initialize_runtime()
         return new
+
+    def _refuse_if_non_durable(self, what):
+        if not self._durable:
+            raise RuntimeError(
+                f"{what}: {self._node_class.__name__} runs in a non-durable program, where a node "
+                "is never restored from its state and nothing is replayed: there is no replay to check"
+            )
 
 
 def _set_env(name, value):

@@ -59,6 +59,9 @@ _PROGRAM_IN_PROGRESS = 2
 # its registrations. Its name starts with a dot, which no run directory may,
 # so that the two never clash.
 _BOOKKEEPING_DIR = ".launcher"
+# In a non-durable program, the file of the bookkeeping that holds the last
+# request number given (see ProgramLauncher._get_request_number)
+_REQUEST_COUNTER_FILE = "request_counter"
 
 # The options of the process, without their dash, that set up a launcher
 # node: the general program (required), the process of it to launch alone,
@@ -72,7 +75,7 @@ _RUNS_ROOT_OPTION = "runsdir"
 # --pfile, --outdir and --sched on its command line, and the last one
 # given wins
 _DEBASHER_EXEC_OPTIONS = frozenset({
-    "--help", "--version", "--pfile", "--outdir", "--sched",
+    "--help", "--version", "--pfile", "--outdir", "--sched", "--durability",
     "--builtinsched-cpus", "--builtinsched-mem", "--builtinsched-oneshot",
     "--builtinsched-debug", "--dflt-nodes", "--dflt-throttle",
     "--rerun-outdated-procs", "--conda-support", "--docker-support",
@@ -319,7 +322,9 @@ class ProgramLauncher(FBPProcess):
     parts is empty or starts with a dot:
     `{"opts": {"-bam": "/data/s17.bam"}, "run": "s17"}`. Without `opts`,
     the program is launched with no options; without `run`, the run
-    directory is named after the position of the request. Other fields are
+    directory is named after the request number: in a durable program the
+    position of the request in the input log, in a non-durable one a
+    counter that the node keeps on disk. Other fields are
     ignored. A request that does not follow this, that gives an option
     that debasher_exec reads itself (those of debasher_exec --help, such as
     --outdir, --sched, --wait or --debug), as a name or as a value, or
@@ -333,6 +338,14 @@ class ProgramLauncher(FBPProcess):
     each, `{"run": ..., "run_dir": ..., "status": ..., "exit_code": ...}`,
     with `run_dir` the absolute path of the run directory, and `status`
     "finished" for an exit code of 0 and "failed" for any other.
+
+    The queue of the node is on disk, so a request that it registered is
+    launched once also in a non-durable program, across crashes and stops.
+    There, a request in flight at a crash is lost, a request received again
+    (as from a relaunched DirectoryWatcher) is dropped with a warning, since
+    its run directory already has a batch run, and the end of a batch run
+    may be announced twice when the node crashes between bringing it in and
+    marking the run directory.
 
     A launcher node cannot be a task of an array process.
     """
@@ -524,6 +537,38 @@ class ProgramLauncher(FBPProcess):
             with open(tmp_path, "w") as f:
                 f.write(self._life_id + "\n")
             os.replace(tmp_path, path)
+        # In a non-durable program the request numbers come from a counter
+        # on disk, since the positions of an incarnation start at 1 again
+        # (see _get_request_number)
+        self._last_request_number = 0
+        if not self._durable:
+            try:
+                with open(self._get_bookkeeping_path(_REQUEST_COUNTER_FILE)) as f:
+                    self._last_request_number = int(f.read().strip() or 0)
+            except FileNotFoundError:
+                pass
+
+    def _get_request_number(self):
+        """
+        The number of the request that process_data is handling, which
+        names its registration and, by default, its run directory. In a
+        durable program it is the position of the request in the input log,
+        which a replay gives it again. In a non-durable program the
+        positions start at 1 in each incarnation, so the number comes from
+        a counter kept in the bookkeeping of the node, written before the
+        request registers anything: a crash in between skips a number and
+        never reuses one.
+        """
+        if self._durable:
+            return self._current_pos
+        number = self._last_request_number + 1
+        path = self._get_bookkeeping_path(_REQUEST_COUNTER_FILE)
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w") as f:
+            f.write(f"{number}\n")
+        os.replace(tmp_path, path)
+        self._last_request_number = number
+        return number
 
     def capture_node_state(self):
         return {"announced": sorted(self._announced)}
@@ -583,26 +628,38 @@ class ProgramLauncher(FBPProcess):
         if error is not None:
             self.log.error("dropping the request at position %s: %s", self._current_pos, error)
             return
-        pos = self._current_pos
+        pos = self._get_request_number()
         run = packet.get("run") or str(pos)
         run_dir = self._get_run_dir(run)
         record = {"life_id": self._life_id, "pos": pos, "opts": packet.get("opts", {})}
 
         # The rule of ownership: the run directory belongs to the request
-        # that wrote its launch.json. The same life and position is that
-        # request, processed again by a replay; any other owner wins
+        # that wrote its launch.json. The same life and request number is
+        # that request, processed again by a replay; any other owner wins.
+        # A non-durable program replays nothing, so there any owner is
+        # another request: one received again, as from a relaunched
+        # DirectoryWatcher, which is no error of the program
         launch_path = os.path.join(run_dir, _LAUNCH_FILE)
         try:
             owner = _read_json(launch_path)
         except FileNotFoundError:
             owner = None
-        if owner is not None and (owner.get("life_id"), owner.get("pos")) != (self._life_id, pos):
-            self.log.error(
-                "dropping the request at position %s: run directory %s belongs to another request",
-                pos,
-                run_dir,
-            )
-            return
+        if owner is not None:
+            if not self._durable:
+                self.log.warning(
+                    "dropping request %s: run directory %s already has a batch run "
+                    "(a request received again, as after a relaunch)",
+                    pos,
+                    run_dir,
+                )
+                return
+            if (owner.get("life_id"), owner.get("pos")) != (self._life_id, pos):
+                self.log.error(
+                    "dropping the request at position %s: run directory %s belongs to another request",
+                    pos,
+                    run_dir,
+                )
+                return
         # launch.json before the registration, so that a registration
         # always finds it; both writes are idempotent, so a replay writes
         # the same content again

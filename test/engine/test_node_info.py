@@ -95,7 +95,9 @@ def test_the_node_info_file_is_written_when_the_threads_start(execdir, fifo_opts
         "out_backlog_max_bytes": lib.FBPProcess.OUT_BACKLOG_MAX_BYTES,
         "out_backlog_fail_bytes": 3 * 1024 * 1024,
         "gil_switch_interval_secs": lib.FBPProcess.GIL_SWITCH_INTERVAL_SECS,
+        "inbound_queue_max_bytes": lib.FBPProcess.INBOUND_QUEUE_MAX_BYTES,
     }
+    assert info["durability"] == "durable"
     assert "healthy" not in info
     assert info["out_backlog_bytes"] == {}
     assert info["checkpoints_skipped_since"] is None

@@ -19,6 +19,9 @@
 # INCLUDE BASH LIBRARIES
 . "${debasher_pkglibdir}"/debasher_lib || exit 1
 . "${debasher_pkglibdir}"/debasher_builtin_sched_lib || exit 1
+# For the state that a resident program keeps across runs (see
+# ensure_durability_unchanged_over_state)
+. "${debasher_pkglibdir}"/debasher_lib_resident_tools || exit 1
 
 #############
 # CONSTANTS #
@@ -50,6 +53,7 @@ print_desc()
 usage()
 {
     echo "debasher_exec             --pfile <string> --outdir <string> [--sched <string>]"
+    echo "                          [--durability <string>]"
     echo "                          [--builtinsched-cpus <int>] [--builtinsched-mem <string>]"
     echo "                          [--builtinsched-oneshot]"
     echo "                          [--dflt-nodes <string>] [--dflt-throttle <string>]"
@@ -66,6 +70,10 @@ usage()
     echo "--sched <string>          Scheduler used to execute the program (if not given,"
     echo "                          SLURM when sbatch is found in the PATH, BUILTIN"
     echo "                          otherwise)"
+    echo "--durability <string>     Durability mode of a resident program, ${DEBASHER_DURABILITY_DURABLE} or"
+    echo "                          ${DEBASHER_DURABILITY_NON_DURABLE}: the one its module declares, which is"
+    echo "                          recorded in the saved command line; given, it has to"
+    echo "                          agree with the declaration"
     echo "--builtinsched-cpus <int> Available CPUs for built-in scheduler (${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} by default)."
     echo "                          A value of ${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS} means unlimited CPUs"
     echo "--builtinsched-mem <string>"
@@ -160,6 +168,7 @@ read_pars()
     pfile_given=0
     outdir_given=0
     sched_given=0
+    durability_given=0
     builtin_sched_cpus_given=0
     builtin_sched_cpus=${DEBASHER_BUILTIN_SCHED_UNLIMITED_CPUS}
     builtin_sched_mem_given=0
@@ -199,6 +208,11 @@ read_pars()
                        sched_opt=$1
                        sched_given=1
                        ;;
+            "--durability") shift
+                            require_opt_value "--durability" $# || return 1
+                            durability_opt=$1
+                            durability_given=1
+                            ;;
             "--builtinsched-cpus") shift
                                    require_opt_value "--builtinsched-cpus" $# || return 1
                                    check_builtin_sched_cpus "$1" || return 1
@@ -435,6 +449,81 @@ enforce_resident_program_scheduling()
     builtin_sched_oneshot_given=1
 
     echo "" >&2
+}
+
+########
+# The durability mode of a resident program is the one its module declares
+# (see debasher::program_type). --durability only states it: given, it has
+# to agree with the declaration, and it is an error for a general program,
+# which has no mode. It exists so that the command line saved in the
+# output directory, which records the mode, stays a command line that
+# debasher_exec accepts.
+enforce_resident_program_durability()
+{
+    if [ ${durability_given} -eq 0 ]; then
+        return 0
+    fi
+
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        echo "Error! --durability applies to a '${DEBASHER_PROGRAM_TYPE_RESIDENT}' program only, and this program is '${DEBASHER_PROGRAM_TYPE}'" >&2
+        return 1
+    fi
+
+    if [ "${durability_opt}" != "${DEBASHER_DURABILITY_DURABLE}" ] && [ "${durability_opt}" != "${DEBASHER_DURABILITY_NON_DURABLE}" ]; then
+        echo "Error! invalid durability mode '${durability_opt}' (expected '${DEBASHER_DURABILITY_DURABLE}' or '${DEBASHER_DURABILITY_NON_DURABLE}')" >&2
+        return 1
+    fi
+
+    if [ "${durability_opt}" != "${DEBASHER_PROGRAM_DURABILITY}" ]; then
+        echo "Error! --durability ${durability_opt} does not agree with the program, whose module declares the '${DEBASHER_PROGRAM_DURABILITY}' mode (program_type \"${DEBASHER_PROGRAM_TYPE_RESIDENT}\" \"${DEBASHER_PROGRAM_DURABILITY}\"); the mode is declared in the module, not chosen at the launch" >&2
+        return 1
+    fi
+}
+
+########
+# The command line saved in the output directory records the durability
+# mode a resident program runs with, as it records the effective
+# scheduler (see record_effective_scheduler_in_command_line): the next
+# debasher_exec on the directory reads the mode of this run from it (see
+# ensure_durability_unchanged_over_state), and so do the tools. A general
+# program has no mode, and its command line carries none.
+record_effective_durability_in_command_line()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    command_line=$(debasher::_add_durability_to_serialized_cmdline "${command_line}" "${DEBASHER_PROGRAM_DURABILITY}")
+}
+
+########
+# A resident program is not launched in one durability mode over the state
+# that a run in the other mode left: a non-durable launch would leave the
+# checkpoints and input logs of a durable run on disk, stale, for a later
+# durable launch to resume from, and a durable launch would take what the
+# processes of a non-durable run left in their output directories for its
+# own. The mode of the earlier run is read from the command line it saved
+# (see record_effective_durability_in_command_line), and the state is what
+# debasher_reset_resident takes away, which the error names. Runs under
+# the lock of the output directory, after the mode of this run is known
+# and before the saved command line is replaced.
+ensure_durability_unchanged_over_state()
+{
+    if [ "${DEBASHER_PROGRAM_TYPE}" != "${DEBASHER_PROGRAM_TYPE_RESIDENT}" ]; then
+        return 0
+    fi
+
+    local command_line_file="${outd}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+    [ -f "${command_line_file}" ] || return 0
+
+    local previous_durability
+    previous_durability=$(debasher::_get_durability_from_command_line_file "${command_line_file}") || return 1
+    [ "${previous_durability}" != "${DEBASHER_PROGRAM_DURABILITY}" ] || return 0
+
+    if debasher::_resident_program_has_state "${outd}"; then
+        echo "Error! this program is '${DEBASHER_PROGRAM_DURABILITY}', but the output directory holds the state of a run in the '${previous_durability}' mode; a program does not change its durability mode over state: run debasher_reset_resident -d ${outd} first, so that every node starts afresh" >&2
+        return 1
+    fi
 }
 
 ########
@@ -1412,7 +1501,11 @@ debasher::_validate_resident_program_processes || exit 1
 
 enforce_resident_program_scheduling || exit 1
 
+enforce_resident_program_durability || exit 1
+
 record_effective_scheduler_in_command_line || exit 1
+
+record_effective_durability_in_command_line || exit 1
 
 if [ ${show_cmdline_opts_given} -eq 1 ]; then
     show_cmdline_opts || exit 1
@@ -1434,6 +1527,9 @@ debasher::_check_process_interpreters || exit 1
 
 # Check if there are running processes and abort execution if true
 ensure_program_not_being_executed || exit 1
+
+# A resident program keeps the durability mode of the state it resumes
+ensure_durability_unchanged_over_state || exit 1
 
 # Define basic file variables: what describes the run is written into the
 # preparation directory, and the options of the earlier run are read from

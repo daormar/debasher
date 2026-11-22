@@ -659,3 +659,89 @@ PYEOF
     [ "${status}" -ne 0 ]
     [[ "${output}" == *"collides with method '_slurm_sigterm_handler'"* ]]
 }
+
+# --- the durability mode of a resident program ---------------------------
+
+@test "debasher::program_type leaves a resident program durable when no mode is given" {
+    debasher::program_type "resident"
+    [ "${DEBASHER_PROGRAM_DURABILITY}" = "durable" ]
+    ! debasher::_is_non_durable_program
+}
+
+@test "debasher::program_type takes the non-durable mode as its second argument" {
+    debasher::program_type "resident" "non-durable"
+    [ "${DEBASHER_PROGRAM_DURABILITY}" = "non-durable" ]
+    debasher::_is_non_durable_program
+}
+
+@test "debasher::program_type takes the durable mode given explicitly" {
+    debasher::program_type "resident" "durable"
+    [ "${DEBASHER_PROGRAM_DURABILITY}" = "durable" ]
+}
+
+@test "debasher::program_type aborts on a mode that is neither durable nor non-durable" {
+    run debasher::program_type "resident" "light"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"Error: invalid durability mode 'light'"* ]]
+}
+
+@test "debasher::program_type aborts on a mode given for a general program" {
+    run debasher::program_type "general" "non-durable"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"applies to a 'resident' program only"* ]]
+}
+
+@test "a general program is never non-durable" {
+    debasher::program_type "general"
+    ! debasher::_is_non_durable_program
+}
+
+@test "debasher::_add_durability_to_serialized_cmdline adds the option the tools read back, and leaves one already given" {
+    local serialized result qcmdline
+    serialized=$(debasher::_serialize_args "debasher_exec" "--pfile" "prg.sh" "--outdir" "out")
+
+    result=$(debasher::_add_durability_to_serialized_cmdline "${serialized}" "non-durable")
+    qcmdline=$(debasher::_sep_serialized_to_qstr "${DEBASHER_ARG_SEP}" "${result}")
+    run debasher::_get_opt_value_from_quoted_cmd "${qcmdline}" "--durability"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "non-durable" ]
+
+    [ "$(debasher::_add_durability_to_serialized_cmdline "${result}" "durable")" = "${result}" ]
+}
+
+@test "debasher::_get_durability_from_command_line_file reads the mode of the run, durable when the file names none" {
+    TAIL="$(command -v tail)"
+    local outdir="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    local file="${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    printf 'cd /work\n' > "${file}"
+    printf '%q ' debasher_exec --pfile /abs/prg.sh --outdir out --sched BUILTIN >> "${file}"
+    echo "" >> "${file}"
+    [ "$(debasher::_get_durability_from_command_line_file "${file}")" = "durable" ]
+
+    printf 'cd /work\n' > "${file}"
+    printf '%q ' debasher_exec --pfile /abs/prg.sh --outdir out --sched BUILTIN --durability non-durable >> "${file}"
+    echo "" >> "${file}"
+    [ "$(debasher::_get_durability_from_command_line_file "${file}")" = "non-durable" ]
+}
+
+@test "debasher::_set_durability_of_run sets the mode that the command line file records, durable when it records none" {
+    TAIL="$(command -v tail)"
+    local outdir="${BATS_TEST_TMPDIR}/out"
+    mkdir -p "${outdir}"
+    local file="${outdir}/${DEBASHER_PRG_COMMAND_LINE_BASENAME}"
+
+    DEBASHER_PROGRAM_DURABILITY="durable"
+    printf 'cd /work\n' > "${file}"
+    printf '%q ' debasher_exec --pfile /abs/prg.sh --outdir out --sched BUILTIN --durability non-durable >> "${file}"
+    echo "" >> "${file}"
+    debasher::_set_durability_of_run "${outdir}"
+    [ "${DEBASHER_PROGRAM_DURABILITY}" = "non-durable" ]
+
+    printf 'cd /work\n' > "${file}"
+    printf '%q ' debasher_exec --pfile /abs/prg.sh --outdir out --sched BUILTIN >> "${file}"
+    echo "" >> "${file}"
+    debasher::_set_durability_of_run "${outdir}"
+    [ "${DEBASHER_PROGRAM_DURABILITY}" = "durable" ]
+}
