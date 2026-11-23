@@ -88,7 +88,11 @@ or change it before you edit anything:
   value or chosen on the command line, and `-process` for a single process of
   it), where its run directories go (its output directory, or `-runsdir`), and
   the node that reads the results of each batch run, which takes the run
-  directory from `run_dir` in the messages on `-outdone`.
+  directory from `run_dir` in the messages on `-outdone`, and, when the
+  processes of that program declare Conda environments or Docker images,
+  `batch_conda_support` or `batch_docker_support` (yes) in its
+  specifications, since the execution options of the resident program do not
+  reach its batch runs.
 
 Prefer few processes with a clear job each over many tiny ones, and the
 connections of the data over ordering by hand.

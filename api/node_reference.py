@@ -44,7 +44,8 @@ _CLASSES = {
         (),
         (),
         (
-            "DONE_PORT", "MAX_CONCURRENT_RUNS", "BATCH_SCHED", "STATUS_CHECK_INTERVAL_SECS",
+            "DONE_PORT", "MAX_CONCURRENT_RUNS", "BATCH_SCHED", "BATCH_CONDA_SUPPORT",
+            "BATCH_DOCKER_SUPPORT", "STATUS_CHECK_INTERVAL_SECS",
         ),
     ),
 }

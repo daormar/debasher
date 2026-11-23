@@ -71,7 +71,11 @@ def _computational_specs_str(specs: ComputationalSpecs | SeqComputationalSpecs) 
         value = getattr(specs, name, None)
         if value is None:
             continue
-        parts.append(f"{name}={value:g}" if isinstance(value, (int, float)) else f"{name}={value}")
+        if isinstance(value, bool):
+            # The engine reads yes or no (see debasher::_check_resident_comp_spec_values)
+            parts.append(f"{name}={'yes' if value else 'no'}")
+        else:
+            parts.append(f"{name}={value:g}" if isinstance(value, (int, float)) else f"{name}={value}")
     return " ".join(parts)
 
 
@@ -87,6 +91,8 @@ RESIDENT_COMP_SPEC_NAMES = (
     "startup_timeout_s",
     "max_concurrent_runs",
     "batch_sched",
+    "batch_conda_support",
+    "batch_docker_support",
     "heartbeat_timeout_s",
 )
 

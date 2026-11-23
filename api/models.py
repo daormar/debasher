@@ -110,6 +110,8 @@ class ComputationalSpecs(BaseModel):
     # A ProgramLauncher only.
     max_concurrent_runs: Optional[int] = None
     batch_sched: Optional[str] = None
+    batch_conda_support: Optional[bool] = None
+    batch_docker_support: Optional[bool] = None
     # The Supervisor only.
     heartbeat_timeout_s: Optional[float] = None
 

@@ -47,6 +47,17 @@ debasher::define_conda_env()
     # error is given once, here
     debasher::_load_conda_functions || return 1
 
+    if debasher::_conda_env_exists "${env_name}"; then
+        return 0
+    fi
+
+    # Two runs that prepare the same environment at once (the batch runs
+    # of a launcher node, two runs by hand) would both find it missing and
+    # both create it, and the second would fail: a lock makes one create
+    # it while the other waits and then finds it
+    local lockdir=$(debasher::_get_conda_env_lock_dirname "${env_name}")
+    debasher::_take_conda_env_lock "${lockdir}" || return 1
+    local prepared=0
     if ! debasher::_conda_env_exists "${env_name}"; then
         local condadir=$(debasher::_get_absolute_condadir)
 
@@ -54,9 +65,54 @@ debasher::define_conda_env()
         local abs_yml_fname=$(debasher::_get_abs_yml_fname "${yml_file}")
 
         echo "Creating conda environment ${env_name} from file ${abs_yml_fname}..." >&2
-        debasher::_conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}" || return 1
-        echo "Conda environment ${env_name} created" >&2
+        if debasher::_conda_env_prepare "${env_name}" "${abs_yml_fname}" "${condadir}"; then
+            echo "Conda environment ${env_name} created" >&2
+        else
+            prepared=1
+        fi
     fi
+    "${RM}" -rf "${lockdir}"
+    return ${prepared}
+}
+
+########
+# Prints the directory that serves as the lock of the creation of the conda
+# environment $1: under .conda of the home directory of the user, which
+# conda itself keeps and which every run of the user shares, named after the
+# environment (an absolute path with every "/" turned into "_"); without a
+# home directory, under the temporary directory.
+debasher::_get_conda_env_lock_dirname()
+{
+    local env_name=$1
+    local base="${HOME:-${TMPDIR:-/tmp}}/.conda"
+    echo "${base}/debasher_locks/${env_name//\//_}"
+}
+
+########
+# Takes the lock $1 for this process: makes the directory, which is atomic,
+# and leaves the id of this process in it. While another process holds it,
+# waits, saying so once a minute; a lock whose holder is gone (its process
+# id is not alive) is taken away and taken. Returns 1 if the directory
+# cannot be made.
+debasher::_take_conda_env_lock()
+{
+    local lockdir=$1
+    "${MKDIR}" -p "$("${DIRNAME}" "${lockdir}")" || return 1
+    local waited=0
+    while ! "${MKDIR}" "${lockdir}" 2> /dev/null; do
+        local holder=$("${CAT}" "${lockdir}/pid" 2> /dev/null)
+        if [ -n "${holder}" ] && ! kill -0 "${holder}" 2> /dev/null; then
+            echo "Taking away the lock of a conda environment left by process ${holder}, which is gone" >&2
+            "${RM}" -rf "${lockdir}"
+            continue
+        fi
+        if [ $((waited % 60)) -eq 0 ]; then
+            echo "Waiting for process ${holder:-?} to finish creating the conda environment..." >&2
+        fi
+        "${SLEEP}" 2
+        waited=$((waited + 2))
+    done
+    echo "$$" > "${lockdir}/pid"
 }
 
 ########

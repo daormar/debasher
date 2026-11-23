@@ -386,6 +386,35 @@ def test_the_scheduler_of_the_batch_runs_reaches_debasher_exec(outdir, monkeypat
     assert "--sched SLURM --wait" in (outdir / "a" / "fake_args").read_text()
 
 
+def test_the_conda_and_docker_support_of_the_batch_runs_reach_debasher_exec(outdir, monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; batch_conda_support=yes; batch_docker_support=yes")
+    node = _node()
+    assert node.BATCH_CONDA_SUPPORT is True and node.BATCH_DOCKER_SUPPORT is True
+    _request(node, 1, {"opts": {"-k": "3"}, "run": "a"})
+
+    _check_until_ended(node, outdir, "a")
+
+    # Before the options of the request, after those of the launcher
+    assert "--sched BUILTIN --conda-support --docker-support -k 3" in (outdir / "a" / "fake_args").read_text()
+
+
+def test_without_the_support_specifications_the_batch_runs_prepare_no_environment(outdir):
+    node = _node()
+    assert node.BATCH_CONDA_SUPPORT is False and node.BATCH_DOCKER_SUPPORT is False
+    _request(node, 1, {"opts": {}, "run": "a"})
+
+    _check_until_ended(node, outdir, "a")
+
+    args = (outdir / "a" / "fake_args").read_text()
+    assert "--conda-support" not in args and "--docker-support" not in args
+
+
+def test_a_support_specification_that_is_not_yes_or_no_is_refused(outdir, monkeypatch):
+    monkeypatch.setenv("DEBASHER_PROCESS_COMP_SPECS", "cpus=1; batch_conda_support=true")
+    with pytest.raises(ValueError, match="batch_conda_support='true' is not yes or no"):
+        _node()
+
+
 def test_the_shell_of_a_batch_run_is_kept_with_its_start_time(outdir):
     node = _node()
     _request(node, 1, {"opts": {}, "run": "a"})

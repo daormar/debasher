@@ -389,6 +389,8 @@
             "startup_timeout_s": null,
             "max_concurrent_runs": null,
             "batch_sched": null,
+            "batch_conda_support": null,
+            "batch_docker_support": null,
             "heartbeat_timeout_s": null
           }
         },
@@ -754,6 +756,30 @@
           ],
           "default": null,
           "title": "Batch Sched"
+        },
+        "batch_conda_support": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Conda Support"
+        },
+        "batch_docker_support": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Batch Docker Support"
         },
         "heartbeat_timeout_s": {
           "anyOf": [

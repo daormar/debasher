@@ -60,7 +60,10 @@ the runs by itself. When the entries arrive over time, a launcher node
 of a resident program launches one run for each request that it
 receives (see :ref:`resident`); its specification
 ``max_concurrent_runs`` (one by default) says how many of those runs go
-at once.
+at once, and ``batch_conda_support`` or ``batch_docker_support``
+(``yes``) makes them prepare the conda environments or docker images
+that the processes of the general program declare, as
+``--conda-support`` and ``--docker-support`` do for a run by hand.
 
 With one run for each entry, a step that combines the results of every
 entry is not part of any of them: it runs separately, as a program of

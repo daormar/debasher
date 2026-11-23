@@ -362,6 +362,11 @@ export function noHoldFifosOption(): ProgramOption {
 // cpus, mem and time.
 type ResidentSpecField = Exclude<keyof ComputationalSpecs, "cpus" | "mem" | "time">;
 
+// The specifications of a ProgramLauncher that are yes or no: whether its
+// batch runs are prepared with conda or docker support (debasher_exec
+// --conda-support, --docker-support), read by the engine as yes or no.
+export const YES_OR_NO_SPEC_FIELDS: ResidentSpecField[] = ["batch_conda_support", "batch_docker_support"];
+
 const NODE_SPEC_FIELDS: ResidentSpecField[] = [
   "input_log_max_mb",
   "out_backlog_max_mb",
@@ -374,7 +379,7 @@ const NODE_SPEC_FIELDS: ResidentSpecField[] = [
 export const RESIDENT_SPEC_FIELDS: Record<NodeKind, ResidentSpecField[]> = {
   FBPProcess: NODE_SPEC_FIELDS,
   DirectoryWatcher: NODE_SPEC_FIELDS,
-  ProgramLauncher: [...NODE_SPEC_FIELDS, "max_concurrent_runs", "batch_sched"],
+  ProgramLauncher: [...NODE_SPEC_FIELDS, "max_concurrent_runs", "batch_sched", "batch_conda_support", "batch_docker_support"],
   Supervisor: ["heartbeat_timeout_s", "startup_timeout_s"],
 };
 
@@ -387,6 +392,8 @@ export const RESIDENT_SPEC_LABELS: Record<ResidentSpecField, string> = {
   startup_timeout_s: "Startup deadline (s)",
   max_concurrent_runs: "Batch runs at a time",
   batch_sched: "Scheduler of the batch runs",
+  batch_conda_support: "Conda support of the batch runs",
+  batch_docker_support: "Docker support of the batch runs",
   heartbeat_timeout_s: "Heartbeat timeout (s)",
 };
 

@@ -195,7 +195,8 @@ relative to the output directory of the run.
 - **computational specification**: a resource that a process asks for (`cpus`,
   `mem` and `time`, always given, and `nodes`, `account`, `partition` and
   `throttle`), or, for a node of a resident program, one of its settings (its
-  limits, its timeouts, `max_concurrent_runs` and `batch_sched`).
+  limits, its timeouts, `max_concurrent_runs`, `batch_sched`,
+  `batch_conda_support` and `batch_docker_support`).
 - **additional specification**: an attribute that changes how the engine treats
   a process or a sequential process: `processdeps`, `force`, `alias`,
   `ext_alias` and `alias_opt_map`, and, for a sequential process only, `sched`.
@@ -939,15 +940,16 @@ separated by commas, one value for each attempt; the built-in scheduler takes
 the first value. How each scheduler uses them is described in "Scheduling". The
 nodes of a resident program take settings of their own as computational
 specifications: the limits of a node, the timeouts that the `Supervisor` reads
-and, for a launcher node, `max_concurrent_runs` and the scheduler of its batch
-runs (`batch_sched`). The engine checks them along with the others, and
-`doc/design_doc_resident.md` describes them (see "Computational specifications
-of a resident process" and "Launching from the queue on disk" there). A process
-can also pass one of its specifications to its tasks as an option (see "Defining
-the options of a task"). The additional specifications change how the engine
-treats the process: `processdeps` gives its explicit dependencies, `force=yes`
-marks it to rerun on every run, and `alias`, `ext_alias` and `alias_opt_map` are
-described above.
+and, for a launcher node, `max_concurrent_runs`, the scheduler of its batch
+runs (`batch_sched`) and whether they are prepared with conda or docker support
+(`batch_conda_support`, `batch_docker_support`). The engine checks them along
+with the others, and `doc/design_doc_resident.md` describes them (see
+"Computational specifications of a resident process" and "Launching from the
+queue on disk" there). A process can also pass one of its specifications to its
+tasks as an option (see "Defining the options of a task"). The additional
+specifications change how the engine treats the process: `processdeps` gives
+its explicit dependencies, `force=yes` marks it to rerun on every run, and
+`alias`, `ext_alias` and `alias_opt_map` are described above.
 `sched`, which only a sequential process has, is described in "Sequential
 processes", and a process that gives it is refused when it is added.
 
@@ -960,6 +962,7 @@ or the other way round, stops the preparation of the run, since it would
 otherwise be ignored. So do a process without `cpus`, `mem` or `time`, a setting
 of a resident node that is not a positive number (a positive whole number for
 `max_concurrent_runs`), a `batch_sched` other than `BUILTIN` or `SLURM`, a
+`batch_conda_support` or `batch_docker_support` other than `yes` or `no`, a
 dependency on a process that is not part of the program, and, under the Slurm
 scheduler, a process with more than one attempt whose explicit dependencies are
 joined by `?` (see "The Slurm scheduler"). The final process specification is
@@ -2755,7 +2758,14 @@ whatever its number of tasks, in the shell of `debasher_exec` and before any
 process is launched:
 
 - `define_conda_env` creates the environment from the `.yml` file when no
-  environment of that name exists, and leaves it alone otherwise. The file is
+  environment of that name exists, and leaves it alone otherwise. Two runs
+  that prepare the same environment at once, such as the batch runs of a
+  launcher node (see "Launching from the queue on disk" in
+  `doc/design_doc_resident.md`), take turns through a lock, a directory made
+  with `mkdir` under `.conda` of the home directory of the user, which conda
+  itself keeps: the one that takes it creates the environment, and the other
+  waits and then finds it. A lock whose holder is gone is taken away by the
+  next run that finds it. The file is
   looked for in the directories of `DEBASHER_YML_DIR`, separated by colons,
   and then among the environment files that DeBasher installs, and the output
   of `conda` goes to `<name>.log` in the directory that `DEBASHER_CONDA_DIR`

@@ -35,7 +35,7 @@ class _Member:
     force: bool = False
     position: tuple[float, float] | None = None
     initiator: bool = False
-    node_specs: dict[str, float | int | str] | None = None
+    node_specs: dict[str, float | int | str | bool] | None = None
 
 
 @dataclass

@@ -109,6 +109,14 @@ debasher::_check_resident_comp_spec_values()
         echo "Error: ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} computational specification of process ${processname} must be ${DEBASHER_BUILTIN_SCHEDULER} or ${DEBASHER_SLURM_SCHEDULER}, got \"${batch_sched}\"" >&2
         return 1
     fi
+    # The conda and docker support of the batch runs, yes or no
+    for specname in ${DEBASHER_BATCH_SUPPORT_COMP_SPEC_NAMES}; do
+        local value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
+        if [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && [ "${value}" != "yes" ] && [ "${value}" != "no" ]; then
+            echo "Error: ${specname} computational specification of process ${processname} must be yes or no, got \"${value}\"" >&2
+            return 1
+        fi
+    done
 }
 
 ########

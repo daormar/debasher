@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useProgram } from "../store/ProgramContext";
 import type { ComputationalSpecs, ProgramProcess } from "../models/process";
 import { DEFAULT_COMPUTATIONAL_SPECS } from "../models/process";
-import { RESIDENT_SPEC_FIELDS, RESIDENT_SPEC_LABELS } from "../models/node";
+import { RESIDENT_SPEC_FIELDS, RESIDENT_SPEC_LABELS, YES_OR_NO_SPEC_FIELDS } from "../models/node";
 
 // The schedulers that a ProgramLauncher may give its batch runs.
 const BATCH_SCHEDULERS = ["BUILTIN", "SLURM"];
@@ -11,6 +11,18 @@ const BATCH_SCHEDULERS = ["BUILTIN", "SLURM"];
 interface Props {
   process: ProgramProcess;
   onClose: () => void;
+}
+
+// The text of a specification in the editor: a yes or no one shows as such,
+// an unset one as empty, which leaves the default of the class.
+function specText(value: number | string | boolean | undefined): string {
+  if (value === undefined) {
+    return "";
+  }
+  if (typeof value === "boolean") {
+    return value ? "yes" : "no";
+  }
+  return value.toString();
 }
 
 export default function ComputationalSpecsEditor({ process, onClose }: Props) {
@@ -38,7 +50,7 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
   const [residentValues, setResidentValues] =
     useState<Record<string, string>>(() =>
       Object.fromEntries(
-        residentFields.map(field => [field, process.computationalSpecs[field]?.toString() ?? ""])
+        residentFields.map(field => [field, specText(process.computationalSpecs[field])])
       )
     );
 
@@ -57,6 +69,8 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
       }
       if (field === "batch_sched") {
         specs.batch_sched = text;
+      } else if (field === "batch_conda_support" || field === "batch_docker_support") {
+        specs[field] = text === "yes";
       } else {
         specs[field] = Number(text);
       }
@@ -166,7 +180,21 @@ export default function ComputationalSpecsEditor({ process, onClose }: Props) {
               {RESIDENT_SPEC_LABELS[field]}
             </label>
 
-            {field === "batch_sched" ? (
+            {YES_OR_NO_SPEC_FIELDS.includes(field) ? (
+
+              <select
+                value={residentValues[field]}
+                onChange={(event) =>
+                  setResidentValues(current => ({ ...current, [field]: event.target.value }))
+                }
+                style={{ width: "100%" }}
+              >
+                <option value="">Default of the class (no)</option>
+                <option value="yes">yes</option>
+                <option value="no">no</option>
+              </select>
+
+            ) : field === "batch_sched" ? (
 
               <select
                 value={residentValues[field]}

@@ -201,8 +201,9 @@ entries below that refer to them.
   only a node of a resident program reads: the limits of a node of the
   design of resident programs (`input_log_max_mb`, `out_backlog_max_mb`,
   `out_backlog_fail_mb`, `gil_switch_interval_ms`) and
-  `startup_timeout_s`, `max_concurrent_runs`, `batch_sched` and
-  `heartbeat_timeout_s`, given with the specifications of its use.
+  `startup_timeout_s`, `max_concurrent_runs`, `batch_sched`,
+  `batch_conda_support`, `batch_docker_support` and `heartbeat_timeout_s`,
+  given with the specifications of its use.
 - **launcher**: `debasher_build`, a Bash script built by `make` that
   chooses the Python to run the tool with and runs the Python module
   `debasher.build` as `python -m` does, without the current directory at

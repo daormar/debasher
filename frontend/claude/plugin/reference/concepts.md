@@ -133,7 +133,10 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   once (not below the number of tasks of a process with a FIFO between two of
   its own tasks, see "FIFOs between processes of several tasks");
   `condaSupport` and `dockerSupport` enable the environments that processes
-  declare; `rerunOutdatedProcs` runs again the processes that finished before
+  declare, for this program's run only: the batch runs of a launcher node take
+  theirs from its `batch_conda_support` and `batch_docker_support` (see
+  "Specifications of a node" below); `rerunOutdatedProcs` runs again the
+  processes that finished before
   the last change of the generated script (see "Running and following").
 - **Program options.** The values of the command-line options for the next
   run, by label; setting them replaces them all. An empty value leaves the
@@ -428,8 +431,11 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   A request to a launcher is `{"opts": {"-<option>": "<value>"}, "run": "<run
   directory>"}`, both fields optional: `opts` holds options of the general
   program (values as strings), never one that `debasher_exec` reads itself
-  (`--outdir`, `--sched`, `--wait`, `--debug`, ...), as a name or a value, and
-  `run` is a relative path with no part empty or starting with a dot. The
+  (`--outdir`, `--sched`, `--wait`, `--debug`, ...), as a name or a value (the
+  scheduler and the conda or docker support of the batch runs come from the
+  specifications of the launcher, `batch_sched`, `batch_conda_support` and
+  `batch_docker_support`), and `run` is a relative path with no part empty or
+  starting with a dot. The
   launcher drops any other request with an error in its scheduler output.
 - **Durability** (`durability`, set with `set_program_settings`): a resident
   program is `durable` (the default) or `non-durable`. Durable, every node keeps
@@ -501,11 +507,16 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   `out_backlog_fail_mb`, `gil_switch_interval_ms`, `inbound_queue_max_mb`, the
   bound of what a node of a non-durable program has read and not yet processed,
   and `startup_timeout_s`), a
-  `ProgramLauncher` also `max_concurrent_runs` and `batch_sched`, and the
-  `Supervisor` only `heartbeat_timeout_s` and `startup_timeout_s`; unset, a
-  limit keeps the default of the class. Each limit, when given, is a positive
-  number, `max_concurrent_runs` (the batch runs at a time) a positive whole
-  number and `batch_sched` `BUILTIN` or `SLURM`: the engine refuses another
+  `ProgramLauncher` also `max_concurrent_runs`, `batch_sched`,
+  `batch_conda_support` and `batch_docker_support`, and the `Supervisor` only
+  `heartbeat_timeout_s` and `startup_timeout_s`; unset, a limit keeps the
+  default of the class. Each limit, when given, is a positive number,
+  `max_concurrent_runs` (the batch runs at a time) a positive whole number,
+  `batch_sched` `BUILTIN` or `SLURM`, and `batch_conda_support` and
+  `batch_docker_support` (whether the batch runs are prepared with conda or
+  docker support, so that the environments and images that the processes of
+  the general program declare exist) booleans, written yes or no in the
+  generated script: the engine refuses another
   value when it loads the program. A node has no additional specifications and
   no additional methods.
 - **Rounds and snapshots** (durable programs; a non-durable program has no

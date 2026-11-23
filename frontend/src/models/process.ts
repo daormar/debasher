@@ -41,6 +41,10 @@ export interface ComputationalSpecs {
 
   batch_sched?: string;
 
+  batch_conda_support?: boolean;
+
+  batch_docker_support?: boolean;
+
   heartbeat_timeout_s?: number;
 
 }

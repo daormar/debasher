@@ -2180,8 +2180,9 @@ that no specification sets:
   engine passes to the `Supervisor` (see "Failure detection").
 - For the `Supervisor`: `heartbeat_timeout_s` and `startup_timeout_s` (see
   "Failure detection").
-- For a launcher node: `max_concurrent_runs` and `batch_sched` (see "Launching
-  from the queue on disk").
+- For a launcher node: `max_concurrent_runs`, `batch_sched`,
+  `batch_conda_support` and `batch_docker_support` (see "Launching from the
+  queue on disk").
 - Not a specification: the open descriptors of the process (`RLIMIT_NOFILE`). A
   process needs two for each of its ports, since it holds both ends of every
   FIFO (see "Ghost connections"), a `Supervisor` one more for each held FIFO
@@ -2196,9 +2197,11 @@ that no specification sets:
 For example,
 `add_debasher_process "relay" "cpus=1; mem=32; time=00:10:00; out_backlog_fail_mb=128"`.
 Sizes are in MiB and the interval in milliseconds. Each value but `batch_sched`,
-when given, must be a positive number, and `max_concurrent_runs` a positive
-whole number. The engine checks them when it loads the program
-(`DEBASHER_RESIDENT_COMP_SPEC_NAMES`), before anything is launched. An
+`batch_conda_support` and `batch_docker_support`, when given, must be a positive
+number, and `max_concurrent_runs` a positive whole number; `batch_conda_support`
+and `batch_docker_support` are `yes` or `no`. The engine checks them when it
+loads the program (`DEBASHER_RESIDENT_COMP_SPEC_NAMES`,
+`DEBASHER_BATCH_SUPPORT_COMP_SPEC_NAMES`), before anything is launched. An
 `input_log_max_mb` or an `out_backlog_fail_mb` smaller than one message stops
 the node at its first message, which the engine cannot foresee, since it does
 not know the size of the messages. The built-in scheduler exports the
@@ -4867,13 +4870,29 @@ with the options of its request. It runs in a session of its own, so that the
 batch run outlives a crash of the node and a stop of the resident program. The
 scheduler is `BATCH_SCHED`, `BUILTIN` by default, as for the resident program
 itself. So the batch runs do not depend on the scheduler that a machine would
-pick on its own. `SLURM` sends them to a cluster. A program sets both in the
-computational specifications of the process, `max_concurrent_runs` and
-`batch_sched`, like the limits of a node (see "Computational specifications of a
-resident process"). When it loads the program, the engine checks that the first
-is a positive whole number and the second one of the schedulers that
-`debasher_exec` knows. The node checks the first again when it is created, since
-a node built without the engine has not been through that check.
+pick on its own. `SLURM` sends them to a cluster. The batch runs are prepared
+with conda or docker support when `BATCH_CONDA_SUPPORT` or
+`BATCH_DOCKER_SUPPORT` says so, neither by default: `debasher_exec` is given
+`--conda-support` or `--docker-support`, so that the environments and images
+that the processes of the general program declare exist before its processes
+run, as a run by hand with the same options prepares them (see "Conda and Docker
+environments" in `doc/design_doc_engine.md`). Conda keeps an environment by its
+name, so the first batch run that needs one creates it and the rest find it, two
+that start together taking turns through the lock of `define_conda_env` (see
+"Conda and Docker environments" in `doc/design_doc_engine.md`), and each run
+keeps only the log of conda, in `.conda` of its own output directory unless
+`DEBASHER_CONDA_DIR` names another. A program sets the four in the
+computational specifications of the process,
+`max_concurrent_runs`, `batch_sched`, `batch_conda_support` and
+`batch_docker_support`, like the limits of a node (see "Computational
+specifications of a resident process"). When it loads the program, the engine
+checks that the first is a positive whole number, the second one of the
+schedulers that `debasher_exec` knows, and the last two `yes` or `no`. The node
+checks the first and the last two again when it is created, since a node built
+without the engine has not been through that check. The `opts` of a request
+cannot carry these options of `debasher_exec` (see "Requests and run
+directories"): what prepares a batch run is a property of the node, not of the
+request.
 
 How a batch run is going is read from its run directory alone, whatever the
 scheduler. A relaunched node has lost what its previous incarnation held in
@@ -5101,8 +5120,10 @@ ends when it ends, and the options of a request are the arguments of that
 function.
 
 Of the computational specifications of a launcher node, `max_concurrent_runs`
-applies to these batch runs. `batch_sched` does not, since nothing schedules
-them. It is ignored, and neither the node nor the engine refuses it.
+applies to these batch runs. `batch_sched`, `batch_conda_support` and
+`batch_docker_support` do not, since nothing schedules them and no
+`debasher_exec` prepares them. They are ignored, and neither the node nor the
+engine refuses them.
 
 The node does not check that the module of `-pfile` has the process that
 `-process` names. A process that it lacks shows when a batch run ends: each one
@@ -5467,10 +5488,11 @@ and languages.
     does on its own.
   - Priorities, or a limit shared by several launcher nodes, beyond the
     `max_concurrent_runs` of each.
-  - The execution options of `debasher_exec` for the batch runs, such as
-    `--conda-support`, `--docker-support` and `--dflt-nodes`, as `batch_sched`
-    gives them their scheduler: the `opts` of a request are options of the
-    general program.
+  - The other execution options of `debasher_exec` for the batch runs, such as
+    `--dflt-nodes`, as `batch_sched`, `batch_conda_support` and
+    `batch_docker_support` give them their scheduler and the preparation of
+    their environments: the `opts` of a request are options of the general
+    program.
 
 ## Testing a node
 

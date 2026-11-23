@@ -228,7 +228,7 @@ debasher::_show_proc_specs()
     # them
     local comp_specs=$(debasher::extract_process_comp_specs "${process_spec}")
     local specname value
-    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES} ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME}; do
+    for specname in ${DEBASHER_RESIDENT_COMP_SPEC_NAMES} ${DEBASHER_BATCH_SCHED_COMP_SPEC_NAME} ${DEBASHER_BATCH_SUPPORT_COMP_SPEC_NAMES}; do
         value=$(debasher::extract_attr_from_process_comp_specs "${comp_specs}" "${specname}")
         [ "${value}" != "${DEBASHER_ATTR_NOT_FOUND}" ] && echo "- \`${specname}\`: ${value}"
     done

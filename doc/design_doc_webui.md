@@ -2819,9 +2819,14 @@ the function of every node. Fanout families apply unchanged.
 the node kinds that read them: the limits of a node (`input_log_max_mb`,
 `out_backlog_max_mb`, `out_backlog_fail_mb`, `gil_switch_interval_ms` and
 `inbound_queue_max_mb`) and `startup_timeout_s` for every node,
-`max_concurrent_runs` and `batch_sched` for a `ProgramLauncher`, and
-`heartbeat_timeout_s` and `startup_timeout_s` for the `Supervisor`. The engine
-checks their values when it loads the program.
+`max_concurrent_runs`, `batch_sched`, `batch_conda_support` and
+`batch_docker_support` for a `ProgramLauncher`, and `heartbeat_timeout_s` and
+`startup_timeout_s` for the `Supervisor`. The engine checks their values when it
+loads the program; the editor offers `batch_conda_support` and
+`batch_docker_support` as yes or no. They are the support of the batch runs that
+the launcher node starts, while `condaSupport` and `dockerSupport` of the
+execution options are that of the runs the web UI starts: setting one does not
+set the other, since each belongs to its own invoker of `debasher_exec`.
 
 **Additional specifications and methods.** A process of a resident program
 offers neither the additional specifications of a general process nor its

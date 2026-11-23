@@ -888,7 +888,8 @@ def test_a_resident_program_survives_the_round_trip(tmp_path):
         ],
         nodeCode=NodeCode(classBody="STATUS_CHECK_INTERVAL_SECS = 1.0"),
         computationalSpecs=ComputationalSpecs(
-            cpus=1, mem=64, time="00:05:00", max_concurrent_runs=2, batch_sched="SLURM"
+            cpus=1, mem=64, time="00:05:00", max_concurrent_runs=2, batch_sched="SLURM",
+            batch_conda_support=True, batch_docker_support=False,
         ),
     )
     watch = _node(

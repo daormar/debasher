@@ -701,7 +701,10 @@ engine leaves a relative name as it is. An absolute path is accepted
 with a warning, since it ties the program to one machine. With the
 option ``-process``, the node launches that process of the general
 program alone, with ``debasher_exec_process``, instead of the whole
-program.
+program. Nothing then schedules or prepares the batch runs, so
+``batch_sched``, ``batch_conda_support`` and ``batch_docker_support``
+are ignored, and the environments that the process declares have to
+exist already.
 
 Every input port of a launcher node receives requests. A request is a
 JSON object with two optional fields: ``opts``, the options of the
@@ -715,7 +718,8 @@ general program (names with their dash, values as strings), and
 Without ``opts``, the program is launched with no options; without
 ``run``, the run directory is named after the position of the request.
 A request may not give an option that ``debasher_exec`` reads itself,
-such as ``--outdir`` or ``--wait``: the node drops it, and logs why.
+such as ``--outdir``, ``--wait`` or ``--conda-support``: the node drops
+it, and logs why.
 Other fields of a request are ignored, and do not reach the message
 on ``-outdone``: a node downstream knows a batch run by its ``run``.
 
@@ -737,19 +741,32 @@ the node sends on it ``{"run": ..., "run_dir": ..., "status": ...,
 absolute path of the run directory, where a node downstream finds the
 results, and ``status`` set to ``finished`` or ``failed``.
 ``MAX_CONCURRENT_RUNS`` (one by default) says how many batch runs run at
-a time, and ``BATCH_SCHED`` which scheduler they use (the built-in one
-by default); a program sets them for one process with the computational
-specifications ``max_concurrent_runs`` and ``batch_sched``. The first is
-a positive whole number: the engine checks it when it loads the
-program, and the node when it is created.
+a time, ``BATCH_SCHED`` which scheduler they use (the built-in one by
+default), and ``BATCH_CONDA_SUPPORT`` and ``BATCH_DOCKER_SUPPORT``
+whether they are prepared with conda or docker support (neither by
+default): ``debasher_exec`` is then given ``--conda-support`` or
+``--docker-support``, so that the environments and images that the
+processes of the general program declare exist before they run, as a run
+by hand with the same options prepares them (see the :doc:`conda` and
+:doc:`docker`); conda keeps an environment by its name, so the
+first batch run that needs one creates it and the rest find it. A
+program sets the four for one process with the computational
+specifications ``max_concurrent_runs``, ``batch_sched``,
+``batch_conda_support`` and ``batch_docker_support`` (the last two
+``yes`` or ``no``). The first is a positive whole number: the engine
+checks it when it loads the program, and the node when it is created.
 Under Slurm the node gives ``debasher_exec`` the option ``--wait``:
 the ``debasher_exec`` of every batch run that runs stays alive on the
 machine of the node until the jobs of its program have ended, and its
 exit status becomes the ``exit_code`` of the batch run (0 when every
 process finished, 3 when some did not, 1 on an error such as options
 that the program refuses). ``MAX_CONCURRENT_RUNS`` bounds how many of
-those processes wait at once. A batch run is a program of its own:
-stopping the resident program, or its launcher node, does not stop the
+those processes wait at once. A batch run is a program of its own: the
+options of the run of the resident program, such as its own
+``--conda-support``, do not reach it, and a request cannot give them in
+``opts`` either, so only ``batch_conda_support`` and
+``batch_docker_support`` prepare its environments; and stopping the
+resident program, or its launcher node, does not stop the
 batch runs in progress, which go on and are reported on ``-outdone``
 when the node comes back. ``debasher_stop -d <run directory>`` stops
 one, and ``debasher_reset_resident`` refuses while one is in progress.

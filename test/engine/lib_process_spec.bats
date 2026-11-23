@@ -175,3 +175,15 @@ register_processes() {
     [ "${status}" -eq 1 ]
     [[ "${output}" == *"batch_sched computational specification of process p must be"* ]]
 }
+
+@test "debasher::_check_resident_comp_spec_values takes the conda and docker support of the batch runs as yes or no" {
+    debasher::_check_resident_comp_spec_values "p" "batch_conda_support=yes;batch_docker_support=no"
+
+    run debasher::_check_resident_comp_spec_values "p" "batch_conda_support=true"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"batch_conda_support computational specification of process p must be yes or no"* ]]
+
+    run debasher::_check_resident_comp_spec_values "p" "batch_docker_support=1"
+    [ "${status}" -eq 1 ]
+    [[ "${output}" == *"batch_docker_support computational specification of process p must be yes or no"* ]]
+}

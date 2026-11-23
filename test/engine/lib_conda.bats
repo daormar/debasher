@@ -11,6 +11,12 @@ setup() {
     : "${ENGINE_BUILDDIR:?ENGINE_BUILDDIR must point at the built engine/ dir}"
     debasher_pkglibdir="${ENGINE_BUILDDIR}"
     source "${ENGINE_BUILDDIR}/debasher_lib.sh"
+    # The lock of define_conda_env goes under .conda of the home directory:
+    # the tests get a temporary one, so that nothing is left in the real one
+    HOME="${BATS_TEST_TMPDIR}/home"
+    # The tools that the lock uses, normally supplied by the tool-path
+    # preamble of the scripts that source this library
+    MKDIR=mkdir RM=rm DIRNAME=dirname CAT=cat SLEEP=sleep
 
     # Whatever conda the shell of the test has is left out
     unset -f conda
@@ -127,6 +133,44 @@ EOF
 
     [ "${status}" -eq 0 ]
     ! grep -q "^env create" "${CONDA_CALLS}" || false
+}
+
+@test "define_conda_env waits for the lock of another run that creates the environment, and then finds it" {
+    make_fake_conda "${BATS_TEST_TMPDIR}/bin/conda"
+    CONDA_CMD="${BATS_TEST_TMPDIR}/bin/conda"
+    touch "${debasher_datadir}/conda_envs/myenv.yml"
+    # The lock goes under .conda of the home directory: a temporary one here
+    HOME="${BATS_TEST_TMPDIR}/home"
+    # Another run, alive, holds the lock: this shell stands in for it
+    local lockdir=$(debasher::_get_conda_env_lock_dirname myenv)
+    mkdir -p "${lockdir}"
+    echo "$$" > "${lockdir}/pid"
+    # It creates the environment and lets the lock go in a few seconds
+    (sleep 3; touch "${FAKE_ENVS}/myenv"; rm -rf "${lockdir}") &
+
+    run define_conda_env myenv myenv.yml
+
+    [ "${status}" -eq 0 ]
+    # Found once the lock was free: nothing created here
+    ! grep -q "^env create" "${CONDA_CALLS}" || false
+    [ ! -d "${lockdir}" ]
+}
+
+@test "define_conda_env takes away the lock of a run that is gone and creates the environment" {
+    make_fake_conda "${BATS_TEST_TMPDIR}/bin/conda"
+    CONDA_CMD="${BATS_TEST_TMPDIR}/bin/conda"
+    touch "${debasher_datadir}/conda_envs/myenv.yml"
+    HOME="${BATS_TEST_TMPDIR}/home"
+    local lockdir=$(debasher::_get_conda_env_lock_dirname myenv)
+    mkdir -p "${lockdir}"
+    # A process id that no process has: the holder is gone
+    echo "4000000" > "${lockdir}/pid"
+
+    run define_conda_env myenv myenv.yml
+
+    [ "${status}" -eq 0 ]
+    grep -q "^env create" "${CONDA_CALLS}"
+    [ ! -d "${lockdir}" ]
 }
 
 @test "define_conda_env creates a missing environment, with its log in DEBASHER_CONDA_DIR" {

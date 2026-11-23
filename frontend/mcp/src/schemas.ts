@@ -72,6 +72,8 @@ const computationalSpecs = z.object({
   startup_timeout_s: z.number().optional(),
   max_concurrent_runs: z.number().int().positive().optional(),
   batch_sched: z.string().optional(),
+  batch_conda_support: z.boolean().optional().describe("ProgramLauncher only: whether its batch runs are prepared with conda support (debasher_exec --conda-support), so that the conda environments that the processes of the general program declare are created; false by default (written yes or no in the generated script)."),
+  batch_docker_support: z.boolean().optional().describe("ProgramLauncher only: the same for docker support (--docker-support): the images that the processes declare are pulled; false by default (written yes or no in the generated script)."),
   heartbeat_timeout_s: z.number().optional(),
 }).strict();
 
@@ -93,7 +95,7 @@ export const processChanges = z.object({
       .describe("The whole Bash functions that define the options of every task: <process>_define_opts, or the option generator pair <process>_generate_opts_size and <process>_generate_opts; without one of them the preparation of the run stops. Define each commandLine option with define_cmdline_opt (define_cmdline_infile_opt or define_cmdline_indir_opt for a file or a directory, the _if_given variant when not mandatory), never with a value of its own, or the preparation of the run stops; a value derived from it goes into another option."),
     language: funcLanguage.optional().describe("The language of arrayCode and generatorSizeCode: python makes them a tasks file that defines tasks(run). A manual handler is bash. Give the code in the new language (the whole Python file, or a Bash body) in the same change."),
   }).strict().optional(),
-  computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class. Each limit, when given, is a positive number; max_concurrent_runs (a ProgramLauncher only), the batch runs at a time, a positive whole number; batch_sched (a ProgramLauncher only) BUILTIN or SLURM. The engine refuses another value when it loads the program."),
+  computationalSpecs: computationalSpecs.optional().describe("cpus, mem in MB and time (HH:MM:SS); each one a process leaves unset is 1, 256 and 01:00:00 respectively. The other fields are limits of a node; unset, a limit keeps the default of the class. Each numeric limit, when given, is a positive number; max_concurrent_runs (a ProgramLauncher only), the batch runs at a time, a positive whole number; batch_sched (a ProgramLauncher only) BUILTIN or SLURM; batch_conda_support and batch_docker_support (a ProgramLauncher only) booleans, whether its batch runs are prepared with conda or docker support (debasher_exec --conda-support, --docker-support), false by default. The engine refuses another value when it loads the program."),
   additionalSpecs: z.object({
     force: z.boolean().optional(),
     processdeps: z.string().optional()

@@ -327,8 +327,10 @@ class ProgramLauncher(FBPProcess):
     counter that the node keeps on disk. Other fields are
     ignored. A request that does not follow this, that gives an option
     that debasher_exec reads itself (those of debasher_exec --help, such as
-    --outdir, --sched, --wait or --debug), as a name or as a value, or
-    whose run
+    --outdir, --sched, --wait or --debug; the scheduler and the conda or
+    docker support of the batch runs are set in the computational
+    specifications of the process, see BATCH_SCHED, BATCH_CONDA_SUPPORT and
+    BATCH_DOCKER_SUPPORT below), as a name or as a value, or whose run
     directory belongs to another request, is logged as an error and
     dropped.
 
@@ -370,6 +372,18 @@ class ProgramLauncher(FBPProcess):
     #: also gives debasher_exec `--wait`, so that it waits for the jobs, alive
     #: on the machine of the node, and its exit code is the end of the run.
     BATCH_SCHED = "BUILTIN"
+    #: Whether the batch runs are prepared with conda support: debasher_exec
+    #: is given `--conda-support`, so that the conda environments that the
+    #: processes of the general program declare are created, by the first
+    #: batch run that needs each, and found by the rest, since conda keeps
+    #: an environment by its name. A program sets it for a process in its
+    #: computational specifications, `batch_conda_support` (yes or no).
+    #: Ignored with -process, where no debasher_exec runs.
+    BATCH_CONDA_SUPPORT = False
+    #: The same for docker support, `batch_docker_support` (yes or no):
+    #: debasher_exec is given `--docker-support`, so that the images that
+    #: the processes declare are pulled.
+    BATCH_DOCKER_SUPPORT = False
     #: How often, at most, in seconds, observe() asks debasher_status how a
     #: batch run is going, for a batch run whose shell is gone without its
     #: exit code, as after a restart of the machine (OBSERVE_INTERVAL_SECS is
@@ -380,6 +394,8 @@ class ProgramLauncher(FBPProcess):
         **FBPProcess._COMP_SPEC_ATTRS,
         "max_concurrent_runs": ("MAX_CONCURRENT_RUNS", 1),
         "batch_sched": ("BATCH_SCHED", None),
+        "batch_conda_support": ("BATCH_CONDA_SUPPORT", None),
+        "batch_docker_support": ("BATCH_DOCKER_SUPPORT", None),
     }
 
     def __init__(self, argv=None, opts=None):
@@ -408,6 +424,12 @@ class ProgramLauncher(FBPProcess):
                 "MAX_CONCURRENT_RUNS in the class body, to 1 or more"
             )
         self.MAX_CONCURRENT_RUNS = int(self.MAX_CONCURRENT_RUNS)
+        # The specifications come as text; the class body may give a bool
+        for name, attribute in (
+            ("batch_conda_support", "BATCH_CONDA_SUPPORT"),
+            ("batch_docker_support", "BATCH_DOCKER_SUPPORT"),
+        ):
+            setattr(self, attribute, self._as_yes_or_no(name, getattr(self, attribute)))
         runs_root = self.opts.get(_RUNS_ROOT_OPTION)
         if runs_root and not os.path.isabs(runs_root):
             raise ValueError(
@@ -484,6 +506,18 @@ class ProgramLauncher(FBPProcess):
                 "builtin scheduler when it launches a process)"
             )
         return outdir
+
+    def _as_yes_or_no(self, name, value):
+        """The bool that the value `value` of the specification `name`
+        gives: a bool as it is, "yes" or "no" as text; anything else is
+        refused, as the engine refuses it when it loads the program."""
+        if isinstance(value, bool):
+            return value
+        if value in ("yes", "no"):
+            return value == "yes"
+        raise ValueError(
+            f"{type(self).__name__}: the computational specification {name}={value!r} is not yes or no"
+        )
 
     def _get_runs_root(self):
         """The absolute path under which the run directories go: the option
@@ -854,6 +888,11 @@ class ProgramLauncher(FBPProcess):
             # Under the built-in scheduler debasher_exec waits for the
             # program on its own; under Slurm it only does with --wait
             wait = ["--wait"] if self.BATCH_SCHED == "SLURM" else []
+            # The environments of the general program are prepared by the
+            # run, as a run by hand prepares them with the same options
+            support = (["--conda-support"] if self.BATCH_CONDA_SUPPORT else []) + (
+                ["--docker-support"] if self.BATCH_DOCKER_SUPPORT else []
+            )
             args = [
                 "/bin/sh",
                 "-c",
@@ -868,6 +907,7 @@ class ProgramLauncher(FBPProcess):
                 "--sched",
                 self.BATCH_SCHED,
                 *wait,
+                *support,
                 *opts,
             ]
         else:

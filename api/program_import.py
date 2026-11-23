@@ -124,8 +124,17 @@ def _to_computational_specs(raw: dict[str, str]) -> ComputationalSpecs:
         mem=_to_float(mem) if mem is not None else None,
         time=raw.get("time"),
         batch_sched=raw.get("batch_sched"),
+        batch_conda_support=_yes_or_no(raw.get("batch_conda_support")),
+        batch_docker_support=_yes_or_no(raw.get("batch_docker_support")),
         **resident,
     )
+
+
+def _yes_or_no(value):
+    """The bool of a specification written yes or no, None when not given."""
+    if value is None:
+        return None
+    return str(value).strip().lower() == "yes"
 
 
 _RESIDENT_NUMERIC_SPECS = (

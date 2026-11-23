@@ -398,6 +398,12 @@ EOF
     [[ "$output" == *"batch_sched"*"BUILTIN or SLURM"* ]]
 }
 
+@test "the spec check accepts the conda and docker support of the batch runs of a launcher node" {
+    source "${ENGINE_BUILDDIR}/debasher_lib_process_spec.sh"
+    run debasher::_program_process_spec_is_ok "proc cpus=1; mem=32; time=00:01:00; batch_conda_support=yes; batch_docker_support=no ||| "
+    [ "$status" -eq 0 ]
+}
+
 # --- process registration and task selection ------------------------------
 
 @test "_update_processname_to_idx_info registers a process once, without errors on a second call" {

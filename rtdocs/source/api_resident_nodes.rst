@@ -111,6 +111,10 @@ Class attributes
 
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.BATCH_SCHED
 
+.. autoattribute:: debasher_runtime_lib.ProgramLauncher.BATCH_CONDA_SUPPORT
+
+.. autoattribute:: debasher_runtime_lib.ProgramLauncher.BATCH_DOCKER_SUPPORT
+
 .. autoattribute:: debasher_runtime_lib.ProgramLauncher.STATUS_CHECK_INTERVAL_SECS
 
 Supervisor
