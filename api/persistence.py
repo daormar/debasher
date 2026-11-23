@@ -117,6 +117,15 @@ def read_raw_metadata(home_dir: str) -> dict | None:
     return metadata if isinstance(metadata, dict) else None
 
 
+def is_program_saved(home_dir: str) -> bool:
+    """Whether `home_dir` holds a saved program: its topology file, or
+    the program metadata of before the artifact."""
+    home = _home(home_dir)
+    return (home / TOPOLOGY_FILENAME).is_file() or (
+        home / METADATA_DIRNAME / PROGRAM_FILENAME
+    ).is_file()
+
+
 def read_local_state(home_dir: str) -> dict:
     """The local state of the editor for the program in `home_dir`, {} when
     there is none or it cannot be read."""

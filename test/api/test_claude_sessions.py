@@ -26,6 +26,7 @@ from api.claude_sessions import (  # noqa: E402
 )
 from api.persistence import METADATA_DIRNAME, PROGRAM_FILENAME  # noqa: E402
 from api.routers import claude  # noqa: E402
+from api.topology import TOPOLOGY_FILENAME  # noqa: E402
 from api.routers.claude import SessionRequest, request_session, terminal  # noqa: E402
 from api.routers.webui import (  # noqa: E402
     CLAUDE_CODE_ENV_VAR,
@@ -392,6 +393,18 @@ def test_reserving_a_held_place_without_taking_it_over_raises():
         with pytest.raises(SessionInUse):
             await registry.reserve("/p", ["cmd"], 80, 24, take_over=False)
         await registry.reserve("/q", ["cmd"], 80, 24, take_over=False)
+
+    asyncio.run(scenario())
+
+
+def test_a_program_saved_as_its_artifact_gets_a_session(fake, tmp_path):
+    home_dir = tmp_path / "artifact"
+    home_dir.mkdir()
+    (home_dir / TOPOLOGY_FILENAME).write_text("name: p\n")
+
+    async def scenario():
+        answer = await request_session(SessionRequest(homeDir=str(home_dir)))
+        assert answer.ticket
 
     asyncio.run(scenario())
 

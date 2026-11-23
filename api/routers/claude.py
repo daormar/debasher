@@ -55,7 +55,7 @@ async def request_session(request: SessionRequest) -> SessionTicket:
     if not request.homeDir.strip():
         raise HTTPException(status_code=400, detail="homeDir must not be empty")
     home_dir = os.path.realpath(Path(request.homeDir).expanduser())
-    if persistence.read_raw_metadata(home_dir) is None:
+    if not persistence.is_program_saved(home_dir):
         raise HTTPException(
             status_code=404, detail=f"No program is saved in {request.homeDir!r}"
         )
