@@ -165,7 +165,10 @@ class Acquire(FBPProcess):
                 return f"readfish gave no batch of reads for {silence:.0f} s since its start"
             return None
         if self.phase == self.SEQUENCING:
-            silence = now - self.last_progress
+            # Counted from the last batch, or from the return to this phase
+            # after a scan, whichever is later: the silence of the scan is
+            # not a silence of the sequencing
+            silence = now - max(self.last_progress, self.phase_changed)
             if silence > self.stall_timeout:
                 return f"readfish gave no batch of reads for {silence:.0f} s in {self.phase}"
         else:

@@ -40,18 +40,23 @@ def report(tmp_path, monkeypatch, **opts):
 DEADLINE_S = 10.0
 
 
-def observe_until(node, kind, seen=None):
-    """Observes until an event of `kind` comes in, and returns it; `seen`,
-    when given, collects every event brought in on the way."""
+def observe_until(node, kind, seen=None, **fields):
+    """Observes until an event of `kind` with the values of `fields` comes
+    in, and returns it; `seen`, when given, collects every event brought in
+    on the way. One observe may bring in several events, so the events that
+    follow the one looked for in the same observe are in `seen` too."""
     deadline = time.monotonic() + DEADLINE_S
     while time.monotonic() < deadline:
+        found = None
         for event in node.observe():
             if seen is not None:
                 seen.append(event)
-            if event["kind"] == kind:
-                return event
+            if found is None and event["kind"] == kind and all(event.get(k) == v for k, v in fields.items()):
+                found = event
+        if found is not None:
+            return found
         time.sleep(0.05)
-    raise AssertionError(f"no {kind} event in {DEADLINE_S} s")
+    raise AssertionError(f"no {kind} event {fields or ''} in {DEADLINE_S} s")
 
 
 def observe_until_raises(node, match):
@@ -122,19 +127,22 @@ def test_acquire_raises_when_readfish_stalls_in_the_sequencing_phase(tmp_path, m
 
 
 def test_a_mux_scan_is_not_a_stall_until_the_scan_timeout(tmp_path, monkeypatch):
-    node = acquire(tmp_path, monkeypatch, "--scan-secs 0.3", **{"scan-timeout-s": "0.6"})
+    # A scan much longer than the stall timeout (0.2 s) and shorter than the
+    # scan timeout; the batches come every 0.1 s, so that the first one
+    # after the scan arrives after the return to the sequencing phase was
+    # seen, and the silence of the scan must not count against it
+    node = acquire(tmp_path, monkeypatch, "--scan-secs 1 --batch-interval-s 0.1", **{"scan-timeout-s": "5"})
     try:
         observe_until(node, "progress")
         (tmp_path / "scan").touch()
-        event = observe_until(node, "phase")
-        assert event["phase"] == "PHASE_MUX_SCAN"
 
-        # Past the stall timeout, inside the scan: no stall
-        time.sleep(0.25)
-        node.observe()
+        # Through the whole scan, observe() raises no stall, although the
+        # stand-in is silent for far longer than the stall timeout
+        seen = []
+        observe_until(node, "phase", seen=seen, phase="PHASE_SEQUENCING")
 
-        event = observe_until(node, "phase")
-        assert event["phase"] == "PHASE_SEQUENCING"
+        phases = [e["phase"] for e in seen if e["kind"] == "phase"]
+        assert phases == ["PHASE_MUX_SCAN", "PHASE_SEQUENCING"]
         observe_until(node, "progress")
     finally:
         stop_child(node)

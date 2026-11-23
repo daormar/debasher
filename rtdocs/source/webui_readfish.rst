@@ -20,8 +20,8 @@ The program has four nodes and a ``Supervisor``, ``Sup``:
   its log every second. The batches of reads of each second become one
   ``progress`` event for ``Report``, and each change of phase of the
   sequencer an event of its own. In the sequencing phase,
-  ``-stall-timeout-s`` seconds (60 by default) without a batch are a
-  stall. During a mux scan, when MinKNOW measures the pores and sends no
+  ``-stall-timeout-s`` seconds (60 by default) without a batch, counted
+  from the last batch or from the return to that phase, are a stall. During a mux scan, when MinKNOW measures the pores and sends no
   reads for some minutes, the silence is legitimate, and only
   ``-scan-timeout-s`` seconds (900) are a stall. A readfish that gives
   nothing for ``-start-timeout-s`` seconds (300) after its start, or that
