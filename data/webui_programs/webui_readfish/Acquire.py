@@ -180,56 +180,6 @@ class Acquire(FBPProcess):
 
     # -- node hooks --
 
-    def process_data(self, port_name, packet):
-        # An event of readfish from observe(), or a note written by hand
-        # into -notes, which Report records like the events
-        if isinstance(packet, dict) and "kind" not in packet:
-            packet = {"kind": "note", **packet}
-        self.send_data("outevents", packet)
-
-    def capture_node_state(self):
-        return {}
-
-    def restore_node_state(self, node_state):
-        pass
-
-    def initialize_runtime(self):
-        # readfish and its log are the outside world, not node state: each
-        # incarnation starts a readfish of its own, which connects anew, as
-        # readfish restarted by hand does. The counters that have to outlive
-        # an incarnation are files of the output directory of the process
-        self.incarnation = self._read_count("launches") + 1
-        self._write_count("launches", self.incarnation)
-        self.attempts = self._read_count("attempts")
-        self.phase = None
-        self.progressed = False
-        self.last_progress = None
-        self.exhausted = False
-        # The counters of readfish, as its last batch line gives them
-        self.counters = {"seq": 0, "unb": 0, "pro": 0}
-        self._start_child()
-        self.phase_changed = self.started_at
-        self.announce = True
-        if any(os.path.basename(arg).startswith("fake_readfish") for arg in shlex.split(self.command)):
-            self.set_notice("running the stand-in fake_readfish.py, not readfish: give -command")
-
-    def observe(self):
-        """Reads what readfish has logged since the last observation, brings
-        it in as events, and ends the incarnation if readfish is stuck or
-        gone. Runs on the observation thread, every OBSERVE_INTERVAL_SECS."""
-        if self.announce:
-            # From here and not from initialize_runtime: only observe()
-            # brings an input into the node
-            self.announce = False
-            self.inject(self._event("started", command=self.command, attempts=self.attempts))
-        # One clock reading for the whole pass: the rules below compare
-        # what this pass saw with it
-        now = time.time()
-        batches, reads = self._read_log(now)
-        if batches:
-            self._record_progress(now, batches, reads)
-        self._check_health(now)
-
     def _read_log(self, now):
         """Takes the new lines of the log of readfish: a change of phase is
         brought in at once and sets the phase; the batches of reads are
@@ -304,6 +254,56 @@ class Acquire(FBPProcess):
             super().run()
         finally:
             self._stop_child()
+
+    def process_data(self, port_name, packet):
+        # An event of readfish from observe(), or a note written by hand
+        # into -notes, which Report records like the events
+        if isinstance(packet, dict) and "kind" not in packet:
+            packet = {"kind": "note", **packet}
+        self.send_data("outevents", packet)
+
+    def capture_node_state(self):
+        return {}
+
+    def restore_node_state(self, node_state):
+        pass
+
+    def initialize_runtime(self):
+        # readfish and its log are the outside world, not node state: each
+        # incarnation starts a readfish of its own, which connects anew, as
+        # readfish restarted by hand does. The counters that have to outlive
+        # an incarnation are files of the output directory of the process
+        self.incarnation = self._read_count("launches") + 1
+        self._write_count("launches", self.incarnation)
+        self.attempts = self._read_count("attempts")
+        self.phase = None
+        self.progressed = False
+        self.last_progress = None
+        self.exhausted = False
+        # The counters of readfish, as its last batch line gives them
+        self.counters = {"seq": 0, "unb": 0, "pro": 0}
+        self._start_child()
+        self.phase_changed = self.started_at
+        self.announce = True
+        if any(os.path.basename(arg).startswith("fake_readfish") for arg in shlex.split(self.command)):
+            self.set_notice("running the stand-in fake_readfish.py, not readfish: give -command")
+
+    def observe(self):
+        """Reads what readfish has logged since the last observation, brings
+        it in as events, and ends the incarnation if readfish is stuck or
+        gone. Runs on the observation thread, every OBSERVE_INTERVAL_SECS."""
+        if self.announce:
+            # From here and not from initialize_runtime: only observe()
+            # brings an input into the node
+            self.announce = False
+            self.inject(self._event("started", command=self.command, attempts=self.attempts))
+        # One clock reading for the whole pass: the rules below compare
+        # what this pass saw with it
+        now = time.time()
+        batches, reads = self._read_log(now)
+        if batches:
+            self._record_progress(now, batches, reads)
+        self._check_health(now)
 
 
 Acquire().run()

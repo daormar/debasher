@@ -4,11 +4,11 @@ name: webui_readfish
 type: resident
 description: >-
   Example built with the web UI: a resident program around readfish, the adaptive
-  sampling tool of nanopore sequencing. Acquire runs readfish as a child process and
-  ends it when its stream of reads dies in silence, so that the Supervisor relaunches
-  it; Watch sends each file that the sequencer writes to Launch, which summarizes it
-  with the general program webui_read_lengths; Report joins what readfish says and
-  what the files show in one timeline. Without a sequencer, Acquire runs a stand-in.
+  sampling tool of nanopore sequencing. Acquire runs readfish as a child process
+  and ends it when its stream of reads dies in silence, so that the Supervisor relaunches
+  it; Watch sends each file that the sequencer writes to Launch, which summarizes
+  it with the general program webui_read_lengths; Report joins what readfish says
+  and what the files show in one timeline. Without a sequencer, Acquire runs a stand-in.
 execution:
   snapshot_every_secs: '60'
 processes:
@@ -17,23 +17,23 @@ processes:
       Watches Acquire, Watch, Launch and Report and relaunches them if they go down.
     specs: {cpus: 1, mem: 256, time: '01:00:00'}
     kind: Supervisor
-    position: {x: 120, y: 60}
+    position: {x: 13.239017946274657, y: 77.56826286960037}
   Acquire:
     description: >-
       Runs readfish (the command of -command; by default the stand-in fake_readfish.py
-      next to this program) as a child process and reads its log: each batch of reads
-      and each change of phase of the sequencer go to Report as events. In the
-      sequencing phase, -stall-timeout-s seconds with no batch is a stall; in a mux
-      scan, only -scan-timeout-s seconds are; a readfish that gives nothing for
-      -start-timeout-s seconds after its start, or that ends, is one too. On a stall
-      the node ends readfish and raises, and the Supervisor relaunches it; after
-      -max-attempts relaunches with no reads at all it stops raising and leaves a
-      notice. Notes written by hand into -notes go to Report like the events.
+      next to this program) as a child process and reads its log: each batch of
+      reads and each change of phase of the sequencer go to Report as events. In
+      the sequencing phase, -stall-timeout-s seconds with no batch is a stall; in
+      a mux scan, only -scan-timeout-s seconds are; a readfish that gives nothing
+      for -start-timeout-s seconds after its start, or that ends, is one too. On
+      a stall the node ends readfish and raises, and the Supervisor relaunches it;
+      after -max-attempts relaunches with no reads at all it stops raising and leaves
+      a notice. Notes written by hand into -notes go to Report like the events.
     code: Acquire.py
     specs: {cpus: 1, mem: 256, time: '01:00:00'}
     kind: FBPProcess
     initiator: true
-    position: {x: 120, y: 260}
+    position: {x: 13.698064516129023, y: 234.8232258064516}
     options:
       -command:
         type: string
@@ -44,22 +44,22 @@ processes:
       -stall-timeout-s:
         type: string
         description: >-
-          seconds without a batch of reads, in the sequencing phase, that make a stall
-          (60 by default)
+          seconds without a batch of reads, in the sequencing phase, that make a
+          stall (60 by default)
         cmdline: true
         mandatory: false
       -scan-timeout-s:
         type: string
         description: >-
-          seconds in a mux scan or another phase that is not sequencing that make a
-          stall (900 by default)
+          seconds in a mux scan or another phase that is not sequencing that make
+          a stall (900 by default)
         cmdline: true
         mandatory: false
       -start-timeout-s:
         type: string
         description: >-
-          seconds after the start of readfish without a first batch that make a stall
-          (300 by default)
+          seconds after the start of readfish without a first batch that make a
+          stall (300 by default)
         cmdline: true
         mandatory: false
       -max-attempts:
@@ -88,11 +88,12 @@ processes:
     specs: {cpus: 1, mem: 256, time: '01:00:00'}
     kind: DirectoryWatcher
     initiator: true
-    position: {x: 120, y: 460}
+    position: {x: 800.0640479177978, y: 233.31198402740074}
     options:
       -watchdir:
         type: string
-        description: directory where the read files arrive, given on the command line
+        description: >-
+          directory where the read files arrive, given on the command line
         cmdline: true
       -outrequests:
         type: string
@@ -107,7 +108,7 @@ processes:
     code: Launch.py
     specs: {cpus: 1, mem: 256, time: '01:00:00', max_concurrent_runs: 2, batch_conda_support: true}
     kind: ProgramLauncher
-    position: {x: 380, y: 460}
+    position: {x: 687.8448503086767, y: 485.19725383207367}
     options:
       -pfile:
         type: string
@@ -125,15 +126,15 @@ processes:
         channel: fifo
   Report:
     description: >-
-      Keeps one timeline of the run: the launches, stalls and phases of readfish from
-      the events of Acquire, and the summary of each read file from the batch runs of
-      Launch. It writes it to timeline.json in its output directory, and sends on
-      -outtimeline each incident, each file and a status line every -status-every-s
+      Keeps one timeline of the run: the launches, stalls and phases of readfish
+      from the events of Acquire, and the summary of each read file from the batch
+      runs of Launch. It writes it to timeline.json in its output directory, and
+      sends on -outtimeline each incident, each file and a status line every -status-every-s
       seconds of event time.
     code: Report.py
     specs: {cpus: 1, mem: 256, time: '01:00:00'}
     kind: FBPProcess
-    position: {x: 380, y: 260}
+    position: {x: 242.27623133572524, y: 751.7071233477293}
     options:
       -inevents:
         type: string
@@ -145,7 +146,8 @@ processes:
         from: Launch.-outdone
       -status-every-s:
         type: string
-        description: seconds of event time between two status lines (60 by default)
+        description: >-
+          seconds of event time between two status lines (60 by default)
         cmdline: true
         mandatory: false
       -outtimeline:
