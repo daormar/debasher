@@ -934,10 +934,16 @@ count_check_status $?
 
 # Check webui_readfish, a resident program around readfish, here its
 # stand-in: a note written by hand and the summary of a file of read lengths
-# left in the watched directory reach its timeline
+# left in the watched directory reach its timeline. Its launcher node runs
+# webui_read_lengths with conda support, so conda is needed
 progname="webui_readfish"
-check_readfish_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" "${progname}"
-count_check_status $?
+if conda_is_usable; then
+    check_readfish_program "${tmpdir}" "${debasher_datadir}/webui_programs/${progname}/${progname}.sh" "${progname}"
+    count_check_status $?
+else
+    print_skipped_check "${progname}" "conda not found"
+    ((checks_skipped++))
+fi
 
 # Check webui_conda_example, a general program whose process activates a
 # conda environment, which the run creates if it does not exist

@@ -46,6 +46,8 @@ webui_live_stats/test/test_live_stats.py	\
 webui_live_stats/webui_live_stats.sh	\
 webui_read_lengths/program.yaml	\
 webui_read_lengths/read_lengths.py	\
+webui_read_lengths/read_lengths.sh	\
+webui_read_lengths/read_lengths_conda_envs.sh	\
 webui_read_lengths/test/test_read_lengths.py	\
 webui_read_lengths/webui_read_lengths.sh	\
 webui_readfish/Acquire.py	\

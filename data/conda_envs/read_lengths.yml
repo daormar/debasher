@@ -1,0 +1,13 @@
+# The environment of the process read_lengths of webui_read_lengths: the
+# readers of the POD5 and FAST5 files of a nanopore sequencer. Created by a
+# run with conda support (debasher_exec --conda-support, or a launcher node
+# with batch_conda_support=yes), by its name, once per machine.
+name: read_lengths
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - h5py
+  - pip
+  - pip:
+      - pod5

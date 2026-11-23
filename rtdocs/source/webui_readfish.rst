@@ -44,8 +44,16 @@ The program has four nodes and a ``Supervisor``, ``Sup``:
   of the reads of the file: count, median, N50 and the fraction of reads
   under 1000 bases. With adaptive sampling at work most reads are short,
   so that fraction says whether readfish was deciding when the file was
-  written. It reads POD5 files through the ``pod5`` package, FAST5 files
-  through ``h5py``, and text files with one length per line.
+  written. Its process activates the conda environment ``read_lengths``
+  (Python with ``h5py`` and ``pod5``, declared in ``read_lengths.yml``,
+  installed with the environment files of DeBasher) and runs
+  ``read_lengths.py``, next to the module (the directory that
+  ``DEBASHER_PROCESS_MODULE_DIR`` names for every process), which reads
+  POD5 files through ``pod5``, FAST5 files through ``h5py``, and text
+  files with one length per line. The
+  specification ``batch_conda_support`` of ``Launch`` makes every batch
+  run prepare that environment: the first one creates it, the rest find
+  it (see "Batch Runs From a Node" in the :ref:`resident` Section).
 * ``Report`` receives the events of ``Acquire`` and the ends of the
   batch runs of ``Launch``, and keeps one timeline in its node state:
   the launches, stalls and phases of readfish, and the summary of every
@@ -95,10 +103,13 @@ Trying it by hand
 """""""""""""""""
 
 The program is launched as in the :ref:`resident` Section, with the
-directory to watch, and its timeline is read outside it, into a file. A
-relaunch of ``Report`` leaves the FIFO with no writer for a moment, which
-ends a plain ``cat``, so the reader opens it again in a loop. A shorter
-stall timeout than the default makes a stall quick to see.
+directory to watch, and its timeline is read outside it, into a file.
+The first file to arrive creates the conda environment ``read_lengths``,
+which takes some minutes once; conda has to be usable (``make
+installcheck`` skips the program otherwise). A relaunch of ``Report``
+leaves the FIFO with no writer for a moment, which ends a plain ``cat``,
+so the reader opens it again in a loop. A shorter stall timeout than the
+default makes a stall quick to see.
 
 ::
 

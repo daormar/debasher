@@ -101,10 +101,11 @@ processes:
         channel: fifo
   Launch:
     description: >-
-      Runs webui_read_lengths once for each read file, and sends a message when each
-      batch run ends.
+      Runs webui_read_lengths once for each read file, with conda support, so that
+      the first batch run creates the conda environment of its process and the rest
+      find it, and sends a message when each batch run ends.
     code: Launch.py
-    specs: {cpus: 1, mem: 256, time: '01:00:00', max_concurrent_runs: 2}
+    specs: {cpus: 1, mem: 256, time: '01:00:00', max_concurrent_runs: 2, batch_conda_support: true}
     kind: ProgramLauncher
     position: {x: 380, y: 460}
     options:

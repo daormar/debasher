@@ -99,3 +99,10 @@ environment does not exist:
 The program ``webui_conda_envs`` does the same with the environment
 given as data in the editor of ``conda_envs``, which ``program.yaml``
 keeps as ``conda_envs: {py27: py27.yml}``.
+
+A general program that a launcher node of a resident program runs has
+its environments prepared by the node when its specification
+``batch_conda_support`` is ``yes`` (see "Batch Runs From a Node" in the
+:ref:`resident` Section); the :doc:`webui_readfish` does so for
+``webui_read_lengths``, whose process activates the environment
+``read_lengths`` and runs a Python script in it.

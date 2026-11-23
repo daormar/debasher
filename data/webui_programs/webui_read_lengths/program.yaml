@@ -4,15 +4,21 @@ name: webui_read_lengths
 description: >-
   Example built with the web UI: a general program that summarizes the lengths of
   the reads of one file of a sequencing run (POD5, FAST5, or a text file with one
-  length per line); webui_readfish runs it once for each file that the sequencer
+  length per line), in the conda environment read_lengths, which a run with conda
+  support creates; webui_readfish runs it once for each file that the sequencer
   writes.
+execution:
+  conda_support: true
 processes:
   read_lengths:
     description: >-
-      Writes a JSON summary of the lengths of the reads of -infile: count, median,
+      Activates the conda environment read_lengths and runs read_lengths.py, which
+      writes a JSON summary of the lengths of the reads of -infile: count, median,
       N50 and the fraction of reads shorter than -short-bases, which says whether
       adaptive sampling was at work when the file was written.
-    code: read_lengths.py
+    code: read_lengths.sh
+    methods:
+      conda_envs: read_lengths_conda_envs.sh
     specs: {cpus: 1, mem: 512, time: '01:00:00'}
     position: {x: 120, y: 160}
     options:

@@ -478,7 +478,7 @@ EOF
 
 Launch_document()
 {
-    debasher::document_process "Runs webui_read_lengths once for each read file, and sends a message when each batch run ends."
+    debasher::document_process "Runs webui_read_lengths once for each read file, with conda support, so that the first batch run creates the conda environment of its process and the rest find it, and sends a message when each batch run ends."
 }
 
 
@@ -740,6 +740,6 @@ webui_readfish_program()
     add_debasher_process "Sup" "cpus=1 mem=256 time=01:00:00" ""
     add_debasher_process "Acquire" "cpus=1 mem=256 time=01:00:00" ""
     add_debasher_process "Watch" "cpus=1 mem=256 time=01:00:00" ""
-    add_debasher_process "Launch" "cpus=1 mem=256 time=01:00:00 max_concurrent_runs=2" ""
+    add_debasher_process "Launch" "cpus=1 mem=256 time=01:00:00 max_concurrent_runs=2 batch_conda_support=yes" ""
     add_debasher_process "Report" "cpus=1 mem=256 time=01:00:00" ""
 }

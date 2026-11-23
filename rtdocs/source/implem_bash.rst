@@ -284,6 +284,15 @@ function with such a name. For instance, if we want to implement the
         # Add process code here
     }
 
+Besides its options, a process finds in its environment where it runs:
+``DEBASHER_PROCESS_OUTDIR``, its output directory;
+``DEBASHER_PROCESS_EXECDIR``, its directory under ``__exec__``;
+``DEBASHER_PROCESS_MODULE_DIR``, the directory of the module that
+defines it, where a script shipped next to the module is found (the
+process ``read_lengths`` of the :doc:`webui_readfish` runs one this
+way); and ``DEBASHER_PROCESS_TASK_IDX``, its index when the process has
+several tasks.
+
 .. _process-naming:
 
 Process Naming and Namespaces
@@ -1517,7 +1526,8 @@ pairs, second argument):
   FIFO for a task held back would never end. A task that reads a FIFO
   it writes itself is not concerned, and nothing is checked between two
   different arrays.
-* ``batch_sched`` and the limits of a node (``input_log_max_mb``,
+* ``batch_sched``, ``batch_conda_support`` and ``batch_docker_support``
+  (``yes`` or ``no``) and the limits of a node (``input_log_max_mb``,
   ``out_backlog_max_mb``, ``out_backlog_fail_mb``,
   ``gil_switch_interval_ms``, ``heartbeat_timeout_s``,
   ``startup_timeout_s``, ``max_concurrent_runs``, a positive whole
