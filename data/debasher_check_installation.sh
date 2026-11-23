@@ -346,6 +346,11 @@ check_business_tests()
             ;;
         *)
             echo "Failed"
+            # The end of the output of the tests, where pytest and bats say
+            # which test failed and why, since the file is not at hand where
+            # this check runs unattended
+            echo "### Last lines of ${test_out}:"
+            "${TAIL}" -n 40 "${test_out}"
             echo ""
             return 1
             ;;

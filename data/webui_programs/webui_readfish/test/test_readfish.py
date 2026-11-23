@@ -22,8 +22,10 @@ FAKE = f"{sys.executable} {os.path.join(MODULE_DIR, 'fake_readfish.py')} --batch
 def acquire(tmp_path, monkeypatch, fake_opts="", **opts):
     # readfish and its files live in the output directory of the process
     monkeypatch.setenv("DEBASHER_PROCESS_OUTDIR", str(tmp_path))
+    # The start timeout is long, since starting the stand-in may take a
+    # second on a slow machine; the test of that timeout gives its own
     opts = {"command": f"{FAKE} {fake_opts}".strip(), "stall-timeout-s": "0.2", "scan-timeout-s": "0.5",
-            "start-timeout-s": "0.5", **opts}
+            "start-timeout-s": str(DEADLINE_S), **opts}
     return load_node("Acquire", opts=opts, inputs=["notes"], outputs=["outevents"])
 
 
@@ -32,19 +34,38 @@ def report(tmp_path, monkeypatch, **opts):
     return load_node("Report", opts=opts, inputs=["inevents", "indone"], outputs=["outtimeline"])
 
 
-def wait_for_batches():
-    # The stand-in writes a batch every 5 ms
-    time.sleep(0.1)
+# The stand-in writes a batch every 5 ms once it runs, but starting it (a
+# Python interpreter) may take a second on a slow machine: the tests wait
+# for what they expect instead of sleeping a fixed time
+DEADLINE_S = 10.0
 
 
-def observe_until(node, kind, tries=20):
-    """Observes until an event of `kind` comes in, and returns it."""
-    for _ in range(tries):
+def observe_until(node, kind, seen=None):
+    """Observes until an event of `kind` comes in, and returns it; `seen`,
+    when given, collects every event brought in on the way."""
+    deadline = time.monotonic() + DEADLINE_S
+    while time.monotonic() < deadline:
         for event in node.observe():
+            if seen is not None:
+                seen.append(event)
             if event["kind"] == kind:
                 return event
         time.sleep(0.05)
-    raise AssertionError(f"no {kind} event")
+    raise AssertionError(f"no {kind} event in {DEADLINE_S} s")
+
+
+def observe_until_raises(node, match):
+    """Observes until observe() raises a RuntimeError whose message holds
+    `match`, which it returns."""
+    deadline = time.monotonic() + DEADLINE_S
+    while time.monotonic() < deadline:
+        try:
+            node.observe()
+        except RuntimeError as e:
+            assert match in str(e), str(e)
+            return e
+        time.sleep(0.05)
+    raise AssertionError(f"observe() did not raise {match!r} in {DEADLINE_S} s")
 
 
 def kinds(events):
@@ -61,17 +82,15 @@ def stop_child(node):
 def test_acquire_announces_its_start_and_sends_the_progress_of_readfish(tmp_path, monkeypatch):
     node = acquire(tmp_path, monkeypatch)
     try:
-        wait_for_batches()
-        events = node.observe()
+        events = []
+        progress = observe_until(node, "progress", seen=events)
 
         assert kinds(events)[:2] == ["started", "phase"]
         assert events[0]["incarnation"] == 1
         assert events[1]["phase"] == "PHASE_SEQUENCING"
-        progress = [e for e in events if e["kind"] == "progress"]
-        assert len(progress) == 1
-        assert progress[0]["batches"] >= 1
-        assert progress[0]["reads"] >= 1
-        assert progress[0]["unb"] >= 0
+        assert progress["batches"] >= 1
+        assert progress["reads"] >= 1
+        assert progress["unb"] >= 0
         assert node.sent("outevents") == events
     finally:
         stop_child(node)
@@ -91,10 +110,8 @@ def test_acquire_raises_when_readfish_stalls_in_the_sequencing_phase(tmp_path, m
     node = acquire(tmp_path, monkeypatch, "--stall-after 3")
     try:
         observe_until(node, "progress")
-        time.sleep(0.3)
 
-        with pytest.raises(RuntimeError, match="no batch of reads"):
-            node.observe()
+        observe_until_raises(node, "no batch of reads")
 
         # The stall event is in the input log, for Report; the child is gone
         assert node.node.child is None
@@ -129,10 +146,8 @@ def test_a_scan_that_never_ends_is_a_stall(tmp_path, monkeypatch):
         observe_until(node, "progress")
         (tmp_path / "scan").touch()
         observe_until(node, "phase")
-        time.sleep(0.4)
 
-        with pytest.raises(RuntimeError, match="PHASE_MUX_SCAN"):
-            node.observe()
+        observe_until_raises(node, "PHASE_MUX_SCAN")
     finally:
         stop_child(node)
 
@@ -140,9 +155,7 @@ def test_a_scan_that_never_ends_is_a_stall(tmp_path, monkeypatch):
 def test_a_readfish_that_ends_makes_acquire_raise(tmp_path, monkeypatch):
     node = acquire(tmp_path, monkeypatch, "--exit-after 2 --exit-code 3")
     try:
-        time.sleep(0.2)
-        with pytest.raises(RuntimeError, match="ended with code 3"):
-            node.observe()
+        observe_until_raises(node, "ended with code 3")
 
         assert node.node.child is None
     finally:
@@ -152,20 +165,18 @@ def test_a_readfish_that_ends_makes_acquire_raise(tmp_path, monkeypatch):
 def test_relaunches_with_no_reads_are_counted_and_then_stop(tmp_path, monkeypatch):
     # A readfish that never gives a batch: each incarnation is an attempt
     for attempt in (1, 2):
-        node = acquire(tmp_path, monkeypatch, "--batch-interval-s 60", **{"max-attempts": "2"})
+        node = acquire(tmp_path, monkeypatch, "--batch-interval-s 60", **{"max-attempts": "2", "start-timeout-s": "0.5"})
         try:
-            time.sleep(0.6)
-            with pytest.raises(RuntimeError, match="since its start"):
-                node.observe()
+            observe_until_raises(node, "since its start")
             assert (tmp_path / "attempts").read_text().strip() == str(attempt)
         finally:
             stop_child(node)
 
     # At the bound the node stays, with an exhausted event and no exception
-    node = acquire(tmp_path, monkeypatch, "--batch-interval-s 60", **{"max-attempts": "2"})
+    node = acquire(tmp_path, monkeypatch, "--batch-interval-s 60", **{"max-attempts": "2", "start-timeout-s": "0.5"})
     try:
-        time.sleep(0.6)
-        events = node.observe()
+        events = []
+        observe_until(node, "exhausted", seen=events)
 
         assert kinds(events)[-1] == "exhausted"
         assert events[-1]["attempts"] == 2
