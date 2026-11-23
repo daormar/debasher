@@ -319,6 +319,73 @@ class Acquire(FBPProcess):
 
     # -- node hooks --
 
+    def _read_log(self, now):
+        """Takes the new lines of the log of readfish: a change of phase is
+        brought in at once and sets the phase; the batches of reads are
+        counted and returned as (batches, reads), with the counters of
+        readfish kept in self.counters."""
+        batches = reads = 0
+        for line in self._new_lines():
+            m = self.BATCH_LINE.search(line)
+            if m:
+                batches += 1
+                reads += int(m.group(1))
+                # The counters of readfish start again with each incarnation
+                self.counters["seq"], self.counters["unb"], self.counters["pro"] = (
+                    int(m.group(i).replace(",", "")) for i in (2, 3, 4)
+                )
+                continue
+            m = self.PHASE_LINE.search(line)
+            if m:
+                self.phase = m.group(1)
+                self.phase_changed = now
+                self.inject(self._event("phase", phase=self.phase))
+        return batches, reads
+
+    def _record_progress(self, now, batches, reads):
+        """Notes that readfish decided on reads in this pass: moves the stall
+        clock, closes the start of the incarnation, and brings in one
+        progress event for the pass."""
+        self.last_progress = now
+        if not self.progressed:
+            self.progressed = True
+            # readfish says the phase at its start; without it, reads mean
+            # sequencing
+            if self.phase is None:
+                self.phase = self.SEQUENCING
+            if self.attempts or self.exhausted:
+                # Reads again: the relaunches that found none are over
+                self.attempts = 0
+                self.exhausted = False
+                self._write_count("attempts", 0)
+                self.clear_notice()
+        self.inject(self._event("progress", batches=batches, reads=reads, **self.counters))
+
+    def _check_health(self, now):
+        """Ends the incarnation if readfish has exited or is stuck (see
+        _stalled), unless the relaunches with no reads are exhausted, in
+        which case the node stays with a notice and an event."""
+        if self.exhausted:
+            # Alive by choice: an operator has to act
+            return
+        if self.child.poll() is not None:
+            self._end("exited", f"readfish ended with code {self.child.returncode}", exit_code=self.child.returncode)
+        reason = self._stalled(now)
+        if reason is None:
+            return
+        if not self.progressed and self.attempts >= self.max_attempts:
+            # Relaunching for ever would fix nothing: the sequencer is gone
+            # or unreachable
+            self.exhausted = True
+            reason = (
+                f"{reason}, after {self.attempts} relaunches with no reads: not relaunching "
+                "readfish again; check the sequencer and relaunch this node"
+            )
+            self.set_notice(reason, level="warning")
+            self.inject(self._event("exhausted", reason=reason, attempts=self.attempts))
+            return
+        self._end("stall", reason, phase=self.phase)
+
     def run(self):
         # The child ends with the node, whether the node ends by a stall
         # (run() raises), by a stop (run() returns) or by any other error
@@ -361,60 +428,21 @@ class Acquire(FBPProcess):
             self.set_notice("running the stand-in fake_readfish.py, not readfish: give -command")
 
     def observe(self):
+        """Reads what readfish has logged since the last observation, brings
+        it in as events, and ends the incarnation if readfish is stuck or
+        gone. Runs on the observation thread, every OBSERVE_INTERVAL_SECS."""
         if self.announce:
-            # From the observation thread, not from initialize_runtime: an
-            # input is brought in only by observe()
+            # From here and not from initialize_runtime: only observe()
+            # brings an input into the node
             self.announce = False
             self.inject(self._event("started", command=self.command, attempts=self.attempts))
+        # One clock reading for the whole pass: the rules below compare
+        # what this pass saw with it
         now = time.time()
-        batches = reads = 0
-        for line in self._new_lines():
-            m = self.BATCH_LINE.search(line)
-            if m:
-                batches += 1
-                reads += int(m.group(1))
-                self.counters["seq"], self.counters["unb"], self.counters["pro"] = (
-                    int(m.group(i).replace(",", "")) for i in (2, 3, 4)
-                )
-                continue
-            m = self.PHASE_LINE.search(line)
-            if m:
-                self.phase = m.group(1)
-                self.phase_changed = now
-                self.inject(self._event("phase", phase=self.phase))
+        batches, reads = self._read_log(now)
         if batches:
-            self.last_progress = now
-            if not self.progressed:
-                self.progressed = True
-                if self.phase is None:
-                    self.phase = self.SEQUENCING
-                if self.attempts or self.exhausted:
-                    # Reads again: the relaunches that found nothing are over
-                    self.attempts = 0
-                    self.exhausted = False
-                    self._write_count("attempts", 0)
-                    self.clear_notice()
-            self.inject(self._event("progress", batches=batches, reads=reads, **self.counters))
-        if self.exhausted:
-            return
-        if self.child.poll() is not None:
-            self._end("exited", f"readfish ended with code {self.child.returncode}", exit_code=self.child.returncode)
-        reason = self._stalled(now)
-        if reason is None:
-            return
-        if not self.progressed and self.attempts >= self.max_attempts:
-            # Relaunching for ever would fix nothing: the sequencer is gone
-            # or unreachable. The node stays, alive by choice, with a notice
-            # and an event, for an operator to act and relaunch it by hand
-            self.exhausted = True
-            reason = (
-                f"{reason}, after {self.attempts} relaunches with no reads: not relaunching "
-                "readfish again; check the sequencer and relaunch this node"
-            )
-            self.set_notice(reason, level="warning")
-            self.inject(self._event("exhausted", reason=reason, attempts=self.attempts))
-            return
-        self._end("stall", reason, phase=self.phase)
+            self._record_progress(now, batches, reads)
+        self._check_health(now)
 
 
 Acquire().run()
