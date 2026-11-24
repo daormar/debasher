@@ -49,6 +49,23 @@ activates a Conda environment or starts a container, and is on every
 machine. A module can also be written by hand, as a few Bash functions
 for each process (see the :ref:`implem` Section).
 
+DeBasher is built to work with AI agents. Its MCP server,
+``debasher_mcp``, offers an agent what the web interface offers a
+person: building a program, process by process and connection by
+connection, running it, following its run, and writing and running the
+tests of its processes. DeBasher checks each operation as it is made,
+so that a wrong connection is refused at once instead of failing in the
+run. The agent and the person work on the same program: the editor
+shows each change of the agent as it is saved, and the agent finds each
+correction made on the canvas in its next call. For Claude Code,
+``debasher_claude`` adds a plugin whose skills design a program,
+implement and test its processes and review their code, in a terminal
+of your own or beside the canvas; and the code editor of each process
+composes a prompt with the rules of a process for any AI tool.
+DeBasher itself calls no AI service: the agent runs with your own
+installation and account (see the :ref:`webui` and :ref:`tools`
+Sections).
+
 DeBasher runs two types of program. A general program processes a
 batch of inputs: each of its processes runs once, as soon as its
 inputs are ready, and ends. A resident program processes a stream: its

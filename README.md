@@ -19,7 +19,10 @@ DeBasher is a workflow system whose processes are Unix programs, written
 in Bash, Python, R, Perl or Groovy. The way the options of the processes
 connect defines the dependency graph that DeBasher schedules and runs.
 Programs are built in a visual editor, with the help of an AI assistant,
-written by hand as Bash modules, or described in Python with the SDK.
+written by hand as Bash modules, or described in Python with the SDK. An
+AI agent, such as Claude Code, works on the same program as a person,
+with the operations of the editor, while the person follows each of its
+changes on the canvas.
 
 <p align="center">
   <img src="rtdocs/source/images/webui_dynamic_fanout_fifos.png"
@@ -49,8 +52,13 @@ Among its features:
   resume;
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
-- a visual editor to build, run and observe programs from a browser, with
-  AI assistance;
+- a visual editor to build, run and observe programs from a browser;
+- integration with AI agents: an MCP server offers an agent the
+  operations of the editor (build a program, run it, follow its run,
+  test its processes), each checked by DeBasher as it is made; a Claude
+  Code plugin brings skills to design a program, implement and test its
+  processes and review their code, in a terminal beside the canvas; and
+  the code editor of each process composes a prompt for any AI tool;
 - programs saved as a readable `program.yaml` and one file per process,
   which the editor, the Python SDK, an AI agent or a text editor all
   write, and git versions.
