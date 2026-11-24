@@ -125,7 +125,8 @@ glossary (Spanish equivalents belong in the untracked
 If the diff of the document describes a behaviour, a name, a flag or a file,
 spot-check with Grep that the code under `engine/`, `api/` or `frontend/src/`
 agrees (the name exists, the flag is spelled the same way). Report
-mismatches. Do not audit the code beyond that.
+mismatches. Do not audit the code beyond that: whether the document describes
+what the code does is the job of `design-doc-sync-reviewer`.
 
 ## Report
 
