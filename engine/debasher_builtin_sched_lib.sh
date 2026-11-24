@@ -322,10 +322,14 @@ debasher_builtin_sched::_get_array_task_status()
 }
 
 ########
-debasher_builtin_sched::_get_failed_array_task_indices()
+# Prints, separated by spaces, the indices of the tasks of the array
+# process $2 of the output directory $1 whose status is one of the
+# statuses given after them
+debasher_builtin_sched::_get_array_task_indices_with_status()
 {
     local dirname=$1
     local processname=$2
+    shift 2
     local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
     local result
 
@@ -333,109 +337,13 @@ debasher_builtin_sched::_get_failed_array_task_indices()
     local last_task_idx=$((array_size - 1))
     for task_idx in $("${SEQ}" 0 ${last_task_idx}); do
         local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" $processname $task_idx)
-        if [ ${task_status} = ${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
-            if [ "${result}" = "" ]; then
-                result=$task_idx
-            else
-                result="$result $task_idx"
+        local status
+        for status in "$@"; do
+            if [ "${task_status}" = "${status}" ]; then
+                result="${result:+${result} }${task_idx}"
+                break
             fi
-        fi
-    done
-
-    echo $result
-}
-
-########
-debasher_builtin_sched::_get_finished_array_task_indices()
-{
-    local dirname=$1
-    local processname=$2
-    local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-    local result
-
-    local task_idx
-    local last_task_idx=$((array_size - 1))
-    for task_idx in $("${SEQ}" 0 ${last_task_idx}); do
-        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" $processname $task_idx)
-        if [ ${task_status} = ${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS} ]; then
-            if [ "${result}" = "" ]; then
-                result=$task_idx
-            else
-                result="$result $task_idx"
-            fi
-        fi
-    done
-
-    echo $result
-}
-
-########
-debasher_builtin_sched::_get_inprogress_array_task_indices()
-{
-    local dirname=$1
-    local processname=$2
-    local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-    local result
-
-    local task_idx
-    local last_task_idx=$((array_size - 1))
-    for task_idx in $("${SEQ}" 0 ${last_task_idx}); do
-        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" $processname $task_idx)
-        if [ ${task_status} = ${DEBASHER_INPROGRESS_PROCESS_STATUS} ]; then
-            if [ "${result}" = "" ]; then
-                result=$task_idx
-            else
-                result="$result $task_idx"
-            fi
-        fi
-    done
-
-    echo $result
-}
-
-########
-debasher_builtin_sched::_get_todo_array_task_indices()
-{
-    local dirname=$1
-    local processname=$2
-    local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-    local result
-
-    local task_idx
-    local last_task_idx=$((array_size - 1))
-    for task_idx in $("${SEQ}" 0 ${last_task_idx}); do
-        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" $processname $task_idx)
-        if [ ${task_status} = ${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS} ]; then
-            if [ "${result}" = "" ]; then
-                result=$task_idx
-            else
-                result="$result $task_idx"
-            fi
-        fi
-    done
-
-    echo $result
-}
-
-########
-debasher_builtin_sched::_get_pending_array_task_indices()
-{
-    local dirname=$1
-    local processname=$2
-    local array_size=${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}
-    local result
-
-    local task_idx
-    local last_task_idx=$((array_size - 1))
-    for task_idx in $("${SEQ}" 0 ${last_task_idx}); do
-        local task_status=$(debasher_builtin_sched::_get_array_task_status "${dirname}" $processname $task_idx)
-        if [ ${task_status} = ${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS} -o ${task_status} = ${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS} ]; then
-            if [ "${result}" = "" ]; then
-                result=$task_idx
-            else
-                result="$result $task_idx"
-            fi
-        fi
+        done
     done
 
     echo $result
@@ -447,7 +355,7 @@ debasher_builtin_sched::_revise_array_mem()
     local dirname=$1
     local processname=$2
 
-    local inprogress_tasks=$(debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" ${processname})
+    local inprogress_tasks=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" ${processname} "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}")
     local num_inprogress_tasks=$(debasher::_get_num_words_in_string "${inprogress_tasks}")
     local process_revised_mem=$(debasher_builtin_sched::_get_process_mem_given_num_tasks ${processname} ${num_inprogress_tasks})
     DEBASHER_BUILTIN_SCHED_ALLOC_MEM=$((DEBASHER_BUILTIN_SCHED_ALLOC_MEM - ${DEBASHER_BUILTIN_SCHED_PROCESS_ALLOC_MEM[${processname}]} + process_revised_mem))
@@ -460,7 +368,7 @@ debasher_builtin_sched::_revise_array_cpus()
     local dirname=$1
     local processname=$2
 
-    local inprogress_tasks=$(debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" ${processname})
+    local inprogress_tasks=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" ${processname} "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}")
     local num_inprogress_tasks=$(debasher::_get_num_words_in_string "${inprogress_tasks}")
     local process_revised_cpus=$(debasher_builtin_sched::_get_process_cpus_given_num_tasks ${processname} ${num_inprogress_tasks})
     DEBASHER_BUILTIN_SCHED_ALLOC_CPUS=$((DEBASHER_BUILTIN_SCHED_ALLOC_CPUS - ${DEBASHER_BUILTIN_SCHED_PROCESS_ALLOC_CPUS[${processname}]} + process_revised_cpus))
@@ -968,7 +876,7 @@ debasher_builtin_sched::_cancel_array_tasks_one_by_one()
     local processname=$3
 
     local cancelled=1 cause task_idx
-    for task_idx in $(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}"); do
+    for task_idx in $(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" "${processname}" "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}"); do
         if cause=$(debasher_builtin_sched::_deps_can_no_longer_hold "${dirname}" "${processname}" "${task_idx}"); then
             debasher_builtin_sched::_cancel_task "${cmdline}" "${dirname}" "${processname}" "${task_idx}" "${cause}" || return 2
             cancelled=0
@@ -989,7 +897,7 @@ debasher_builtin_sched::_cancel_array_tasks_together()
     local dirname=$2
     local processname=$3
 
-    local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}")
+    local todo_task_indices=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" "${processname}" "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}")
     [ -z "${todo_task_indices}" ] && return 1
 
     local cause task_idx
@@ -1132,7 +1040,7 @@ debasher_builtin_sched::_cancel_tasks_left_waiting()
             local status=${DEBASHER_BUILTIN_SCHED_CURR_PROCESS_STATUS[${processname}]}
             if [ "${status}" != "${DEBASHER_FINISHED_PROCESS_STATUS}" ] \
                    && [ "${status}" != "${DEBASHER_BUILTIN_SCHED_FAILED_PROCESS_STATUS}" ]; then
-                task_indices=($(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" "${processname}"))
+                task_indices=($(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" "${processname}" "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}"))
             fi
         fi
         [ ${#task_indices[@]} -eq 0 ] && continue
@@ -1155,7 +1063,7 @@ debasher_builtin_sched::_get_max_num_tasks()
         # Without a throttle, any task not launched yet can be launched
         echo "${DEBASHER_BUILTIN_SCHED_PROCESS_ARRAY_SIZE[${processname}]}"
     else
-        local inprogress_tasks=$(debasher_builtin_sched::_get_inprogress_array_task_indices "${dirname}" $processname)
+        local inprogress_tasks=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" $processname "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}")
         local num_inprogress_tasks=$(debasher::_get_num_words_in_string "${inprogress_tasks}")
         local result=$((throttle - num_inprogress_tasks))
         echo ${result}
@@ -1198,7 +1106,7 @@ debasher_builtin_sched::_update_executable_array_process()
                && { [ ${deps_per_task} -eq 1 ] || debasher_builtin_sched::_check_process_deps "${dirname}" ${processname}; }; then
             local max_task_num=$(debasher_builtin_sched::_get_max_num_tasks "${dirname}" ${processname})
             if [ ${max_task_num} -gt 0 ]; then
-                local todo_task_indices=$(debasher_builtin_sched::_get_todo_array_task_indices "${dirname}" ${processname})
+                local todo_task_indices=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" ${processname} "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}")
                 if [ ${deps_per_task} -eq 1 ]; then
                     todo_task_indices=$(debasher_builtin_sched::_filter_tasks_with_deps "${dirname}" ${processname} "${todo_task_indices}")
                 fi
@@ -2059,7 +1967,7 @@ debasher_builtin_sched::_clean_process_files()
     else
         # If array size is greater than 1, remove only those log files
         # related to unfinished array tasks
-        local pending_tasks=$(debasher_builtin_sched::_get_pending_array_task_indices "${dirname}" ${processname})
+        local pending_tasks=$(debasher_builtin_sched::_get_array_task_indices_with_status "${dirname}" ${processname} "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}" "${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS}")
         if [ "${pending_tasks}" != "" ]; then
             # Iterate over pending tasks
             local idx

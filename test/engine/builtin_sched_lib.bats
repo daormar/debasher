@@ -1106,6 +1106,27 @@ fail_task() {
     [ "$(debasher_builtin_sched::_get_array_task_status "${OUTDIR}" arr 1)" = "${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}" ]
 }
 
+@test "_get_array_task_indices_with_status lists the tasks in any of the statuses given, in order" {
+    setup_cancellation
+    # Task 0 waits to be launched, task 1 failed, task 2 runs, task 3
+    # finished and task 4 was cancelled
+    register_process arr 5 "" "${DEBASHER_UNFINISHED_PROCESS_STATUS}"
+    fail_task arr 1
+    echo 900002 > "$(debasher::_get_array_taskid_filename "${OUTDIR}" arr 2)"
+    debasher::_id_exists() { [ "$1" = 900002 ]; }
+    mark_task_finished arr 3
+    debasher::_signal_task_cancellation "${OUTDIR}" arr 4 5 "afterok:x"
+
+    run debasher_builtin_sched::_get_array_task_indices_with_status "${OUTDIR}" arr "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}"
+    [ "${output}" = "0" ]
+    run debasher_builtin_sched::_get_array_task_indices_with_status "${OUTDIR}" arr "${DEBASHER_BUILTIN_SCHED_INPROGRESS_TASK_STATUS}"
+    [ "${output}" = "2" ]
+    run debasher_builtin_sched::_get_array_task_indices_with_status "${OUTDIR}" arr "${DEBASHER_BUILTIN_SCHED_FAILED_TASK_STATUS}" "${DEBASHER_BUILTIN_SCHED_TODO_TASK_STATUS}"
+    [ "${output}" = "0 1" ]
+    run debasher_builtin_sched::_get_array_task_indices_with_status "${OUTDIR}" arr "${DEBASHER_BUILTIN_SCHED_FINISHED_TASK_STATUS}" "${DEBASHER_BUILTIN_SCHED_CANCELLED_TASK_STATUS}"
+    [ "${output}" = "3 4" ]
+}
+
 @test "_reset_task_cancellations removes the cancellation markers of a process, so that its tasks wait to be launched again" {
     setup_cancellation
     register_process arr 3 "" "${DEBASHER_TODO_PROCESS_STATUS}"
