@@ -49,7 +49,7 @@ def take_pars():
         sys.exit()
     else:
         for opt, arg in opts:
-            if opt in ("-p", "--pfile"):
+            if opt in ("-p", "--prefix"):
                 values["prefix"] = arg
                 flags["p_given"]=True
             elif opt in ("-r", "--print-reord"):
