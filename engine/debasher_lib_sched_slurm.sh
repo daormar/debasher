@@ -486,7 +486,8 @@ debasher::_slurm_launch_preverif_job()
     local process_spec=$5
     local attempt_jids=$6
 
-    # The job fails if all attempts fail
+    # The job runs, and succeeds, only if every attempt fails: Slurm
+    # kills it once an attempt succeeds and its dependency cannot hold
     local attempt_deps=$(debasher::_slurm_get_attempt_deps ${attempt_jids})
     local logf=$(debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname})
     debasher::_slurm_launch_check_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" "${processname}__preverif" "${logf}" "${attempt_deps}" ${attempt_jids} "preliminary verification"
