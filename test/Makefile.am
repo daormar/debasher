@@ -1,7 +1,8 @@
 SUBDIRS = engine api sdk
 
 EXTRA_DIST = utils/README.md utils/crap_report.py utils/bash_complexity.py \
-utils/hotspots.py utils/coupling.py utils/module_depth.py
+utils/hotspots.py utils/coupling.py utils/module_depth.py \
+utils/duplication.py
 
 # CRAP report (utils/crap_report.py) of the Python code of the API and of
 # the engine. It is not part of `make check`: it is a report rather than a
@@ -23,10 +24,10 @@ endif
 
 # Complexity of the Bash functions of the engine (utils/bash_complexity.py),
 # hotspots of the code (utils/hotspots.py), its change coupling
-# (utils/coupling.py) and the depth of its modules (utils/module_depth.py):
-# reports too, and static ones, so they need neither the tests nor the
-# virtual environment of the API.
-.PHONY: bash-complexity hotspots coupling module-depth
+# (utils/coupling.py), the depth of its modules (utils/module_depth.py) and
+# its duplication (utils/duplication.py): reports too, and static ones, so
+# they need neither the tests nor the virtual environment of the API.
+.PHONY: bash-complexity hotspots coupling module-depth duplication
 bash-complexity:
 	cd $(top_srcdir) && $(PYTHON) test/utils/bash_complexity.py
 
@@ -38,3 +39,6 @@ coupling:
 
 module-depth:
 	cd $(top_srcdir) && $(PYTHON) test/utils/module_depth.py
+
+duplication:
+	cd $(top_srcdir) && $(PYTHON) test/utils/duplication.py

@@ -13,6 +13,7 @@ the project with its `make` target, or directly with the options its
 | `make hotspots` | `hotspots.py` | files both complex and often changed, in every language | Python 3, git |
 | `make coupling` | `coupling.py` | files that change together in the same commits | Python 3, git |
 | `make module-depth` | `module_depth.py` | depth of the modules: code against the cost of their interface | Python 3 |
+| `make duplication` | `duplication.py` | fragments and functions written twice, in every language | Python 3, git |
 
 ## CRAP score
 
@@ -162,3 +163,42 @@ stand for functionality, and the informal part of an interface (the order
 of the calls, the files expected on disk) is not seen. Its parsers are line
 based for Bash (the one of the complexity report) and use `ast` for Python.
 It ranks modules to look at; it does not grade them.
+
+## Duplication
+
+Code copied and then adapted is a fix that has to be made twice, and the
+second copy is the one that gets forgotten. `duplication.py` looks for it in
+the source files of `engine/`, `api/`, `frontend/src/`, `frontend/mcp/src/`
+and `sdk/` (tests are left out unless `--include-tests` is given), in two
+ways:
+
+- **Clones**: fragments of at least 60 tokens (`--min-tokens`) that are the
+  same code in two places, whether in two files or in one. A clone is
+  **exact** when the tokens are the same, and **renamed** when the
+  identifiers differ but map one to one between the two fragments: a name
+  on one side always stands for the same name on the other. In both kinds
+  at least half of the identifiers and literals (`--min-same`) are the same
+  on both sides, so that two interfaces with different fields, or two runs
+  of `echo` with different texts, are not taken for a copy. Comments,
+  whitespace and import statements do not count, and a clone that mostly
+  repeats a longer one, shifted by a few tokens, is not listed again.
+- **Similar functions**: pairs of functions whose bodies share at least 70%
+  (`--min-similarity`) of their sequences of 5 tokens, counted as many times
+  as they appear (a weighted Jaccard similarity). This finds what a clone
+  misses: a copy with lines added, removed or changed. Functions under 40
+  tokens (`--min-function-tokens`) are left out, since short ones are
+  alike by nature.
+
+Each pair carries its **span**, as in the change coupling (`dir`, `part`,
+`cross`, `test`), and `--span` lists only the pairs of a span: a `cross`
+clone is a rule written in two parts of the code, which drift apart. The
+report starts with the lines of code of each part that lie in some clone,
+and ends with the files with most such lines.
+
+Files are tokenized by language: Python with its `tokenize` module, Bash
+and TypeScript with scanners of their own that know quotes, comments,
+here-documents and template strings. Functions are found with `ast` in
+Python, with the parser of the complexity report in Bash, and in
+TypeScript as function declarations, functions assigned to a variable and
+methods. A copy written in other words, the same logic with other code, is
+not seen: that one is left to a reading of the code.
