@@ -48,7 +48,10 @@ is a workflow system whose processes are Unix programs, written in Bash,
 Python, R, Perl or Groovy. The way the options of the processes connect
 defines the dependency graph that DeBasher schedules and runs. Programs
 are built in a visual editor, with the help of an AI assistant, written
-by hand as Bash modules, or described in Python with the SDK.</p>
+by hand as Bash modules, or described in Python with the SDK. An AI
+agent, such as Claude Code, works on the same program as a person, with
+the operations of the editor, while the person follows each of its
+changes on the canvas.</p>
 
 <p style="text-align:center">
 <a href="images/webui_dynamic_fanout_fifos.png"><img
@@ -91,7 +94,7 @@ an MSc degree in Bioinformatics.</p>
 <li>Processes run concurrently as their data dependencies allow, and a new run repeats only those that failed or are pending.</li>
 <li>A built-in scheduler for a single machine, and Slurm for clusters; static scheduling keeps programs of thousands of processes efficient.</li>
 <li>Conda environments and Docker containers, for reproducible results.</li>
-<li>A visual editor to build, run and observe programs from a browser, with AI assistance.</li>
+<li>A visual editor to build, run and observe programs from a browser.</li>
 <li>Programs saved as a readable <code>program.yaml</code> and one file per process, which the editor, the Python SDK, an AI agent or a text editor all write, and git versions.</li>
 </ul>
 
@@ -101,6 +104,7 @@ an MSc degree in Bioinformatics.</p>
 <li>Data streamed between processes through FIFOs, and cycles between processes.</li>
 <li>Interactive workflows, which take input written into them while they run.</li>
 <li>Programs built out of other programs, loaded as modules or launched as batch runs on request.</li>
+<li>Integration with AI agents, which work on the program as data: an MCP server offers an agent the operations of the editor (build a program, run it, follow its run, test its processes), each checked by DeBasher as it is made, while the person sees every change on the canvas; a Claude Code plugin brings skills to design a program, implement and test its processes and review their code, in a terminal beside the canvas; and the code editor of each process composes a prompt for any AI tool.</li>
 <li>Resident programs, whose processes keep their state and are fault tolerant:
 <ul>
 <li>a process that crashes is relaunched and returns to the state it would have had without the crash, while the others keep running;</li>
