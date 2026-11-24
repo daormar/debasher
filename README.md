@@ -47,11 +47,19 @@ files or FIFOs can be one.
 
 Among its features:
 
+- streaming and batch processing combined: in one program, processes
+  connected through files wait for their inputs while those connected
+  through FIFOs run together, and a resident program launches a batch
+  run for each request it receives;
 - cycles between processes, and interactive workflows;
 - stateful processes, with crash recovery, snapshots, and orderly stop and
   resume;
 - a built-in scheduler, and Slurm for clusters;
 - Conda environments and Docker containers for reproducibility;
+- business tests for the processes of a program, each run on its own
+  with `debasher_test`, from the editor or by an AI agent;
+- Linux, macOS and Windows under WSL2, all three tested in continuous
+  integration;
 - a visual editor to build, run and observe programs from a browser;
 - integration with AI agents: an MCP server offers an agent the
   operations of the editor (build a program, run it, follow its run,
