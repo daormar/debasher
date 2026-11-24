@@ -345,9 +345,13 @@ def test_a_dropped_fragment_never_moves_the_accepted_counter(fifo_path):
             w.write("\n" + lib.encode_hello() + "\n")
             w.write(lib.encode_data("after", seq=2) + "\n")
 
-        assert _wait_until(lambda: proc._accepted_seq.get("inf") == 2)
+        # Waits on what was processed, not on the counter: the reader moves
+        # the counter before it logs and queues the message, so a stop at
+        # that moment would reach the brain thread ahead of the message.
+        # Had the fragment moved the counter to 7, "after" would be dropped
+        # as a duplicate and never arrive.
+        assert _wait_until(lambda: proc.received == ["before", "after"])
+        assert proc._accepted_seq.get("inf") == 2
         assert proc._reader_threads["inf"].is_alive()
     finally:
         proc.stop_threads(timeout=2)
-
-    assert proc.received == ["before", "after"]
