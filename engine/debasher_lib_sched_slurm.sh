@@ -452,24 +452,33 @@ debasher::_slurm_launch_attempt()
         debasher::_set_slurm_jobcorr_like_deps ${prev_attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${processdeps}" || { echo "Error while launching attempt job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
     fi
 
-    # Release job
-    "$SCONTROL" release "$jid" > /dev/null
-    local exit_code=$?
-
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        local command="$SCONTROL release $jid"
-        echo "Error while launching attempt job for process ${processname} (${command})" >&2
-        return 1
-    fi
+    debasher::_slurm_release_job "${jid}" ${processname} "attempt" || return 1
 
     echo $jid
 }
 
 ########
+# Releases the held job $1 of the process $2, whose description $3 (such
+# as "attempt") goes into the error message
+debasher::_slurm_release_job()
+{
+    local jid=$1
+    local processname=$2
+    local job_desc=$3
+
+    "$SCONTROL" release "$jid" > /dev/null
+    local exit_code=$?
+
+    if [ ${exit_code} -ne 0 ]; then
+        local command="$SCONTROL release $jid"
+        echo "Error while launching ${job_desc} job for process ${processname} (${command})" >&2
+        return 1
+    fi
+}
+
+########
 debasher::_slurm_launch_preverif_job()
 {
-    # Initialize variables
     local dirname=$1
     local processname=$2
     local array_size=$3
@@ -477,65 +486,15 @@ debasher::_slurm_launch_preverif_job()
     local process_spec=$5
     local attempt_jids=$6
 
-    # Obtain dependencies for attempts
+    # The job fails if all attempts fail
     local attempt_deps=$(debasher::_slurm_get_attempt_deps ${attempt_jids})
-
-    # Retrieve specification
-    local account=$(debasher::_extract_account_from_process_spec "$process_spec")
-    local partition=$(debasher::_extract_partition_from_process_spec "$process_spec")
-    local nodes=$(debasher::_extract_nodes_from_process_spec "$process_spec")
-
-    # Define options
-    local jobname="${processname}__preverif"
-    local preverif_logf=$(debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname})
-    local cpus_opt=$(debasher::_get_slurm_cpus_opt 1)
-    local mem_opt=$(debasher::_get_slurm_mem_opt 16)
-    local time_opt=$(debasher::_get_slurm_time_opt 00:01:00)
-    local account_opt=$(debasher::_get_slurm_account_opt ${account})
-    local nodes_opt=$(debasher::_get_slurm_nodes_opt ${nodes})
-    local partition_opt=$(debasher::_get_slurm_partition_opt ${partition})
-    local dependency_opt=$(debasher::_get_slurm_dependency_opt "${attempt_deps}")
-    if [ ${array_size} -gt 1 ]; then
-        local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
-    fi
-
-    # Submit preliminary verification job (the job will fail if all
-    # attempts fail, initially it is put on hold)
-    local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${preverif_logf}" --kill-on-invalid-dep=yes -H --wrap "true")
-    local exit_code=$?
-
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        echo "Error while launching preliminary verification job for process ${processname}" >&2
-        return 1
-    fi
-
-    # Update dependencies when executing job arrays
-    if [ ${array_size} -gt 1 ]; then
-        local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
-        local additional_deps=""
-        debasher::_set_slurm_jobcorr_like_deps ${attempt_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { echo "Error while launching preliminary verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
-    fi
-
-    # Release job
-    "$SCONTROL" release "$jid" > /dev/null
-    local exit_code=$?
-
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        local command="$SCONTROL release $jid"
-        echo "Error while launching preliminary verification job for process ${processname} (${command})" >&2
-        return 1
-    fi
-
-    echo $jid
+    local logf=$(debasher::_get_process_log_preverif_filename_slurm "${dirname}" ${processname})
+    debasher::_slurm_launch_check_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" "${processname}__preverif" "${logf}" "${attempt_deps}" ${attempt_jids} "preliminary verification"
 }
 
 ########
 debasher::_slurm_launch_verif_job()
 {
-    # Initialize variables
     local dirname=$1
     local processname=$2
     local array_size=$3
@@ -543,35 +502,56 @@ debasher::_slurm_launch_verif_job()
     local process_spec=$5
     local preverif_jid=$6
 
+    # The job succeeds if the preliminary verification job fails
+    local verjob_deps="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}:${preverif_jid}"
+    local logf=$(debasher::_get_process_log_verif_filename_slurm "${dirname}" ${processname})
+    debasher::_slurm_launch_check_job "${dirname}" ${processname} ${array_size} ${task_array_list} "${process_spec}" "${processname}__verif" "${logf}" "${verjob_deps}" ${preverif_jid} "verification"
+}
+
+########
+# Launches a check job of the process $2 of the output directory $1, with
+# $3 tasks ($4 their list) and the process specification $5: a job named
+# $6 that does nothing, writes the log $7 and depends on $8. For an array,
+# its tasks are tied to those of the jobs $9 that it depends on. ${10}
+# describes the job in error messages. Prints the job id, or fails
+debasher::_slurm_launch_check_job()
+{
+    local dirname=$1
+    local processname=$2
+    local array_size=$3
+    local task_array_list=$4
+    local process_spec=$5
+    local jobname=$6
+    local logf=$7
+    local deps=$8
+    local corr_jids=$9
+    local job_desc=${10}
+
     # Retrieve specification
     local account=$(debasher::_extract_account_from_process_spec "$process_spec")
     local partition=$(debasher::_extract_partition_from_process_spec "$process_spec")
     local nodes=$(debasher::_extract_nodes_from_process_spec "$process_spec")
 
-    # Define options
-    local jobname="${processname}__verif"
-    local verif_logf=$(debasher::_get_process_log_verif_filename_slurm "${dirname}" ${processname})
+    # Define options: the job only checks what its dependencies left, so
+    # it asks for the least resources
     local cpus_opt=$(debasher::_get_slurm_cpus_opt 1)
     local mem_opt=$(debasher::_get_slurm_mem_opt 16)
     local time_opt=$(debasher::_get_slurm_time_opt 00:01:00)
     local account_opt=$(debasher::_get_slurm_account_opt ${account})
     local nodes_opt=$(debasher::_get_slurm_nodes_opt ${nodes})
     local partition_opt=$(debasher::_get_slurm_partition_opt ${partition})
-    local verjob_deps="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}:${preverif_jid}"
-    local dependency_opt=$(debasher::_get_slurm_dependency_opt "${verjob_deps}")
+    local dependency_opt=$(debasher::_get_slurm_dependency_opt "${deps}")
     if [ ${array_size} -gt 1 ]; then
         local jobarray_opt=$(debasher::_get_slurm_task_array_opt ${task_array_list} ${DEBASHER_ARRAY_TASK_NOTHROTTLE})
     fi
 
-    # Submit verification job (the job will succeed if preliminary
-    # verification job fails, initially it is put on hold)
+    # Submit the job, initially on hold
     local jid
-    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${verif_logf}" --kill-on-invalid-dep=yes -H --wrap "true")
+    jid=$("$SBATCH" --parsable ${cpus_opt} ${mem_opt} ${time_opt} ${account_opt} ${partition_opt} ${nodes_opt} ${dependency_opt} ${jobarray_opt} --job-name ${jobname} --output "${logf}" --kill-on-invalid-dep=yes -H --wrap "true")
     local exit_code=$?
 
-    # Check for errors
     if [ ${exit_code} -ne 0 ]; then
-        echo "Error while launching verification job for process ${processname}" >&2
+        echo "Error while launching ${job_desc} job for process ${processname}" >&2
         return 1
     fi
 
@@ -579,19 +559,10 @@ debasher::_slurm_launch_verif_job()
     if [ ${array_size} -gt 1 ]; then
         local deptype="${DEBASHER_AFTERNOTOK_PROCESSDEP_TYPE}"
         local additional_deps=""
-        debasher::_set_slurm_jobcorr_like_deps ${preverif_jid} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { echo "Error while launching verification job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
+        debasher::_set_slurm_jobcorr_like_deps ${corr_jids} ${jid} ${array_size} ${task_array_list} ${deptype} "${additional_deps}" || { echo "Error while launching ${job_desc} job for process ${processname} (debasher::_set_slurm_jobcorr_like_deps)" >&2; return 1; }
     fi
 
-    # Release job
-    "$SCONTROL" release "$jid" > /dev/null
-    local exit_code=$?
-
-    # Check for errors
-    if [ ${exit_code} -ne 0 ]; then
-        local command="$SCONTROL release $jid"
-        echo "Error while launching verification job for process ${processname} (${command})" >&2
-        return 1
-    fi
+    debasher::_slurm_release_job "${jid}" ${processname} "${job_desc}" || return 1
 
     echo $jid
 }

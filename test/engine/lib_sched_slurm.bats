@@ -54,6 +54,70 @@ setup() {
     [[ "${output}" == *"Error while launching verification job for process proc (debasher::_set_slurm_jobcorr_like_deps)"* ]]
 }
 
+# A fake sbatch that writes its arguments, one per line, to sbatch.args and
+# prints a job id
+record_sbatch_args() {
+    printf '#!/bin/bash\nprintf "%%s\\n" "$@" > "%s"\necho 123\n' \
+        "${BATS_TEST_TMPDIR}/sbatch.args" > "${SBATCH}"
+}
+
+@test "the preliminary verification job is held, depends on every attempt failing and writes its own log" {
+    record_sbatch_args
+    local spec="proc cpus=1 mem=32 time=00:01:00"
+
+    run debasher::_slurm_launch_preverif_job "${OUTDIR}" proc 1 "0" "${spec}" "100,101"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "123" ]
+    local args
+    args=$(cat "${BATS_TEST_TMPDIR}/sbatch.args")
+    [[ "${args}" == *$'\n'"--dependency=afternotok:100,afternotok:101"$'\n'* ]]
+    [[ "${args}" == *$'\n'"--job-name"$'\n'"proc__preverif"$'\n'* ]]
+    [[ "${args}" == *$'\n'"--output"$'\n'"$(debasher::_get_process_log_preverif_filename_slurm "${OUTDIR}" proc)"$'\n'* ]]
+    [[ "${args}" == *$'\n'"-H"$'\n'"--wrap"$'\n'"true" ]]
+}
+
+@test "the verification job is held, depends on the preliminary one failing and writes its own log" {
+    record_sbatch_args
+    local spec="proc cpus=1 mem=32 time=00:01:00"
+
+    run debasher::_slurm_launch_verif_job "${OUTDIR}" proc 1 "0" "${spec}" "200"
+    [ "${status}" -eq 0 ]
+    [ "${output}" = "123" ]
+    local args
+    args=$(cat "${BATS_TEST_TMPDIR}/sbatch.args")
+    [[ "${args}" == *$'\n'"--dependency=afternotok:200"$'\n'* ]]
+    [[ "${args}" == *$'\n'"--job-name"$'\n'"proc__verif"$'\n'* ]]
+    [[ "${args}" == *$'\n'"--output"$'\n'"$(debasher::_get_process_log_verif_filename_slurm "${OUTDIR}" proc)"$'\n'* ]]
+    [[ "${args}" == *$'\n'"-H"$'\n'"--wrap"$'\n'"true" ]]
+}
+
+@test "for an array, each check job ties its tasks to those of the jobs it depends on" {
+    local spec="proc cpus=1 mem=32 time=00:01:00"
+    debasher::_set_slurm_jobcorr_like_deps() {
+        echo "$*" >> "${BATS_TEST_TMPDIR}/jobcorr.args"
+    }
+
+    debasher::_slurm_launch_preverif_job "${OUTDIR}" proc 2 "0-1" "${spec}" "100,101" > /dev/null
+    debasher::_slurm_launch_verif_job "${OUTDIR}" proc 2 "0-1" "${spec}" "200" > /dev/null
+
+    run cat "${BATS_TEST_TMPDIR}/jobcorr.args"
+    [ "${lines[0]}" = "100,101 123 2 0-1 afternotok " ]
+    [ "${lines[1]}" = "200 123 2 0-1 afternotok " ]
+}
+
+@test "a check job that cannot be released is reported with the command that failed" {
+    printf '#!/bin/bash\nexit 1\n' > "${SCONTROL}"
+    local spec="proc cpus=1 mem=32 time=00:01:00"
+
+    run debasher::_slurm_launch_preverif_job "${OUTDIR}" proc 1 "0" "${spec}" "100"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Error while launching preliminary verification job for process proc (${SCONTROL} release 123)"* ]]
+
+    run debasher::_slurm_launch_verif_job "${OUTDIR}" proc 1 "0" "${spec}" "200"
+    [ "${status}" -ne 0 ]
+    [[ "${output}" == *"Error while launching verification job for process proc (${SCONTROL} release 123)"* ]]
+}
+
 # --- logs of the attempts ---------------------------------------------------
 
 @test "_get_last_attempt_logf_slurm gives the log of the last attempt that ran" {
