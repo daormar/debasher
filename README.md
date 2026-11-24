@@ -47,10 +47,10 @@ files or FIFOs can be one.
 
 Among its features:
 
-- streaming and batch processing combined: in one program, processes
-  connected through files wait for their inputs while those connected
-  through FIFOs run together, and a resident program launches a batch
-  run for each request it receives;
+- batch processing and stream processing, each on its own or combined:
+  in one program, processes connected through files wait for their
+  inputs while those connected through FIFOs run together, and a
+  resident program launches a batch run for each request it receives;
 - cycles between processes, and interactive workflows;
 - stateful processes, with crash recovery, snapshots, and orderly stop and
   resume;

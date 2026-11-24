@@ -83,10 +83,10 @@ clusters, and tests the processes of a program with business tests,
 each process run on its own (see the :ref:`tools` Section,
 ``debasher_test``). It runs on Linux, on macOS and on Windows through
 WSL2, and is tested on all three (see :doc:`getstart`).
-Unlike most of them, it streams data between processes, combines
-streaming and batch processing (in one program, processes connected
-through files wait for their inputs while those connected through FIFOs
-run together, and a resident program launches a batch run for each
-request it receives), allows cycles, keeps processes with a state of
-their own, takes input from outside while a program runs, and launches
-programs from within programs.
+Unlike most of them, it does batch processing and stream processing,
+each on its own or combined (in one program, processes connected
+through files wait for their inputs while those connected through
+FIFOs run together, and a resident program launches a batch run for
+each request it receives), allows cycles, keeps processes with a state
+of their own, takes input from outside while a program runs, and
+launches programs from within programs.
