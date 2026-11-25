@@ -2,9 +2,10 @@
 
 `Dockerfile` packages the engine, API and web UI into a single container for
 demoing/evaluating DeBasher. It is not meant for production use: it has no
-conda/docker-in-docker support for processes that need their own
-environment, and the Slurm scheduler backend is disabled, since it makes
-no sense inside a container.
+docker-in-docker support for processes that run in their own docker
+container, and the Slurm scheduler backend is disabled, since it makes no
+sense inside a container. Conda is there, so processes can have conda
+environments of their own (see "Conda environments").
 
 ## Build and run
 
@@ -83,6 +84,41 @@ With compose, `/data` is `./demo-data` on the host, so the copies show up at
 Without compose, `/data` is a directory of the container, lost when the
 container is removed; set `DEBASHER_DEMO_DIR` (`-e DEBASHER_DEMO_DIR=...`) to
 copy them somewhere else.
+
+## Conda environments
+
+The image has conda (Miniforge, under `/opt/conda`, with conda-forge as its
+only channel), and the engine is built to use it. A run with conda support
+("Enable conda support" in the execution options of the web UI,
+`--conda-support` for `debasher_exec`, `batch_conda_support=yes` on a
+launcher node) creates the environments that its processes declare before
+it launches them. `webui_readfish` relies on it: its first batch run of
+`webui_read_lengths` creates the environment `read_lengths`, and the rest
+find it.
+
+Creating an environment downloads its packages, so the first run that needs
+one takes a few minutes and needs network access. The environments and the
+downloaded packages go to `/home/debasher/.conda` (`CONDA_ENVS_DIRS`,
+`CONDA_PKGS_DIRS`), not under `/opt/conda`: with compose, that is the named
+volume of the home directory, so an environment is created once and
+survives restarts and rebuilds of the image. `docker compose down -v`
+deletes it with the volume.
+
+Conda takes about 430 MB of the image, more than half of it. To build the
+image without it, for instance to try only the web UI, give the build
+argument `WITH_CONDA=no`:
+
+```bash
+docker compose build --build-arg WITH_CONDA=no
+docker compose up -d
+```
+
+or `docker build --build-arg WITH_CONDA=no -t debasher-demo .` without
+compose. In that image a run with conda support stops before it launches
+anything, saying that conda was not found: `webui_read_lengths`,
+`webui_conda_envs` and `webui_conda_example` do not run there, nor do the
+batch runs that `webui_readfish` launches. A later `docker compose up
+--build -d` builds the image with conda again.
 
 ## Claude Code
 
@@ -205,11 +241,16 @@ Three stages:
    tarball made with `make dist-vendored` carries it), which `configure`
    installs as it is, with `debasher_mcp`, `debasher_claude` and the plugin
    of DeBasher for Claude Code.
-3. `runtime` (`debian:bookworm-slim`): copies what stage 2 installed,
-   creates a Python venv and `pip install`s `api/requirements.txt` into it,
-   adds the Node.js of stage 1 for the MCP server and `install-claude-code`
-   (see "Claude Code"), and runs `docker-entrypoint.sh` (see "Programs
-   built with the web UI") as a non-root `debasher` user.
+   Its `make` is given `CONDA_CMD=/opt/conda/bin/conda`, the conda of
+   stage 3, which `configure` cannot find in this stage (an empty one with
+   `WITH_CONDA=no`).
+3. `runtime` (`debian:bookworm-slim`): installs Miniforge under
+   `/opt/conda` (see "Conda environments"; not with `WITH_CONDA=no`),
+   copies what stage 2 installed, creates a Python venv and `pip install`s
+   `api/requirements.txt` into it, adds the Node.js of stage 1 for the MCP
+   server and `install-claude-code` (see "Claude Code"), and runs
+   `docker-entrypoint.sh` (see "Programs built with the web UI") as a
+   non-root `debasher` user.
 
 ## Updating the image after a code change
 

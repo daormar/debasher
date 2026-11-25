@@ -8,11 +8,18 @@
 # `docker exec debasher-demo webui-url` gives).
 #
 # This image is meant for demoing/evaluating DeBasher, not for production
-# use: it has no conda/docker-in-docker support for processes that need
-# their own environment, and neither the "debasher" user's home directory
+# use: it has no docker-in-docker support for processes that run in their
+# own docker container, and neither the "debasher" user's home directory
 # nor the demo directory, /data, is persisted unless you mount a volume
 # (docker-compose.yml mounts both). Processes run on the built-in
 # scheduler, since the image has no Slurm.
+#
+# Conda is there (Miniforge, under /opt/conda), so that a run with conda
+# support creates the environments of its processes. They are kept in the
+# home directory of the "debasher" user, so that one created once survives
+# a restart and a rebuild when that directory is a volume. Conda doubles
+# the size of the image; to leave it out, build with
+# --build-arg WITH_CONDA=no.
 #
 # The web UI prints the address to open, with its token, when it starts:
 # see the logs of the container, or run webui-url in it at any time.
@@ -62,10 +69,16 @@ RUN touch frontend/dist/.vendored
 # scripts (engine/debasher_exec, ...), newer than their .sh sources, and
 # with the host's prefix and tool paths written into them. Without
 # removing them, make would install them as they are.
-RUN ./reconf \
+# CONDA_CMD: the conda of the runtime stage, which this stage does not
+# have, so configure finds none; given to make, it goes into the built
+# scripts all the same. Without conda it stays empty, and a process that
+# activates an environment fails saying that there is no conda.
+ARG WITH_CONDA=yes
+RUN if [ "${WITH_CONDA}" = yes ]; then conda_cmd=/opt/conda/bin/conda; else conda_cmd=; fi \
+    && ./reconf \
     && ./configure --prefix=/usr/local \
     && make clean \
-    && make \
+    && make CONDA_CMD="${conda_cmd}" \
     && make install DESTDIR=/out
 
 ########################################################################
@@ -79,6 +92,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash debasher \
     && mkdir /data && chown debasher:debasher /data
+
+# Miniforge: conda with conda-forge as its only channel, for the machine
+# the image is built on (x86_64 or aarch64). It stays owned by root: the
+# environments and the packages they download go to the home directory of
+# "debasher" (CONDA_ENVS_DIRS, CONDA_PKGS_DIRS below). Left out with
+# WITH_CONDA=no.
+ARG WITH_CONDA=yes
+RUN if [ "${WITH_CONDA}" = yes ]; then \
+        curl -fsSL -o /tmp/miniforge.sh \
+            "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" \
+        && bash /tmp/miniforge.sh -b -p /opt/conda \
+        && rm /tmp/miniforge.sh \
+        && /opt/conda/bin/conda clean -afy; \
+    fi
+ENV CONDA_ENVS_DIRS=/home/debasher/.conda/envs
+ENV CONDA_PKGS_DIRS=/home/debasher/.conda/pkgs
 
 COPY --from=builder /out/usr/local /usr/local
 # The Node.js that the MCP server (debasher_mcp) is built for, a single

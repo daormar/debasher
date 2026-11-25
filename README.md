@@ -157,8 +157,8 @@ docker compose down
 
 The `webui-url` command prints the address of the web interface, which
 carries its token; open it in a browser. The image is for trying DeBasher
-out, not for real work: inside it, processes cannot have Conda environments
-or Docker containers of their own, and there is no Slurm.
+out, not for real work: inside it, processes can have Conda environments of
+their own but not Docker containers, and there is no Slurm.
 [DOCKER.md](DOCKER.md) has the details, and how to run Claude Code inside the
 container.
 
