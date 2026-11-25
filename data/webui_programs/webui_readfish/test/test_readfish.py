@@ -127,11 +127,15 @@ def test_acquire_raises_when_readfish_stalls_in_the_sequencing_phase(tmp_path, m
 
 
 def test_a_mux_scan_is_not_a_stall_until_the_scan_timeout(tmp_path, monkeypatch):
-    # A scan much longer than the stall timeout (0.2 s) and shorter than the
+    # A scan much longer than the stall timeout (0.5 s) and shorter than the
     # scan timeout; the batches come every 0.1 s, so that the first one
     # after the scan arrives after the return to the sequencing phase was
-    # seen, and the silence of the scan must not count against it
-    node = acquire(tmp_path, monkeypatch, "--scan-secs 1 --batch-interval-s 0.1", **{"scan-timeout-s": "5"})
+    # seen, and the silence of the scan must not count against it. The
+    # stand-in sees the file scan only after its next 0.1 s sleep, which a
+    # loaded machine (a macOS runner) may stretch: the stall timeout leaves
+    # room for that before the scan begins
+    node = acquire(tmp_path, monkeypatch, "--scan-secs 1.5 --batch-interval-s 0.1",
+                   **{"stall-timeout-s": "0.5", "scan-timeout-s": "5"})
     try:
         observe_until(node, "progress")
         (tmp_path / "scan").touch()
