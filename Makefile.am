@@ -26,3 +26,32 @@ crap:
 .PHONY: bash-complexity hotspots coupling module-depth duplication
 bash-complexity hotspots coupling module-depth duplication:
 	$(MAKE) -C test $@
+
+# List of the targets worth calling by hand, with what each one does: the
+# standard ones of Automake and those defined above.
+.PHONY: help
+help:
+	@echo "Build and install:"
+	@echo "  all              build everything (the default target)"
+	@echo "  install          install under the prefix given to configure"
+	@echo "  uninstall        remove what install put in place"
+	@echo "  clean            remove what all built"
+	@echo "  distclean        clean, and also remove what configure generated"
+	@echo ""
+	@echo "Tests:"
+	@echo "  check            run the bats, pytest and frontend (vitest) tests"
+	@echo "  installcheck     run the example programs against the installation"
+	@echo ""
+	@echo "Distribution:"
+	@echo "  dist             build the source tarball"
+	@echo "  distcheck        build the tarball, then build and test it apart"
+	@echo "  dist-vendored    like dist, but with a built frontend/dist inside"
+	@echo "                   (installable without npm; needs npm here)"
+	@echo ""
+	@echo "Code analysis reports (see test/utils/README.md):"
+	@echo "  crap             CRAP score of the Python code and of the frontend"
+	@echo "  bash-complexity  complexity of the Bash functions of the engine"
+	@echo "  hotspots         files both complex and often changed"
+	@echo "  coupling         files that change together in the same commits"
+	@echo "  module-depth     depth of the modules against their interface"
+	@echo "  duplication      fragments and functions written twice"
