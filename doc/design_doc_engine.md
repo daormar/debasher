@@ -3888,7 +3888,13 @@ leaves, by design, to the program or to whoever runs it.
 
 # Future work
 
-What is known to be missing from the design, or left open by it:
+What is known to be missing from the design, or left open by it. The items
+are grouped by what they touch: streaming through FIFOs, the dependencies
+between processes and tasks, sizing and building arrays, reruns and refusals,
+schedulers and environments, extensions of the process contract, and batches
+and tests.
+
+## Streaming through FIFOs
 
 - **Watching the ends of a FIFO.** When one end of a FIFO fails, the built-in
   scheduler could stop the other, instead of leaving it blocked until someone
@@ -3897,9 +3903,9 @@ What is known to be missing from the design, or left open by it:
   before the other could have the resources of both reserved, or both could be
   launched in the same round in dependency order, so that the other end always
   fits.
-- **Finer change detection.** Comparing the contents of input files, all the
-  tasks of an array, and, for outdated code, only the module that defines each
-  process, the external scripts of aliases and the Python function files.
+
+## Dependencies between processes and tasks
+
 - **Dependencies by containment.** An input whose value is a directory gets no
   dependency on the processes whose output options hold paths inside it, such
   as a process that reads a whole shared directory and the tasks that write its
@@ -3911,58 +3917,45 @@ What is known to be missing from the design, or left open by it:
   `processdeps=none` would still allow. Explicit dependencies that add to the
   inferred ones, instead of replacing them, would serve too, at the cost of
   declaring them by hand.
-- **Processes that left the program.** `debasher_exec` could refuse to start
-  in every run, and not only in a run with a subdivided shared directory,
-  while a process that an earlier run had, and that the program no longer has,
-  is still running, as it does for the processes of the program.
-- **Reserved names.** Refusing a process or a shared directory whose name is
-  that of a file of the engine in the output directory.
-- **Choosing the tests to run.** Giving the test runner the test files, or a
-  filter, so that it runs only some of the tests of a program.
-- **Choosing the scheduler of the steps at launch.** An option of
-  `debasher_exec` could give the scheduler of the steps whose sequential
-  process has no `sched`, and of the steps of functions that are not sequential
-  processes, in place of the built-in scheduler, so that whoever runs a
-  program, who knows whether there is a cluster, sends those steps to it
-  without editing the module. The `sched` of a sequential process would still
-  take precedence. Such an option would apply to every one of those steps
-  alike, light or heavy, which is why the choice for a single step stays in its
-  declaration.
-- **A conformance suite for the process contract.** Tests that exercise a
-  process only through the process contract: give it a command line, ask for
-  its declared options and its task options, run its tasks and check its skip
-  rule, on every program of `data/programs` and `data/webui_programs`. Any
-  form of a process, and any implementation of the engine, would then be
-  checked against the same suite.
-- **A second reader of the process contract.** The engine could read the
-  topology file and the process files of a program directly, with no module
-  generated from them. That needs the task options as data that a program in
-  any language prints, such as each option list as a list of options with the
-  kind of every value, of which the calls to the `define_*` functions of a
-  module would be one implementation. Left open: whether the task options are
-  only such a program, or also a restricted language of expressions for the
-  common cases (counting the lines of a file, taking a column of a sample
-  sheet), translated into one.
-- **A Bash process as a script with the library of the engine.** A body in Bash
-  kept in a file of its own already runs as a program, as an external alias with
-  a `.sh` file (see "Processes in other languages, and aliases"), but in a new
-  `bash` with neither the execution context nor the library of the engine.
-  Giving it the library, without the execution context, would let such a process
-  call the functions of the engine as a process function does, and would ask of
-  it what the process contract asks: no variable or function of its module
-  besides its own parts.
-- **Gathering the runs of a batch.** `debasher_exec_batch` executes a batch,
-  such as one run of the same program for each sample of a sample sheet (see
-  "Batches of runs"). A step that combines the results of every run, such as a
-  report over all the samples, has to be launched separately once the batch
-  ends. `debasher_exec_batch` could take a final command, like the hook of `-k`
-  but run once for the whole batch, and give it a manifest, a file with the
-  output directory of every run of the batch (where `-o` moved it, and those of
-  the runs that an earlier launch of the batch completed included), one per
-  line. Left open: whether the manifest lists only the runs that completed
-  (within the tolerance of `-u`) or every run with its status, whether the final
-  command runs when some runs failed or the batch stopped before launching them
-  all, and whether its result counts in the exit status of the batch.
+- **Dependencies on the tasks that a task reads.** When a task of an array
+  reads a task of another array that is not its counterpart, such as a task
+  per sample reading the tasks of one lane each of that sample, the merge of
+  the dependencies gives `afterok` on the whole producer (see "Inferring
+  dependencies from options"), and the first sample waits for the last
+  lane. The preparation knows which tasks of the producer each task
+  reads, from the per-task connections of its option list, so the inference
+  could keep that set of indices per task instead of degrading, and the
+  built-in scheduler, which judges an `aftercorr` dependency task by task by
+  asking whether the counterpart has finished (see "The built-in
+  scheduler"), would ask the same of every task of the set. Under the Slurm
+  scheduler the set would still give `afterok`: Slurm relates the tasks of
+  two arrays only one to one, and a dependency on single tasks of an array
+  is one of the job, so holding it would split the dependent array into a
+  job per task; the price of `afterok` there is waiting, and the design of
+  submitting every job at once with its dependencies, with no process of
+  DeBasher polling the queue, is worth more. On top of the sets, the
+  matching could be declared by a key that each task of the producer gives
+  (the sample, the lane) and the consumer names, in place of indices
+  computed from the same sheet twice; a key with no partner would then be
+  refused while the run is prepared, as an option with two values is.
+
+## Sizing and building arrays
+
+- **Any option of the upstream task.** A task of an array process that reads
+  the task of the same index of another array, with
+  `define_opt_from_proc_task_out`, can take from it only an output option.
+  What describes that task, such as the sample and the lane that its options
+  hold when the array was built from a sample sheet, has to be read again
+  from the sheet, repeating the rule by which the producer numbered its
+  tasks, parsed from a path, or declared as an output option that it is not.
+  A sister function that reads any option of a task of the producer, given
+  its index, would resolve it while the run is prepared, as the output
+  descriptors are resolved (see "Connections between processes"), from the
+  option list of that task, and add no dependency of its own: a value that
+  is not produced orders nothing, and one that is already makes the
+  dependency that any such value makes (see "Inferring dependencies from
+  options"). In the web UI it is an edge from an input option to an input
+  option, which the editor does not draw today.
 - **Task counts known only during the run.** Every array is sized while the
   run is prepared, since `_define_opts` and `_generate_opts_size` run then
   (see "Arrays and option generators" and "Architecture"), and every process
@@ -4008,50 +4001,81 @@ What is known to be missing from the design, or left open by it:
   the other, and the Slurm scheduler refuses FIFOs in any case. What is
   lost: the streaming between the producer and the array, which is not
   launched until the producer has ended, where the pool of workers streams.
-- **Any option of the upstream task.** A task of an array process that reads
-  the task of the same index of another array, with
-  `define_opt_from_proc_task_out`, can take from it only an output option.
-  What describes that task, such as the sample and the lane that its options
-  hold when the array was built from a sample sheet, has to be read again
-  from the sheet, repeating the rule by which the producer numbered its
-  tasks, parsed from a path, or declared as an output option that it is not.
-  A sister function that reads any option of a task of the producer, given
-  its index, would resolve it while the run is prepared, as the output
-  descriptors are resolved (see "Connections between processes"), from the
-  option list of that task, and add no dependency of its own: a value that
-  is not produced orders nothing, and one that is already makes the
-  dependency that any such value makes (see "Inferring dependencies from
-  options"). In the web UI it is an edge from an input option to an input
-  option, which the editor does not draw today.
-- **Dependencies on the tasks that a task reads.** When a task of an array
-  reads a task of another array that is not its counterpart, such as a task
-  per sample reading the tasks of one lane each of that sample, the merge of
-  the dependencies gives `afterok` on the whole producer (see "Inferring
-  dependencies from options"), and the first sample waits for the last
-  lane. The preparation knows which tasks of the producer each task
-  reads, from the per-task connections of its option list, so the inference
-  could keep that set of indices per task instead of degrading, and the
-  built-in scheduler, which judges an `aftercorr` dependency task by task by
-  asking whether the counterpart has finished (see "The built-in
-  scheduler"), would ask the same of every task of the set. Under the Slurm
-  scheduler the set would still give `afterok`: Slurm relates the tasks of
-  two arrays only one to one, and a dependency on single tasks of an array
-  is one of the job, so holding it would split the dependent array into a
-  job per task; the price of `afterok` there is waiting, and the design of
-  submitting every job at once with its dependencies, with no process of
-  DeBasher polling the queue, is worth more. On top of the sets, the
-  matching could be declared by a key that each task of the producer gives
-  (the sample, the lane) and the consumer names, in place of indices
-  computed from the same sheet twice; a key with no partner would then be
-  refused while the run is prepared, as an option with two values is.
-- **A third kind of environment.** Apptainer (Singularity) beside Conda and
-  Docker (see "Conda and Docker environments"), since it is the norm on
-  academic clusters, where Docker is seldom allowed.
-- **More schedulers.** Batch services (AWS Batch, Google Batch, the jobs of
-  Kubernetes) behind the scheduler abstraction (see "The scheduler
-  abstraction"), each a library beside the built-in and Slurm ones.
 - **Helpers for sample sheets.** Functions, in the library of the engine
   and for Python tasks files, for what the `_define_opts` method of an array
   does with a sample sheet (split it, group by a column, take the product
   of two columns, filter), so that these are a call rather than an `awk`
   written anew in every module.
+
+## Reruns and refusals
+
+- **Finer change detection.** Comparing the contents of input files, all the
+  tasks of an array, and, for outdated code, only the module that defines each
+  process, the external scripts of aliases and the Python function files.
+- **Processes that left the program.** `debasher_exec` could refuse to start
+  in every run, and not only in a run with a subdivided shared directory,
+  while a process that an earlier run had, and that the program no longer has,
+  is still running, as it does for the processes of the program.
+- **Reserved names.** Refusing a process or a shared directory whose name is
+  that of a file of the engine in the output directory.
+
+## Schedulers and environments
+
+- **Choosing the scheduler of the steps at launch.** An option of
+  `debasher_exec` could give the scheduler of the steps whose sequential
+  process has no `sched`, and of the steps of functions that are not sequential
+  processes, in place of the built-in scheduler, so that whoever runs a
+  program, who knows whether there is a cluster, sends those steps to it
+  without editing the module. The `sched` of a sequential process would still
+  take precedence. Such an option would apply to every one of those steps
+  alike, light or heavy, which is why the choice for a single step stays in its
+  declaration.
+- **More schedulers.** Batch services (AWS Batch, Google Batch, the jobs of
+  Kubernetes) behind the scheduler abstraction (see "The scheduler
+  abstraction"), each a library beside the built-in and Slurm ones.
+- **A third kind of environment.** Apptainer (Singularity) beside Conda and
+  Docker (see "Conda and Docker environments"), since it is the norm on
+  academic clusters, where Docker is seldom allowed.
+
+## Extensions of the process contract
+
+- **A conformance suite for the process contract.** Tests that exercise a
+  process only through the process contract: give it a command line, ask for
+  its declared options and its task options, run its tasks and check its skip
+  rule, on every program of `data/programs` and `data/webui_programs`. Any
+  form of a process, and any implementation of the engine, would then be
+  checked against the same suite.
+- **A second reader of the process contract.** The engine could read the
+  topology file and the process files of a program directly, with no module
+  generated from them. That needs the task options as data that a program in
+  any language prints, such as each option list as a list of options with the
+  kind of every value, of which the calls to the `define_*` functions of a
+  module would be one implementation. Left open: whether the task options are
+  only such a program, or also a restricted language of expressions for the
+  common cases (counting the lines of a file, taking a column of a sample
+  sheet), translated into one.
+- **A Bash process as a script with the library of the engine.** A body in Bash
+  kept in a file of its own already runs as a program, as an external alias with
+  a `.sh` file (see "Processes in other languages, and aliases"), but in a new
+  `bash` with neither the execution context nor the library of the engine.
+  Giving it the library, without the execution context, would let such a process
+  call the functions of the engine as a process function does, and would ask of
+  it what the process contract asks: no variable or function of its module
+  besides its own parts.
+
+## Batches and tests
+
+- **Gathering the runs of a batch.** `debasher_exec_batch` executes a batch,
+  such as one run of the same program for each sample of a sample sheet (see
+  "Batches of runs"). A step that combines the results of every run, such as a
+  report over all the samples, has to be launched separately once the batch
+  ends. `debasher_exec_batch` could take a final command, like the hook of `-k`
+  but run once for the whole batch, and give it a manifest, a file with the
+  output directory of every run of the batch (where `-o` moved it, and those of
+  the runs that an earlier launch of the batch completed included), one per
+  line. Left open: whether the manifest lists only the runs that completed
+  (within the tolerance of `-u`) or every run with its status, whether the final
+  command runs when some runs failed or the batch stopped before launching them
+  all, and whether its result counts in the exit status of the batch.
+- **Choosing the tests to run.** Giving the test runner the test files, or a
+  filter, so that it runs only some of the tests of a program.
