@@ -487,7 +487,9 @@ So do the entries below that refer to it.
   exception, or whose loop returned before its process was told to stop. It
   ends its process with an error, after the other threads have stopped or
   `DEAD_THREAD_STOP_TIMEOUT_SECS` (5 seconds) has passed, so it is a crash (see
-  "Overview of the class").
+  "Overview of the class"). A thread that dies when a stop signal has arrived,
+  or arrives within `_STOP_POLL_SECS`, ends no process with an error: the stop
+  goes on as for any stop signal.
 - **checker thread**: the thread of the `Supervisor`, not of a node, that
   decides which nodes are down or done. It wakes every
   `HEARTBEAT_CHECK_INTERVAL_SECS`, the check interval of the `Supervisor` (see
@@ -518,8 +520,9 @@ So do the entries below that refer to it.
 
 - **crash**: the death of a node's process that is neither a halt nor a finish
   for good: `SIGKILL`, an out-of-memory kill, an exception in its main thread
-  during the startup (restore, `initialize_runtime`, replay), a dead thread, or
-  a non-zero exit. A deliberate error exit and a crash are treated the same.
+  during the startup (restore, `initialize_runtime`, replay), a dead thread
+  (unless a stop signal comes with its death, see dead thread), or a non-zero
+  exit. A deliberate error exit and a crash are treated the same.
 - **relaunch**: starting a new incarnation of a node, by the `Supervisor`
   (through `debasher_launch_process`) or by hand. It is the same operation as
   the first launch: there is no recovery mode.
@@ -745,9 +748,10 @@ working, and which failures they do not cover.
 - **Tolerated**: the crash of any process of a `resident` program (see crash in
   the Glossary) and its relaunch, by the `Supervisor` or by hand. A thread that
   dies (a dead thread, see the Glossary), whatever thread it is, ends its
-  process with an error, so it is a crash like any other. This holds for the
-  `Supervisor` too, which nothing relaunches (see "Failure detection"). Any
-  number of nodes may crash at any time, including while other nodes are
+  process with an error, so it is a crash like any other, unless a stop signal
+  comes with its death: the stop then goes on as for any stop signal. This holds
+  for the `Supervisor` too, which nothing relaunches (see "Failure detection").
+  Any number of nodes may crash at any time, including while other nodes are
   recovering, with the exceptions listed under "Limits and non-goals". There is
   deliberately no bound on how many nodes fail simultaneously: each node
   recovers from its own checkpoint and input log, on stable storage,
@@ -951,10 +955,11 @@ guarantee in words and never cite these numbers, which may change.
   limit 9, "A crash while a round is open", below).
 - **G7, bounded detection**: a node whose process is verifiably gone is noticed
   within `HEARTBEAT_CHECK_INTERVAL_SECS`. A node with a dead thread is noticed
-  within `DEAD_THREAD_STOP_TIMEOUT_SECS` plus one
+  within one `_STOP_POLL_SECS` plus `DEAD_THREAD_STOP_TIMEOUT_SECS` plus one
   `HEARTBEAT_CHECK_INTERVAL_SECS` of the death, since its process ends within
-  the first. A node whose process runs but sends no heartbeat (suspended, kept
-  off the CPU, or inside a call that keeps the GIL) is noticed within
+  the first two (unless a stop signal comes with the death, see dead thread in
+  the Glossary). A node whose process runs but sends no heartbeat (suspended,
+  kept off the CPU, or inside a call that keeps the GIL) is noticed within
   `HEARTBEAT_TIMEOUT_SECS` plus one `HEARTBEAT_CHECK_INTERVAL_SECS`, since the
   checker thread of the `Supervisor` looks at it once per tick. Before its first
   heartbeat, a node has its startup deadline instead of
@@ -1066,7 +1071,11 @@ comments state a limit in words and never cite these numbers, which may change.
      the FIFO held, and G8 reports the hole. Its rest stays in the FIFO, and
      matters only if the FIFO outlives the stop, as on an external port whose
      source keeps it open: the reader of the next incarnation finds it as a
-     fragment that no `HELLO` follows, which stops that reader.
+     fragment that no `HELLO` follows, which stops that reader. A reader that
+     finds a hole of G8 just as a stop signal arrives dies with the stop, which
+     ends no process with an error (see dead thread in the Glossary): the hole
+     is only logged, and the next incarnation finds it again when the next
+     message arrives on that channel.
 4. **Stuck but alive.** A node that is alive and whose work makes no progress is
    not detected, whether a thread of it is blocked (an endless loop, a deadlock)
    or what it observes outside has stopped.
@@ -2008,10 +2017,25 @@ hand, as after any crash. Each step has its reason:
   node"), and a node that dies again after every relaunch would be relaunched
   for ever.
 
+**A death that comes with a stop signal is part of the stop.** The stop signal
+goes to the whole process group of the node (see "Ordered shutdown"), so it
+also ends the children that the node started, such as an external program that
+`observe()` watches. The observation thread can then see the child gone and die
+before the handler of the signal has run in the node. Ending the process with an
+error would turn the stop into a crash: no `.finished`, and a
+`debasher_stop_resident` that reports a failure. So, once a thread has died,
+`run()` looks whether a stop signal has arrived, and if none has, it waits one
+`_STOP_POLL_SECS` (0.2 s) and looks again (`_is_dead_thread_part_of_stop`).
+With the signal there, it stops its threads with `close=False` and returns, as
+for any stop: the node was being stopped anyway, and it is resumed later as
+after any stop. Without the signal, the death is a crash as above, 0.2 s later.
+The `Supervisor` does the same.
+
 During the replay only the writer threads run. One that dies stops the replay at
-the next record, and `run()` raises in the same way without starting the other
-threads. The `Supervisor` follows the same rule, with its checker thread among
-its threads (see "Failure detection").
+the next record, and `run()` raises in the same way, stop signal or not (a stop
+signal during the startup is honored only when the startup ends), without
+starting the other threads. The `Supervisor` follows the same rule, with its
+checker thread among its threads (see "Failure detection").
 
 **Subclass extension points.** A subclass redefines
 `process_data(port_name, packet)`, where `packet` is the `payload` of the `DATA`
@@ -2450,8 +2474,8 @@ after a node failure").
 10. Starts the other threads. If this fails, it stops the threads that are
     running, so that the readers stop between blocks, and raises the error.
 11. Waits until told to stop, and stops every thread. If a thread dies instead,
-    it stops the others within `DEAD_THREAD_STOP_TIMEOUT_SECS` and raises a
-    `RuntimeError`.
+    with no stop signal (see "Overview of the class"), it stops the others
+    within `DEAD_THREAD_STOP_TIMEOUT_SECS` and raises a `RuntimeError`.
 
 A SIGTERM during the startup is honored when the startup ends, since the replay
 does not look at it. Only a `send_data` that waits for room stops waiting, since
@@ -3827,11 +3851,12 @@ declares working nodes down. Nor must it live on without its checker thread,
 blind to the nodes that do go down, or without a reader of a heartbeat channel.
 A thread of it that dies is a dead thread, as in a node (see "Overview of the
 class"): it is logged and ends the `Supervisor` with an error (its `run()`
-raises a `RuntimeError` that carries it). That then counts as a `Supervisor`
-that died: the nodes keep running, unsupervised, until it is relaunched by hand.
-What a writer of its channels can get wrong, a malformed command or a type that
-does not belong there, is dropped by the reader before it reaches the brain
-thread (see "Fields of each type").
+raises a `RuntimeError` that carries it), unless a stop signal comes with the
+death, which then goes on as for any stop signal. That error then counts as a
+`Supervisor` that died: the nodes keep running, unsupervised, until it is
+relaunched by hand. What a writer of its channels can get wrong, a malformed
+command or a type that does not belong there, is dropped by the reader before it
+reaches the brain thread (see "Fields of each type").
 
 A node that exits with an error on purpose leaves the same signs as one that
 crashes (no `.finished`, no more heartbeats, a dead PID), and both are treated
@@ -3872,9 +3897,10 @@ main thread (not when a test drives it on another thread). `run()` waits on one
 event, `_all_resolved`. It is set in three cases: by the checker thread once
 every node is resolved, by `run()` itself once the handler has noted a stop
 signal, and by `_wake_run` when a thread of the `Supervisor` dies (see dead
-thread in the Glossary). `run()` tells the last apart by `_thread_error`. The
-signal lets the ordered shutdown tool end the `Supervisor` before it triggers
-the halt, so that the `Supervisor` cannot relaunch a node under it (see
+thread in the Glossary). `run()` tells the last apart by `_thread_error`, and a
+death that comes with a stop signal from the stop itself. The signal lets the
+ordered shutdown tool end the `Supervisor` before it triggers the halt, so that
+the `Supervisor` cannot relaunch a node under it (see
 "`debasher_stop_resident`").
 
 ## Relaunching a downed node

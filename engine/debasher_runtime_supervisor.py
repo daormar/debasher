@@ -207,7 +207,8 @@ class Supervisor(_PortWorker):
         # What run() waits on: set once every node is resolved (done, or
         # given up on) and no escalation runs, by run() itself on a stop
         # signal (see _wait_for_stop), and by _wake_run when a thread of its
-        # own dies, which run() tells apart by _thread_error. Not acted
+        # own dies, which run() tells apart by _thread_error (and a death
+        # that comes with a stop signal from the stop itself). Not acted
         # on by the checker thread itself, which would deadlock joining its
         # own thread from inside stop_threads().
         self._all_resolved = threading.Event()
@@ -296,8 +297,8 @@ class Supervisor(_PortWorker):
         self._wait_for_stop(self._all_resolved)
         # Nothing supervises the Supervisor, so it must not live on without
         # a thread of its own, deaf to the heartbeats or blind to the nodes
-        # that go down: the run fails.
-        if self._thread_error is not None:
+        # that go down: the run fails, unless it was being stopped anyway.
+        if self._thread_error is not None and not self._is_dead_thread_part_of_stop():
             self._stop_after_dead_thread()
         # No CLOSE on the initiator ports: the stop of a Supervisor is no end
         # for good, since another one, of a resumed program, writes into the

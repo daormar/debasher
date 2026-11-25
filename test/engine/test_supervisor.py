@@ -280,6 +280,43 @@ def test_a_supervisor_whose_checker_thread_dies_stops_with_an_error(execdir):
     assert isinstance(errors[0].__cause__, KeyError)
 
 
+def test_a_supervisor_whose_thread_dies_just_before_the_stop_signal_stops_cleanly(execdir):
+    # The stop signal reaches the whole process group: a thread that dies
+    # of it before the handler of the Supervisor has run is part of the
+    # stop, not a crash
+    fail = threading.Event()
+
+    class Sup(lib.Supervisor):
+        HEARTBEAT_CHECK_INTERVAL_SECS = 0.01
+
+        def _check_once(self):
+            if fail.is_set():
+                raise KeyError("a child ended by the signal")
+
+    proc = Sup(opts={})
+    errors = []
+
+    def run():
+        try:
+            proc.run()
+        except RuntimeError as exc:
+            errors.append(exc)
+
+    runner = threading.Thread(target=run, daemon=True)
+    runner.start()
+    fail.set()
+    deadline = time.monotonic() + 5
+    while proc._thread_error is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    # What the handler of SIGTERM does, which a run() off the main thread
+    # does not install
+    proc._stop_signaled = True
+    runner.join(timeout=5)
+
+    assert not runner.is_alive()
+    assert errors == []
+
+
 def test_a_supervisor_whose_brain_thread_dies_stops_with_an_error(execdir, tmp_path):
     # Nothing supervises the Supervisor: rather than live on, deaf to the
     # heartbeats, it ends, and the run fails.

@@ -546,7 +546,9 @@ class FBPProcess(_PortWorker):
         checkpoint, and then processes what arrives. In a non-durable
         program it calls initialize_runtime() and processes what arrives:
         there is no checkpoint and no input log. Raises RuntimeError, which
-        ends the process with an error, once a thread of the node has died.
+        ends the process with an error, once a thread of the node has died,
+        unless a stop signal came with the death (see
+        _is_dead_thread_part_of_stop).
         """
         # Full startup sequence: install the SIGTERM handler -> open every
         # FIFO -> find the most recent checkpoint if any ->
@@ -631,8 +633,10 @@ class FBPProcess(_PortWorker):
             raise
         self._wait_for_stop(self._stop_requested)
         # A thread that died ends the process: the node would otherwise stay
-        # up without its part of the work, which only a relaunch brings back
-        if self._thread_error is not None:
+        # up without its part of the work, which only a relaunch brings back.
+        # Unless the node was being stopped anyway: then the death is a
+        # result of the stop signal, and the stop stays an orderly one
+        if self._thread_error is not None and not self._is_dead_thread_part_of_stop():
             self._stop_after_dead_thread()
         # A halt is an orderly stop that the whole program is resumed from
         # later, not the end of this node. CLOSE is what a writer says when

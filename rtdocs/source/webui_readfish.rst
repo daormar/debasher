@@ -28,7 +28,9 @@ The program has four nodes and a ``Supervisor``, ``Sup``:
   ends, is a stall too. On a stall, ``Acquire`` leaves a warning notice,
   ends readfish and raises: its process ends with an error, ``Sup``
   relaunches it, and the new incarnation starts a new readfish, which
-  connects anew, as readfish restarted by hand does.
+  connects anew, as readfish restarted by hand does. A readfish ended by
+  the stop of the program, which reaches the whole process group of
+  ``Acquire``, is no stall: the stop goes on with no error.
   A readfish that never gives a read, because the sequencer is gone, is
   not relaunched for ever: after ``-max-attempts`` incarnations (5) with
   no reads at all, ``Acquire`` stays, with a notice and an ``exhausted``

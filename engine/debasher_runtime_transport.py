@@ -605,6 +605,21 @@ class _PortWorker:
             f"so the process ends: {self._thread_error!r}"
         ) from self._thread_error
 
+    def _is_dead_thread_part_of_stop(self):
+        """
+        True if a stop signal arrived before a thread of this process died,
+        or within one _STOP_POLL_SECS after; run() then stops as it does for
+        the signal, not as for a crash. Called by run() once a thread has
+        died.
+        """
+        # The stop signal goes to the whole process group, so it also ends
+        # the children of the node. A thread that watches such a child can
+        # see it die before the handler of this process has run: the signal
+        # is given one step to show up
+        if not self._stop_signaled:
+            time.sleep(_STOP_POLL_SECS)
+        return self._stop_signaled
+
     def stop_threads(self, timeout=None, close=True):
         """
         Tells every thread to stop and waits for them, for up to `timeout`

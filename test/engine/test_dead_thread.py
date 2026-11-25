@@ -263,3 +263,61 @@ def test_a_writer_that_dies_during_the_replay_stops_it_and_ends_run(opts):
     assert node.received == [0]
     # The other threads were never started
     assert node._brain_thread is None
+
+
+# --- a death that comes with a stop signal -------------------------------
+
+
+class _ObserverFailsOnRequest(_Relay):
+    """An observation thread that dies when the test says so, as one that
+    watches a child of the node does when the stop signal, sent to the
+    whole process group, ends that child."""
+
+    OBSERVE_PORT = "events"
+
+    def __init__(self, *args, **kwargs):
+        self.fail = threading.Event()
+        super().__init__(*args, **kwargs)
+
+    def observe(self):
+        if self.fail.is_set():
+            raise RuntimeError("the child of the node ended")
+
+
+def test_a_death_just_before_the_stop_signal_leaves_the_stop_orderly(opts):
+    # The child ends, the observation thread sees it and dies, and only
+    # then does the handler of the signal run in this process: the death
+    # is a result of the stop, not a crash
+    node = _ObserverFailsOnRequest(opts=opts)
+    thread, outcome = _start_run(node)
+    try:
+        assert _wait_until(lambda: node._observe_thread is not None)
+        node.fail.set()
+        node.observe_now()
+        assert _wait_until(lambda: node._thread_error is not None)
+        # What the handler of SIGTERM does, which a run() off the main
+        # thread does not install
+        node._stop_signaled = True
+        thread.join(timeout=5)
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert not thread.is_alive()
+    assert "error" not in outcome
+
+
+def test_a_death_with_no_stop_signal_still_ends_run_with_an_error(opts):
+    # The step given to the signal changes nothing when none comes
+    node = _ObserverFailsOnRequest(opts=opts)
+    thread, outcome = _start_run(node)
+    try:
+        assert _wait_until(lambda: node._observe_thread is not None)
+        node.fail.set()
+        node.observe_now()
+        thread.join(timeout=5)
+    finally:
+        node._stop_requested.set()
+        thread.join(timeout=5)
+
+    assert "the child of the node ended" in str(outcome["error"].__cause__)

@@ -503,7 +503,8 @@ launching the program again. A ``Supervisor`` one of whose own threads
 fails does not go on half working, deaf to the heartbeats: it stops
 with the error in its log (``debasher_get_sched_out``), and the nodes
 go on running, unsupervised, until the program is stopped and launched
-again.
+again. A thread that fails while the ``Supervisor`` is being stopped
+leaves the stop as it is, with no error.
 
 Stopping, Resuming and Resetting
 --------------------------------
@@ -632,7 +633,12 @@ with a ``DirectoryWatcher``, and its tests.
 If ``observe`` raises, the process of the node ends with an error, as it
 does when any of its threads dies, and the ``Supervisor`` relaunches it
 (in a program without one, the node is down until it is relaunched by
-hand). A node whose source can stall while its process stays alive (a
+hand). Not during a stop: ``debasher_stop_resident`` sends the stop
+signal to the whole process group of each node, which also ends a child
+process that the node runs, and an ``observe`` that raises because its
+child ended while the signal arrives leaves the stop as it is, with no
+error. ``observe`` need not tell that end of its child from a crash.
+A node whose source can stall while its process stays alive (a
 stream that gives no more data and does not close) raises in ``observe``
 once it has seen nothing for too long, and the relaunch reconnects. The
 :doc:`webui_stream_stall` shows such a node, and lets you try a stall, a
