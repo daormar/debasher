@@ -758,13 +758,15 @@ the engine:
 
 - It goes from an output to an input. Both may belong to the same process,
   a self-loop, so that a process can feed itself.
-- The input takes its value from nowhere else: it is not a flag, which takes
+- The input takes its value from nowhere else. It is not a flag, which takes
   no value, nor a command line option, nor an option taken from the process
-  specifications, all of which script generation writes before it looks at
-  any connection. The editor of an option does not turn a connected input
-  into any of them either.
-- The input is on the option channel `none`, or on `shared_dir` when the
-  output is too (see "Data type and option channel").
+  specifications: script generation writes all of these before it looks at
+  any connection. Nor is it declared on the option channel `fifo`: it would
+  read a FIFO of its own, which no process writes. The editor of an option
+  does not turn a connected input into any of these either. The one exception
+  is an input that names a shared directory, which takes a connection only
+  from an output that also names a shared directory (see "Data type and
+  option channel").
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same directory,
