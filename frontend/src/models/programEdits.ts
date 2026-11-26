@@ -115,22 +115,13 @@ function dropInvalidEdges(source: Program): Program {
 }
 
 /**
- * Drops the edges that join no output to an input (see dropInvalidEdges),
- * re-derives every connected option's "[process;option]" value from the
- * current edges and names, so renaming a process or a connected option's
- * label can't leave a stale reference behind in what gets saved/generated,
- * moves a connected input off a channel that would hide its connection
- * (see normalizeConnectedInputChannels), and sets the data type that an
- * option channel or a connection fixes (see normalizeDataTypes), which also
- * repairs a program whose metadata breaks those rules, such as one edited
- * by hand.
- * Also self-heals a falsy executionOptions.scheduler (e.g. a file saved
- * while it was blank, see ExecutionOptionsEditor, whose dropdown defaults
- * its *displayed* value to "BUILTIN" without ever correcting a genuinely
- * empty stored one, since Cancel is a no-op) back to a valid default.
- * Without this, debasher_exec/debasher_status get "--sched ''" and fail
- * with "Error: is not a valid scheduler" even though the UI appears to
- * show "BUILTIN" selected.
+ * The program brought in line with the rules of the model: the edges that
+ * join no output to an input dropped, every connected input moved off a
+ * channel that would hide its connection, the connection sentinels derived
+ * again from the edges and the names, the data types that a channel or a
+ * connection fixes set, and a missing durability mode or scheduler given
+ * its default. It repairs a program saved against those rules, such as one
+ * edited by hand.
  */
 export function normalizeProgram(source: Program): Program {
 
@@ -144,6 +135,8 @@ export function normalizeProgram(source: Program): Program {
   // program was
   const withDurability = normalized.durability ? normalized : { ...normalized, durability: "durable" as const };
 
+  // A program saved with a blank scheduler would give debasher_exec
+  // "--sched ''", while the editor shows "BUILTIN" for it
   return withDurability.executionOptions.scheduler
     ? withDurability
     : {
@@ -342,16 +335,9 @@ function edgeTouchesOption(edge: ProgramEdge, processId: string, optionId: strin
 }
 
 /**
- * Adds the edge and gives its target option the reference to its source.
- * A "shared_dir" source's channel/value already fully determines its
- * resolved path, so connecting it into a plain target promotes that target
- * into a matching "shared_dir" option too, instead of the usual
- * "[proc;option]" sentinel, so a second connection from another writer of
- * the same directory validates against an already-tagged, matching target
- * (see isValidEdge) and both keep generating the same compact
- * get_absolute_shdirname-based code (see script_generation.py's shared_dir
- * branch) rather than one becoming a define_opt_from_proc_out reference to
- * this specific source.
+ * Adds the edge and gives its target option the value of a connected
+ * input: the reference to its source, or, for a source on "shared_dir",
+ * the channel and the directory of the source.
  */
 export function connect(program: Program, edge: ProgramEdge): Program {
 
@@ -363,6 +349,9 @@ export function connect(program: Program, edge: ProgramEdge): Program {
     o => o.id === edge.sourceOptionId
   );
 
+  // A target of a shared directory names that directory too: a second
+  // writer of the same directory may then connect to it (see isValidEdge),
+  // and script generation writes it as that shared directory
   const connected = sourceProcess && sourceOption
     ? updateOption(
         program,
@@ -481,15 +470,10 @@ export interface MergedGroup {
 
 /**
  * The copies of the processes, sequential processes and edges of `loaded`
- * that "Add program" brings into `program`, from the directory `sourceDir`,
- * with new ids from `newId`. In a general program they all form one group,
- * tagged with the same GroupSource, so that script generation emits a single
- * add_debasher_program call for them while the group stays intact. A
- * resident program is merged process by process, never as a group, and
- * loads nothing from where they came from: a module added with
- * add_debasher_program would carry its own Supervisor wiring, while the
- * wiring of the whole program has to be derived again with the new nodes.
- * Names are kept exactly as in `loaded` (see mergeRefusal).
+ * that "Add program" brings into `program` from the directory `sourceDir`,
+ * with new ids from `newId` and their names kept (see mergeRefusal). In a
+ * general program they form one group; a resident program takes them
+ * process by process.
  */
 export function prepareMerge(
   program: Program,
@@ -501,6 +485,11 @@ export function prepareMerge(
   const isResident = program.programType === "resident";
   const loadedSeqProcesses = loaded.seqProcesses ?? [];
 
+  // A group shares one GroupSource, so that script generation writes a
+  // single add_debasher_program for it while it stays intact. A resident
+  // program takes no group: a module added with add_debasher_program would
+  // carry its own Supervisor wiring, while the wiring of the whole program
+  // has to be derived again with the new nodes
   const groupSource: GroupSource | undefined = isResident
     ? undefined
     : {
@@ -548,6 +537,7 @@ export function prepareMerge(
     targetProcessId: idMap.get(edge.targetProcessId) ?? edge.targetProcessId,
   }));
 
+  // A resident program loads nothing from the directory of what it takes
   return { processes, seqProcesses, edges, modDir: isResident ? null : sourceDir };
 
 }
@@ -637,16 +627,8 @@ export function applyEdits(program: Program, edits: EditOp[]): Program {
 }
 
 /**
- * The groups that the edits touch in `program`, which have to be dissolved
- * (see dissolveGroups) before they are applied. An edit touches the group of
- * a process whose definition it changes, of a process it removes, and of the
- * target of an edge it adds or removes, the edges that go with a removed
- * process or option included, since a connected option's
- * define_opt_from_proc_out call lives in the target's own generated function
- * (see api/script_generation.py's _option_definition_line). Replacing the
- * sequential processes touches the groups of those it changes or leaves out.
- * Moving a process, setting how edges are drawn, editing the program's own
- * fields and adding processes or a group touch none.
+ * The groups that `edits` touch in `program`, which have to be dissolved
+ * (see dissolveGroups) before the edits are applied.
  */
 export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
 
@@ -654,6 +636,10 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
 
   for (const edit of edits) {
 
+    // An edit touches the group of a process whose definition it changes or
+    // that it removes, and that of the target of an edge it adds or removes:
+    // the definition of a connected input lives in the function of its
+    // target (see _option_definition_line in api/script_generation.py)
     const touched = (() => {
       switch (edit.op) {
         case "removeProcess":
@@ -682,7 +668,10 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
         case "disconnect":
           return groupsOfEdgeTargets(program, [edit.edgeId]);
         case "setSeqProcesses":
+          // Those of the sequential processes that it changes or leaves out
           return groupsOfChangedSeqProcesses(program, edit.seqProcesses);
+        // Moving a process, how edges are drawn, the program's own fields
+        // and an addition touch no group
         case "setProgramFields":
         case "setEnvVar":
         case "addProcess":

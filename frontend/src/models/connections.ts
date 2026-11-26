@@ -117,30 +117,19 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
 }
 
 /**
- * Whether a connection is allowed: it must go from an output option to
- * an input option whose value does not come from elsewhere: not a flag,
- * which takes no value, nor a command line option, nor one taken from the
- * process specifications, all of which script generation writes before it
- * looks at any connection. Both may
- * belong to the same process: a self-loop, which lets a process feed
- * itself. Every cycle, a self-loop included,
- * needs at least one edge from a fifo: a connection that is not from a
- * fifo is refused when it would close a cycle of connections that are
- * not from a fifo either, since the engine refuses such a cycle (see
- * reachesWithoutFifo). An output may always feed multiple inputs
- * (fan-out). An
- * input, by default, accepts at most one connected output, except a
- * "shared_dir" input (and not a fanout-family one, which keeps its own
- * single-source pairing rule), which may accept several, one per writer
- * of that same shared directory. That's the one case the engine
- * actually guarantees every connected source resolves to an identical
- * value (debasher::_dedup_resolved_opts): every "shared_dir" option
- * naming the same directory always resolves via get_absolute_shdirname
- * to the same absolute path, which is what makes gathering several
- * connections into one option safe in the first place; a plain option
- * has no such guarantee, so it stays limited to a single connection. A
- * "shared_dir" option, on either end, may also only ever pair with
- * another "shared_dir" option naming the identical directory.
+ * Whether the connection `endpoints` may be added to `program`: from an
+ * output to an input, of another process or of the same one (a
+ * self-loop). An output may feed several inputs. It is refused when:
+ * - the input takes its value from elsewhere: a flag, a command line
+ *   option, or one taken from the process specifications;
+ * - in a resident program, it does not join a business output to an
+ *   input that it can make a business input;
+ * - the input is on a channel that would hide the connection;
+ * - it breaks the pairing of a fanout family;
+ * - the input is already connected, unless both ends are on "shared_dir";
+ * - two "shared_dir" options name different directories;
+ * - it is not from a fifo and closes a cycle of connections none of which
+ *   is from a fifo (see reachesWithoutFifo).
  */
 export function isValidEdge(
   program: Program,
@@ -165,6 +154,7 @@ export function isValidEdge(
     option => option.id === targetHandle
   );
 
+  // Script generation writes these before it looks at any connection
   if (
     targetOptionDef?.dataType === "None" ||
     targetOptionDef?.commandLine ||
@@ -217,16 +207,10 @@ export function isValidEdge(
   const sourceIsSharedDir = sourceOptionDef?.channel === "shared_dir";
   const targetIsSharedDir = targetOptionDef?.channel === "shared_dir";
 
-  // Fan-in (more than one incoming connection into the same input) is
-  // only ever allowed when both ends are "shared_dir" options naming
-  // the identical directory, the one case the engine guarantees every
-  // connected source resolves to an identical value
-  // (debasher::_dedup_resolved_opts). A single connection into any
-  // other input follows the ordinary one-source rule regardless of
-  // either option's channel: e.g. a "shared_dir" output can still
-  // feed a single, ordinary "none"-channel input just like any other
-  // output, exactly as decompress_deliverable's "-out-extractdir" feeds
-  // a plain "-extractd" input.
+  // Several connections into one input only between "shared_dir" options
+  // of the same directory, the one case where the engine sees every source
+  // resolve to the same value (debasher::_dedup_resolved_opts); a fanout
+  // family keeps its own single pairing
   const targetAllowsMultipleConnections =
     targetIsSharedDir && sourceIsSharedDir && !targetIsFanout;
 
@@ -250,6 +234,7 @@ export function isValidEdge(
     }
   }
 
+  // The engine refuses a cycle with no fifo in it, a self-loop included
   if (
     sourceOptionDef?.channel !== "fifo" &&
     reachesWithoutFifo(program, target, source)
