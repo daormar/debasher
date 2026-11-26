@@ -75,13 +75,8 @@ export function isFanoutPartnerMode(process: ProgramProcess | undefined): boolea
 }
 
 /**
- * Whether `to` can be reached from `from` (or is `from` itself) through
- * edges whose source option is not a fifo. Each such edge makes its
- * target wait for its source to finish (an afterok dependency of the
- * engine), while a fifo edge makes no dependency at all (see
- * debasher::_get_procdeps_for_process_task), so a cycle made only of
- * edges like these is one the engine refuses with "circular dependency
- * detected".
+ * Whether the process `to` can be reached from the process `from`, or is
+ * `from` itself, through edges whose source option is not a fifo.
  */
 function reachesWithoutFifo(program: Program, from: string, to: string): boolean {
 
@@ -90,6 +85,7 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
       .find(process => process.id === processId)
       ?.options.find(option => option.id === optionId)?.channel;
 
+  // A walk in depth over the processes, each visited once
   const visited = new Set<string>();
   const pending = [from];
 
@@ -234,7 +230,12 @@ export function isValidEdge(
     }
   }
 
-  // The engine refuses a cycle with no fifo in it, a self-loop included
+  // A connection that is not from a fifo makes its target wait for its
+  // source to finish (an afterok dependency), while one from a fifo makes
+  // none (debasher::_get_procdeps_for_process_task). The engine refuses a
+  // cycle of dependencies; it lets a self-loop pass, dropping the dependency
+  // of a process on itself, but such a process would only read the file it
+  // writes, so it is refused too
   if (
     sourceOptionDef?.channel !== "fifo" &&
     reachesWithoutFifo(program, target, source)
