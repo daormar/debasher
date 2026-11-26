@@ -666,48 +666,69 @@ a wrong module, refusing to generate it.
 ## Data type and option channel
 
 The data type of an option is the type of the data that it carries, and its
-option channel is how the data gets to the process. With option channel `none`
-the process receives the data itself, unless the option is a connected input,
-which receives what the output it reads delivers. Through a FIFO or a value
-descriptor the process receives a path, and the data type is that of each line
-of the FIFO, or of the value that the descriptor holds: a FIFO of data type
-`int` carries an integer on each line, one of data type `file` the path of a
-file. Two things fix the data type instead of the user. A directory channel,
-`shared_dir` or `process_outdir`, names a directory, whatever is in it, so its
-data type is `dir`. A connected input carries the data of the output that it
-reads, so its data type is that of the output, and follows it when the output
-changes. For such an option the editor shows the fixed data type instead of a
-choice. `normalizeProgram` sets it after every edit and when a program is
-loaded, which also repairs a program whose metadata breaks the rule, for example
-one edited by hand, and the checks of the edits that an agent makes refuse an
-`updateOption` that names another data type for it; an option that an agent adds
-with another data type simply takes the fixed one. The engine checks the data
-type only where the process receives the data itself: an input of data type
-`file` or `dir` with a literal value, or a command line option, has to name an
-existing regular file or directory. The template of the code parses what the
-process receives for each option, so it reads the path of a FIFO, of a value
-descriptor or of a directory as a string, whatever its data type, and the code
-prompt says, for each option, whether the code receives the data or the path of
-it (see "What the code prompt says"). A Bash process is the exception for an
-input that reads a value descriptor: `read_opt_value_from_func_args` gives the
-value, not the path.
+option channel is how the data gets to the process. What the process receives,
+and what the data type then describes, depend on the channel:
 
-A connected input also receives its data through the option channel of the
-output that it reads, so its own option channel is `none`. The exception is an
-input that reads a shared directory: it may name that directory too, on
-`shared_dir`. An input on another channel would take its value from that
-channel, and its connection would be lost: on `fifo`, for example, it would read
-a FIFO of its own that no process writes, and the run would never end. The web
-UI keeps the rule wherever a connected input can arise. The canvas refuses a
-connection into an input on another channel, in a general program as in a
-resident one, and so do the checks of the edits that an agent makes, with a
-refusal that says how the input is declared; they also refuse an
-`updateOption` that moves a connected input to such a channel. The editor of an
-option shows "From connection" for the channel of a connected input instead of
-a choice. `normalizeProgram` moves a connected input on another channel to
-`none`: this repairs a program whose metadata breaks the rule, and makes an
-input follow its output when the output leaves `shared_dir`. Script generation
-refuses such an input in metadata that did not go through that normalization.
+| Option channel | The process receives | The data type describes |
+|---|---|---|
+| `none` | the data itself | the data |
+| `fifo` | the path of the FIFO | each line of the FIFO |
+| `value_desc` | the path of the descriptor | the value that the descriptor holds |
+| `shared_dir`, `process_outdir` | the path of the directory | the directory, whatever is in it: always `dir` |
+
+A FIFO of data type `int` carries an integer on each line; one of data type
+`file`, the path of a file. A connected input receives through the option
+channel of the output that it reads (see below), so the row of that channel
+says what it receives and what its data type describes. A Bash process is the
+exception for an input that reads a value descriptor:
+`read_opt_value_from_func_args` gives the value, not the path.
+
+**The data type that the user does not choose.** Two things fix it:
+
+- A directory channel names a directory, whatever is in it, so its data type is
+  `dir`.
+- A connected input carries the data of the output that it reads, so its data
+  type is that of the output, and follows it when the output changes.
+
+Three places keep it:
+
+- The editor of an option shows the fixed data type instead of a choice.
+- `normalizeProgram` sets it after every edit and when a program is loaded. This
+  also repairs a program saved against the rule, for example one edited by
+  hand.
+- The checks of the edits that an agent makes refuse an `updateOption` that
+  names another data type. An option that an agent adds on a directory channel
+  simply takes `dir`, whatever data type it names; a flag aside, which takes no
+  channel but `none`.
+
+**Where the data type matters.**
+
+- The engine checks it only where the process receives the data itself: an
+  input of data type `file` or `dir` with a literal value, or a command line
+  option, has to name an existing regular file or directory.
+- The template of the code parses what the process receives: it reads the path
+  of a FIFO, of a value descriptor or of a directory as a string, whatever its
+  data type, but for the exception of Bash above. The code prompt says, for
+  each option, whether the code receives the data or its path (see "What the
+  code prompt says").
+
+**The channel of a connected input.** A connected input receives its data
+through the option channel of the output that it reads, so its own option
+channel is `none`. The exception is an input that reads a shared directory: it
+may name that directory too, on `shared_dir`. An input on any other channel
+would take its value from that channel, and its connection would be lost. On
+`fifo`, for example, it would read a FIFO of its own that no process writes, and
+the run would never end.
+
+The web UI keeps the rule wherever a connected input can arise:
+
+| Where | What it does |
+|---|---|
+| The canvas | refuses a connection into an input on another channel, in a general program as in a resident one |
+| The checks of the edits that an agent makes | refuse such a connection (the refusal says how the input is declared), and an `updateOption` that moves a connected input to such a channel |
+| The editor of an option | shows "From connection" for the channel of a connected input, instead of a choice |
+| `normalizeProgram` | moves a connected input on another channel to `none`: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
+| Script generation | refuses such an input in a program that did not go through that normalization |
 
 ## Connections
 
