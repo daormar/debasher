@@ -712,22 +712,26 @@ Three places keep it:
   each option, whether the code receives the data or its path (see "What the
   code prompt says").
 
-**The channel of a connected input.** A connected input receives its data
-through the option channel of the output that it reads, so its own option
-channel is `none`. The exception is an input that reads a shared directory: it
-may name that directory too, on `shared_dir`. An input on any other channel
-would take its value from that channel, and its connection would be lost. On
-`fifo`, for example, it would read a FIFO of its own that no process writes, and
-the run would never end.
+**The channel of a connected input.** A connected input does not choose its
+option channel: it receives what the output delivers, through the channel of
+the output, such as the path of the FIFO that the output writes or of its value
+descriptor. The editor of an option shows "From connection" instead of a
+choice, so the user never sets it.
 
-The web UI keeps the rule wherever a connected input can arise:
+In the program model, `ProgramOption.channel` is still there, and stays `none`,
+or `shared_dir` for an input that reads a shared directory: the canvas connects
+such an input only to an output that names the same directory. Any other value
+would lose the connection, since script generation writes an option on a
+channel as that channel, whatever edge reaches it: an input on `fifo`, for
+example, would read a FIFO of its own that no process writes, and the run would
+never end. Besides the editor, the web UI keeps the rule wherever a connected
+input can arise:
 
 | Where | What it does |
 |---|---|
 | The canvas | refuses a connection into an input on another channel, in a general program as in a resident one |
 | The checks of the edits that an agent makes | refuse such a connection (the refusal says how the input is declared), and an `updateOption` that moves a connected input to such a channel |
-| The editor of an option | shows "From connection" for the channel of a connected input, instead of a choice |
-| `normalizeProgram` | moves a connected input on another channel to `none`: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
+| `normalizeProgram` | moves a connected input on another channel to `none`, when a program is loaded and after every edit: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
 | Script generation | refuses such an input in a program that did not go through that normalization |
 
 ## Connections
