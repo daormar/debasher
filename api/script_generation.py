@@ -341,13 +341,9 @@ Connections = list[tuple[str, str, str]]
 
 def _check_connected_input_channels(program: Program) -> None:
     """
-    Refuses an input that a connection reaches on an option channel that
-    would hide the connection: _option_definition_line takes the value of
-    such an input from its channel, and the connection would be lost. The
-    channel of the output says how the data travels, so a connected input
-    is on "none", or on "shared_dir" when it reads a shared directory (the
-    rule of isConnectedInputChannel in the frontend, whose normalization
-    keeps the metadata it saves in line with it).
+    Refuses, with ValueError, an input that a connection reaches on an
+    option channel other than "none", or than "shared_dir" when it reads a
+    shared directory.
     """
     options = {
         (process.id, option.id): (process, option)
@@ -360,6 +356,11 @@ def _check_connected_input_channels(program: Program) -> None:
         if source is None or target is None:
             continue
         (source_process, source_option), (target_process, target_option) = source, target
+        # The channel of the output says how the data travels. An input on a
+        # channel of its own would be written as that channel
+        # (_option_definition_line), and its connection lost. The frontend
+        # keeps the same rule (isConnectedInputChannel), so only a program
+        # that did not go through its normalization reaches this refusal
         if target_option.channel == "none" or (
             target_option.channel == "shared_dir" and source_option.channel == "shared_dir"
         ):
