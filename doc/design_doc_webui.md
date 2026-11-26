@@ -797,74 +797,92 @@ handles of the answering pair to the other side, so that the edge stays short.
 ## Directories and their subdirectories
 
 Two option channels give an option a directory that the engine manages:
-`shared_dir`, a shared directory of the program, and `process_outdir`, the
-process output directory of the option's own process. Either may name, in
-`subpath`, a directory below it instead: a shared subdirectory or a task
-subdirectory, which the engine creates before the process runs and, for a task
-subdirectory, empties before each task, unless the process has a
-`_reset_outfiles` method. The subpath is a Bash word, like a literal value (see
-"Values are Bash words, descriptions are text"), so that it can name each task's
-own directory, such as `${task_idx}` or `${array[$task_idx]}`. Script generation
-writes a subpath with `--subdir` (see "Option definitions"), and the engine
-checks, when the run is prepared, that it stays below its directory; an empty
-`subpath` means no subdirectory: the option names the directory itself, and
-script generation writes no `--subdir`.
+
+| Option channel | The directory | Direction |
+|---|---|---|
+| `shared_dir` | a shared directory of the program, named in `value` | input or output |
+| `process_outdir` | the process output directory of the option's own process | output only |
+
+**The subpath.** Either channel may name, in `subpath`, a directory below that
+directory instead: a shared subdirectory below a shared directory, or a task
+subdirectory below a process output directory. The engine creates it before the
+process runs, and empties a task subdirectory before each task, unless the
+process has a `_reset_outfiles` method or belongs to a resident program, whose
+nodes keep their state from one run to the next.
+
+- The subpath is a Bash word, like a literal value (see "Values are Bash words,
+  descriptions are text"), so that it can name the directory of each task, such
+  as `${task_idx}` or `${array[$task_idx]}`.
+- Script generation writes it with `--subdir` (see "Option definitions"). An
+  empty subpath means no subdirectory: the option names the directory itself,
+  and script generation writes no `--subdir`.
+- The engine checks, when the run is prepared, that the subpath stays below its
+  directory.
+- The editor of an option offers the subpath next to the directory name of a
+  `shared_dir` option, and next to the channel of a `process_outdir` one, in
+  `standard`, `array` and `generator` mode, with the variables that the mode
+  provides as a hint.
 
 A subpath serves the principle of the design of the engine that the code of a
 process does not depend on its number of tasks. A process in `array` or
-`generator` mode whose output option with option channel `process_outdir` has
-subpath `${task_idx}` finds in that option a directory that exists and is empty
-when each task starts, unless it has a `_reset_outfiles` method, as a process in
-`standard` mode finds its process output directory, and writes into it the same
-files under the same names.
+`generator` mode whose `process_outdir` output has subpath `${task_idx}` finds
+in it, when each task starts, a directory that exists and is empty, unless it
+has a `_reset_outfiles` method, as a process in `standard` mode finds its
+process output directory, and writes there the same files under the same names.
 
-`process_outdir` only applies to an output: the directory that the process
-produces, which another process reads through an ordinary connection to that
-output. A reader in `array` or `generator` mode reads the task subdirectory of
-the task with the same index, and a fanout family of a process in `standard`
-mode reads the task subdirectory of every task, one option for each (see "Option
-definitions"); an ordinary input of any other reader gets the value of the first
-task of the source only (see "Options handler modes"). A process that gathers
-the results of every task therefore reads them through a fanout family, with
-either channel, which also makes it wait for every task, since each of its
-options holds the path of the output of one task. The editor of an option offers
-the subpath next to the directory name of a `shared_dir` option, and next to the
-channel of a `process_outdir` one, in `standard`, `array` and `generator` mode,
-with the variables that the mode provides as a hint. A subdivided shared
-directory or subdivided process output directory belongs to its subdirectories,
-as the design of the engine says: a task writes only into its own
-subdirectories, or into a path that one of its output options names, and an
-output option that holds the whole directory stops the run. The editor does not
-check these rules, which depend on the values of every task; the engine checks
-the last one, in a validation too, and removes what a task leaves elsewhere:
-from a subdivided shared directory on the next run, and from a subdivided
-process output directory when its process is next prepared, unless it has a
-`_reset_outfiles` method.
+**Reading a process output directory.** The directory that a `process_outdir`
+output names is what the process produces, and another process reads it through
+an ordinary connection to that output:
 
-**Connections.** Two `shared_dir` options pair when they name the same shared
-directory, whatever their subpaths: an output that writes the shared
-subdirectory `${task_idx}` of `data` may feed an input that reads the whole of
-`data`, as a process that gathers the results of every task does, or an input
-that reads the same subdirectory. Connecting a `shared_dir` output to an input
-gives the input the name of the directory, not the subpath, so it reads the
-whole directory until the user gives it a subpath of its own. The edge only
-documents how the processes share the directory: script generation writes the
-definition of each option from its name and subpath, whatever the edges, and the
-engine infers a dependency only between an output and an input that hold the
-same path. A process that reads, through an input with subpath `${task_idx}`,
-what another writes through an output with the same subpath, both in `array` or
-`generator` mode, thus depends on it task by task (`aftercorr`), while an input
-that reads the whole directory gets no dependency on the writers of its
-subdirectories: its process has to be ordered after them with explicit
-dependencies, which replace its inferred ones (see "Future work"). A fanout
-family that reads the shared subdirectory of every task is ordered after them
-without them.
+| Reader | What it reads |
+|---|---|
+| a process in `array` or `generator` mode | the task subdirectory of the task with the same index |
+| a fanout family of a process in `standard` mode | the task subdirectory of every task, one option for each (see "Option definitions") |
+| an ordinary input of any other process | the value of the first task of the source only (see "Options handler modes") |
+
+A process that gathers the results of every task therefore reads them through a
+fanout family, with either channel. That also makes it wait for every task,
+since each of its options holds the path of the output of one task.
+
+**A subdivided shared or process output directory belongs to its
+subdirectories.** It follows two rules of the design of the engine:
+
+- a task writes only into its own subdirectories, or into a path that one of
+  its output options names;
+- an output option that holds the whole directory stops the run.
+
+The editor does not check these rules, which depend on the values of every task.
+The engine checks the second, in a validation too, and removes what a task
+leaves elsewhere: from a subdivided shared directory on the next run, and from a
+subdivided process output directory when its process is next prepared, unless
+it has a `_reset_outfiles` method or belongs to a resident program.
+
+**Connections between shared directories.** Two `shared_dir` options pair when
+they name the same shared directory, whatever their subpaths. An output that
+writes the shared subdirectory `${task_idx}` of `data` may feed an input that
+reads the whole of `data`, as a process that gathers the results of every task
+does, or an input that reads the same subdirectory. Connecting a `shared_dir`
+output to an input gives the input the name of the directory, not the subpath:
+an input that had no subpath reads the whole directory until the user gives it
+one, and one that had a subpath keeps it.
+
+The edge only documents how the processes share the directory. Script
+generation writes the definition of each option from its name and subpath,
+whatever the edges, and the engine infers a dependency only between an output
+and an input that hold the same path. So the readers of a shared directory
+depend on its writers as follows:
+
+| Reader | Dependency on the writers |
+|---|---|
+| an input with subpath `${task_idx}` that reads an output with the same subpath, both in `array` or `generator` mode | task by task (`aftercorr`) |
+| an input that reads the whole directory | none on the writers of its subdirectories: its process has to be ordered after them with explicit dependencies, which replace its inferred ones (see "Future work") |
+| a fanout family that reads the shared subdirectory of every task | after all of them, with no explicit dependency |
 
 **Import.** Import recognizes `define_opt_from_shared_dir` and
 `define_opt_from_process_outdir` with an optional `--subdir`, and gives the
 option its channel and its subpath (see "Recovering the options handler"). The
 edges that it adds between `shared_dir` options join each writer of a shared
-directory to each of its readers, whatever their subpaths.
+directory to each of its readers in another process, whatever their subpaths.
 
 ## Options handler modes
 
