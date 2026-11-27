@@ -514,15 +514,15 @@ export function ProgramProvider({
 
   const newId = () => crypto.randomUUID();
 
-  // A process tagged with GroupSource ("Add program") represents a
-  // process add_debasher_program will re-declare, unmodified, from its
-  // source module, so edits that would be overwritten by that
-  // re-declaration first ask the user, once for all the groups they
-  // touch (see edits.findGroupsTouchedBy), and are then applied together with
-  // the dissolution of those groups or, if the user declines, not at all.
-  // Returns whether the edits were applied.
+  // The one door through which the editor changes the program: takes edits
+  // as plain data and applies them with edits.applyEdit, the function that
+  // the MCP server uses too, in one change of the program; returns whether
+  // they were applied.
   function edit(...ops: edits.EditOp[]): boolean {
 
+    // An edit of a group, which add_debasher_program would declare again
+    // from its module, asks the user first, once for all the groups it
+    // touches; declined, nothing changes
     const groups = edits.findGroupsTouchedBy(programRef.current, ops);
 
     if (groups.size > 0) {
@@ -539,6 +539,8 @@ export function ProgramProvider({
       }
     }
 
+    // Applies the edits, after dissolving the groups that they touch, if
+    // any, in one change, so that both go in or neither does
     setProgram(current => ops.reduce(
       (edited, op) => edits.applyEdit(edited, op),
       edits.dissolveGroups(current, new Set(groups.keys()))
