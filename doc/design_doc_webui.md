@@ -1007,8 +1007,10 @@ dissolves the whole group:
 - editing the content of a process of the group, its options included, or
   changing a sequential process of it;
 - removing a process or a sequential process of the group;
-- adding or removing a connection that reaches an input of the group, which
-  removing the process or the option at its other end also does.
+- adding or removing a connection into an input of a process of the group;
+- removing an output that a process of the group reads, or the process that
+  has it, also when they are outside the group: that removes the connection
+  too.
 
 The members of a dissolved group are then generated one by one, like any other.
 Moving a process of the group, and connecting one of its outputs to a process
