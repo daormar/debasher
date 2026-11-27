@@ -923,7 +923,7 @@ The options handler mode says how a process defines its options, and so how
 many tasks it runs:
 
 - `standard`: one task. Script generation writes one `_define_opts` function
-  that defines every option once.
+  that defines the options of that task (see "Option definitions").
 - `array`: one task per element of a Bash array named `array`, which the
   user's code (`arrayCode`) builds. The generated `_define_opts` loops over
   the array with the index `task_idx`, which option values can use.
@@ -940,45 +940,80 @@ The index of a task has the same name, `task_idx`, in `array` and `generator`
 mode, so an option value written for one of them, such as
 `${process_outdir}/${task_idx}`, means the same in the other.
 
-In `array` and `generator` mode the user's code is Bash or Python, as
-`optionsHandler.language` says. In Python it is the text of a tasks file that
-defines `tasks(run)`, which returns the elements of the array or the number of
-tasks, and script generation writes, in place of the code, the call of the
-engine that runs the file: `local array` and `tasks_from_file` before the
-loop of `array` mode, and `num_tasks_from_file` as the body of
-`_generate_opts_size` (see "Python function files" in
-`doc/design_doc_engine.md`). The rest of the option definition functions is
-the same in both languages, so the options of each task are defined in the
-module whatever language shapes the tasks. The code of `manual` mode is always
-Bash. The configuration dialog of `array` and `generator` mode has a language
-selector, which starts a tasks file from a `tasks(run)` that returns no
-elements, or one task; choosing `manual` mode in the inspector sets the
-language back to Bash.
+**The language of the code that shapes the tasks.** In `array` and `generator`
+mode the user's code is Bash or Python, as `optionsHandler.language` says:
 
-When both ends of a connection run in `array` or `generator` mode, each task
-reads the output of the task with the same index at the other end. In every
-other case the connection names the output of the source process as a whole,
-not that of one of its tasks: the model does not know the tasks of a `manual`
-process, and a `standard` process has only one.
+- In Bash, script generation writes the code as it is.
+- In Python, the code is the text of a Python function file that defines
+  `tasks(run)`, which returns the elements of the array or the number of tasks.
+  Script generation writes, in place of the code, the call of the engine that
+  runs the file: `local array` and `tasks_from_file` before the loop of `array`
+  mode, and `num_tasks_from_file` as the body of `_generate_opts_size` (see
+  "Python function files" in `doc/design_doc_engine.md`).
+
+The rest of the option definition functions is the same in both languages, so
+the options of each task are defined in the module whatever language shapes the
+tasks. The code of `manual` mode is always Bash: script generation refuses a
+`manual` process whose options handler is in Python.
+
+The configuration dialog of `array` and `generator` mode has a language
+selector: choosing Python in it starts a tasks file from a `tasks(run)` that
+returns no elements, or one task. Choosing `manual` mode in the inspector sets
+the language back to Bash.
+
+**Connections between tasks.** When both ends of a connection run in `array` or
+`generator` mode, each task reads the output of the task with the same index at
+the other end. In every other case the connection names the output of the
+source process as a whole, not that of one of its tasks: the model does not know
+the tasks of a `manual` process, and a `standard` process has only one. A fanout
+family is the exception: each task of an `array` or `generator` process reads
+the member of the family that its index names, and a family of inputs reads the
+tasks at the other end one by one (see "Option definitions").
 
 ## Groups
 
-"Add program" brings every process of another program saved with the web UI into
-the current one, in one operation. It reads that program's metadata from its
-home directory, like loading does, not its module, and marks each of its
-processes with the same `groupSource`: the other program's name, a `groupId`
-shared by all of them, the `groupSize`, and the other program's home directory,
-which it also adds to `DEBASHER_MOD_DIR` so that the engine finds its generated
-script. While all the processes of a group are still present and none has been
-edited, script generation declares them with a single `add_debasher_program` of
-the other program's module, which the generated module loads with
-`load_debasher_module` right after the preamble, since `add_debasher_program`
-adds only the program of a module already loaded; that module stays the one
-place where they are defined. The engine cannot express a module minus one
-process, or with one process changed, so editing the content of any process of
-the group, removing one, or connecting an input of one to something new or
-disconnecting it first asks the user, and then dissolves the whole group: its
-processes are then generated one by one, like any other.
+"Add program" brings the processes, the sequential processes and the
+connections of another program saved with the web UI into the current one, in
+one operation. It refuses a program of another type, and one that brings a
+process or a sequential process with a name that the current program already
+has, since `add_debasher_program` declares each one under its own name. In a
+general program it makes what it brings a group:
+
+- It loads the other program from its home directory, as loading does, not from
+  its module.
+- It marks each of its processes and sequential processes with the same
+  `groupSource`: the other program's name, a `groupId` shared by all of them,
+  the `groupSize`, and the other program's home directory.
+- It adds that home directory to `DEBASHER_MOD_DIR`, so that the engine finds
+  the other program's generated script.
+
+A resident program takes the processes one by one, never as a group, and adds
+nothing to `DEBASHER_MOD_DIR` (see "The program model of a resident program").
+How a group treats its sequential processes is in "Generating and importing a
+sequential process".
+
+**One declaration while the group is intact.** While every member of a group
+still carries its `groupSource`, which an edit that touches the group clears
+first (see below), script generation declares them with a single
+`add_debasher_program` of the other program's module. The generated module
+loads that module with `load_debasher_module` right after the preamble, since
+`add_debasher_program` adds only the program of a module already loaded. That
+module stays the one place where the members of the group are defined.
+
+**Dissolving a group.** The engine cannot express a module minus one process, or
+with one process changed. So each of these edits first asks the user, and then
+dissolves the whole group:
+
+- editing the content of a process of the group, its options included, or
+  changing a sequential process of it;
+- removing a process or a sequential process of the group;
+- adding or removing a connection that reaches an input of the group, which
+  removing the process or the option at its other end also does.
+
+The members of a dissolved group are then generated one by one, like any other.
+Moving a process of the group, and connecting one of its outputs to a process
+outside it, leave the group whole: that connection is defined in the function
+of its target.
 
 # From the model to a module: script generation
 
