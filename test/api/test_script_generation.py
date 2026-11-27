@@ -590,16 +590,25 @@ def test_a_reader_of_several_tasks_reads_a_source_of_several_tasks_task_by_task(
 
 
 @pytest.mark.parametrize("target_channel, source_channel", [("fifo", "fifo"), ("shared_dir", "fifo")])
-def test_a_connected_input_on_a_channel_that_would_hide_its_connection_is_refused(target_channel, source_channel):
-    # The input would take its value from its own channel, and the
-    # connection would be lost: a FIFO of its own that nothing writes
-    with pytest.raises(ValueError, match="a connected input receives what the output delivers"):
-        generate_script(_connected_program(target_channel, source_channel), skip_redundant_check=True)
+def test_a_connected_input_on_a_channel_of_its_own_reads_its_connection(target_channel, source_channel):
+    # The edges are the one source of truth of what is connected: the
+    # channel field of a connected input, which a program edited by hand
+    # may hold, is never written
+    script = generate_script(_connected_program(target_channel, source_channel), skip_redundant_check=True)
+    assert 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist' in script
+    assert 'define_fifo_opt "-in"' not in script
+    assert 'define_opt_from_shared_dir "-in"' not in script
 
 
-def test_a_connected_input_names_the_shared_directory_that_it_reads():
-    script = generate_script(_connected_program("shared_dir", "shared_dir"), skip_redundant_check=True)
-    assert 'debasher::define_opt_from_shared_dir "-in" "nums" optlist' in script
+@pytest.mark.parametrize("target_channel", ["shared_dir", "none", "fifo"])
+def test_a_connected_input_names_the_shared_directory_of_the_output_it_reads(target_channel):
+    program = _connected_program(target_channel, "shared_dir")
+    # Whatever directory the input names, with a subdirectory of its own
+    reader_option = program.processes[1].options[0]
+    reader_option.value = "other"
+    reader_option.subpath = "3"
+    script = generate_script(program, skip_redundant_check=True)
+    assert 'debasher::define_opt_from_shared_dir "-in" "nums" optlist --subdir "3"' in script
 
 
 # --- Fanout families counted by the tasks of another process ---------------
@@ -641,6 +650,18 @@ def _family_program(family_direction, partner_modes, count_source=False):
         if is_input:
             break
     return _seq_program([], processes, edges=edges)
+
+
+def test_the_input_of_a_family_reads_each_task_of_a_shared_directory_output():
+    # A shared directory is no channel for a family, which reads each task
+    # of the process at the other end
+    program = _family_program("input", ["array"])
+    partner_output = program.processes[1].options[0]
+    partner_output.channel, partner_output.value, partner_output.dataType = "shared_dir", "nums", "dir"
+    program.processes[0].options[0].channel = "shared_dir"
+    program.processes[0].options[0].value = "nums"
+    script = generate_script(program.model_copy(update={"sharedDirs": ["nums"]}), skip_redundant_check=True)
+    assert 'debasher::define_opt_from_proc_task_out "-ind${i}" "partner0" "${i}" "-outf" optlist' in script
 
 
 @pytest.mark.parametrize("partner_mode", ["generator", "array"])

@@ -1,4 +1,3 @@
-import { isConnectedInputChannel } from "./dataTypes";
 import type { ProgramEdge } from "./edge";
 import { edgeEndText } from "./edge";
 import { isFanoutOption } from "./option";
@@ -122,10 +121,11 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
  *   option, or one taken from the process specifications;
  * - in a resident program, it does not join a business output to an
  *   input that it can make a business input;
- * - the input is on a channel that would hide the connection;
  * - it breaks the pairing of a fanout family;
  * - the input is already connected, unless both ends are on "shared_dir";
- * - two "shared_dir" options name different directories;
+ * - it adds a writer of another directory to an input that a "shared_dir"
+ *   output already feeds, or comes from a "shared_dir" output that names no
+ *   directory;
  * - it is not from a fifo and closes a cycle of connections none of which
  *   is from a fifo (see reachesWithoutFifo).
  */
@@ -177,17 +177,6 @@ export function isValidEdge(
     return false;
   }
 
-  // The channel of the output says how the data travels, so an input on
-  // a channel of its own would take its value from it and lose the
-  // connection (see isConnectedInputChannel)
-  if (
-    sourceOptionDef &&
-    targetOptionDef &&
-    !isConnectedInputChannel(targetOptionDef.channel, sourceOptionDef.channel)
-  ) {
-    return false;
-  }
-
   // A fanout family option (see isFanoutOption) on a "standard" process
   // may only pair with an "array"- or "generator"-mode process on the
   // other end (mirrors script_generation.py's _FANOUT_PARTNER_MODES),
@@ -222,14 +211,22 @@ export function isValidEdge(
     return false;
   }
 
-  // Two "shared_dir" options may only ever pair with each other, and
-  // only when they name the identical directory: a mismatched pair
-  // would resolve to two different absolute paths, which is exactly
-  // the case debasher::_dedup_resolved_opts rejects at run time.
-  if (sourceIsSharedDir && targetIsSharedDir) {
-    if (!sourceOptionDef!.value || sourceOptionDef!.value !== targetOptionDef!.value) {
-      return false;
-    }
+  // A "shared_dir" output that names no directory gives the input none.
+  // An input that another writer already feeds names that writer's
+  // directory, and a second writer of another one would resolve to a
+  // different absolute path, which debasher::_dedup_resolved_opts rejects
+  // at run time; an input not connected yet takes the directory of the
+  // output (see getConnectedInputChannel)
+  if (sourceIsSharedDir && !sourceOptionDef!.value) {
+    return false;
+  }
+  if (
+    sourceIsSharedDir &&
+    targetIsSharedDir &&
+    targetAlreadyConnected &&
+    sourceOptionDef!.value !== targetOptionDef!.value
+  ) {
+    return false;
   }
 
   // A connection that is not from a fifo makes its target wait for its

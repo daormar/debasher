@@ -68,7 +68,7 @@ describe("listConnectionCandidates", () => {
     ]);
   });
 
-  it("joins two shared directory options by the name of the directory, whatever their subpaths", () => {
+  it("adds a writer of a shared directory to an input that it already feeds only for the same directory, whatever their subpaths", () => {
     const program: Program = {
       ...createEmptyProgram("p"),
       processes: [
@@ -76,11 +76,17 @@ describe("listConnectionCandidates", () => {
           option("split-outd", "-outd", { channel: "shared_dir", value: "data", subpath: "${task_idx}" }),
           option("split-outo", "-outo", { channel: "shared_dir", value: "other", subpath: "${task_idx}" }),
         ]),
+        process("more", [option("more-outd", "-outd", { channel: "shared_dir", value: "data" })]),
         process("merge", [option("merge-ind", "-ind", { channel: "shared_dir", value: "data" })]),
       ],
       edges: [],
     };
-    expect(listConnectionCandidates(program, "merge", "merge-ind")).toEqual([
+    // An input not connected yet takes the directory of the output it reads
+    expect(listConnectionCandidates(program, "merge", "merge-ind").map(candidate => candidate.text)).toEqual([
+      "split -outd", "split -outo", "more -outd",
+    ]);
+    const fed = { ...program, edges: [{ id: "e1", ...edgeOf("more", "more-outd", "merge", "merge-ind") }] };
+    expect(listConnectionCandidates(fed, "merge", "merge-ind")).toEqual([
       { sourceProcessId: "split", sourceOptionId: "split-outd", text: "split -outd" },
     ]);
   });

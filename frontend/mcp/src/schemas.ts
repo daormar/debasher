@@ -35,7 +35,7 @@ export const optionFields = z.object({
   dataType: z.enum(["int", "float", "string", "file", "dir", "None"]).optional()
     .describe('The type of the data that the option carries, the channel being how it gets there: with channel "none", the value itself ("file" or "dir" for an input path that has to exist, a regular file or a directory); through a FIFO, each line of it; through a value descriptor, the value it holds. A directory channel fixes it to "dir", and a connected input has that of the output it reads, which it follows. "None" for a flag, which takes no value and no channel.'),
   channel: z.enum(["none", "value_desc", "fifo", "shared_dir", "process_outdir"]).optional()
-    .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, a shared directory, or, for an output, the output directory of the process."),
+    .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, a shared directory, or, for an output, the output directory of the process. A connected input takes the channel that its connection gives it (\"none\", or \"shared_dir\" when it reads a shared directory): leave it out."),
   subpath: z.string().optional()
     .describe('With channel "shared_dir" or "process_outdir": a directory of the task\'s own below that directory, a Bash word such as "${task_idx}", which the engine creates (and, for the output directory of the process, empties before each task). Empty for the directory itself.'),
   mirror: z.boolean().optional().describe("On a FIFO output of a general program: keep a copy of the lines that go through it, for debugging, readable without taking data from the reader. The copy stays empty while no reader opens the FIFO."),
@@ -43,7 +43,7 @@ export const optionFields = z.object({
     .describe("In a resident program, on a FIFO input: an external input, written from outside the program."),
   description: z.string().optional(),
   value: z.string().optional()
-    .describe("A Bash word, which once expanded cannot start with - or -- followed by an ASCII letter or _ (a negative number can) nor hold a newline: the engine refuses it. With channel \"shared_dir\", the name of a shared directory that the program (sharedDirs) or a module of its preamble declares. A connected input takes its value from its connection."),
+    .describe("A Bash word, which once expanded cannot start with - or -- followed by an ASCII letter or _ (a negative number can) nor hold a newline: the engine refuses it. With channel \"shared_dir\", the name of a shared directory that the program (sharedDirs) or a module of its preamble declares. A connected input takes its value from its connection: leave it out (another shared directory is refused); a connected \"shared_dir\" input keeps a subpath of its own."),
   commandLine: z.boolean().optional().describe("The value comes from the command line of the program, as given (absolute for a file or a dir); value is ignored, and a value derived from it goes into another option."),
   mandatory: z.boolean().optional(),
   taskShaping: z.boolean().optional()

@@ -256,9 +256,12 @@ input. Its editor sets:
   for the processes connected to it; a FIFO; a shared directory; or,
   for an output, the output directory of the process. A connected
   input receives its data through the channel of the output it reads,
-  so the editor shows "From connection" instead of a choice, and an
-  input on a channel of its own, such as a FIFO, cannot be connected:
-  set it to a direct value first;
+  so the editor shows "From connection" instead of a choice, and
+  connecting an input that is on a channel of its own, such as a
+  FIFO, replaces that channel. An input that reads a shared directory
+  names the directory of the output, and follows it when the output
+  names another, but keeps its own "Subdirectory (optional)", the
+  shared subdirectory that it reads (see :doc:`shared_subdir`);
 * its **value**, for a direct value, which is a Bash word such as
   ``10`` or ``${task_idx}``, written into the generated script as it is.
 
@@ -326,6 +329,9 @@ An option of a standard process whose label ends in ``-ith``, such as
 ``-outf-ith``, is a *fanout family*: it stands for as many numbered
 options (``-outf0``, ``-outf1``, ...) as its count source says, and it
 connects to an array or generator process, one option for each task.
+An input family reads each task of the process at the other end, even
+from an output on a shared directory: it does not name that directory,
+as a single input would.
 The count source, chosen in the editor of the option, is a command line
 option of the same process, or the number of tasks of the process at
 the other end of the connections of the family, an array or a

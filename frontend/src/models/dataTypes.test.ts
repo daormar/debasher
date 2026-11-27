@@ -156,35 +156,58 @@ describe("the channel of a connected input", () => {
     sourceProcessId, sourceOptionId, targetProcessId: "id-reader", targetOptionId,
   });
 
-  it("refuses to connect an input whose own channel would hide the connection", () => {
+  it("connects an input on a channel of its own, which the connection replaces", () => {
     const p = withReader();
-    expect(isValidEdge(p, edge("id-counter", "outf", "in"))).toBe(false);
-    // a shared directory input reads only another one, of the same directory
-    expect(isValidEdge(p, edge("id-counter", "outf", "sums"))).toBe(false);
-    expect(isValidEdge(p, edge("id-adder", "sums", "sums"))).toBe(true);
+    expect(isValidEdge(p, edge("id-counter", "outf", "in"))).toBe(true);
+    expect(isValidEdge(p, edge("id-counter", "outf", "sums"))).toBe(true);
+    const edits = [
+      { op: "connect" as const, edge: { id: "e2", ...edge("id-counter", "outf", "in") } },
+      { op: "connect" as const, edge: { id: "e3", ...edge("id-counter", "outf", "sums") } },
+    ];
+    // An agent is not refused either
+    expect(validateEdits(p, edits)).toEqual([]);
+    const connected = applyEdits(p, edits);
+    for (const id of ["in", "sums"]) {
+      expect(optionOf(connected, "reader", id).channel).toBe("none");
+      expect(optionOf(connected, "reader", id).value).toBe("[counter;-outf]");
+    }
   });
 
-  it("tells an agent why such a connection is refused", () => {
-    expect(validateEdits(withReader(), [
-      { op: "connect", edge: { id: "e2", ...edge("id-counter", "outf", "in") } },
-    ])).toEqual([
-      'Option "-in" of process "reader" uses the channel "fifo", so it cannot read "-outf" of process "counter": ' +
-      "an input that a connection reaches receives what the output delivers, through the channel of the output, " +
-      'and so is declared with the channel "none".',
+  it("tells an agent that a resident program connects only an input on the channel \"none\"", () => {
+    // The connection makes it a business input; an input on a FIFO of its
+    // own is an external input
+    const p: Program = {
+      ...withReader(),
+      programType: "resident",
+      processes: [
+        process("counter", [createOption("outf", "-outf", { dataType: "int", channel: "fifo" })]),
+        process("reader", [createOption("in", "-in", { dataType: "int", channel: "fifo", value: "in", fifoTag: "external" })]),
+      ],
+      edges: [],
+    };
+    expect(validateEdits(p, [{ op: "connect", edge: { id: "e2", ...edge("id-counter", "outf", "in") } }])).toEqual([
+      'Option "-in" of process "reader" uses the channel "fifo": in a resident program a connection reaches only ' +
+      'an input on the channel "none", which it makes a business input.',
     ]);
   });
 
-  it("refuses an edit that moves a connected input to such a channel, and takes it on an input that is not connected", () => {
+  it("refuses an edit that gives a connected input another channel or directory than its connection, and takes it on an input that is not connected", () => {
     expect(validateEdits(program(), [
       { op: "updateOption", processId: "id-adder", optionId: "inf", changes: { channel: "fifo", value: "inf" } },
     ])).toEqual([
-      'Option "-inf" of process "adder" uses the channel "fifo", so it cannot read "-outf" of process "counter": ' +
-      "an input that a connection reaches receives what the output delivers, through the channel of the output, " +
-      'and so is declared with the channel "none".',
+      'Option "-inf" of process "adder" reads "-outf" of process "counter", so its channel is "none", ' +
+      'which the connection gives it, not "fifo". Leave channel and value out of the edit, or disconnect the input first.',
     ]);
     expect(validateEdits(program(), [
       { op: "updateOption", processId: "id-adder", optionId: "n", changes: { channel: "fifo", value: "n" } },
     ])).toEqual([]);
+    const connected = applyEdits(withReader(), [{ op: "connect", edge: { id: "e2", ...edge("id-adder", "sums", "sums") } }]);
+    expect(validateEdits(connected, [
+      { op: "updateOption", processId: "id-reader", optionId: "sums", changes: { value: "other" } },
+    ])).toEqual([
+      'Option "-sums" of process "reader" reads "-out-sums" of process "adder", so it names the shared ' +
+      'directory "sums", which the connection gives it, not "other". Leave channel and value out of the edit, or disconnect the input first.',
+    ]);
   });
 
   it("moves a connected input that metadata put on such a channel to the channel \"none\"", () => {
@@ -212,6 +235,38 @@ describe("the channel of a connected input", () => {
       expect(option.subpath).toBeUndefined();
     }
     expect(normalizeProgram(normalized)).toEqual(normalized);
+  });
+
+  it("keeps a shared directory input on the directory of the output it reads, with its own subpath", () => {
+    const p = withReader();
+    const connected = applyEdits(p, [{ op: "connect", edge: { id: "e2", ...edge("id-adder", "sums", "sums") } }]);
+    const withSubpath = applyEdits(connected, [
+      { op: "updateOption", processId: "id-reader", optionId: "sums", changes: { subpath: "3" } },
+    ]);
+    const renamed = applyEdits({ ...withSubpath, sharedDirs: ["sums", "totals"] }, [
+      { op: "updateOption", processId: "id-adder", optionId: "sums", changes: { value: "totals" } },
+    ]);
+    expect(optionOf(renamed, "reader", "sums").channel).toBe("shared_dir");
+    expect(optionOf(renamed, "reader", "sums").value).toBe("totals");
+    expect(optionOf(renamed, "reader", "sums").subpath).toBe("3");
+  });
+
+  it("leaves the input of a fanout family that reads a shared directory on the channel \"none\"", () => {
+    // It reads each task of the process at the other end, which script
+    // generation writes only on "none"
+    const p: Program = {
+      ...program(),
+      processes: [
+        { ...process("split", [createOption("outd", "-outd", { dataType: "dir", channel: "shared_dir", value: "sums" })]), optionsHandler: { mode: "array" } },
+        process("merge", [createOption("ind", "-ind-ith", { dataType: "dir" })]),
+      ],
+      edges: [],
+    };
+    const connected = applyEdits(p, [
+      { op: "connect", edge: { id: "e1", sourceProcessId: "id-split", sourceOptionId: "outd", targetProcessId: "id-merge", targetOptionId: "ind" } },
+    ]);
+    expect(optionOf(connected, "merge", "ind").channel).toBe("none");
+    expect(optionOf(connected, "merge", "ind").value).toBe("[split;-outd]");
   });
 
   it("keeps a shared directory input in step when the output it reads leaves the shared directory", () => {

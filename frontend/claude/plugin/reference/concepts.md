@@ -362,15 +362,20 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
 ## Connections
 
 - From an output to an input (`connect`, `disconnect`); an input takes one
-  connection, except `shared_dir` options naming the same directory, whatever
-  their subpaths.
-- **A connected input** is declared with channel `none` and no value
-  (`shared_dir`, naming the directory, when it reads a shared directory):
-  the channel of the output says how the data travels, so in a FIFO
-  connection only the output has channel `fifo`. An input on another channel
-  takes no connection, and an edit that moves a connected input to one is
-  refused. In a resident program the connection is what makes an input a
-  business input.
+  connection, except an input that `shared_dir` outputs naming the same
+  directory feed, whatever their subpaths.
+- **A connected input** takes its channel and value from its connection:
+  `none`, or `shared_dir` naming the directory of the output when it reads a
+  shared directory (always `none` for the input of a fanout family, which
+  reads each task of the process at the other end). The channel of the
+  output says how the data travels, so in a FIFO connection only the output
+  has channel `fifo`. Connecting an input on a channel of its own replaces
+  that channel and drops its `fifoTag` and `mirror`, and its `subpath`
+  unless it stays on `shared_dir`. An edit that gives a connected input
+  another channel or another shared directory is refused: leave `channel`
+  and `value` out, or disconnect it first. In a resident program only an
+  input on channel `none` takes a connection, and the connection is what
+  makes it a business input.
 - **A file connection** makes the reader wait until the writer finished
   (`afterok`, or task by task, each task after the task of the same index,
   between two processes in `array` or `generator` mode that both have several

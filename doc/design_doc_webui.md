@@ -112,10 +112,11 @@ refer to it.
   topology file spells `flag`.
 - **option channel**: how an option's data gets to its process, independent of
   its data type (`ProgramOption.channel`; a connected input gets its data
-  through the option channel of the output it reads): `none` for a literal value
-  or a connection, `value_desc` for a value descriptor the engine synthesizes,
-  `fifo` for a named pipe, `shared_dir` for a shared directory, `process_outdir`
-  for the process output directory of the option's own process.
+  through the option channel of the output it reads, and its own channel follows
+  from its connection, see "Data type and option channel"): `none` for a literal
+  value or a connection, `value_desc` for a value descriptor the engine
+  synthesizes, `fifo` for a named pipe, `shared_dir` for a shared directory,
+  `process_outdir` for the process output directory of the option's own process.
 - **directory channel**: either of the option channels `shared_dir` and
   `process_outdir`, which give an option a directory that the engine manages,
   or a subdirectory of it named by a subpath (see "Directory channels and
@@ -768,24 +769,26 @@ Three places keep it:
 **The channel of a connected input.** A connected input does not choose its
 option channel: it receives what the output delivers, through the channel of
 the output, such as the path of the FIFO that the output writes or of its value
-descriptor. The editor of an option shows "From connection" instead of a
-choice, so the user never sets it.
+descriptor. Its channel follows from its connection, as its data type does:
 
-In the program model, `ProgramOption.channel` is still there, and stays `none`,
-or `shared_dir` for an input that reads a shared directory: the canvas connects
-such an input only to an output that names the same directory. Any other value
-would lose the connection, since script generation writes an option on a
-channel as that channel, whatever edge reaches it: an input on `fifo`, for
-example, would read a FIFO of its own that no process writes, and the run would
-never end. Besides the editor, the web UI keeps the rule wherever a connected
-input can arise:
+- `shared_dir`, with the directory of the output, when the output names a
+  shared directory; the input keeps a subpath of its own, which names a
+  subdirectory of that directory;
+- `none` otherwise, and always for the input of a fanout family, which reads
+  each task of the process at the other end.
+
+The editor of an option shows "From connection" instead of a choice, so the
+user never sets it. The edges are the one source of truth about what is
+connected, so `ProgramOption.channel` of a connected input is derived from
+them, as its connection sentinel is, and the web UI never lets it hide the
+connection:
 
 | Where | What it does |
 |---|---|
-| The canvas | refuses a connection into an input on another channel, in a general program as in a resident one |
-| The checks of the edits that an agent makes | refuse such a connection (the refusal says how the input is declared), and an `updateOption` that moves a connected input to such a channel |
-| `normalizeProgram` | moves a connected input on another channel to `none`, without the fifo tag, the mirror and the subpath that only the channel it leaves takes, when a program is loaded and after every edit: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
-| Script generation | refuses such an input in a program that did not go through that normalization |
+| The canvas and `connect` | accept a connection into an input on a channel of its own, which the connection replaces: `connect` gives the input the channel and the value that the connection gives it. A resident program is the exception: only an input on `none` takes a connection, which makes it a business input (see "The program model of a resident program") |
+| The checks of the edits that an agent makes | refuse an `updateOption` that gives a connected input another channel, or another directory, than its connection gives it: the refusal says which, so that the agent learns it rather than seeing its edit undone |
+| `normalizeProgram` | puts every connected input on the channel that its connection gives it, without the fifo tag, the mirror and the subpath that only the channel it leaves takes, when a program is loaded and after every edit: it keeps the directory of an input in step with its output, makes an input follow its output when the output leaves `shared_dir`, and repairs a program saved against the rule |
+| Script generation | applies the same rule to the program it receives (`_normalize_connected_inputs`), so that it never writes the channel field of a connected input, even in a program edited by hand; in a resident program, after the refusals of "What script generation refuses of a resident program" (in "Script generation and import of a resident program"), which see the fields as the program holds them |
 
 ## Connections
 
@@ -815,19 +818,19 @@ the engine:
 - The input takes its value from nowhere else. It is not a flag, which takes
   no value, nor a command line option, nor an option taken from the process
   specifications: script generation writes all of these before it looks at
-  any connection. Nor is it declared on the option channel `fifo`: it would
-  read a FIFO of its own, which no process writes. The editor of an option
-  does not turn a connected input into any of these either. The one exception
-  is an input that names a shared directory, which takes a connection only
-  from an output that also names a shared directory (see "Data type and
-  option channel").
+  any connection. The editor of an option does not turn a connected input into
+  any of these either. An input on an option channel of its own takes the
+  connection, which gives it its channel (see "Data type and option
+  channel").
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same directory,
   whose edges only document how the processes share it (see "Directory channels
   and subpaths").
-- A `shared_dir` option pairs with another `shared_dir` option only when both
-  name the same directory, whatever their subpaths.
+- An input that a `shared_dir` output already feeds takes another writer only
+  of the same directory, whatever their subpaths; an input not connected yet
+  takes the directory of the output it reads. A `shared_dir` output that names
+  no directory feeds no input.
 - A fanout family pairs only with a process in `array` or `generator` mode,
   and never with another fanout family.
 - It closes no cycle, a self-loop included, made only of edges that do not
@@ -911,20 +914,22 @@ leaves elsewhere: from a subdivided shared directory on the next run, and from a
 subdivided process output directory when its process is next prepared, unless
 it has a `_reset_outfiles` method or belongs to a resident program.
 
-**Connections between shared directories.** Two `shared_dir` options pair when
-they name the same shared directory, whatever their subpaths. An output that
-writes the shared subdirectory `${task_idx}` of `data` may feed an input that
-reads the whole of `data`, as a process that gathers the results of every task
-does, or an input that reads the same subdirectory. Connecting a `shared_dir`
-output to an input gives the input the name of the directory, not the subpath:
-an input that had no subpath reads the whole directory until the user gives it
-one, and one that had a subpath keeps it.
+**Connections between shared directories.** Two connected `shared_dir` options
+name the same shared directory, whatever their subpaths. An output that writes
+the shared subdirectory `${task_idx}` of `data` may feed an input that reads the
+whole of `data`, as a process that gathers the results of every task does, or an
+input that reads the same subdirectory. Connecting a `shared_dir` output to an
+input (except the input of a fanout family) gives the input the name of the
+directory, not the subpath, and keeps the two in step, since the connection
+gives the input its directory (see "Data type and option channel"): an input
+that had no subpath reads the whole directory until the user gives it one, and
+one that had a subpath keeps it.
 
-The edge only documents how the processes share the directory. Script
-generation writes the definition of each option from its name and subpath,
-whatever the edges, and the engine infers a dependency only between an output
-and an input that hold the same path. So the readers of a shared directory
-depend on its writers as follows:
+The edge only documents how the processes share the directory. Script generation
+writes the definition of each option from its name and subpath, the directory of
+a connected input being that of its output, and the engine infers a dependency
+only between an output and an input that hold the same path. So the readers of a
+shared directory depend on its writers as follows:
 
 | Reader | Dependency on the writers |
 |---|---|
@@ -1117,10 +1122,14 @@ a fan-in), taken from the first rule that applies:
    or a directory shipped with the program can be named portably.
 9. Anything else: `define_opt` with the literal value.
 
-A command line option always gets its definition from rule 6, or from rule 1
-for a flag, since one with an option channel other than `none` is refused (see
-"What script generation refuses"). A fanout family becomes a loop instead of
-one line: it reads its count and defines one option per index, `define_opt` or
+A connected input is first given the channel that its connection gives it (see
+"Data type and option channel"), so it gets its definition from rule 4, on
+`shared_dir` with the directory of the output it reads, or from rule 7: the
+channel field that a program holds for it is never written. A command line
+option always gets its definition from rule 6, or from rule 1 for a flag, since
+one with an option channel other than `none` is refused (see "What script
+generation refuses"). A fanout family becomes a loop instead of one line: it
+reads its count and defines one option per index, `define_opt` or
 `define_fifo_opt` on the writing side, `define_opt_from_proc_task_out` on the
 reading side.
 
@@ -1242,6 +1251,10 @@ module could not write as a word. The save generates the script before it writes
 anything, so a program that script generation refuses leaves the home directory
 as it was. The save answers with the reason of the refusal, which the frontend
 shows.
+
+A connected input is first given the channel that its connection gives it (see
+"Data type and option channel"), so these rules judge the channel and the
+subpath of an input only when it is not connected.
 
 ## Environment variables of a program
 
@@ -5415,8 +5428,12 @@ resident program".
 **The program model**
 
 - **Connections are consistent.** After every change, the value of each
-  connected input names the output its edge comes from, and the canvas accepts
-  only connections that the engine can resolve (see "Connections").
+  connected input names the output its edge comes from, its option channel is
+  the one that its connection gives it, with the directory of the output for a
+  `shared_dir` input, and script generation applies the same rule, so that a
+  channel never hides a connection; the canvas accepts only connections that
+  the engine can resolve (see "Connections" and "Data type and option
+  channel").
 - **No wrong module.** Script generation refuses a program whose module would
   be wrong, rather than writing it (see "What script generation refuses").
 - **Import is a fixed point.** Importing a generated module gives back the

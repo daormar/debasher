@@ -460,7 +460,7 @@ const editingTools = [
 
   editTool(
     "connect",
-    "Connects an output of a process to an input of another, or of the same one; the input then takes its value from the output.",
+    "Connects an output of a process to an input of another, or of the same one; the input then takes its channel and its value from the output: \"shared_dir\" naming the same directory when the output is on a shared directory (not for the input of a fanout family), \"none\" otherwise, replacing a channel of its own.",
     { from: schemas.optionRef, to: schemas.optionRef, display: schemas.connectionDisplay.optional() },
     ({ from, to, display }) => [{ op: "connect", from, to, display }]
   ),

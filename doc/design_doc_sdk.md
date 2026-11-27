@@ -516,9 +516,12 @@ process contract:
   another process to read through a connection.
 - `shared_dir(name, subpath="", source=None)`, an option whose value is one of
   the shared directories of the program, or a shared subdirectory of it (the
-  `shared_dir` channel); its source, if any, checked as that of a connection,
-  only draws the sharing on the canvas, since the engine orders the processes by
-  the directory itself.
+  `shared_dir` channel). A source, if any, checked as that of a connection,
+  draws the sharing on the canvas, since the engine orders the processes by the
+  directory itself; it also gives the option its directory, so it has to be an
+  output of the same shared directory, or the option is written as an ordinary
+  connection to it (see "Data type and option channel" in
+  `doc/design_doc_webui.md`).
 - `procspec(attribute)`, an input whose value is an attribute of the
   specifications of the use of the process, such as `"cpus"`.
 - `value_desc()`, an output delivered as a value descriptor that the

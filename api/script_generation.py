@@ -340,38 +340,55 @@ def _define_opts_func_foot():
 Connections = list[tuple[str, str, str]]
 
 
-def _check_connected_input_channels(program: Program) -> None:
+def _get_connected_input_channel(process, option, source_option) -> str:
+    """Takes a connected input, its process and the output it reads; returns
+    the option channel that the connection gives the input: "shared_dir"
+    when the output names a shared directory, "none" otherwise. The frontend
+    keeps the same rule (getConnectedInputChannel)."""
+    # The input of a fanout family reads each task of the process at the
+    # other end (define_opt_from_proc_task_out), whatever that writes
+    is_fanout = process.optionsHandler.mode == "standard" and _is_fanout_label(option.label)
+    return "shared_dir" if source_option.channel == "shared_dir" and not is_fanout else "none"
+
+
+def _normalize_connected_inputs(program: Program) -> Program:
     """
-    Takes a program; returns nothing, and raises ValueError for an input
-    that a connection reaches on an option channel other than "none", or
-    than "shared_dir" when it reads a shared directory.
+    Takes a program; returns a copy with every connected input on the
+    option channel that its connection gives it: on "shared_dir", with the
+    directory of the output it reads and its own subpath, or on "none",
+    without a fifo tag, a mirror or a subpath. The edges are the one source
+    of truth about what is connected, so the channel field of a connected
+    input, which a program edited by hand may hold, is never written.
     """
-    options = {
-        (process.id, option.id): (process, option)
-        for process in program.processes
-        for option in process.options
-    }
+    options = {}
+    for process in program.processes:
+        for option in process.options:
+            options[(process.id, option.id)] = option
+    # The output that each connected input reads; several edges into one
+    # input all name the same shared directory
+    sources = {}
     for edge in program.edges:
         source = options.get((edge.sourceProcessId, edge.sourceOptionId))
-        target = options.get((edge.targetProcessId, edge.targetOptionId))
-        if source is None or target is None:
-            continue
-        (source_process, source_option), (target_process, target_option) = source, target
-        # The channel of the output says how the data travels. An input on a
-        # channel of its own would be written as that channel
-        # (_option_definition_line), and its connection lost. The frontend
-        # keeps the same rule (isConnectedInputChannel), so only a program
-        # that did not go through its normalization reaches this refusal
-        if target_option.channel == "none" or (
-            target_option.channel == "shared_dir" and source_option.channel == "shared_dir"
-        ):
-            continue
-        raise ValueError(
-            f'Option "{target_option.label}" on "{target_process.name}" uses channel '
-            f'"{target_option.channel}", so it can\'t read "{source_option.label}" of '
-            f'"{source_process.name}": a connected input receives what the output delivers, '
-            'through the channel of the output, and so uses channel "none".'
-        )
+        if source is not None and (edge.targetProcessId, edge.targetOptionId) in options:
+            sources.setdefault((edge.targetProcessId, edge.targetOptionId), source)
+
+    processes = []
+    for process in program.processes:
+        normalized = []
+        for option in process.options:
+            source = sources.get((process.id, option.id))
+            if source is None:
+                normalized.append(option)
+            elif _get_connected_input_channel(process, option, source) == "shared_dir":
+                normalized.append(option.model_copy(update={
+                    "channel": "shared_dir", "value": source.value, "fifoTag": None, "mirror": False,
+                }))
+            else:
+                normalized.append(option.model_copy(update={
+                    "channel": "none", "fifoTag": None, "mirror": False, "subpath": "",
+                }))
+        processes.append(process.model_copy(update={"options": normalized}))
+    return program.model_copy(update={"processes": processes})
 
 
 def _connections_by_option(program: Program) -> dict[tuple[str, str], Connections]:
@@ -1318,7 +1335,7 @@ def _build_script(
     lines = [SCRIPT_HEADER, "", ""]
 
     process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
-    _check_connected_input_channels(program)
+    program = _normalize_connected_inputs(program)
     connections_by_option = _connections_by_option(program)
     readers_by_option = _readers_by_option(program)
 

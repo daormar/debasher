@@ -1,4 +1,4 @@
-import { normalizeConnectedInputChannels, normalizeDataTypes } from "./dataTypes";
+import { getConnectedInputChannel, normalizeConnectedInputChannels, normalizeDataTypes } from "./dataTypes";
 import type { EdgeDisplay, ProgramEdge } from "./edge";
 import { buildConnectionSentinel } from "./edge";
 import { MOD_DIR_SEP, splitModDir } from "./modDir";
@@ -117,8 +117,8 @@ function dropInvalidEdges(source: Program): Program {
 /**
  * Takes a program; returns it brought in line with the rules of the model,
  * or the same object when it already is: the edges that join no output to
- * an input dropped, every connected input moved off a channel that would
- * hide its connection, the connection sentinels derived again from the
+ * an input dropped, every connected input put on the channel that its
+ * connection gives it, the connection sentinels derived again from the
  * edges and the names, the data types that a channel or a connection fixes
  * set, and a missing durability mode or scheduler given its default. It
  * repairs a program saved against those rules, such as one edited by hand.
@@ -331,9 +331,9 @@ function doesEdgeTouchOption(edge: ProgramEdge, processId: string, optionId: str
 
 /**
  * Takes a program and a new edge; returns the program with the edge added
- * and its target option given the value of a connected input: the
- * reference to its source, or, for a source on "shared_dir", the channel
- * and the directory of the source.
+ * and its target option given the channel and the value of a connected
+ * input (see getConnectedInputChannel): the directory of a source on
+ * "shared_dir", or the channel "none" and the reference to its source.
  */
 export function connect(program: Program, edge: ProgramEdge): Program {
 
@@ -345,17 +345,27 @@ export function connect(program: Program, edge: ProgramEdge): Program {
     o => o.id === edge.sourceOptionId
   );
 
+  const targetProcess = program.processes.find(
+    process => process.id === edge.targetProcessId
+  );
+
+  const targetOption = targetProcess?.options.find(
+    o => o.id === edge.targetOptionId
+  );
+
   // A target of a shared directory names that directory too: a second
   // writer of the same directory may then connect to it (see isValidEdge),
-  // and script generation writes it as that shared directory
-  const connected = sourceProcess && sourceOption
+  // and script generation writes it as that shared directory. Any other
+  // target leaves a channel of its own, which the connection replaces;
+  // normalizeProgram drops the fields that only that channel takes
+  const connected = sourceProcess && sourceOption && targetProcess && targetOption
     ? updateOption(
         program,
         edge.targetProcessId,
         edge.targetOptionId,
-        sourceOption.channel === "shared_dir"
+        getConnectedInputChannel(targetProcess, targetOption, sourceOption) === "shared_dir"
           ? { channel: "shared_dir", value: sourceOption.value }
-          : { value: buildConnectionSentinel(sourceProcess.name, sourceOption.label) }
+          : { channel: "none", value: buildConnectionSentinel(sourceProcess.name, sourceOption.label) }
       )
     : program;
 

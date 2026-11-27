@@ -1,5 +1,5 @@
 import { isValidEdge } from "./connections";
-import { findConnectedChannelProblem, findConnectedInputChannelProblem, findDataTypeProblem } from "./dataTypes";
+import { findConnectedChannelProblem, findDataTypeProblem } from "./dataTypes";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
 import { DIRECTORY_CHANNELS } from "./option";
@@ -119,8 +119,9 @@ function findEditProblem(program: Program, edit: EditOp): string | null {
         (edit.changes.dataType === undefined
           ? null
           : findDataTypeProblem(program, process, { ...option!, ...edit.changes })) ??
-        // A channel that would hide the connection of a connected input
-        (edit.changes.channel === undefined
+        // A channel or a directory of a connected input other than those
+        // that its connection gives it
+        (edit.changes.channel === undefined && edit.changes.value === undefined
           ? null
           : findConnectedChannelProblem(program, process, { ...option!, ...edit.changes }))
       );
@@ -145,14 +146,14 @@ function findEditProblem(program: Program, edit: EditOp): string | null {
       if (missing) {
         return missing;
       }
-      const sourceOption = source.options.find(option => option.id === edge.sourceOptionId)!;
+      // A resident program takes a connection only into an input on "none",
+      // which the connection makes a business input
       const targetOption = target.options.find(option => option.id === edge.targetOptionId)!;
-      const channelProblem =
-        sourceOption.direction === "output" && targetOption.direction === "input"
-          ? findConnectedInputChannelProblem(target, targetOption, source, sourceOption)
-          : null;
-      if (channelProblem) {
-        return channelProblem;
+      if (program.programType === "resident" && targetOption.direction === "input" && targetOption.channel !== "none") {
+        return (
+          `Option "${targetOption.label}" of process "${target.name}" uses the channel "${targetOption.channel}": ` +
+          'in a resident program a connection reaches only an input on the channel "none", which it makes a business input.'
+        );
       }
       if (!isValidEdge(program, edge)) {
         const label = (process: ProgramProcess, optionId: string) =>

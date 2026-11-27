@@ -1,4 +1,4 @@
-import type { OptionChannel, OptionDataType, ProgramOption } from "./option";
+import { isFanoutOption, type OptionChannel, type OptionDataType, type ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 
@@ -11,7 +11,7 @@ import type { Program } from "./program";
 // carries no data of a type of its own: its data type is always "dir". A
 // connected input carries what the output it reads carries, and so has its
 // data type. It also receives it through the channel of that output, so its
-// own channel is "none", or "shared_dir" when it reads a shared directory.
+// own channel follows from the output too (see getConnectedInputChannel).
 
 // The data type that an option channel fixes, or null when the data type
 // is free: the directory channels name a directory, whatever is in it.
@@ -19,34 +19,42 @@ export function getChannelDataType(channel: OptionChannel): OptionDataType | nul
   return channel === "shared_dir" || channel === "process_outdir" ? "dir" : null;
 }
 
-// Whether an input on option channel `channel` can read an output on
-// `sourceChannel`. The channel of the output says how the data travels, so
-// the input itself is on "none"; the exception is an input that reads a
-// shared directory, which may name that directory too, on "shared_dir"
-// (connect, in programEdits.ts, makes it so). An input on another channel
-// would take its value from that channel, and the connection would be lost.
-export function isConnectedInputChannel(channel: OptionChannel, sourceChannel: OptionChannel): boolean {
-  return channel === "none" || (channel === "shared_dir" && sourceChannel === "shared_dir");
+// Takes a connected input, its process and the output it reads; returns
+// the option channel that the connection gives the input: "shared_dir"
+// when the output names a shared directory, and "none" otherwise, since
+// the channel of the output says how the data travels. The input of a
+// fanout family is on "none" whatever its output, since it reads each
+// task of the process at the other end. Script generation keeps the same
+// rule (_normalize_connected_inputs).
+export function getConnectedInputChannel(
+  process: ProgramProcess,
+  option: ProgramOption,
+  sourceOption: ProgramOption
+): OptionChannel {
+  const isFanout = process.optionsHandler.mode === "standard" && isFanoutOption(option.label);
+  return sourceOption.channel === "shared_dir" && !isFanout ? "shared_dir" : "none";
 }
 
-// Why `option` of `process`, an input on the channel it has, cannot read
-// `sourceOption` of `sourceProcess`, or null.
+// Takes a connected input with the fields an edit gives it, its process
+// and the output it reads, with its process; returns why the input cannot
+// have that channel, or that directory, or null. The connection gives
+// both (see getConnectedInputChannel), and an edit that sets another is
+// refused rather than undone, so that its author learns it.
 export function findConnectedInputChannelProblem(
   process: ProgramProcess,
   option: ProgramOption,
   sourceProcess: ProgramProcess,
   sourceOption: ProgramOption
 ): string | null {
-  if (isConnectedInputChannel(option.channel, sourceOption.channel)) {
-    return null;
+  const where = `Option "${option.label}" of process "${process.name}" reads "${sourceOption.label}" of process "${sourceProcess.name}"`;
+  const channel = getConnectedInputChannel(process, option, sourceOption);
+  if (option.channel !== channel) {
+    return `${where}, so its channel is "${channel}", which the connection gives it, not "${option.channel}". Leave channel and value out of the edit, or disconnect the input first.`;
   }
-  const alternative = sourceOption.channel === "shared_dir" ? ' (or "shared_dir", naming the same directory)' : "";
-  return (
-    `Option "${option.label}" of process "${process.name}" uses the channel "${option.channel}", ` +
-    `so it cannot read "${sourceOption.label}" of process "${sourceProcess.name}": an input that a ` +
-    `connection reaches receives what the output delivers, through the channel of the output, and so ` +
-    `is declared with the channel "none"${alternative}.`
-  );
+  if (channel === "shared_dir" && option.value !== sourceOption.value) {
+    return `${where}, so it names the shared directory "${sourceOption.value}", which the connection gives it, not "${option.value}". Leave channel and value out of the edit, or disconnect the input first.`;
+  }
+  return null;
 }
 
 // The incoming edge of an input, if it is connected. Only inputs on a
@@ -131,22 +139,29 @@ export function normalizeDataTypes(program: Program): Program {
   return changed ? { ...program, processes } : program;
 }
 
-// The program with every connected input whose own channel would hide its
-// connection (see isConnectedInputChannel) moved to the channel "none",
+// Takes a program; returns it with every connected input on the channel
+// that its connection gives it (see getConnectedInputChannel): on
+// "shared_dir", with the directory of the output it reads, or on "none",
 // without the fields that only the channel it leaves takes. The edges are
-// the one source of truth about what is connected, so this repairs a
-// program whose metadata breaks the rule, such as one edited by hand.
+// the one source of truth about what is connected, so this keeps an input
+// in step with its output, and repairs a program saved against the rule,
+// such as one edited by hand.
 export function normalizeConnectedInputChannels(program: Program): Program {
   let changed = false;
   const processes = program.processes.map(process => {
     let processChanged = false;
     const options = process.options.map(option => {
       const source = findConnectedSource(program, process.id, option.id);
-      if (!source || isConnectedInputChannel(option.channel, source.option.channel)) {
+      if (!source || !findConnectedInputChannelProblem(process, option, source.process, source.option)) {
         return option;
       }
       processChanged = true;
-      const { fifoTag: _fifoTag, subpath: _subpath, ...rest } = option;
+      const { fifoTag: _fifoTag, subpath, ...rest } = option;
+      // A subpath names a subdirectory of the shared directory; on "none"
+      // script generation refuses it
+      if (getConnectedInputChannel(process, option, source.option) === "shared_dir") {
+        return { ...rest, ...(subpath ? { subpath } : {}), channel: "shared_dir" as const, value: source.option.value, mirror: false };
+      }
       return { ...rest, channel: "none" as const, mirror: false };
     });
     if (!processChanged) {
@@ -158,8 +173,9 @@ export function normalizeConnectedInputChannels(program: Program): Program {
   return changed ? { ...program, processes } : program;
 }
 
-// Why a connected input cannot be on the channel it has, or null: that
-// channel would hide its connection (see isConnectedInputChannel).
+// Takes a program, a process and one of its options, with the fields an
+// edit gives it; returns why a connected input cannot have that channel or
+// directory, or null (see findConnectedInputChannelProblem).
 export function findConnectedChannelProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
   const source = findConnectedSource(program, process.id, option.id);
   return source ? findConnectedInputChannelProblem(process, option, source.process, source.option) : null;
