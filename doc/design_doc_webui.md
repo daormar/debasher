@@ -42,23 +42,23 @@ backend receives. The two sections that follow describe the translation between
 the model and a module in each direction, and what survives a round trip.
 "Persistence and the program's directories" describes what the web UI keeps on
 disk, "The artifact: the topology file and the process files" the saved form
-that replaces the program metadata, and "Execution and observation" how it
-runs a program and follows it.
-"Frontend state and the canvas" describes the frontend's own state and the Help
-menu of the editor, and "Sequential processes in the web UI" describes how a
-program keeps the sequential processes of its module. "Guarantees and non-goals"
-gathers the guarantees stated along the way. "Resident programs in the web UI"
-designs the extension to resident programs, and says which parts of it are
-built. "Business tests in the web UI" describes how the web UI runs the tests of
-a program and writes a first test for a process. "A prompt for the code of a
-process" describes how the code editors help to have an AI tool write the code
-of a process, of its options handler, of its additional methods or of a node.
-"Editing a program from an agent: the MCP server" describes a second client of
-the backend, for AI agents, "Claude Code on a program" how DeBasher starts
-Claude Code with that server, "Access to the backend: the token" how the backend
-obeys only those who hold its token, "Claude Code in the page" describes a
-terminal in the editor where the backend runs Claude Code, and "Future work"
-lists what is known to be missing.
+that replaces the program metadata, and "Execution and observation" how it runs
+a program and follows it. "Frontend state and the canvas" describes the
+frontend's own state and the Help menu of the editor, and "Sequential processes
+in the web UI" describes how a program keeps the sequential processes of its
+module. "Resident programs in the web UI" designs the extension to resident
+programs, and says which parts of it are built. "Business tests in the web UI"
+describes how the web UI runs the tests of a program and writes a first test for
+a process. "A prompt for the code of a process" describes how the code editors
+help to have an AI tool write the code of a process, of its options handler, of
+its additional methods or of a node. "Editing a program from an agent: the MCP
+server" describes a second client of the backend, for AI agents, "Claude Code on
+a program" how DeBasher starts Claude Code with that server, "Access to the
+backend: the token" how the backend obeys only those who hold its token, "Claude
+Code in the page" describes a terminal in the editor where the backend runs
+Claude Code, "Guarantees and non-goals" gathers the guarantees stated along the
+way, those of resident programs included, and "Future work" lists what is known
+to be missing.
 
 # Glossary
 
@@ -2519,173 +2519,6 @@ leaves the calls to `seq_execute` that name it as they are, and the program
 fails when such a call runs. A resident program has no sequential processes
 (see "The program model of a resident program").
 
-# Guarantees and non-goals
-
-This section gathers the guarantees that the web UI gives today for general
-programs, stated in the other sections of this document, and what it
-deliberately does not try to do. Where a guarantee has a known gap, "Future
-work" lists it. Those of resident programs, designed and being built, are
-gathered in "Guarantees and non-goals of a resident program".
-
-## Guarantees
-
-**The program model**
-
-- **Connections are consistent.** After every change, the value of each
-  connected input names the output its edge comes from, and the canvas accepts
-  only connections that the engine can resolve (see "Connections").
-- **No wrong module.** Script generation refuses a program whose module would
-  be wrong, rather than writing it (see "What script generation refuses").
-- **Import is a fixed point.** Importing a generated module gives back the
-  model it was generated from, apart from what lives only in the program
-  metadata, and generating and importing an imported module changes nothing;
-  both are tested (see "What the round trip preserves").
-- **No lost code.** Leaving out the code that a loaded module already provides
-  can only remove a duplicate; when the check cannot be made, the code is
-  written (see "Code that a loaded module already provides").
-- **What import does not understand, it keeps.** An option definition function
-  outside the grammar of import is kept as its verbatim source, in `manual`
-  mode, so it runs as it did; a connection recovered from it only affects the
-  canvas (see "Recovering the options handler").
-
-**The program's directories**
-
-- **Two directories apart.** A program is never saved into its output
-  directory, and the output directory is never set to the home directory.
-- **No save over another's without knowing.** A save into a program's own home
-  directory never overwrites what another tab or client saved there since the
-  program was loaded, unless the user, told so, chooses to (see "The digest of
-  the artifact").
-- **No write over another's file.** The editor of the program files panel never
-  overwrites a file that someone else wrote since it read it, unless the user
-  chooses to (see "Reserved names and user files").
-- **Unsaved changes are lost only when the user lets them go.** A program
-  written elsewhere is loaded on its own only into a tab with no unsaved
-  changes, and leaving the editor or closing its tab with unsaved changes asks
-  first (see "The digest of the artifact" and "Screens and the store").
-- **A program lives where it is loaded from.** Its home directory is the
-  directory it was loaded from, even if it was copied or moved there (see
-  "The home directory").
-- **User files are the user's.** The program files panel, and the MCP server
-  through the same endpoints, never touches a reserved name, never leaves the
-  home directory, never deletes or moves anything but the entry that a path
-  names and its contents (a link and not what it points to, never the home
-  directory itself), and never changes the generated script (see "Reserved names
-  and user files").
-- **A reset stays in the output directory.** Resetting it deletes only what is
-  inside it, and does nothing when it is blank, missing, the root, the user's
-  home or the home directory (see "The output directory").
-- **No change under a running program.** While there is a run in progress, the
-  web UI refuses to save, to run, validate or check the options of the program,
-  to reset the output directory and to change it. The backend refuses them too,
-  whoever sends the request, and also while a `debasher_exec` only validates the
-  program on the output directory (see "The home directory").
-
-**Execution and observation**
-
-- **One run per output directory.** A run is not launched on an output
-  directory with a run in progress.
-- **Nothing that happens to a tab or to the backend stops a run, or cuts a tool
-  in the middle.** A run is stopped only with "Stop program" or "Stop process",
-  and every tool that launches or stops it runs in a session of its own and
-  writes into a file (see "A run that outlives the tab").
-- **A program that the engine refuses is reported at once.** With Slurm, `/run`
-  waits for `debasher_exec`, which ends once the jobs are submitted, and with
-  the built-in scheduler it validates the program first; either way it shows
-  what the engine printed. The one exception is a first round of the built-in
-  scheduler that can choose no task, which shows as `unfinished` (see "Launching
-  a run").
-- **Any run is observed.** The process statuses, and the guards that depend on
-  them, cover a run launched from another tab or from the command line.
-- **Watching a FIFO takes nothing from it.** "Watch FIFO" reads the FIFO
-  mirror, never the FIFO.
-- **Talking to a FIFO competes with nobody.** "Talk to FIFOs" only opens
-  unconnected FIFOs, and never blocks a request for more than a few seconds.
-- **Nothing is lost when the backend restarts**, since it keeps no state (see
-  "The backend keeps no state"); the sessions in the page are the one
-  exception.
-
-**The code prompt**
-
-- **Nothing leaves the machine through the code prompt.** The web UI calls no
-  AI service: the user copies the code prompt, and sees all of it first (see
-  "A prompt for the code of a process").
-- **Code from an AI tool is code like any other.** It reaches the program
-  only by being pasted into the code editor and saved, and "Cancel" drops it
-  (see "The prompt panel").
-
-**Access to the backend**
-
-- **No call to the API without the token.** The backend answers no request to
-  the API that does not carry its token (see "What the backend checks"), and it
-  cannot be started without one (see "The token"). The WebSocket of a session in
-  the page carries a ticket instead, which only a request with the token gets,
-  and which serves once (see "Opening a session in the page").
-- **The browser hands the token to nobody.** It keeps the token for the origin
-  of the backend alone and sends it only where the page puts it, and the token
-  is never in an address that reaches a server or a log (see "How a request
-  carries the token"). A token given to outlive its backend is the exception
-  (see "What the token does not protect").
-- **No page of another origin acts through the browser.** Its requests carry
-  no token, and one that names a host that is not the backend's is refused
-  when the backend listens on a single address (see "What the backend
-  checks").
-- **The token file belongs to the backend that owns the port.** It is written
-  only once the port is bound, readable only by the user, removed before the
-  port is released when the backend stops in order, and used by `debasher_mcp`
-  only while its backend is alive and only towards the local machine (see "The
-  token file").
-- **A refused token loses no unsaved change.** The editor stops and says how to
-  get a new token, and keeps the program as it is (see "The editor without a
-  valid token").
-
-**Claude Code in the page**
-
-- **The command of a session holds nothing that the page sends but the program
-  and how the conversation starts.** The backend builds it itself, and runs
-  nothing but `debasher_claude` (see "The session in the page").
-- **One session per program.** A backend runs at most one session in the page
-  on a program, whatever tab asks for it, and another tab gets it only by
-  taking it over (see "The session in the page").
-- **No session outlives its WebSocket or its backend.** A closed WebSocket
-  hangs the session up, and a backend that dies closes the pseudo-terminal,
-  the controlling terminal of its process, which hangs it up too (see "The
-  pseudo-terminal").
-- **Leaving the editor asks before it ends a session.** Closing or reloading
-  the tab, and "Close", ask first while a session runs (see "The terminal
-  panel").
-
-## Non-goals
-
-- **Security beyond the token.** The web UI trusts whoever holds the token: it
-  has no users and no permissions, and it runs every tool, and reads any path,
-  as the user who started it. It speaks plain HTTP, so it listens only on the
-  local machine unless told otherwise (see "What the token does not
-  protect").
-- **Several people on one program.** Two tabs on the same program or the same
-  directories are not coordinated beyond two guards: a save over what another
-  wrote since the program was loaded is refused (see "The digest of the
-  artifact"), and the guards based on the engine's own files (a run in
-  progress) see the other tab. A tab learns of a digest that another wrote,
-  and loads it or asks, but nothing merges the changes of two tabs.
-- **Keeping unsaved work.** There is no autosave and no undo: unsaved changes
-  live only in the tab.
-- **Live updates.** The web UI learns what happens in a run by polling, every
-  few seconds, not by being told.
-- **Being told that a run ended, or a list of the runs in progress.** A run is
-  found, and its end seen, by opening its program (see "A run that outlives the
-  tab").
-- **Importing any module faithfully.** Import recognizes a closed grammar, and
-  keeps the rest as it is rather than trying to understand it (see "What the
-  round trip preserves").
-- **An output directory that follows a moved program.** A program loaded
-  from a new place keeps the output directory it was saved with (see "The
-  home directory"); the artifact makes it local state that a moved program
-  does not carry (see "Loading, saving and the local state").
-- **Checking the code that an AI tool writes.** The web UI treats it as code
-  written by hand; validating the program and running its tests check it
-  (see "The prompt panel").
-
 # Resident programs in the web UI
 
 *Designed, and being built: a subsection that is built says so under its
@@ -3936,98 +3769,6 @@ initiator), and the edges: a FIFO from a business output to a business input,
 the route of an edge that goes back up and of a self-loop, a label edge, the
 edges of the Supervisor wiring and a fanout edge; and the label of a fanout
 family.
-
-## Guarantees and non-goals of a resident program
-
-This subsection gathers the guarantees that the design of resident programs
-gives, stated in the subsections above, and what it deliberately does not try
-to do, as "Guarantees and non-goals" does for general programs. Those of
-general programs that the subsections above keep hold for resident programs
-too.
-
-**The program model and the round trip**
-
-- **The node kind and the code agree.** Script generation writes the class
-  declaration from the node kind, and the class is named after the process
-  (see "The program model of a resident program").
-- **The Supervisor wiring is always complete.** It is derived every time, and
-  never saved or drawn by hand, so adding or removing a node cannot leave it
-  half done (see "The program model of a resident program").
-- **Only connections that the engine accepts.** The canvas joins a business
-  output to a business input only, and offers neither `value_desc`,
-  `shared_dir`, `process_outdir` nor `--mirror` (see "The program model of a
-  resident program").
-- **The code of a node is imported exactly, or refused.** Import keeps the
-  parts of a node, or refuses the program with an explanation for each node
-  that does not fit; it never keeps an approximation (see "Script generation
-  and import of a resident program").
-
-**The program's directories**
-
-- **No resume with a changed program without asking.** A launch on program
-  state compares the program with the launch record, and asks when they
-  differ or when there is no record; when in doubt it asks. A change in a
-  module that the preamble loads goes unseen (see "The directories of a
-  resident program").
-- **A reset loses no checkpoint unless asked to.** "Reset program state" sets
-  the program state aside by default, and the backend refuses to empty the
-  output directory of a resident program (see "The directories of a resident
-  program").
-- **No change under a live program.** While the program is `live`, the frontend
-  refuses to save, to reset the program state and to change the output
-  directory, and the backend refuses them too (see "Running a resident
-  program").
-
-**Execution and observation**
-
-- **A failed launch is reported at once.** `/run` waits for `debasher_exec`
-  and shows what it printed (see "Running a resident program").
-- **One live program per output directory.** A launch is refused while there
-  is a run in progress.
-- **A hard kill is never taken for an orderly stop.** The exit code with which
-  `debasher_stop_resident` reports that it fell back to `debasher_stop` is
-  shown as such (see "Running a resident program").
-- **A relaunch never doubles a task.** "Relaunch node", and "Restart node" in a
-  program without a `Supervisor`, relaunch only a task whose PID no longer
-  exists, under the relaunch lock (see "Running a resident program").
-- **Nothing that the web UI writes can bring a node down.** "Talk to FIFOs"
-  writes only `DATA` envelopes into external inputs, never a raw line, a
-  `CLOSE` or a command into a control port (see "Observing and talking to a
-  live program").
-- **Inspecting takes nothing from the program.** "Show node state" only reads,
-  with the rules of recovery, and the input log shows what arrived through a
-  channel without reading the channel (see "Observing and talking to a live
-  program").
-- **Any live program is observed and controlled**, whoever launched it (see
-  "Observing and talking to a live program").
-
-**A program that outlives the tab**
-
-- **Nothing that happens to a tab or to the backend stops the program, or
-  cuts a tool in the middle.** No event of a tab stops a resident program, and
-  every tool that acts on it runs in a session of its own and writes into a
-  file (see "A program that outlives the tab").
-- **Nothing is lost when the backend restarts**, as for a general program.
-
-**Non-goals**
-
-- **Coordinating two tabs.** Two orderly stops of the same program at the same
-  time, or a stop and "Restart node", are not coordinated by the web UI; a
-  single orderly stop at a time is left to the engine.
-- **Surviving a restart of the machine.** Nothing launches a resident program
-  again when the machine starts.
-- **Telling anyone that a program stopped by itself.** The next tab that opens
-  it sees it.
-- **A list of the live programs.** A live program is found by loading it.
-- **Supervising the `Supervisor`.** A `Supervisor` that dies is shown, not
-  relaunched.
-- **Holding any resident module.** A module whose `Supervisor` has code of its
-  own, or whose nodes do not fit the parts of a node, is refused, not
-  approximated.
-- **A status for each task on the canvas.** The canvas shows one status for
-  each process, and "Show node state" the state of each task.
-- **Changing the period of the snapshots of a live program.** A new period
-  applies from the next launch.
 
 # Business tests in the web UI
 
@@ -5611,6 +5352,268 @@ that stands in for xterm.js, which draws nothing under jsdom
 question of "Close" are tested in `models/claudeTerminal.test.ts`, and the
 address of the WebSocket and the answers of the request in
 `api/claudeTerminalApi.test.ts`.
+
+# Guarantees and non-goals
+
+This section gathers the guarantees that the web UI gives today, stated in the
+other sections of this document, and what it deliberately does not try to do.
+Where a guarantee has a known gap, "Future work" lists it. "Guarantees" and
+"Non-goals" are those of general programs and of what serves both types of
+program, such as the code prompt, the access to the backend and Claude Code in
+the page. Those of resident programs follow, in "Guarantees and non-goals of a
+resident program".
+
+## Guarantees
+
+**The program model**
+
+- **Connections are consistent.** After every change, the value of each
+  connected input names the output its edge comes from, and the canvas accepts
+  only connections that the engine can resolve (see "Connections").
+- **No wrong module.** Script generation refuses a program whose module would
+  be wrong, rather than writing it (see "What script generation refuses").
+- **Import is a fixed point.** Importing a generated module gives back the
+  model it was generated from, apart from what lives only in the program
+  metadata, and generating and importing an imported module changes nothing;
+  both are tested (see "What the round trip preserves").
+- **No lost code.** Leaving out the code that a loaded module already provides
+  can only remove a duplicate; when the check cannot be made, the code is
+  written (see "Code that a loaded module already provides").
+- **What import does not understand, it keeps.** An option definition function
+  outside the grammar of import is kept as its verbatim source, in `manual`
+  mode, so it runs as it did; a connection recovered from it only affects the
+  canvas (see "Recovering the options handler").
+
+**The program's directories**
+
+- **Two directories apart.** A program is never saved into its output
+  directory, and the output directory is never set to the home directory.
+- **No save over another's without knowing.** A save into a program's own home
+  directory never overwrites what another tab or client saved there since the
+  program was loaded, unless the user, told so, chooses to (see "The digest of
+  the artifact").
+- **No write over another's file.** The editor of the program files panel never
+  overwrites a file that someone else wrote since it read it, unless the user
+  chooses to (see "Reserved names and user files").
+- **Unsaved changes are lost only when the user lets them go.** A program
+  written elsewhere is loaded on its own only into a tab with no unsaved
+  changes, and leaving the editor or closing its tab with unsaved changes asks
+  first (see "The digest of the artifact" and "Screens and the store").
+- **A program lives where it is loaded from.** Its home directory is the
+  directory it was loaded from, even if it was copied or moved there (see
+  "The home directory").
+- **User files are the user's.** The program files panel, and the MCP server
+  through the same endpoints, never touches a reserved name, never leaves the
+  home directory, never deletes or moves anything but the entry that a path
+  names and its contents (a link and not what it points to, never the home
+  directory itself), and never changes the generated script (see "Reserved names
+  and user files").
+- **A reset stays in the output directory.** Resetting it deletes only what is
+  inside it, and does nothing when it is blank, missing, the root, the user's
+  home or the home directory (see "The output directory").
+- **No change under a running program.** While there is a run in progress, the
+  web UI refuses to save, to run, validate or check the options of the program,
+  to reset the output directory and to change it. The backend refuses them too,
+  whoever sends the request, and also while a `debasher_exec` only validates the
+  program on the output directory (see "The home directory").
+
+**Execution and observation**
+
+- **One run per output directory.** A run is not launched on an output
+  directory with a run in progress.
+- **Nothing that happens to a tab or to the backend stops a run, or cuts a tool
+  in the middle.** A run is stopped only with "Stop program" or "Stop process",
+  and every tool that launches or stops it runs in a session of its own and
+  writes into a file (see "A run that outlives the tab").
+- **A program that the engine refuses is reported at once.** With Slurm, `/run`
+  waits for `debasher_exec`, which ends once the jobs are submitted, and with
+  the built-in scheduler it validates the program first; either way it shows
+  what the engine printed. The one exception is a first round of the built-in
+  scheduler that can choose no task, which shows as `unfinished` (see "Launching
+  a run").
+- **Any run is observed.** The process statuses, and the guards that depend on
+  them, cover a run launched from another tab or from the command line.
+- **Watching a FIFO takes nothing from it.** "Watch FIFO" reads the FIFO
+  mirror, never the FIFO.
+- **Talking to a FIFO competes with nobody.** "Talk to FIFOs" only opens
+  unconnected FIFOs, and never blocks a request for more than a few seconds.
+- **Nothing is lost when the backend restarts**, since it keeps no state (see
+  "The backend keeps no state"); the sessions in the page are the one
+  exception.
+
+**The code prompt**
+
+- **Nothing leaves the machine through the code prompt.** The web UI calls no
+  AI service: the user copies the code prompt, and sees all of it first (see
+  "A prompt for the code of a process").
+- **Code from an AI tool is code like any other.** It reaches the program
+  only by being pasted into the code editor and saved, and "Cancel" drops it
+  (see "The prompt panel").
+
+**Access to the backend**
+
+- **No call to the API without the token.** The backend answers no request to
+  the API that does not carry its token (see "What the backend checks"), and it
+  cannot be started without one (see "The token"). The WebSocket of a session in
+  the page carries a ticket instead, which only a request with the token gets,
+  and which serves once (see "Opening a session in the page").
+- **The browser hands the token to nobody.** It keeps the token for the origin
+  of the backend alone and sends it only where the page puts it, and the token
+  is never in an address that reaches a server or a log (see "How a request
+  carries the token"). A token given to outlive its backend is the exception
+  (see "What the token does not protect").
+- **No page of another origin acts through the browser.** Its requests carry
+  no token, and one that names a host that is not the backend's is refused
+  when the backend listens on a single address (see "What the backend
+  checks").
+- **The token file belongs to the backend that owns the port.** It is written
+  only once the port is bound, readable only by the user, removed before the
+  port is released when the backend stops in order, and used by `debasher_mcp`
+  only while its backend is alive and only towards the local machine (see "The
+  token file").
+- **A refused token loses no unsaved change.** The editor stops and says how to
+  get a new token, and keeps the program as it is (see "The editor without a
+  valid token").
+
+**Claude Code in the page**
+
+- **The command of a session holds nothing that the page sends but the program
+  and how the conversation starts.** The backend builds it itself, and runs
+  nothing but `debasher_claude` (see "The session in the page").
+- **One session per program.** A backend runs at most one session in the page
+  on a program, whatever tab asks for it, and another tab gets it only by
+  taking it over (see "The session in the page").
+- **No session outlives its WebSocket or its backend.** A closed WebSocket
+  hangs the session up, and a backend that dies closes the pseudo-terminal,
+  the controlling terminal of its process, which hangs it up too (see "The
+  pseudo-terminal").
+- **Leaving the editor asks before it ends a session.** Closing or reloading
+  the tab, and "Close", ask first while a session runs (see "The terminal
+  panel").
+
+## Non-goals
+
+- **Security beyond the token.** The web UI trusts whoever holds the token: it
+  has no users and no permissions, and it runs every tool, and reads any path,
+  as the user who started it. It speaks plain HTTP, so it listens only on the
+  local machine unless told otherwise (see "What the token does not
+  protect").
+- **Several people on one program.** Two tabs on the same program or the same
+  directories are not coordinated beyond two guards: a save over what another
+  wrote since the program was loaded is refused (see "The digest of the
+  artifact"), and the guards based on the engine's own files (a run in
+  progress) see the other tab. A tab learns of a digest that another wrote,
+  and loads it or asks, but nothing merges the changes of two tabs.
+- **Keeping unsaved work.** There is no autosave and no undo: unsaved changes
+  live only in the tab.
+- **Live updates.** The web UI learns what happens in a run by polling, every
+  few seconds, not by being told.
+- **Being told that a run ended, or a list of the runs in progress.** A run is
+  found, and its end seen, by opening its program (see "A run that outlives the
+  tab").
+- **Importing any module faithfully.** Import recognizes a closed grammar, and
+  keeps the rest as it is rather than trying to understand it (see "What the
+  round trip preserves").
+- **An output directory that follows a moved program.** A program loaded
+  from a new place keeps the output directory it was saved with (see "The
+  home directory"); the artifact makes it local state that a moved program
+  does not carry (see "Loading, saving and the local state").
+- **Checking the code that an AI tool writes.** The web UI treats it as code
+  written by hand; validating the program and running its tests check it
+  (see "The prompt panel").
+
+## Guarantees and non-goals of a resident program
+
+This subsection gathers the guarantees that the design of resident programs
+gives, stated in "Resident programs in the web UI", and what it deliberately
+does not try to do, as "Guarantees" and "Non-goals" do for general programs and
+for what serves both types. Those of general programs that "Resident programs in
+the web UI" keeps, and those of what serves both types, hold for resident
+programs too.
+
+**The program model and the round trip**
+
+- **The node kind and the code agree.** Script generation writes the class
+  declaration from the node kind, and the class is named after the process
+  (see "The program model of a resident program").
+- **The Supervisor wiring is always complete.** It is derived every time, and
+  never saved or drawn by hand, so adding or removing a node cannot leave it
+  half done (see "The program model of a resident program").
+- **Only connections that the engine accepts.** The canvas joins a business
+  output to a business input only, and offers neither `value_desc`,
+  `shared_dir`, `process_outdir` nor `--mirror` (see "The program model of a
+  resident program").
+- **The code of a node is imported exactly, or refused.** Import keeps the
+  parts of a node, or refuses the program with an explanation for each node
+  that does not fit; it never keeps an approximation (see "Script generation
+  and import of a resident program").
+
+**The program's directories**
+
+- **No resume with a changed program without asking.** A launch on program
+  state compares the program with the launch record, and asks when they
+  differ or when there is no record; when in doubt it asks. A change in a
+  module that the preamble loads goes unseen (see "The directories of a
+  resident program").
+- **A reset loses no checkpoint unless asked to.** "Reset program state" sets
+  the program state aside by default, and the backend refuses to empty the
+  output directory of a resident program (see "The directories of a resident
+  program").
+- **No change under a live program.** While the program is `live`, the frontend
+  refuses to save, to reset the program state and to change the output
+  directory, and the backend refuses them too (see "Running a resident
+  program").
+
+**Execution and observation**
+
+- **A failed launch is reported at once.** `/run` waits for `debasher_exec`
+  and shows what it printed (see "Running a resident program").
+- **One live program per output directory.** A launch is refused while there
+  is a run in progress.
+- **A hard kill is never taken for an orderly stop.** The exit code with which
+  `debasher_stop_resident` reports that it fell back to `debasher_stop` is
+  shown as such (see "Running a resident program").
+- **A relaunch never doubles a task.** "Relaunch node", and "Restart node" in a
+  program without a `Supervisor`, relaunch only a task whose PID no longer
+  exists, under the relaunch lock (see "Running a resident program").
+- **Nothing that the web UI writes can bring a node down.** "Talk to FIFOs"
+  writes only `DATA` envelopes into external inputs, never a raw line, a
+  `CLOSE` or a command into a control port (see "Observing and talking to a
+  live program").
+- **Inspecting takes nothing from the program.** "Show node state" only reads,
+  with the rules of recovery, and the input log shows what arrived through a
+  channel without reading the channel (see "Observing and talking to a live
+  program").
+- **Any live program is observed and controlled**, whoever launched it (see
+  "Observing and talking to a live program").
+
+**A program that outlives the tab**
+
+- **Nothing that happens to a tab or to the backend stops the program, or
+  cuts a tool in the middle.** No event of a tab stops a resident program, and
+  every tool that acts on it runs in a session of its own and writes into a
+  file (see "A program that outlives the tab").
+- **Nothing is lost when the backend restarts**, as for a general program.
+
+**Non-goals**
+
+- **Coordinating two tabs.** Two orderly stops of the same program at the same
+  time, or a stop and "Restart node", are not coordinated by the web UI; a
+  single orderly stop at a time is left to the engine.
+- **Surviving a restart of the machine.** Nothing launches a resident program
+  again when the machine starts.
+- **Telling anyone that a program stopped by itself.** The next tab that opens
+  it sees it.
+- **A list of the live programs.** A live program is found by loading it.
+- **Supervising the `Supervisor`.** A `Supervisor` that dies is shown, not
+  relaunched.
+- **Holding any resident module.** A module whose `Supervisor` has code of its
+  own, or whose nodes do not fit the parts of a node, is refused, not
+  approximated.
+- **A status for each task on the canvas.** The canvas shows one status for
+  each process, and "Show node state" the state of each task.
+- **Changing the period of the snapshots of a live program.** A new period
+  applies from the next launch.
 
 # Future work
 
