@@ -8,6 +8,8 @@ import type { Program } from "./program";
 import {
   buildOptionChanges,
   canShapeTasks,
+  correctOptionDraft,
+  createOptionDraft,
   describeFanoutCount,
   describeLockedDataType,
   findScatterCountSource,
@@ -238,6 +240,43 @@ describe("buildOptionChanges", () => {
     expect(buildOptionChanges(draft({ countSourceOptionId: "w" }), { ...general, isFanout: true }).countSourceOptionId).toBe("w");
     expect(buildOptionChanges(draft({ countSourceOptionId: "" }), { ...general, isFanout: true }).countSourceOptionId).toBeUndefined();
     expect(buildOptionChanges(draft({ countSourceOptionId: "w" }), general).countSourceOptionId).toBeUndefined();
+  });
+
+});
+
+describe("correctOptionDraft", () => {
+
+  it("starts from the fields of the option", () => {
+    const option = createOption("o", "-outf", { channel: "fifo", value: "q", mirror: true, countSourceOptionId: "w" });
+    expect(createOptionDraft(option)).toMatchObject({ label: "-outf", channel: "fifo", value: "q", mirror: true, countSourceOptionId: "w", subpath: "" });
+  });
+
+  it("drops what the other fields of the draft rule out", () => {
+    // A flag is an input; an input has no value descriptor; an output takes
+    // nothing from the specifications
+    expect(correctOptionDraft(draft({ label: "-outx", dataType: "None" }), false).dataType).toBe("string");
+    expect(correctOptionDraft(draft({ channel: "value_desc" }), false).channel).toBe("none");
+    expect(correctOptionDraft(draft({ channel: "process_outdir" }), false).channel).toBe("none");
+    expect(correctOptionDraft(draft({ label: "-outn", fromProcessSpec: true }), false).fromProcessSpec).toBe(false);
+    expect(correctOptionDraft(draft({ fromProcessSpec: true, channel: "fifo" }), false).channel).toBe("none");
+    // A connected input keeps only "none" or "shared_dir"
+    expect(correctOptionDraft(draft({ channel: "fifo" }), true).channel).toBe("none");
+    expect(correctOptionDraft(draft({ channel: "shared_dir" }), true).channel).toBe("shared_dir");
+    expect(correctOptionDraft(draft({ channel: "fifo" }), false).channel).toBe("fifo");
+  });
+
+  it("keeps a mirror only on a FIFO output, after the channel is corrected", () => {
+    expect(correctOptionDraft(draft({ label: "-outq", channel: "fifo", mirror: true }), false).mirror).toBe(true);
+    expect(correctOptionDraft(draft({ channel: "fifo", mirror: true }), false).mirror).toBe(false);
+    // The channel goes to "none" first, and the mirror with it
+    expect(correctOptionDraft(draft({ label: "-outq", channel: "fifo", mirror: true, fromProcessSpec: true }), false).mirror).toBe(true);
+    const connected = correctOptionDraft(draft({ label: " -in", channel: "fifo", mirror: true }), true);
+    expect(connected).toMatchObject({ channel: "none", mirror: false });
+  });
+
+  it("is a fixed point", () => {
+    const corrected = correctOptionDraft(draft({ label: "-outq", channel: "value_desc", mirror: true, fromProcessSpec: true, dataType: "None" }), true);
+    expect(correctOptionDraft(corrected, true)).toEqual(corrected);
   });
 
 });

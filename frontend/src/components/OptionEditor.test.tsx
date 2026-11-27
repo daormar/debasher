@@ -48,6 +48,24 @@ describe("OptionEditor", () => {
     expect(saved()[0]).toMatchObject({ label: "-outq", direction: "output", channel: "fifo", mirror: true });
   });
 
+  it("corrects the draft as it is edited: an input leaves the process output directory, and a source excludes the other", () => {
+    const output = createOption("d", "-outd", { channel: "process_outdir", dataType: "dir" });
+    const program = { ...createEmptyProgram("p"), processes: [processOf("w", "writer", []), processOf("r", "reader", [output])] };
+    renderEditor(program, output);
+
+    // Only an output names a process output directory, which takes a subpath
+    expect(screen.getByText("Subdirectory (optional)")).toBeInTheDocument();
+    fireEvent.change(screen.getByDisplayValue("-outd"), { target: { value: "-ind" } });
+    expect(screen.queryByText("Subdirectory (optional)")).toBeNull();
+
+    const commandLine = screen.getByRole("checkbox", { name: /Command line/ });
+    const fromSpec = screen.getByRole("checkbox", { name: /From process spec/ });
+    fireEvent.click(commandLine);
+    fireEvent.click(fromSpec);
+    expect(fromSpec).toBeChecked();
+    expect(commandLine).not.toBeChecked();
+  });
+
   it("shows what a connected input reads and the data type of its output, which a save keeps", () => {
     const input = createOption("i", "-in");
     const program: Program = {

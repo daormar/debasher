@@ -26,6 +26,62 @@ export interface OptionDraft {
   countSourceOptionId: string;
 }
 
+// Takes an option; returns the draft that the editor starts from.
+export function createOptionDraft(option: ProgramOption): OptionDraft {
+  return {
+    label: option.label,
+    dataType: option.dataType,
+    channel: option.channel,
+    subpath: option.subpath ?? "",
+    mirror: option.mirror,
+    description: option.description,
+    value: option.value,
+    commandLine: option.commandLine,
+    fromProcessSpec: option.fromProcessSpec,
+    mandatory: option.mandatory,
+    taskShaping: option.taskShaping ?? false,
+    countSourceOptionId: option.countSourceOptionId ?? "",
+  };
+}
+
+// Takes a draft and whether the option is connected; returns it without the
+// fields that its other fields rule out, so that the editor never shows a
+// combination that it does not offer. One pass is enough: the mirror,
+// which depends on the channel, comes last.
+export function correctOptionDraft(draft: OptionDraft, isConnected: boolean): OptionDraft {
+  const corrected = { ...draft };
+  const direction = getOptionDirection(corrected.label.trim());
+  // A flag is always an input
+  if (direction === "output" && corrected.dataType === "None") {
+    corrected.dataType = "string";
+  }
+  // Only an output has a value descriptor or a process output directory
+  if (direction === "input" && (corrected.channel === "value_desc" || corrected.channel === "process_outdir")) {
+    corrected.channel = "none";
+  }
+  // A connected input takes the channel of its connection (see
+  // getConnectedInputChannel): "none", or "shared_dir" when it reads a
+  // shared directory
+  if (isConnected && corrected.channel !== "none" && corrected.channel !== "shared_dir") {
+    corrected.channel = "none";
+  }
+  // An output names what the process produces, never an attribute of its
+  // specifications
+  if (direction === "output") {
+    corrected.fromProcessSpec = false;
+  }
+  // A value taken from the specifications comes from one
+  // define_procspec_opt, and from no channel
+  if (corrected.fromProcessSpec) {
+    corrected.channel = "none";
+  }
+  // Only a FIFO output has a mirror
+  if (!(corrected.channel === "fifo" && direction === "output")) {
+    corrected.mirror = false;
+  }
+  return corrected;
+}
+
 // An output that the option reads, with its process and the sentinel that
 // names it.
 export interface ConnectedSource {
