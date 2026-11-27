@@ -909,11 +909,9 @@ depend on its writers as follows:
 | an input that reads the whole directory | none on the writers of its subdirectories: its process has to be ordered after them with explicit dependencies, which replace its inferred ones (see "Future work") |
 | a fanout family that reads the shared subdirectory of every task | after all of them, with no explicit dependency |
 
-**Import.** Import recognizes `define_opt_from_shared_dir` and
-`define_opt_from_process_outdir` with an optional `--subdir`, and gives the
-option its channel and its subpath (see "Recovering the options handler"). The
-edges that it adds between `shared_dir` options join each writer of a shared
-directory to each of its readers in another process, whatever their subpaths.
+**Import.** Import recovers the channel and the subpath of each option, and the
+edges between `shared_dir` options (see "Recovering the options handler" and
+"Building the program").
 
 ## Options handler modes
 
@@ -1300,9 +1298,9 @@ With the processes read, import assembles the program:
 - **Shared directories.** An option whose value names a shared directory,
   literally or through a variable that the engine resolves, becomes a
   `shared_dir` option when that directory is one the program can reach, and
-  import adds an edge from each writer of a directory to each of its readers,
-  whatever their subpaths. `availableSharedDirs` is filled with every reachable
-  shared directory.
+  import adds an edge from each writer of a directory to each of its readers in
+  another process, whatever their subpaths. `availableSharedDirs` is filled
+  with every reachable shared directory.
 - **Preamble.** The module documentation has no notion of a preamble, so
   import takes the text of the module before its first function definition,
   leaving out the header line of a generated script.
