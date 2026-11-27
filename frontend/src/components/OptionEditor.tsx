@@ -7,17 +7,26 @@ import type {
   OptionChannel,
 } from "../models/option";
 import type { ProgramType } from "../models/program";
-import type { ProgramProcess } from "../models/process";
 import { findOptionLabelProblem } from "../models/process";
-import { getChannelDataType, getOwnDataType } from "../models/dataTypes";
 import { findFanoutCountProcesses } from "../models/connections";
 import {
-  DIRECTORY_CHANNELS,
   getOptionDirection,
   isValidOptionLabel,
   isFanoutOption,
   PROCESS_SPEC_ATTRIBUTE_NAMES,
 } from "../models/option";
+import {
+  buildOptionChanges,
+  canShapeTasks as canOptionShapeTasks,
+  describeFanoutCount,
+  describeLockedDataType,
+  findScatterCountSource,
+  getLockedDataType,
+  isScatterConsumer as isScatterConsumerOf,
+  listConnectedSources,
+  listOfferedChannels,
+  listOfferedDataTypes,
+} from "../models/optionForm";
 
 interface Props {
   processId: string;
@@ -33,122 +42,37 @@ interface Props {
   onClose: () => void;
 }
 
-// Modes whose _define_opts/_generate_opts produces one save_opt_list
-// call per task, numbered 0..N-1: see script_generation.py's own
-// _TASK_INDEXED_MODES, which this mirrors for display purposes only.
-const TASK_INDEXED_MODES = new Set(["generator", "array"]);
-
 export default function OptionEditor({ processId, option, manualMode, programType = "general", onClose }: Props) {
 
   const { program, updateOption } = useProgram();
 
   const isResident = programType === "resident";
 
-  // A non-command-line, non-fanout input may gather from more than one
-  // source (see isValidEdge): everything below keys off
-  // the full list; connectedSourceOption (its first/only entry) remains
-  // for the fanout-gather and scatter-consumer checks below, which stay
-  // single-connection by construction.
-  const connectingEdges = program.edges.filter(
-    edge =>
-      edge.targetProcessId === processId &&
-      edge.targetOptionId === option.id
-  );
-
-  const isConnected = connectingEdges.length > 0;
-
-  const connectedSourceOptions = connectingEdges
-    .map(edge => {
-
-      const sourceProcess = program.processes.find(
-        process => process.id === edge.sourceProcessId
-      );
-
-      const sourceOption = sourceProcess?.options.find(
-        o => o.id === edge.sourceOptionId
-      );
-
-      if (!sourceProcess || !sourceOption) {
-        return null;
-      }
-
-      return { sourceProcess, sourceOption };
-
-    })
-    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
-  const connectedSourceOption = connectedSourceOptions[0] ?? null;
-
   const ownerProcess = program.processes.find(
     process => process.id === processId
   );
 
-  // A "standard"-mode owner gathering from an "array"- or "generator"-
-  // mode source (see script_generation.py's _fanout_definition_lines and
-  // its _FANOUT_PARTNER_MODES) doesn't share a loop with the source the
-  // way generator/array do: it expands into its own local "i" loop at
-  // script-gen time, one connection per task.
-  const isFanoutGather =
-    isFanoutOption(option.label) &&
-    ownerProcess?.optionsHandler.mode === "standard" &&
-    !!connectedSourceOption &&
-    (connectedSourceOption.sourceProcess.optionsHandler.mode === "array" ||
-      connectedSourceOption.sourceProcess.optionsHandler.mode === "generator");
+  // The outputs that the option reads, each with its sentinel; only an
+  // input on a shared directory reads several, and the first one decides
+  // what the connection gives the option
+  const connectedSources = listConnectedSources(program, ownerProcess, option);
+  const isConnected = connectedSources.length > 0;
+  const connectedSource = connectedSources[0];
 
-  // Informational only: matches script_generation.py's own rule
-  // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
-  // connection is only ever regenerated when both this option's own
-  // process and that connection's source are generator or array mode,
-  // since that's the only combination where the source is guaranteed
-  // to actually have a task N to pull from. Computed per connection:
-  // a non-command-line input can gather from several sources whose
-  // modes differ.
-  const connectedSourceLabels = connectedSourceOptions.map(entry => {
-
-    const entryIsTaskIndexed =
-      !!ownerProcess && TASK_INDEXED_MODES.has(ownerProcess.optionsHandler.mode) &&
-      TASK_INDEXED_MODES.has(entry.sourceProcess.optionsHandler.mode);
-
-    if (entryIsTaskIndexed) {
-      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${task_idx}]`;
-    }
-    if (isFanoutGather) {
-      return `[${entry.sourceProcess.name};${entry.sourceOption.label};\${i}]`;
-    }
-    return `[${entry.sourceProcess.name};${entry.sourceOption.label}]`;
-
-  });
-
-  const connectedSourceLabel = connectedSourceLabels[0];
-
-  // Consumer side of a scatter connection (see
-  // script_generation.py's _option_definition_line "conn_opt" branch):
-  // this option is connected to a fanout family declared on a
-  // "standard" process, so this ("array"- or "generator"-mode) process's
-  // own task count is implicitly forced to match whatever that family's
-  // own count source computes: flagged here since nothing enforces it
-  // structurally.
-  const isScatterConsumer =
-    !!connectedSourceOption &&
-    connectedSourceOption.sourceProcess.optionsHandler.mode === "standard" &&
-    isFanoutOption(connectedSourceOption.sourceOption.label);
-
+  // The consumer of a scatter: its process has to run as many tasks as the
+  // family it reads has members, which nothing enforces, so it is said
+  const isScatterConsumer = isScatterConsumerOf(connectedSource);
   const scatterConsumerModeNoun =
     ownerProcess?.optionsHandler.mode === "generator" ? "generator" : "array";
-
-  const scatterCountSource = isScatterConsumer
-    ? connectedSourceOption.sourceProcess.options.find(
-        o => o.id === connectedSourceOption.sourceOption.countSourceOptionId
-      )
-    : undefined;
+  const scatterCountSource = isScatterConsumer ? findScatterCountSource(connectedSource) : undefined;
 
   const [label, setLabel] =
     useState(option.label);
 
-  const direction = getOptionDirection(label);
+  // The spaces around what is typed are dropped on save
+  const direction = getOptionDirection(label.trim());
 
-  // Shown once something is typed (see findOptionLabelProblem). The
-  // spaces around what is typed are dropped on save
+  // Shown once something is typed (see findOptionLabelProblem)
   const labelProblem = ownerProcess
     ? findOptionLabelProblem(ownerProcess, label.trim(), programType, option.id)
     : null;
@@ -164,20 +88,11 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     ownerProcess?.options.filter(o => o.commandLine && !o.taskShaping && o.id !== option.id) ?? [];
 
   // Without a count source option, the family counts the tasks of the
-  // process at the other end of its connections, an array or a generator
-  // (see findFanoutCountProcesses). The engine answers about an array not
-  // defined yet by running its whole option definition again, so a
-  // generator is cheaper to count
-  const countProcesses = ownerProcess ? findFanoutCountProcesses(program, ownerProcess, option) : [];
-  const countProcessNote = (process: ProgramProcess): string =>
-    process.optionsHandler.mode === "generator" ? ""
-      : process.optionsHandler.mode === "array" ? " (an array: a generator is cheaper to count)"
-        : " (not an array nor a generator: choose an option)";
-  const tasksCountText = countProcesses.length === 1
-    ? `Number of tasks of ${countProcesses[0].name}${countProcessNote(countProcesses[0])}`
-    : countProcesses.length === 0
-      ? "Number of tasks of the connected array or generator (not connected yet)"
-      : "Number of tasks of the connected process (connected to several: choose an option)";
+  // process at the other end of its connections (see
+  // findFanoutCountProcesses)
+  const tasksCountText = describeFanoutCount(
+    ownerProcess ? findFanoutCountProcesses(program, ownerProcess, option) : []
+  );
 
   const [countSourceOptionId, setCountSourceOptionId] =
     useState(option.countSourceOptionId ?? "");
@@ -237,17 +152,13 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   }, [mirror, isFifo, direction]);
 
   useEffect(() => {
-    // A connected option's value always comes from define_opt_from_proc_out,
-    // never from its own define_value_desc_opt/define_fifo_opt call, the
-    // channel describes how the *source* option got its value, not how
-    // this one receives it, so a connected option's own channel is always
-    // "none". "shared_dir" is the one exception: its value never depends
-    // on a connection at all (see isValidEdge), so a
-    // "shared_dir" option keeps its channel regardless of edges.
-    if (connectedSourceLabel && channel !== "none" && channel !== "shared_dir") {
+    // A connected input takes the channel of its connection (see
+    // getConnectedInputChannel): "none", or "shared_dir" when it reads a
+    // shared directory
+    if (isConnected && channel !== "none" && channel !== "shared_dir") {
       setChannel("none");
     }
-  }, [connectedSourceLabel, channel]);
+  }, [isConnected, channel]);
 
   const [description, setDescription] =
     useState(option.description);
@@ -267,20 +178,11 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const [taskShaping, setTaskShaping] =
     useState(option.taskShaping ?? false);
 
-  // The data type that the option channel or the connection fixes (see
-  // getFixedDataType), shown instead of a choice: a directory channel names a
-  // directory, and a connected input carries what the output it reads
-  // carries. A command line option has the channel "none", whatever the
-  // disabled channel selector still holds.
-  const lockedDataType: OptionDataType | null =
-    getChannelDataType(commandLine ? "none" : channel) ??
-    (connectedSourceOption ? getOwnDataType(connectedSourceOption.sourceOption) : null);
+  // The data type that the option channel or the connection fixes, shown
+  // instead of a choice (see getLockedDataType)
+  const lockedDataType = getLockedDataType(channel, commandLine, connectedSource);
 
-  // A task shaping option is a mandatory command line input with a value,
-  // and not a fanout family, which script_generation.py refuses otherwise
-  // and not the count of a fanout family
-  const countsAFamily = ownerProcess?.options.some(o => o.countSourceOptionId === option.id) ?? false;
-  const canShapeTasks = commandLine && !isFlag && direction === "input" && !isFanout && !countsAFamily;
+  const canShapeTasks = canOptionShapeTasks(ownerProcess, option, { label, dataType, commandLine }, isFanout);
 
   useEffect(() => {
     // Not a channel (see ProgramOption.fromProcessSpec), but, like a
@@ -303,36 +205,13 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   function handleSave() {
 
-    // An output names what the process produces, never an attribute of
-    // its specifications
-    const savedFromProcessSpec = !isFlag && direction === "input" && fromProcessSpec;
-
-    // A command-line option takes its value from the command line only,
-    // never through a channel (script_generation.py refuses the
-    // combination), whatever the disabled channel selector still holds.
-    const savedCommandLine = commandLine && !savedFromProcessSpec;
-
-    const savedTaskShaping = savedCommandLine && canShapeTasks && taskShaping;
-
-    const savedChannel =
-      isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel;
-
-    updateOption(processId, option.id, {
-      label: label.trim(),
-      direction: getOptionDirection(label.trim()),
-      dataType: lockedDataType ?? dataType,
-      channel: savedChannel,
-      mirror: !isResident && !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
-      fifoTag: isResident && savedChannel === "fifo" && direction === "input" ? "external" : undefined,
-      description,
-      value: isFlag || isValueDescriptor || savedChannel === "process_outdir" ? "" : value,
-      subpath: DIRECTORY_CHANNELS.has(savedChannel) ? subpath.trim() : "",
-      commandLine: savedCommandLine,
-      fromProcessSpec: savedFromProcessSpec,
-      mandatory: commandLine && !savedFromProcessSpec && (mandatory || savedTaskShaping) && !isFlag,
-      taskShaping: savedTaskShaping,
-      countSourceOptionId: isFanout ? (countSourceOptionId || undefined) : undefined,
-    });
+    updateOption(processId, option.id, buildOptionChanges(
+      {
+        label, dataType, channel, subpath, mirror, description, value,
+        commandLine, fromProcessSpec, mandatory, taskShaping, countSourceOptionId,
+      },
+      { isResident, isConnected, lockedDataType, canShapeTasks, isFanout },
+    ));
 
     onClose();
 
@@ -370,8 +249,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
         {isScatterConsumer && scatterCountSource && (
           <p style={{ margin: 0, color: "#c0392b", fontSize: 13 }}>
-            ⚠ This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
-            fanout family "{connectedSourceOption.sourceOption.label}", whose size is set by{" "}
+            ⚠ This connection is wired to {connectedSource.process.name}'s{" "}
+            fanout family "{connectedSource.option.label}", whose size is set by{" "}
             {`that process's own "${scatterCountSource.label}" option`}
             {", so this process's "}{scatterConsumerModeNoun} must produce exactly that many tasks.
           </p>
@@ -381,8 +260,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             this process; an array is costlier to count than a generator */}
         {isScatterConsumer && !scatterCountSource && ownerProcess?.optionsHandler.mode === "array" && (
           <p style={{ margin: 0, color: "#8a6d3b", fontSize: 13 }}>
-            This connection is wired to {connectedSourceOption.sourceProcess.name}'s{" "}
-            fanout family "{connectedSourceOption.sourceOption.label}", which has no count source option{" "}
+            This connection is wired to {connectedSource.process.name}'s{" "}
+            fanout family "{connectedSource.option.label}", which has no count source option{" "}
             and so counts the tasks of this process. The engine counts an array not defined yet by running its whole{" "}
             option definition again, so a generator is cheaper: put this process in generator mode if{" "}
             it can be, or choose a count source option for the family.
@@ -468,9 +347,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             }}
           >
             {lockedDataType}{" "}
-            {connectedSourceOption && !getChannelDataType(commandLine ? "none" : channel)
-              ? "(from connection)"
-              : "(directory channel)"}
+            {describeLockedDataType(channel, commandLine, connectedSource)}
           </div>
 
         ) : (
@@ -491,33 +368,13 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
           >
 
-            <option value="int">
-              int
-            </option>
-
-            <option value="float">
-              float
-            </option>
-
-            <option value="string">
-              string
-            </option>
-
-            <option value="file">
-              file
-            </option>
-
-            <option value="dir">
-              dir
-            </option>
-
             {/* A flag takes no connection (see isValidEdge), nor
                 does a command line option or one from the process spec. */}
-            {direction === "input" && !isConnected && (
-              <option value="None">
-                None (flag)
+            {listOfferedDataTypes(direction, isConnected).map(type => (
+              <option key={type} value={type}>
+                {type === "None" ? "None (flag)" : type}
               </option>
-            )}
+            ))}
 
           </select>
 
@@ -707,7 +564,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
               Channel
             </label>
 
-            {connectedSourceLabel ? (
+            {isConnected ? (
 
               <div
                 style={{
@@ -740,35 +597,11 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
               >
 
-                <option value="none">
-                  Direct value
-                </option>
-
-                {direction === "output" && !isResident && (
-                  <option value="value_desc">
-                    Value descriptor
+                {listOfferedChannels(direction, isResident).map(entry => (
+                  <option key={entry.channel} value={entry.channel}>
+                    {entry.text}
                   </option>
-                )}
-
-                <option value="fifo">
-                  {!isResident
-                    ? "FIFO"
-                    : direction === "output"
-                      ? "FIFO (business output)"
-                      : "External input (FIFO written from outside the program)"}
-                </option>
-
-                {direction === "output" && !isResident && (
-                  <option value="process_outdir">
-                    Process output directory
-                  </option>
-                )}
-
-                {!isResident && (
-                  <option value="shared_dir">
-                    Shared directory
-                  </option>
-                )}
+                ))}
 
               </select>
 
@@ -808,7 +641,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
               {isFifo ? "FIFO name" : "Value"}
             </label>
 
-            {connectedSourceLabels.length > 0 ? (
+            {isConnected ? (
 
               <div
                 style={{
@@ -823,11 +656,11 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
               >
                 {isSharedDir
                   ? `[${subpath.trim() ? `${value}/${subpath.trim()}` : value}]`
-                  : connectedSourceLabels.length === 1
-                  ? connectedSourceLabels[0]
-                  : connectedSourceLabels.map((sourceLabel, index) => (
+                  : connectedSources.length === 1
+                  ? connectedSources[0].sentinel
+                  : connectedSources.map((source, index) => (
                       <div key={index}>
-                        {sourceLabel}
+                        {source.sentinel}
                       </div>
                     ))}
               </div>
