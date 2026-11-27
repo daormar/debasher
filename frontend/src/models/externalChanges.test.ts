@@ -35,7 +35,7 @@ describe("onDiskDigest", () => {
 
   const state = { tabDigest: "3", diskDigest: "3", unsavedChanges: false };
 
-  it("does nothing when there is no program metadata on disk", () => {
+  it("does nothing when there is no saved program on disk", () => {
     expect(onDiskDigest({ ...state, diskDigest: null })).toBe("none");
     expect(onDiskDigest({ ...state, diskDigest: null, unsavedChanges: true })).toBe("none");
   });

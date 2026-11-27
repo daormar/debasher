@@ -5,7 +5,7 @@ import { throwIfDigestConflict } from "../api/digestConflict";
 import { apiFetch } from "../api/apiFetch";
 
 // ---------------------------------------------------------------
-// FAKE IMPLEMENTATION — replace the body of each function below
+// FAKE IMPLEMENTATION: replace the body of each function below
 // with real `fetch` calls to your backend when it's ready. The
 // function signatures (name, params, return type) are the actual
 // contract the rest of the app depends on: as long as they stay
@@ -23,7 +23,7 @@ async function errorMessage(response: Response): Promise<string> {
       return parsed.detail;
     }
   } catch {
-    // Not JSON — fall through and use the raw body.
+    // Not JSON: fall through and use the raw body.
   }
 
   return body;
@@ -128,7 +128,7 @@ export async function getAllEnvVars(
 }
 
 /**
- * Not persisted yet — just builds a blank program in memory.
+ * Not persisted yet: just builds a blank program in memory.
  * It only gets stored once the user actually saves it.
  */
 export function createEmptyProgram(

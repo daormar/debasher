@@ -5,7 +5,7 @@ import { backEdgeRoute } from "./edgeRoutes";
 import type { BackEdgeRouteData } from "./edgeRoutes";
 
 /**
- * A "back edge" — one whose target sits at or above its source (see
+ * A "back edge": one whose target sits at or above its source (see
  * isBackEdge in reactFlowAdapter.ts). A plain edge would have to route
  * straight back up from the source's Bottom handle into the target's
  * Top handle (see ProcessNode: every option's handle is fixed to

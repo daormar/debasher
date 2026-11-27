@@ -2,7 +2,7 @@ export type OptionDirection = "input" | "output";
 
 export type OptionDataType = "int" | "float" | "string" | "file" | "dir" | "None";
 
-// How the value is delivered, independent of its type — see
+// How the value is delivered, independent of its type: see
 // api/models.py's ProgramOption.channel for the full rationale
 // (value_desc and process_outdir are output-only; fifo and shared_dir
 // aren't direction-restricted). A "shared_dir" option's value names one
@@ -22,7 +22,7 @@ export interface ProgramOption {
   // Only meaningful when channel === "fifo" && direction === "output"
   // (this process writes to the fifo): duplicates every line written
   // into a separate mirror log file the canvas's "Watch FIFO" action
-  // can poll, without stealing data from the fifo's real reader — see
+  // can poll, without stealing data from the fifo's real reader: see
   // api/models.py's ProgramOption.mirror.
   mirror: boolean;
   // Only in a resident program, on an input with channel "fifo": "external"
@@ -44,17 +44,17 @@ export interface ProgramOption {
   // On a "standard"-mode process only, whether this option's value comes
   // from an attribute of the process's own process spec (via
   // debasher::define_procspec_opt) rather than a literal/connection/
-  // channel-delivered value — see api/models.py's
+  // channel-delivered value: see api/models.py's
   // ProgramOption.fromProcessSpec for why this is deliberately its own
   // flag rather than folded into `channel`. Mutually exclusive with
   // commandLine. When true, `value` holds the spec attribute's name
   // (e.g. "cpus", one of PROCESS_SPEC_ATTRIBUTE_NAMES) rather than a
-  // literal value — the same convention a "shared_dir"-channel option
+  // literal value: the same convention a "shared_dir"-channel option
   // already uses for its own `value` (a directory name, not a path).
   fromProcessSpec: boolean;
   // On a "standard"-mode process only (see isFanoutOption), the id of
   // another option on the SAME process (with commandLine=true) whose
-  // value supplies the runtime count for this fanout family — e.g.
+  // value supplies the runtime count for this fanout family: e.g.
   // "-outf-ith"'s countSourceOptionId points at that process's own "-w".
   // Unset, the family counts the tasks of the generator at the other end
   // of its connections (see findFanoutCountProcesses).
@@ -69,11 +69,11 @@ export interface ProgramOption {
 }
 
 // Process-spec attribute names a "from process spec" option can name in
-// `value` — restricted to the ones ComputationalSpecs/AdditionalSpecs
+// `value`: restricted to the ones ComputationalSpecs/AdditionalSpecs
 // (see models/process.ts) actually model and let a user set elsewhere in
 // this editor, out of the full set debasher::define_procspec_opt itself
 // accepts (which also includes the engine's nodes/account/partition/
-// throttle computational-spec attributes — process.ts has no fields for
+// throttle computational-spec attributes, process.ts has no fields for
 // those, so offering them here would let a user reference a value they
 // can't set anywhere in the app).
 export const PROCESS_SPEC_ATTRIBUTE_NAMES = [
@@ -122,7 +122,7 @@ export function isValidOptionLabel(label: string): boolean {
 // debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)
 // for a dynamic-count family of options: a label ending in "-ith" (e.g.
 // "-outf-ith" standing for "-outf0", "-outf1", ...). Only meaningful on a
-// "standard"-mode process — callers must check optionsHandler.mode
+// "standard"-mode process: callers must check optionsHandler.mode
 // themselves, since the same label on array/generator/manual is just an
 // ordinary option.
 const FANOUT_SUFFIX = "-ith";

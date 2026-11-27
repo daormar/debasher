@@ -13,7 +13,7 @@ async function errorDetail(response: Response, fallback: string): Promise<string
       return body.detail;
     }
   } catch {
-    // Not JSON — fall through to the fallback message.
+    // Not JSON: fall through to the fallback message.
   }
 
   return fallback;
@@ -215,7 +215,7 @@ export async function getProgramStatus(program: Program): Promise<string> {
 }
 
 // Cheap check of whether a run is still going, backed by the same
-// debasher_status call as getProgramStatus() — used to poll a
+// debasher_status call as getProgramStatus(): used to poll a
 // background run and to guard against launching a second one.
 export async function getProgramState(program: Program): Promise<ProgramState> {
   const { state } = await fetchProgramStatus(program);
@@ -289,8 +289,8 @@ async function fetchProcessOutput(
 
 // A process's captured stdout (the canvas's right-click "Inspect
 // execution" menu's "Show stdout"). `taskIndex` selects one task's
-// file for a process that ran as more than one task — see
-// getProcessTasks — and is omitted for a "standard" one-file process.
+// file for a process that ran as more than one task (see
+// getProcessTasks) and is omitted for a "standard" one-file process.
 export async function getProcessStdout(
   program: Program,
   processName: string,
@@ -340,7 +340,7 @@ export async function getProcessOpts(
 }
 
 // A mirrored output fifo's captured content (the canvas's right-click
-// "Watch FIFO" action) — see api/routers/execution.py's /fifo-mirror.
+// "Watch FIFO" action): see api/routers/execution.py's /fifo-mirror.
 // `fifoName` is the fifo's name as given to define_fifo_opt (the
 // mirrored option's own `value`, per ProgramOption.mirror). See
 // getProcessStdout for `taskIndex`.
@@ -361,10 +361,10 @@ export async function getFifoMirror(
 }
 
 // Writes one line to an unconnected input fifo (the "Talk to FIFOs"
-// action) — see api/routers/execution.py's /fifo-write. `fifoName` is
+// action): see api/routers/execution.py's /fifo-write. `fifoName` is
 // the fifo's name as given to define_fifo_opt, not the option's label.
 // Never throws for an ordinary failure (no reader connected, fifo not
-// ready yet) — that comes back as `{ ok: false, error }` so the caller
+// ready yet): that comes back as `{ ok: false, error }` so the caller
 // can show it inline instead of via a thrown Error.
 export async function writeFifo(
   program: Program,
@@ -386,10 +386,10 @@ export async function writeFifo(
 }
 
 // Reads one line from an unconnected output fifo (the "Talk to FIFOs"
-// action) — see api/routers/execution.py's /fifo-read, which blocks
+// action): see api/routers/execution.py's /fifo-read, which blocks
 // server-side for a short bounded time. `timedOut: true` means nothing
-// arrived within that window — the expected, common case while
-// waiting for a response — not an error; the caller just calls again.
+// arrived within that window (the expected, common case while
+// waiting for a response) not an error; the caller just calls again.
 // `signal` lets the caller abort an in-flight call (e.g. the dialog
 // closing) via AbortController.
 export async function readFifo(
@@ -460,7 +460,7 @@ export async function readResidentFifo(
 
 // An {label: resolved value} map for a process's command-line options,
 // parsed from its ".opts" file (the canvas's right-click "Inspect
-// execution" menu's "Show inputs and outputs") — empty when the
+// execution" menu's "Show inputs and outputs"): empty when the
 // program hasn't been run yet. See getProcessStdout for `taskIndex`.
 export async function getProcessResolvedOptions(
   program: Program,
@@ -532,8 +532,8 @@ export type PathInspection =
   | { kind: "directory"; entries: string[] }
   | { kind: "missing" };
 
-// Inspects a resolved option's value as a filesystem path — a file's
-// content, or a directory's listing — for the "Show inputs and
+// Inspects a resolved option's value as a filesystem path (a file's
+// content, or a directory's listing) for the "Show inputs and
 // outputs" modal's per-option "View" button.
 export async function inspectPath(path: string): Promise<PathInspection> {
   const response = await apiFetch("/api/execution/inspect-path", {
@@ -562,11 +562,11 @@ export function pathInspectionText(path: string, result: PathInspection): string
 }
 
 // The task indices that have a stdout, scheduler-output, or options
-// file for `processName` — empty for a "standard" one-task process,
+// file for `processName`: empty for a "standard" one-task process,
 // otherwise the "Inspect execution" menu shows a task picker before
 // fetching either output (see ProcessTaskPicker). Not necessarily contiguous,
 // and can run into the thousands for a large array/generator, so this
-// is the one place that count is dealt with — everything downstream
+// is the one place that count is dealt with: everything downstream
 // just gets a plain number to pass back as taskIndex.
 export async function getProcessTasks(
   program: Program,
@@ -607,7 +607,7 @@ export async function checkProgramOptions(program: Program): Promise<SavedOutput
 
 // Deletes everything inside program.outputDir. Resolves to false
 // (rather than throwing) when the backend's own guards made it a
-// no-op — e.g. outputDir is blank — so the caller can tell the user
+// no-op (e.g. outputDir is blank), so the caller can tell the user
 // there was nothing to reset.
 export async function resetOutputDir(program: Program): Promise<boolean> {
   const response = await apiFetch("/api/execution/reset-output-dir", {

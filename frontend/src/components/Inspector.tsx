@@ -119,7 +119,7 @@ export default function Inspector() {
   }
 
 
-  // Which node edge (top/bottom) each option currently renders at —
+  // Which node edge (top/bottom) each option currently renders at:
   // matches ProcessNode exactly, including a mutual-FIFO cycle's
   // flipped return option (see computeFlippedOptionIds), so dragging
   // here can reorder options that are visually adjacent on the canvas

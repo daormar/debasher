@@ -17,13 +17,13 @@ export interface ExecutionOptions {
   // --builtinsched-mem <int> (BUILTIN scheduler only). Despite the
   // "<int>" in debasher_exec's own --help, it accepts a plain number
   // (MB) or one with a K/M/G/T suffix (see
-  // debasher::_convert_mem_value_to_mb) — free-form text, not an
+  // debasher::_convert_mem_value_to_mb): free-form text, not an
   // integer input.
   builtinSchedMem?: string;
 
   // --dflt-nodes <string> (SLURM scheduler only): a node list passed
   // straight through to sbatch's -w, e.g. "node01,node02" or
-  // "node[01-04]" — not an index/count despite living next to the
+  // "node[01-04]": not an index/count despite living next to the
   // (actually numeric) cpus/mem options above.
   dfltNodes?: string;
 
@@ -111,7 +111,7 @@ export interface Program {
   // _add_shared_dirs_func).
   sharedDirs: string[];
 
-  // Every shared directory name reachable from this program — its own
+  // Every shared directory name reachable from this program: its own
   // sharedDirs plus every one declared by a module it loads,
   // transitively (see api/doc_mod.py's run_doc_mod_all_shared_dirs).
   // Populated only by import (api/program_import.py); purely additive,

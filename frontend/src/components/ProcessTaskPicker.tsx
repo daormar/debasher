@@ -2,7 +2,7 @@ import { useState } from "react";
 
 // Above this many tasks, rendering one button per index stops being
 // cheap (a large array/generator process can leave many thousands of
-// task files behind) — past it, only a bounded sample (first/last few)
+// task files behind): past it, only a bounded sample (first/last few)
 // is shown as quick picks, and the number input is the only way to
 // reach the rest.
 const MAX_CHIPS = 60;

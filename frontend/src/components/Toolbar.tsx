@@ -18,7 +18,7 @@ import { closeQuestion } from "../models/claudeTerminal";
 import { hasSupervisor } from "../models/node";
 
 // Mirrors the shape of an identifier DeBasher can turn into function
-// names (<name>_document, <name>_shared_dirs, <name>_program) — no
+// names (<name>_document, <name>_shared_dirs, <name>_program): no
 // server round-trip needed for this, unlike process names, since module
 // names aren't checked against a reserved-suffix list by the engine.
 const NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -142,7 +142,7 @@ export default function Toolbar({ onClose }: Props) {
           background: "transparent",
           padding: "2px 4px",
           // A name longer than the fixed width above is truncated with
-          // an ellipsis rather than just cut off — while editing, the
+          // an ellipsis rather than just cut off: while editing, the
           // browser's own caret handling still scrolls the field to
           // follow the cursor, so the full name stays reachable.
           overflow: "hidden",

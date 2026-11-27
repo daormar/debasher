@@ -1,7 +1,7 @@
 """
 The guard against changing a program under a run in progress, shared by
-every endpoint that writes the program metadata and the generated script
-or deletes what a run left.
+every endpoint that writes the artifact and the generated script or
+deletes what a run left.
 
 The engine reads the generated script again each time it starts a process,
 so writing it during a run would leave the processes already started on one
@@ -85,11 +85,11 @@ def _saved_output_dir(home_dir: str) -> str:
 
 def refuse_while_running(program: Program, action: str, home_dir: str | None = None) -> None:
     """
-    Refuse `action` (in words, "save the program") with a conflict when a run
-    or a validation is in progress in the program's output directory or,
-    when `home_dir` is given, in the output directory that the program
-    metadata there records: a save that changes the output directory still
-    writes the script that a run in the old one reads.
+    Takes a program, an action in words ("save the program") and, for a
+    caller that writes the script of a home directory, that `home_dir`.
+    Returns nothing; raises HTTPException 409 when a run or a validation is
+    in progress in the program's output directory or, with `home_dir`, in
+    the output directory last saved there.
     """
     debasher_mod_dir = program.envVars.get("DEBASHER_MOD_DIR", "")
 
@@ -102,9 +102,14 @@ def refuse_while_running(program: Program, action: str, home_dir: str | None = N
             ),
         )
 
+    # Only a caller that writes the script of a home directory has a second
+    # directory to ask about
     if home_dir is None:
         return
 
+    # A save that changes the output directory still writes the script that
+    # a run in the old one reads. A directory never saved, or the same one
+    # (already asked above), needs no second check
     saved = _saved_output_dir(home_dir)
     if (
         saved.strip()

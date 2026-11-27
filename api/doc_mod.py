@@ -59,14 +59,14 @@ def run_doc_mod(
     Run debasher_doc_mod over `script_path` and return its Markdown
     documentation. `flags` selects which "## Shared Directories"/
     "### <section>" blocks it prints (see engine/debasher_doc_mod's
-    usage) — defaults to every section (shared directories, options,
+    usage): defaults to every section (shared directories, options,
     option handler, implementation, specs); pass a narrower tuple (e.g.
     ("--show-impl",)) when the caller only needs one of them, to skip
     the rest of the work debasher_doc_mod would otherwise do.
 
     `debasher_mod_dir`, if given, is forwarded as DEBASHER_MOD_DIR so
     the script's own `load_debasher_module` calls (for shared modules
-    outside its own directory) can resolve — mirroring how
+    outside its own directory) can resolve: mirroring how
     routers/execution.py's _debasher_env and routers/processes.py's
     _run_preamble_tool forward it from a program's own envVars.
     """
@@ -105,15 +105,15 @@ def run_get_proc_info(script_path: Path, process_name: str, debasher_mod_dir: st
 
     Unlike run_doc_mod, this never runs `script_path`'s own module
     "_program" function or registers any process via
-    add_debasher_process — it calls
+    add_debasher_process: it calls
     debasher::_show_process_documentation directly for the one process
     name given, so it works on a file that declares no processes of its
     own at all (e.g. just a program's preamble, or a single process's
     own code in isolation) and can't fail just because some other,
     unrelated process in a full script has no implementation (see
     debasher::_add_debasher_regular_process in
-    engine/debasher_lib_programs.sh, which add_debasher_process — and so
-    only a real "_program" run — would otherwise enforce).
+    engine/debasher_lib_programs.sh, which add_debasher_process (and so
+    only a real "_program" run) would otherwise enforce).
     """
     tool = paths.find_libexec_tool(_GET_PROC_INFO_TOOL_NAME)
     if tool is None:
@@ -198,7 +198,7 @@ def _parse_bullet_section(
 ) -> list[re.Match[str]]:
     """
     Collect "- ..." bullet matches under the first line matching
-    `heading_re`, stopping at the next "## ..." heading — mirrors how
+    `heading_re`, stopping at the next "## ..." heading: mirrors how
     parse_module_markdown scopes its own "## Shared Directories"
     section. Used for the two standalone (single-section) doc_mod
     calls below, each run with only its own flag so no other "## ..."
@@ -223,7 +223,7 @@ def parse_all_shared_dirs_markdown(markdown: str) -> list[str]:
     """
     Parse the output of run_doc_mod_all_shared_dirs: every shared
     directory reachable from a program (the module named after -m plus
-    every module it loads, transitively — see
+    every module it loads, transitively, see
     debasher::_show_all_program_shared_dirs), as opposed to
     parse_module_markdown's `shared_dirs`, which is scoped to the named
     module's own declarations only.
@@ -238,12 +238,12 @@ def parse_all_envvars_markdown(markdown: str) -> dict[str, str]:
     """
     Parse the output of debasher_doc_mod --show-all-envvars: every
     variable newly bound while sourcing the module (plus every module it
-    loads, transitively) — see debasher::_show_all_program_envvars —
+    loads, transitively) (see debasher::_show_all_program_envvars)
     as opposed to parse_resolved_vars_markdown, which requires already
     knowing the name to look up. Used by script_generation.get_all_envvars
     against a program's own (possibly stubbed, see there) generated
     script, run with only this one flag, so no other "## ..." section
-    precedes it — see _parse_bullet_section.
+    precedes it: see _parse_bullet_section.
     """
     return {
         m.group("name").strip(): m.group("value")
@@ -283,7 +283,7 @@ def run_doc_mod_resolve_vars(
     module (and everything it loads) has been sourced, via
     debasher_doc_mod --resolve-var. This is a plain bash
     indirect-expansion read (`${!name}`), not a function call, so it
-    carries no more execution risk than any other run_doc_mod call —
+    carries no more execution risk than any other run_doc_mod call:
     important since `script_path` can be caller-supplied (see
     routers/programs.py's import endpoint).
 
@@ -340,10 +340,10 @@ def parse_module_markdown(
     Split debasher_doc_mod's output into the module name, its
     description, the names listed under its "## Shared Directories"
     section (present only when debasher_doc_mod was run with
-    --show-shdirs — see debasher::_show_module_shared_dirs in
+    --show-shdirs, see debasher::_show_module_shared_dirs in
     engine/debasher_lib_modules.sh, which lists one "- `<name>`" bullet
     per directory the module itself defines directly), and a (process
-    name, per-process Markdown) pair for each "## <process>" section —
+    name, per-process Markdown) pair for each "## <process>" section:
     each of which markdown_parsing.parse_proc_info_markdown can parse on
     its own, exactly as it does for a single-process
     debasher_get_proc_info block. Any other module section (see

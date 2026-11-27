@@ -4,7 +4,7 @@ import { NoProgramMetadata } from "../../src/storage/programStorage";
 import type { Backend } from "./backend";
 
 // A backend for the tests of the MCP tools, which needs no server: the
-// program metadata of each home directory in memory, saved with the
+// program of each home directory in memory, saved with the
 // digest check of the backend (see persistence.save), and every other
 // request answered by `overrides`, or refused as not faked.
 

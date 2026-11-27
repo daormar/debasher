@@ -1,8 +1,8 @@
 """
-Recovers a process's AdditionalMethods — reset_outfiles/post/
+Recovers a process's AdditionalMethods (reset_outfiles/post/
 skip/conda_envs/docker_imgs, the DEBASHER_PROCESS_METHODS
 (engine/debasher_lib.sh) not already covered by ProcessInfo.description/
-code/options/optionHandler — from the raw `declare -f` dumps
+code/options/optionHandler) from the raw `declare -f` dumps
 markdown_parsing.parse_methods_with_code pulls out of a process's
 "### Process Methods" section, keyed by method label. Only populated
 when debasher_doc_mod/debasher_get_proc_info were run with
@@ -10,7 +10,7 @@ when debasher_doc_mod/debasher_get_proc_info were run with
 "#### <label>" subsections) yields nothing to recover here.
 
 Each recovered field is the method's body alone (like arrayCode/
-generatorSizeCode, unlike ProgramProcess.code) — script_generation.py's
+generatorSizeCode, unlike ProgramProcess.code): script_generation.py's
 _add_additional_methods_funcs re-wraps it into "<name><suffix>() { ... }"
 on codegen, so only the body, not the function header/braces, is kept.
 """
@@ -63,7 +63,7 @@ def resolve_additional_methods(
         # header to strip here (unlike arrayCode/generatorSizeCode),
         # since script_generation.py's _add_method_body_func wraps the
         # stored body straight into "<name><suffix>() { ... }" with no
-        # header lines of its own — see this module's own docstring.
+        # header lines of its own: see this module's own docstring.
         funcname = function_header_name(source)
         if funcname is None:
             continue

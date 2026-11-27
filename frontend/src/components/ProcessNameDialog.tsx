@@ -116,7 +116,7 @@ export default function ProcessNameDialog({
         }
       })
       .catch(() => {
-        // Suggestions are a convenience — silently ignore failures.
+        // Suggestions are a convenience, silently ignore failures.
       });
 
     return () => {

@@ -47,8 +47,8 @@ from .option_handler_import import ConnectionRef, SharedDirRef, resolve_options_
 from .resident_import import import_resident_processes
 from .script_generation import SCRIPT_HEADER
 
-# A top-level bash function definition header — "name()", "name ()",
-# "name() {", or the same with a leading "function " keyword — anchored
+# A top-level bash function definition header: "name()", "name ()",
+# "name() {", or the same with a leading "function " keyword, anchored
 # to column 0 since that's how every function is written throughout
 # data/programs (including the occasional brace-on-the-same-line style,
 # e.g. debasher_dynamic_fanout.sh's count_chars() {).
@@ -78,7 +78,7 @@ def _synthesized_option(label: str) -> ProgramOption:
     """
     A minimal stand-in ProgramOption for a label that a recovered
     connection references but that debasher_doc_mod's "Process Options"
-    section never declared — expected for array-mode processes, whose
+    section never declared: expected for array-mode processes, whose
     per-task options (e.g. an -id or a connected -in built directly in
     generate_opts) commonly aren't pre-declared via explain_opt at all
     (see debasher_host_workflow.sh's host2, whose "-inf" only exists
@@ -169,7 +169,7 @@ def _to_additional_specs(raw: dict[str, str]) -> AdditionalSpecs:
     """
     Maps debasher::_show_proc_specs's raw "### Additional
     Specifications" attribute dict onto the app's typed AdditionalSpecs.
-    "force" (engine value "yes" — see script_generation.py's
+    "force" (engine value "yes", see script_generation.py's
     _additional_specs_str) is treated as a boolean by presence alone, so
     unlike the other fields it isn't passed through by value.
     """
@@ -217,8 +217,8 @@ def _extract_preamble(script_path: Path) -> str:
     Heuristic recovery of the program's preamble: debasher_doc_mod's
     Markdown carries no such notion at all (it only ever *runs* the
     script's _program function to register processes, so whatever
-    precedes the first function definition — a shebang, comments,
-    `source`/`load_debasher_module` calls, constants — is just skipped
+    precedes the first function definition (a shebang, comments,
+    `source`/`load_debasher_module` calls, constants) is just skipped
     over rather than documented anywhere). Since the frontend's own
     preamble is exactly "raw bash inserted verbatim before every
     function definition" (see script_generation.py's _add_preamble),
@@ -249,7 +249,7 @@ def _extract_preamble(script_path: Path) -> str:
 
 
 # Modes whose resolved OptionsHandler guarantees a task N to actually
-# pull from — mirrors script_generation.py's own _TASK_INDEXED_MODES.
+# pull from: mirrors script_generation.py's own _TASK_INDEXED_MODES.
 _TASK_INDEXED_MODES = {"generator", "array"}
 
 
@@ -262,7 +262,7 @@ def _downgrade_unverifiable_task_indexed_connections(
     A define_opt_from_proc_task_out "${task_idx}" connection only means
     "my task N pairs with the source's task N" if the source process is
     itself generator- or array-shaped, i.e. guaranteed to have a task N
-    at all — script_generation.py only ever regenerates that for a pair
+    at all: script_generation.py only ever regenerates that for a pair
     both in _TASK_INDEXED_MODES (see _option_definition_line in
     script_generation.py). A process that resolved to "generator" or
     "array" mode via such a connection into a source outside that set
@@ -271,7 +271,7 @@ def _downgrade_unverifiable_task_indexed_connections(
     here, using `option_handler_code_by_process`'s already-`declare -f`-
     normalized source (mirroring resolve_options_handler's own fallback
     for an unparseable body) rather than resolve_options_handler's exact
-    original source — this downgrade only fires for the rare
+    original source: this downgrade only fires for the rare
     unverifiable-connection case, so it hasn't been worth threading
     script_path/debasher_mod_dir through here too just to upgrade it the
     same way.
@@ -352,16 +352,16 @@ def _build_edges(
     pending_connections: list[tuple[str, ConnectionRef]],
 ) -> list[ProgramEdge]:
     """
-    Resolves each recovered ConnectionRef — process/option names, as
-    parsed from source — against the actual processes/options built for
+    Resolves each recovered ConnectionRef (process/option names, as
+    parsed from source) against the actual processes/options built for
     this import (which have ids). A connection naming a process that
     isn't part of this program (e.g. one from a different, separately-
     loaded module) is silently dropped rather than left dangling. An
     option that IS part of this program's processes but was never
-    declared via explain_opt — array-mode processes routinely define
-    per-task options (e.g. an -id, or a connected -in) directly inside
+    declared via explain_opt (array-mode processes routinely define
+    per-task options, e.g. an -id or a connected -in, directly inside
     generate_opts with no matching explain_opt call, so debasher_doc_mod
-    never lists them — gets a minimal synthesized ProgramOption instead,
+    never lists them) gets a minimal synthesized ProgramOption instead,
     so the edge still has somewhere to attach in the canvas.
     """
     processes_by_name = {process.name: process for process in processes}
@@ -413,16 +413,16 @@ def _resolve_shared_dir_refs(
     channel="shared_dir" once its SharedDirRef (see
     option_handler_import.py) resolves to a name that's actually part of
     the program's real reachable shared-directory set
-    (--show-all-shdirs) — a defensive cross-check, since in principle a
+    (--show-all-shdirs): a defensive cross-check, since in principle a
     variable could resolve to something that isn't a real shared
     directory at all. A ref that fails this check (an unresolved
     variable, or a name --show-all-shdirs doesn't know about) is left
-    alone — the option keeps the plain literal value
+    alone: the option keeps the plain literal value
     resolve_options_handler already gave it, exactly as if the ref had
     never been recognized.
 
     Returns the program's full reachable set (Program.
-    availableSharedDirs) — computed here since it's already needed for
+    availableSharedDirs): computed here since it's already needed for
     the cross-check, off the same debasher_doc_mod call
     run_doc_mod_all_shared_dirs makes; empty (skipping that call
     entirely) when there's nothing to resolve.
@@ -457,7 +457,7 @@ def _build_shared_dir_edges(processes: list[ProgramProcess]) -> list[ProgramEdge
     """
     Synthesizes one edge for every (output, input) pair of "shared_dir"
     options naming the identical directory, whatever their subpaths,
-    across the whole program —
+    across the whole program:
     mirrors what hand-connecting them in the canvas would produce (see
     frontend/src/models/connections.ts's isValidEdge's fan-in rule), so an
     imported program's canvas shows the same writer/reader relationships
@@ -563,9 +563,9 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
                 option.value = value
             # channel is independent of dataType (see models.py): a
             # value_desc option is always output-direction (that call
-            # defines an output's own value — the consuming side just
+            # defines an output's own value, the consuming side just
             # connects normally, it never marks itself value_desc), but
-            # fifo isn't direction-restricted — a process can legitimately
+            # fifo isn't direction-restricted: a process can legitimately
             # open an *input* on a fifo it rendezvous on by name rather
             # than a plain connection (see debasher_cycle_trigger_
             # interactive.sh's worker, whose "-threshold" is an input
@@ -580,7 +580,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
             # written where a general program writes --mirror.
             if option.channel == "fifo":
                 option.fifoTag = result.fifo_tags.get(option.label)
-            # Not a channel (see ProgramOption.fromProcessSpec) — a
+            # Not a channel (see ProgramOption.fromProcessSpec): a
             # process-spec-sourced option is an ordinary literal once
             # resolved, this only flags where the value in `option.value`
             # (the spec attribute's name, e.g. "cpus") came from.
@@ -598,7 +598,7 @@ def _read_module(script_path: Path, debasher_mod_dir: str) -> _ReadModule:
         # Resolve each recovered fanout family's count-source label (see
         # OptionHandlerResult.fanout_count_source_labels) into the
         # actual sibling ProgramOption's id, now that both have real
-        # ones — mirrors OptionEditor.tsx's own dropdown, which stores
+        # ones: mirrors OptionEditor.tsx's own dropdown, which stores
         # the same kind of same-process option reference.
         for fanout_label, count_source_label in result.fanout_count_source_labels.items():
             fanout_option = next((option for option in options if option.label == fanout_label), None)

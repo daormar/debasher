@@ -203,8 +203,10 @@ function findEditProblem(program: Program, edit: EditOp): string | null {
 
 }
 
-// The combinations of the fields of an option that make no sense, which the
-// editor of an option does not offer and script generation refuses.
+// Takes a process and one of its options; returns why the combination of
+// the fields of the option makes no sense, or null. The editor of an option
+// does not offer these combinations; script generation refuses them too,
+// but for a flag on a channel and a subpath on a fanout family.
 function findOptionFieldsProblem(process: ProgramProcess, option: ProgramOption): string | null {
   const where = `Option "${option.label}" of process "${process.name}"`;
   if (option.direction === "output" && option.fromProcessSpec) {

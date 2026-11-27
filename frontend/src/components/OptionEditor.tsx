@@ -34,7 +34,7 @@ interface Props {
 }
 
 // Modes whose _define_opts/_generate_opts produces one save_opt_list
-// call per task, numbered 0..N-1 — see script_generation.py's own
+// call per task, numbered 0..N-1: see script_generation.py's own
 // _TASK_INDEXED_MODES, which this mirrors for display purposes only.
 const TASK_INDEXED_MODES = new Set(["generator", "array"]);
 
@@ -86,7 +86,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   // A "standard"-mode owner gathering from an "array"- or "generator"-
   // mode source (see script_generation.py's _fanout_definition_lines and
   // its _FANOUT_PARTNER_MODES) doesn't share a loop with the source the
-  // way generator/array do — it expands into its own local "i" loop at
+  // way generator/array do: it expands into its own local "i" loop at
   // script-gen time, one connection per task.
   const isFanoutGather =
     isFanoutOption(option.label) &&
@@ -95,12 +95,12 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     (connectedSourceOption.sourceProcess.optionsHandler.mode === "array" ||
       connectedSourceOption.sourceProcess.optionsHandler.mode === "generator");
 
-  // Informational only — matches script_generation.py's own rule
+  // Informational only: matches script_generation.py's own rule
   // (_option_definition_line/_TASK_INDEXED_MODES): a task-indexed
   // connection is only ever regenerated when both this option's own
   // process and that connection's source are generator or array mode,
   // since that's the only combination where the source is guaranteed
-  // to actually have a task N to pull from. Computed per connection —
+  // to actually have a task N to pull from. Computed per connection:
   // a non-command-line input can gather from several sources whose
   // modes differ.
   const connectedSourceLabels = connectedSourceOptions.map(entry => {
@@ -126,7 +126,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   // this option is connected to a fanout family declared on a
   // "standard" process, so this ("array"- or "generator"-mode) process's
   // own task count is implicitly forced to match whatever that family's
-  // own count source computes — flagged here since nothing enforces it
+  // own count source computes: flagged here since nothing enforces it
   // structurally.
   const isScatterConsumer =
     !!connectedSourceOption &&
@@ -203,7 +203,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     useState(option.mirror);
 
   // Union of the program's own declared shared dirs and every one it
-  // inherits from a loaded module (see Program.availableSharedDirs) —
+  // inherits from a loaded module (see Program.availableSharedDirs):
   // an imported program like golem_java.sh declares none of its own but
   // should still offer the ones it inherits.
   const selectableSharedDirs = [
@@ -227,7 +227,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   useEffect(() => {
     // Mirroring only makes sense on an output-direction fifo option
-    // (see ProgramOption.mirror's docstring) — clear it as soon as
+    // (see ProgramOption.mirror's docstring), clear it as soon as
     // either condition stops holding, rather than leaving a stale
     // checked state hidden behind the checkbox's own conditional render.
     if (mirror && !(isFifo && direction === "output")) {
@@ -237,7 +237,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   useEffect(() => {
     // A connected option's value always comes from define_opt_from_proc_out,
-    // never from its own define_value_desc_opt/define_fifo_opt call — the
+    // never from its own define_value_desc_opt/define_fifo_opt call, the
     // channel describes how the *source* option got its value, not how
     // this one receives it, so a connected option's own channel is always
     // "none". "shared_dir" is the one exception: its value never depends
@@ -282,7 +282,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
   const canShapeTasks = commandLine && !isFlag && direction === "input" && !isFanout && !countsAFamily;
 
   useEffect(() => {
-    // Not a channel (see ProgramOption.fromProcessSpec) — but, like a
+    // Not a channel (see ProgramOption.fromProcessSpec), but, like a
     // connection, it's still incompatible with one: a process-spec-
     // sourced option's value comes from exactly one define_procspec_opt
     // call, which can't also be a define_value_desc_opt/define_fifo_opt/

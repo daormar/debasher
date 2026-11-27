@@ -17,9 +17,8 @@ interface FifoCandidate {
 // Only ordinary "standard"-mode fifo options with no connection either
 // way are safe to open directly: a fanout family or an already-
 // connected option would compete with a real producer/consumer for
-// data (see the plan's discussion of why no mirroring is needed here —
-// unlike "Watch FIFO", these fifos are required to have no edge at
-// all).
+// data. No mirroring is needed here: unlike "Watch FIFO", these fifos
+// are required to have no edge at all.
 function collectCandidates(
   processes: { name: string; options: ProgramOption[] }[],
   edges: { sourceOptionId: string; targetOptionId: string }[],
@@ -116,7 +115,7 @@ export default function TalkToFifosDialog({ onClose }: Props) {
     }
   }
 
-  // One write+read round trip for a single fifo line — called once per
+  // One write+read round trip for a single fifo line: called once per
   // line of the (possibly multi-line, Shift+Enter-separated) draft, in
   // order, so a pasted/typed paragraph plays out as one send+response
   // pair per line, same as typing them one at a time would. Returns
@@ -140,7 +139,7 @@ export default function TalkToFifosDialog({ onClose }: Props) {
 
     try {
       // Each call blocks server-side for a short bounded time (see
-      // api/routers/execution.py's _FIFO_READ_TIMEOUT_SECS) — a
+      // api/routers/execution.py's _FIFO_READ_TIMEOUT_SECS): a
       // "timedOut" result just means nothing arrived yet, so keep
       // calling until a real line or a real error comes back.
       for (;;) {
@@ -178,8 +177,8 @@ export default function TalkToFifosDialog({ onClose }: Props) {
       return;
     }
 
-    // Each line of the textarea (Shift+Enter separates them) is sent —
-    // and its response read — as its own turn, in order.
+    // Each line of the textarea (Shift+Enter separates them) is sent
+    // (and its response read) as its own turn, in order.
     const lines = draft.split("\n");
     setDraft("");
     setError(null);
@@ -354,7 +353,7 @@ export default function TalkToFifosDialog({ onClose }: Props) {
 
                 // Not disabled while waiting (unlike the Send button):
                 // disabling a focused element blurs it immediately, so
-                // the user would lose focus on every send — the
+                // the user would lose focus on every send: the
                 // isWaiting guards in handleSubmit/handleDraftKeyDown
                 // already prevent overlapping sends without that.
                 autoFocus

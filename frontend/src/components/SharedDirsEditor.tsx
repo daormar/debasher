@@ -6,7 +6,7 @@ interface Props {
   onClose: () => void;
 }
 
-// One shared directory name per line — blank lines are dropped on save,
+// One shared directory name per line: blank lines are dropped on save,
 // so stray empty lines left while editing don't turn into bogus entries.
 function linesToSharedDirs(text: string): string[] {
   return text
@@ -26,10 +26,10 @@ export default function SharedDirsEditor({ onClose }: Props) {
     useState(program.sharedDirs.join("\n"));
 
   // Shared directories reachable from this program but not declared by
-  // it — inherited from a module it loads (see api/doc_mod.py's
+  // it: inherited from a module it loads (see api/doc_mod.py's
   // run_doc_mod_all_shared_dirs, populated only by import). Shown
-  // separately, read-only: they aren't this program's own to edit —
-  // sharedDirs is what script generation actually emits from — and
+  // separately, read-only: they aren't this program's own to edit
+  // (sharedDirs is what script generation actually emits from) and
   // any already in sharedDirs are left out here since the editable box
   // above already shows them.
   const inheritedSharedDirs = program.availableSharedDirs.filter(

@@ -18,7 +18,7 @@ const MIN_HIT_HALF_WIDTH = 8;
 
 /**
  * A scatter/gather connection between a "standard" process's fanout
- * family option (see isFanoutOption) and the paired "array" process —
+ * family option (see isFanoutOption) and the paired "array" process:
  * drawn as a filled wedge, narrow at the family end and wide at the
  * array end, so the single edge visually reads as "one becomes many"
  * rather than a plain 1:1 connection. The wedge follows the route of

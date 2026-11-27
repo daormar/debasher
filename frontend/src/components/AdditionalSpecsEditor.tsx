@@ -28,7 +28,7 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
     useState(process.additionalSpecs.externalAlias ?? "");
 
   // Candidates for the "from" side of a mapping: this process's own
-  // command-line options — the only ones that can actually appear in
+  // command-line options: the only ones that can actually appear in
   // its own optlist for the engine to rename (see
   // debasher::_rename_opt_args in engine/debasher_lib_programs.sh).
   const commandLineOptionLabels =
@@ -38,7 +38,7 @@ export default function AdditionalSpecsEditor({ process, onClose }: Props) {
     setAlias(value);
     if (!value.trim() && !externalAlias.trim()) {
       // alias_opt_map is invalid without alias or externalAlias (see
-      // debasher::add_debasher_process) — clear it once neither is set
+      // debasher::add_debasher_process): clear it once neither is set
       // any more, same as OptionEditor clears channel when
       // fromProcessSpec is set.
       setAliasOptMap([]);

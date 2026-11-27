@@ -1,7 +1,7 @@
 """
 Recovers a process's OptionsHandler (and any process-to-process
 connections implied by it) from the raw `declare -f` source of its
-_define_opts/_generate_opts_size/_generate_opts functions — exposed by
+_define_opts/_generate_opts_size/_generate_opts functions: exposed by
 debasher_doc_mod's --show-opthnd flag and pulled out per-function by
 markdown_parsing.parse_option_handler.
 
@@ -9,16 +9,16 @@ Design (see program_import.py for how this plugs into the rest of the
 import):
 
 - _generate_opts_size and _generate_opts are meant to be provided
-  jointly — the engine always calls the latter to retrieve a task's
+  jointly: the engine always calls the latter to retrieve a task's
   options once it has decided a process uses the generator mechanism at
   all (i.e. once _generate_opts_size exists), regardless of the
-  size-only fast path some internal callers take — so that pair is the
+  size-only fast path some internal callers take: so that pair is the
   frontend's "generator" mode. _generate_opts_size's body, minus its
-  fixed header (the same _define_opts header minus "local optlist=" —
+  fixed header (the same _define_opts header minus "local optlist=",
   the engine calls it with the same 4 positional args, see
   debasher::_define_opts_generator), is kept verbatim as
   generatorSizeCode (like arrayCode for array mode)
-  rather than matched against a grammar — its only contract is that it
+  rather than matched against a grammar: its only contract is that it
   echoes the task count, so any implementation round-trips as long as
   that header is present in its exact fixed form (see
   _extract_generator_size_code). _generate_opts itself typically uses
@@ -33,14 +33,14 @@ import):
   define_cmdline_opt[_if_given], define_cmdline_infile_opt[_if_given],
   define_cmdline_indir_opt[_if_given],
   define_cmdline_flag_if_given, define_flag, define_value_desc_opt,
-  define_fifo_opt[_generator] — all of them just other ways to define
+  define_fifo_opt[_generator], all of them just other ways to define
   an option's value, not something exotic). A body that's exactly the
   standard boilerplate header/footer
   plus a flat sequence of those calls with literal label/proc/opt
   arguments round-trips structurally, so it's parsed into "standard"
   mode option values plus real connections.
 - A loop, or any other statement outside that grammar, falls back to
-  "manual" mode with _define_opts kept verbatim — UNLESS it matches
+  "manual" mode with _define_opts kept verbatim: UNLESS it matches
   script_generation.py's own fixed "array" shape exactly: the standard
   header minus its "local optlist=..." line, then arbitrary user code
   (kept verbatim as arrayCode) building a fixed-name array ("array"),
@@ -64,8 +64,8 @@ import):
   them: for a process that falls back, script generation re-emits the
   captured source verbatim rather than deriving it from option
   values/edges, so a recovered edge there is purely a visual/documentary
-  hint in the canvas — a wrong or missed one costs a click, not script
-  correctness — which makes it safe to be permissive about.
+  hint in the canvas (a wrong or missed one costs a click, not script
+  correctness) which makes it safe to be permissive about.
 """
 
 import re
@@ -93,7 +93,7 @@ class ConnectionRef:
     option_label: str
     source_process: str
     source_option: str
-    # True for a define_opt_from_proc_task_out "${task_idx}" connection —
+    # True for a define_opt_from_proc_task_out "${task_idx}" connection:
     # program_import.py checks the source process actually resolved to
     # "generator" mode before trusting it, since script_generation.py
     # only ever regenerates ${task_idx} for that combination (see
@@ -106,7 +106,7 @@ class SharedDirRef:
     # Exactly one of the two is set: a literal directory name resolved
     # directly from the source text, or the name of a variable whose
     # value (the actual directory name) program_import.py resolves
-    # later via debasher_doc_mod --resolve-var — this module never
+    # later via debasher_doc_mod --resolve-var: this module never
     # executes anything to find out.
     literal_name: str | None = None
     var_name: str | None = None
@@ -116,22 +116,22 @@ class SharedDirRef:
 class OptionHandlerResult:
     handler: OptionsHandler
     # Option label -> literal/expression value text, recovered only for
-    # "standard"/"generator" modes (raw, unevaluated — codegen re-embeds
+    # "standard"/"generator" modes (raw, unevaluated, codegen re-embeds
     # it as-is).
     option_values: dict[str, str] = field(default_factory=dict)
     connections: list[ConnectionRef] = field(default_factory=list)
-    # Labels defined via define_value_desc_opt/define_fifo_opt[_generator]
-    # — program_import.py sets their option's channel ("value_desc"/
+    # Labels defined via define_value_desc_opt/define_fifo_opt[_generator]:
+    # program_import.py sets their option's channel ("value_desc"/
     # "fifo") from these, independent of dataType. There's no
     # explain_opt-level signal for this (an option's declared type and
     # its actual delivery channel can legitimately diverge, e.g. a
     # mandatory cmdline int that's really sourced from a fifo), so this
-    # is the sole source, recovered the same way as connections are —
+    # is the sole source, recovered the same way as connections are:
     # best-effort in "manual" mode, exact otherwise.
     value_descriptor_labels: set[str] = field(default_factory=set)
     fifo_labels: set[str] = field(default_factory=set)
     # Subset of fifo_labels whose define_fifo_opt[_generator] call carried
-    # a trailing "--mirror" token — program_import.py sets their option's
+    # a trailing "--mirror" token: program_import.py sets their option's
     # `mirror` from this. Recovered the same way as fifo_labels itself
     # (best-effort in "manual" mode, exact otherwise).
     mirrored_fifo_labels: set[str] = field(default_factory=set)
@@ -142,8 +142,8 @@ class OptionHandlerResult:
     # in every mode (see scan_fifo_tags), since a tag says nothing about the
     # shape of the function.
     fifo_tags: dict[str, str] = field(default_factory=dict)
-    # Labels defined via define_procspec_opt — program_import.py sets
-    # their option's fromProcessSpec (not channel — see
+    # Labels defined via define_procspec_opt: program_import.py sets
+    # their option's fromProcessSpec (not channel, see
     # ProgramOption.fromProcessSpec's own docstring for why) from these.
     # Additive, like shared_dir_refs below: a matched label also keeps
     # its ordinary option_values[label] entry, holding the spec
@@ -153,7 +153,7 @@ class OptionHandlerResult:
     procspec_labels: set[str] = field(default_factory=set)
     # Fanout family option label (e.g. "-outf-ith") -> the label of the
     # command-line option on the SAME process that supplies its runtime
-    # count (e.g. "-w") — see script_generation.py's
+    # count (e.g. "-w"): see script_generation.py's
     # _fanout_definition_lines/_FANOUT_SUFFIX. Only ever populated for
     # "standard" mode (see _parse_primitive_calls's allow_fanout_blocks);
     # program_import.py resolves the label into an actual
@@ -170,7 +170,7 @@ class OptionHandlerResult:
     # call (see the dispatch in _parse_primitive_calls). Additive: a
     # matched label also keeps its ordinary option_values[label] entry
     # (a synthesized "$(debasher::get_absolute_shdirname ...)"
-    # expression — see _parse_primitive_calls), so an option
+    # expression, see _parse_primitive_calls), so an option
     # program_import.py can't confirm against a real shared directory
     # still round-trips as a plain value rather than vanishing.
     shared_dir_refs: dict[str, SharedDirRef] = field(default_factory=dict)
@@ -202,8 +202,8 @@ _COMMENT_RE = re.compile(r"^#")
 # `define_opt "-outf" "${outf}" optlist`: common enough (see
 # debasher_value_pass_example.sh) to special-case rather than force
 # every process using it into manual mode. Only a value token that's a
-# *bare* reference to such a local — "${name}" or "$name" and nothing
-# else — is substituted, with the local's own right-hand side text
+# *bare* reference to such a local ("${name}" or "$name" and nothing
+# else) is substituted, with the local's own right-hand side text
 # (quotes stripped, unevaluated); referencing it as part of a larger
 # string, or a local whose value itself isn't a plain literal/expression
 # line, isn't chased further and is left to the manual-mode fallback.
@@ -221,25 +221,25 @@ def _strip_one_quote_layer(text: str) -> str:
 def _resolve_embedded_refs(expr: str, locals_table: dict[str, str], known_local_names: set[str]) -> str | None:
     """
     Substitutes every ${name}/$name occurrence *embedded* in `expr` (as
-    opposed to a bare whole-string reference — see _VAR_REF_RE) that
+    opposed to a bare whole-string reference, see _VAR_REF_RE) that
     names an already-resolved local with that local's own (already
-    self-contained) text — e.g. geno-debasher's
+    self-contained) text: e.g. geno-debasher's
     `local abs_datadir=`get_absolute_shdirname "${DATADIR_BASENAME}"``
     then `local outfile="${abs_datadir}"/out.bam`: without this, a
     define_opt using `$outfile` as its value would inline "${abs_datadir}"/out.bam
-    verbatim — a dangling reference, since script_generation.py never
+    verbatim: a dangling reference, since script_generation.py never
     re-emits a local's own declaration, only the option value ultimately
     built from it.
 
     Returns None if `expr` embeds a reference to a *different* local
     name that wasn't itself resolved this way (known to be a local at
-    all, i.e. in `known_local_names`, but not in `locals_table`) —
+    all, i.e. in `known_local_names`, but not in `locals_table`):
     leaving that reference as literal text would dangle the same way, so
     the caller must reject the whole body rather than guess. A reference
-    to anything else — a header arg (cmdline/process_spec/process_name/
-    process_outdir/task_idx) or a genuinely global name sourced from
-    elsewhere — is left untouched either way, since those are equally
-    available once regenerated; they're just never local-scoped to the
+    to anything else (a header arg, such as cmdline, process_spec,
+    process_name, process_outdir or task_idx, or a genuinely global name
+    sourced from elsewhere) is left untouched either way, since those are
+    equally available once regenerated; they're just never local-scoped to the
     function.
     """
     unresolved = False
@@ -262,13 +262,13 @@ def _chase_local_value(
 ) -> tuple[str, bool]:
     """
     Resolves every local reference in a define_opt/define_fifo_opt value
-    token — whether it's a *bare* whole-string reference (e.g. "$outfile",
+    token: whether it's a *bare* whole-string reference (e.g. "$outfile",
     the common case, produced by chasing an intermediate local per
     _LOCAL_ASSIGN_RE) or one *embedded* alongside other literal text (e.g.
-    "${abs_datadir}/normal.bam", skipping the intermediate local) — into
+    "${abs_datadir}/normal.bam", skipping the intermediate local): into
     self-contained text, via _resolve_embedded_refs (a bare reference is
     just the embedded case spanning the whole string). Returns
-    (value_text, False) instead — the caller must reject the whole body —
+    (value_text, False) instead (the caller must reject the whole body)
     if the token references a local that itself couldn't be resolved to
     something self-contained: leaving that reference as literal text
     would dangle, since script_generation.py never re-emits a local's own
@@ -326,7 +326,7 @@ _CONNECTION_SCAN_RE = re.compile(
 )
 # The per-task variant (used by real generator/array generate_opts or
 # define_opts loop bodies, see debasher_generator_example.sh) takes the
-# connected task index as its 3rd argument instead — same connection,
+# connected task index as its 3rd argument instead: same connection,
 # one arg later.
 _TASK_CONNECTION_SCAN_RE = re.compile(
     r'(?:debasher::)?define_opt_from_proc_task_out\s+"(?P<label>[^"]*)"\s+'
@@ -349,10 +349,10 @@ _TAGGED_FIFO_SCAN_RE = re.compile(
 # positional arguments: its mirror, or its fifo tag.
 _FIFO_TRAILING_FLAGS = (("--mirror", False), ("--external", False), ("--control", False))
 # The process_spec argument comes first (typically "${process_spec}", one
-# token with no internal space) — skipped the same way
+# token with no internal space): skipped the same way
 # _TASK_CONNECTION_SCAN_RE skips a task-index argument. Unlike
 # _FIFO_SCAN_RE/_VALUE_DESC_SCAN_RE, the specname argument is captured
-# too (like _SHARED_DIR_SCAN_RE's own dirname) — it's always a clean
+# too (like _SHARED_DIR_SCAN_RE's own dirname): it's always a clean
 # literal right there in the call regardless of what else in the body
 # caused the fallback, so recovering it here is exact, not a guess.
 _PROCSPEC_SCAN_RE = re.compile(
@@ -363,7 +363,7 @@ _PROCSPEC_SCAN_RE = re.compile(
 def _tokenize(args: str) -> list[tuple[str, bool]]:
     """
     Splits a call's argument text into (text, is_literal) pairs.
-    Double-quoted text with no "$"/backtick inside is literal — usable
+    Double-quoted text with no "$"/backtick inside is literal: usable
     as a static label/proc/opt name; anything else (bare words,
     interpolated strings) is not, but its raw text is still returned
     since a value argument (unlike a label/proc/opt one) is carried
@@ -371,7 +371,7 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
 
     Adjacent matches with no gap between them (e.g. "${abs_datadir}"/out.bam,
     a quoted piece directly concatenated with a bare one, no space) are one
-    shell word, not two — merged into a single (non-literal) token so a
+    shell word, not two: merged into a single (non-literal) token so a
     later embedded-reference resolution (_resolve_embedded_refs) sees the
     whole value at once, same as if it had all been written inside one
     pair of quotes.
@@ -408,11 +408,11 @@ def _tokenize(args: str) -> list[tuple[str, bool]]:
 # (the declaration may also name the loop variable, "local <var> i", and
 # the call may omit "debasher::", as a hand-written module does). But
 # `declare -f` always reprints a for loop's "do" on its own line
-# (verified against real bash — same as _ARRAY_FOR_RE/_ARRAY_DO_LINE's
+# (verified against real bash, same as _ARRAY_FOR_RE/_ARRAY_DO_LINE's
 # "for task_idx in ...; do" below), so the shape actually recovered here is
 # the count-read (one or two lines), the bare "for ((...))" header, "do",
 # the one inner call, "done". Recognized as a unit (see
-# _try_parse_fanout_block) only when allow_fanout_blocks is set — i.e.
+# _try_parse_fanout_block) only when allow_fanout_blocks is set: i.e.
 # only inside a "standard"-mode _define_opts body, never inside
 # array/generator ones, which have no notion of a fanout family option.
 _FANOUT_COUNT_RE = re.compile(
@@ -517,7 +517,7 @@ def _try_parse_fanout_block(
     value/connection pair is mutually exclusive, matching
     define_opt/define_fifo_opt (scatter) vs define_opt_from_proc_task_out
     (gather, connected to an array-mode process's per-task output)
-    respectively — the last element is only ever True for a
+    respectively: the last element is only ever True for a
     define_fifo_opt scatter (see
     data/programs/debasher_dynamic_fanout_fifos.sh's dispatch). None if
     body[start:] doesn't match this exact shape, leaving the caller to
@@ -858,7 +858,7 @@ def _parse_primitive_calls(
     call target, an unsupported call).
 
     `allow_fanout_blocks` (only ever set for a "standard" _define_opts
-    body — see resolve_options_handler) additionally recognizes the
+    body, see resolve_options_handler) additionally recognizes the
     fanout-family block shape (see _try_parse_fanout_block).
 
     `allow_fanout_consumer` (only ever set for an array-mode loop body
@@ -869,14 +869,14 @@ def _parse_primitive_calls(
     process's "<base>-ith" fanout family.
 
     `initial_locals`/`initial_known_local_names` seed the local-chasing
-    state (see _resolve_embedded_refs/_chase_local_value) — only ever
+    state (see _resolve_embedded_refs/_chase_local_value): only ever
     set for an array-mode loop body, whose preceding arrayCode section
     is otherwise kept opaque/verbatim (see _parse_array_define_opts):
     without this, a local declared there (e.g. geno-debasher's
     `local abs_splitdir=`get_absolute_shdirname ...``, used by a loop-
     body option built as `"${abs_splitdir}"/name_${contig}.bam`) would
     look like a genuinely global name to the loop body's own parse,
-    since it never saw the declaration — letting a dangling reference
+    since it never saw the declaration: letting a dangling reference
     to it through instead of correctly rejecting the body to "manual".
     """
     state = _ParseState(
@@ -938,7 +938,7 @@ def _parse_function_source(
     )
 
 
-# _define_opts_func_header() without the "local optlist=..." line — array
+# _define_opts_func_header() without the "local optlist=..." line: array
 # mode has no persistent optlist to declare up front (see
 # _add_array_opts_func: each loop iteration declares its own, fresh).
 _ARRAY_HEADER_RES = [
@@ -968,9 +968,9 @@ _VERBATIM_ARRAY_FOR_RE = re.compile(rf'^for\s+{TASK_IDX_VAR}\s+in\s+"\$\{{!array
 def _scan_locals(lines: list[str]) -> tuple[dict[str, str], set[str]]:
     """
     Extracts `local NAME=EXPR` assignments from `lines` (in order,
-    chasing each against the ones before it — see
+    chasing each against the ones before it, see
     _resolve_embedded_refs) without validating anything else about
-    `lines` — used only to seed _parse_primitive_calls's local-chasing
+    `lines`: used only to seed _parse_primitive_calls's local-chasing
     state for a loop body from its own arrayCode section, which is
     otherwise left opaque/verbatim (see _parse_array_define_opts).
     """
@@ -1017,9 +1017,9 @@ def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     body (its own header/footer-boilerplate skipping handles those two
     lines), then `done` and nothing else.
 
-    None for anything that deviates from that — a different loop shape,
+    None for anything that deviates from that (a different loop shape,
     trailing statements after the loop, a stray non-primitive call in
-    the loop body, etc. — leaving the caller to fall back to "manual".
+    the loop body, etc.), leaving the caller to fall back to "manual".
     """
     body = function_body_lines(source)
     if body is None:
@@ -1045,7 +1045,7 @@ def _parse_array_define_opts(source: str) -> tuple[str, _OptionFacts] | None:
     loop_body = rest[for_index + 2:-1]
 
     # array_code precedes the loop and is otherwise kept opaque/verbatim
-    # (arbitrary user code) — but a local it declares (e.g. geno-
+    # (arbitrary user code): but a local it declares (e.g. geno-
     # debasher's `local abs_splitdir=`get_absolute_shdirname ...``) may
     # still be referenced by a loop-body option's own local (see
     # _resolve_embedded_refs), so its locals are scanned (not otherwise
@@ -1116,7 +1116,7 @@ def scan_mirrored_fifo_labels(source: str) -> set[str]:
 
 def scan_procspec_values(source: str) -> dict[str, str]:
     """
-    Best-effort companion to scan_connections, for the same reason —
+    Best-effort companion to scan_connections, for the same reason:
     but unlike scan_value_descriptor_labels/scan_fifo_labels, the spec
     attribute name is captured too (see _PROCSPEC_SCAN_RE), the same way
     scan_shared_dir_refs captures its own dirname: label -> spec
@@ -1137,12 +1137,12 @@ def scan_procspec_labels(source: str) -> set[str]:
 
 def _extract_generator_size_code(source: str) -> str | None:
     """
-    Returns _generate_opts_size's body, verbatim (declare -f-normalized —
-    see function_body_lines — so relative indentation within it is
+    Returns _generate_opts_size's body, verbatim (declare -f-normalized,
+    see function_body_lines, so relative indentation within it is
     flattened, same as arrayCode via _parse_array_define_opts), minus the
     fixed header script_generation.py's _add_generate_opts_size_func
     always emits ahead of it (the same header as _define_opts minus
-    "local optlist=" — engine calls this with the same 4 positional args,
+    "local optlist=", engine calls this with the same 4 positional args,
     see debasher::_define_opts_generator). None if the header isn't
     present in that exact form, or the source isn't a well-formed
     function dump.

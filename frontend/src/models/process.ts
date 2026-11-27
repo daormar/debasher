@@ -74,7 +74,7 @@ export interface AdditionalSpecs {
 
   alias?: string;
 
-  // Only meaningful alongside `alias` — renames this process's own
+  // Only meaningful alongside `alias`: renames this process's own
   // option labels (fromLabel) into the ones the aliased process's
   // implementation expects (toLabel) before delegating, via the
   // engine's "alias_opt_map" process spec attribute. Lets an alias
@@ -125,7 +125,7 @@ export interface CondaEnv {
 /**
  * Bodies (not full function definitions, unlike ProgramProcess.code) for
  * the DEBASHER_PROCESS_METHODS (engine/debasher_lib.sh) not covered
- * elsewhere in the Inspector — "document" has its own Description field,
+ * elsewhere in the Inspector: "document" has its own Description field,
  * "exec" is ProgramProcess.code, and the option explanation/definition
  * methods are driven by ProgramProcess.options / optionsHandler.
  */
@@ -170,7 +170,7 @@ export type MethodCodeKey =
  * present, none detached) from a partial one. Cleared from every
  * process sharing the same groupId the moment any one of them has its
  * own content edited or is deleted (see ProgramContext's
- * confirmDetachIfGrouped) — add_debasher_program can't express "this
+ * confirmDetachIfGrouped): add_debasher_program can't express "this
  * module except one process" or "with this process's code overridden",
  * so once that happens the whole group falls back to being generated
  * as ordinary add_debasher_process calls.

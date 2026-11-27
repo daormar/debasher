@@ -4,13 +4,13 @@ import type { FanoutFamily, OptionChannel, ProgramOption } from "../models/optio
 
 interface Props {
   processName: string;
-  // Every option except fromProcessSpec ones — a resource spec (cpus,
+  // Every option except fromProcessSpec ones: a resource spec (cpus,
   // mem, ...), not a process input/output (see the "Specifications"
   // inspector section for those). See ProgramCanvas's fetchProcessIO
   // for why this isn't filtered by commandLine instead.
   options: ProgramOption[];
   // {label: resolved value}, from the process's own ".opts" file (see
-  // getProcessResolvedOptions) — empty when the program hasn't been
+  // getProcessResolvedOptions): empty when the program hasn't been
   // run yet, in which case each option falls back to its own
   // (possibly unresolved, e.g. a "[proc;opt]" connection sentinel or a
   // shared-dir/fifo name rather than its real path) model value.
@@ -57,7 +57,7 @@ function optionHasPathButton(option: ProgramOption, deliveryChannels: Map<string
 }
 
 // Mirrors ProgramOptionsEditor's ("Run" > "Set program options") own
-// per-option layout — label above value — for a consistent look
+// per-option layout (label above value) for a consistent look
 // between the two option-inspecting modals.
 function OptionRow({
   option,

@@ -1,10 +1,10 @@
 import type { Program } from "./program";
 
-// What the program metadata keeps of a program, as text: every field but the
+// Takes a program; returns its program model as text, every field but the
 // digest and the home directory, which loading replaces, with the keys of
 // every object in order, so that the order in which an edit built an object
-// does not count, and with no field that holds undefined, which the metadata
-// cannot hold.
+// does not count, and with no field that holds undefined, which a saved
+// program cannot hold.
 export function savedContent(program: Program): string {
   const kept: Partial<Program> = { ...program };
   delete kept.digest;
@@ -34,7 +34,7 @@ export function hasUnsavedChanges(program: Program, saved: Program): boolean {
   return savedContent(program) !== savedContent(saved);
 }
 
-// What the editor does when it learns the digest of the program metadata in
+// What the editor does when it learns the digest of the program saved in
 // the home directory: nothing, clear the question asked about a digest that
 // the tab has since caught up with, load the program again, or ask the user.
 export type DiskDigestAction = "none" | "clear" | "reload" | "ask";
@@ -42,7 +42,7 @@ export type DiskDigestAction = "none" | "clear" | "reload" | "ask";
 export interface DiskDigestState {
   // The digest the tab loaded or last saved.
   tabDigest: string;
-  // The digest of the program metadata on disk, null when there is none.
+  // The digest of the program saved on disk, null when there is none.
   diskDigest: string | null;
   unsavedChanges: boolean;
 }

@@ -68,7 +68,7 @@ def _run_preamble_tool(
 
     These tools source the preamble in a DeBasher-aware Bash process, so
     DEBASHER_MOD_DIR (used to resolve any `load_debasher_module` calls
-    the preamble makes) must be forwarded to them — taken from the
+    the preamble makes) must be forwarded to them: taken from the
     program's own envVars (what the program will actually run with),
     not the webui server's environment.
     """
@@ -167,7 +167,7 @@ def _get_proc_info(
     info = parse_proc_info_markdown(stdout)
 
     # debasher_get_proc_info exits 0 even for an unknown process name,
-    # printing only warnings (to stderr) and otherwise-empty sections —
+    # printing only warnings (to stderr) and otherwise-empty sections:
     # treat that as "not found" rather than injecting blank data.
     if not info.description and not info.options and not info.code:
         return None

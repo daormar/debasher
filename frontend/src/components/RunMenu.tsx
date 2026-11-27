@@ -598,7 +598,7 @@ export default function RunMenu() {
                 // Wiping the output directory out from under a run
                 // (or repointing which directory this UI watches/
                 // controls) would delete files it's using or make it
-                // unstoppable — checked via isRunInProgress (not
+                // unstoppable: checked via isRunInProgress (not
                 // runPhase) so a run launched outside this tab is
                 // caught too.
                 (item === "Set output directory" && isRunInProgress) ||

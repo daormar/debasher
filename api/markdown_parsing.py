@@ -43,15 +43,15 @@ from .debasher_constants import (
 _OPTION_LINE_RE = re.compile(r"^-\s*`(?P<label>[^`]+)`\s*(?P<rest>.*)$")
 # debasher::_show_proc_opts (engine/debasher_lib_proc_doc) prints the
 # option's type right after the label, verbatim from whatever was passed
-# as debasher::explain_opt's own $2 — angle-bracket-wrapped by
+# as debasher::explain_opt's own $2: angle-bracket-wrapped by
 # convention throughout every script in data/programs ("<int>",
-# "<string>", ...) — and only present at all when the option was
+# "<string>", ...): and only present at all when the option was
 # declared with debasher::explain_opt (typed) rather than
 # debasher::explain_flag. This is purely the value's type: how it's
-# *delivered* (a plain value, a value descriptor, a fifo — see
+# *delivered* (a plain value, a value descriptor, a fifo, see
 # ProgramOption.channel in models.py) is a separate, independent axis,
 # recovered instead from _define_opts/_generate_opts source by
-# option_handler_import.py — an option's declared type and its actual
+# option_handler_import.py: an option's declared type and its actual
 # channel can legitimately diverge (e.g. a mandatory cmdline int that's
 # actually sourced from a fifo internally), so this section shouldn't
 # try to encode both into one type keyword. "file" and "dir" are
@@ -67,8 +67,8 @@ _PROCESS_LANGUAGES: set[str] = {"bash", "python", "perl", "r", "groovy"}
 
 # debasher::_show_proc_opt_handler (engine/debasher_lib_proc_doc) dumps
 # one ```bash ... ``` block per option-handler function it finds for the
-# process — any of _define_opts, _define_opt_deps, _generate_opts_size,
-# _generate_opts — each as its own `declare -f` fence, back to back
+# process (any of _define_opts, _define_opt_deps, _generate_opts_size,
+# _generate_opts) each as its own `declare -f` fence, back to back
 # under a single "### Process Option Handler" heading. Longer suffixes
 # are checked first only for readability; none of these four suffixes is
 # actually a suffix of another, so match order doesn't affect the result.
@@ -83,14 +83,14 @@ _FUNC_HEADER_RE = re.compile(r"^(?P<name>\S+)\s*\(\)")
 # debasher::_show_proc_specs (engine/debasher_lib_proc_doc) prints one
 # "- `<attr>`: <value>" bullet per attribute actually set on the
 # process's add_debasher_process call, under "### Computational
-# Specifications"/"### Additional Specifications" — only present when
+# Specifications"/"### Additional Specifications": only present when
 # the Markdown was produced with --show-specs.
 _SPEC_LINE_RE = re.compile(r"^-\s*`(?P<key>[^`]+)`:\s*(?P<value>.*)$")
 
 # debasher::_show_proc_methods (engine/debasher_lib_proc_doc) prints one
 # "#### <label>" subheading per method (e.g. "reset_outfiles", "post",
 # "exec") followed by its own ```bash ... ``` `declare -f` fence, all
-# under the single "### Process Methods" heading — only present when the
+# under the single "### Process Methods" heading: only present when the
 # Markdown was produced with --show-meths-with-code (a plain --show-meths
 # only lists method names as bullets, with no "#### " subsections at
 # all).
@@ -124,7 +124,7 @@ class ProcessInfo(BaseModel):
     optionHandler: dict[str, str] = Field(default_factory=dict)
     # Raw attribute -> value maps from "### Computational/Additional
     # Specifications" (e.g. {"cpus": "1", "mem": "32", "time":
-    # "00:01:00"} / {"processdeps": "afterok:count"}) — engine attribute
+    # "00:01:00"} / {"processdeps": "afterok:count"}): engine attribute
     # names, not yet mapped onto ComputationalSpecs/AdditionalSpecs (see
     # program_import.py for that). Only populated with --show-specs.
     computationalSpecs: dict[str, str] = Field(default_factory=dict)
@@ -218,12 +218,12 @@ def function_body_lines(source: str) -> list[str] | None:
     Strips a `declare -f` dump ("<name> ()\\n{\\n ... \\n}") down to its
     body, one stripped statement per line. None if the source doesn't
     have that exact three-part shape (header, opening brace, closing
-    brace) — declare -f always produces it, so this only trips on
+    brace): declare -f always produces it, so this only trips on
     malformed/truncated input.
 
     declare -f also reprints every simple statement with its trailing
     ";" statement terminator, even when the original source had one
-    statement per line and never needed it (bash normalizes this) — so
+    statement per line and never needed it (bash normalizes this): so
     a single trailing ";" is stripped from each line here rather than
     threading that through every regex below.
     """
@@ -245,7 +245,7 @@ def function_body_lines(source: str) -> list[str] | None:
 def function_header_name(source: str) -> str | None:
     """
     Pulls the function name out of a `declare -f` dump's own header line
-    ("<name> ()", see _FUNC_HEADER_RE) — this is the *actual*, fully
+    ("<name> ()", see _FUNC_HEADER_RE): this is the *actual*, fully
     resolved name debasher::_search_process_func found (a process's exec
     function, an alias target's, a method's, an option-handler's, ...),
     so it's what should be handed to
@@ -264,13 +264,13 @@ def split_function_blocks(code: str) -> list[str]:
     individual per-function `declare -f` dumps. debasher::_show_proc_
     implem_bash_func (engine/debasher_lib_proc_doc.sh) pulls in any
     same-script helper function the process's exec function calls
-    alongside it, one blank line apart, exec function always last — so
+    alongside it, one blank line apart, exec function always last: so
     a process with no such helpers still round-trips here as a single-
     element list.
 
     Splitting on blank lines is safe because `declare -f` never emits
     one inside a function body (it reprints one statement per line with
-    no blank-line separators of its own) — only between the dumps this
+    no blank-line separators of its own): only between the dumps this
     concatenates, exactly like this splits back apart.
     """
     if not code:
@@ -281,12 +281,12 @@ def split_function_blocks(code: str) -> list[str]:
 def join_verbatim_body_lines(lines: list[str]) -> str:
     """
     Joins a verbatim function body (see verbatim_function_body_lines)
-    back into text, trimming only whole blank lines off either end —
-    never a plain str.strip(), which would also eat the first
+    back into text, trimming only whole blank lines off either end.
+    Never a plain str.strip(), which would also eat the first
     remaining line's own leading indentation (the normalized
     `declare -f` equivalent, "\\n".join(body).strip(), is safe there only
     because function_body_lines already stripped every line
-    individually — a verbatim body must not be).
+    individually, which a verbatim body must not be).
 
     The indentation every line shares (the body's own indentation inside
     its function) is removed, keeping only the relative indentation
@@ -309,8 +309,8 @@ def verbatim_function_body_lines(source: str) -> list[str] | None:
     Like function_body_lines, but for a verbatim source string (see
     doc_mod.run_get_verbatim_func_source) rather than a `declare -f`
     dump: strips the header/opening-brace/closing-brace shape down to
-    the body, but keeps every body line exactly as written — no
-    stripping, no trailing-";" removal — since the whole point of a
+    the body, but keeps every body line exactly as written (no
+    stripping, no trailing-";" removal) since the whole point of a
     verbatim source is to preserve the author's own indentation and
     comments.
 
@@ -319,7 +319,7 @@ def verbatim_function_body_lines(source: str) -> list[str] | None:
     doc-comment block ahead of it (see
     debasher::_get_verbatim_func_source), so this locates the header by
     its own "name ()" shape (_FUNC_HEADER_RE) first, dropping any
-    comment lines before it — a doc-comment describes the *original*
+    comment lines before it: a doc-comment describes the *original*
     function, which is meaningless once its body is spliced into a
     freshly synthesized one (see script_generation.py's
     _add_method_body_func/_add_array_opts_func/
@@ -328,7 +328,7 @@ def verbatim_function_body_lines(source: str) -> list[str] | None:
 
     None whenever no such header can be found, or what follows it isn't
     the exact "{\\n...\\n}" shape (e.g. "name() { ... }" all on the
-    header's own line, or a brace-less single-statement body) — callers
+    header's own line, or a brace-less single-statement body): callers
     should fall back to function_body_lines on the `declare -f` version
     of the same function in that case, same as if the verbatim source
     were unavailable at all.
@@ -348,7 +348,7 @@ def verbatim_function_body_lines(source: str) -> list[str] | None:
 def parse_code_blocks(lines: list[str]) -> list[str]:
     """
     Like parse_code, but returns every ```<lang> ... ``` fenced block in
-    `lines` (fence lines excluded) rather than just the first — for
+    `lines` (fence lines excluded) rather than just the first: for
     sections that may concatenate several of them back to back, such as
     "Process Option Handler".
     """

@@ -68,7 +68,7 @@ function taskOptionsOf(process: ProgramProcess): ProgramOption[] {
   return process.options.filter(o => !o.taskShaping);
 }
 
-// This process's fanout family options (see isFanoutOption) — only
+// This process's fanout family options (see isFanoutOption): only
 // meaningful on a "standard"-mode process.
 function fanoutOptionsOf(process: ProgramProcess): ProgramOption[] {
   return process.optionsHandler.mode === "standard"
@@ -112,7 +112,7 @@ function argsCountId(read: FanoutRead): string {
 
 // Bash template lines for one fanout family option (see isFanoutOption):
 // a runtime loop, driven by its count-source option's own identifier
-// (already declared earlier in the template — fanout blocks are always
+// (already declared earlier in the template, fanout blocks are always
 // emitted after all plain option reads, see generateBashTemplate), or by
 // the number of options of the family found among the arguments, reading
 // "<base-label>$i" for each i into an array.

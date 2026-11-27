@@ -228,8 +228,8 @@ export function canvasStructuralKey(program: Program, showWiring = false): strin
 // isBackEdge) is routed through and the rightmost process in the
 // program, so the lane sits clear of every node's box. Unlike a
 // process's left edge (its bare position.x), its right edge isn't in
-// the Program model at all — ProcessNode has no fixed width, only a
-// minWidth, and grows with however many options it has — so this
+// the Program model at all (ProcessNode has no fixed width, only a
+// minWidth, and grows with however many options it has) so this
 // margin has to double as a stand-in for "widest plausible node width"
 // too. Comfortable for the option counts in data/programs today; a
 // process with an unusually large number of options could in
@@ -237,8 +237,8 @@ export function canvasStructuralKey(program: Program, showWiring = false): strin
 const BACK_EDGE_MARGIN = 260;
 
 /**
- * Whether an edge points "backward" — its target sitting at or above
- * its source (smaller/equal y) — which a cyclic program always has at
+ * Whether an edge points "backward": its target sitting at or above
+ * its source (smaller/equal y): which a cyclic program always has at
  * least one of, since a strict top-to-bottom layering can't exist for
  * a cycle. Rendered via BackEdge instead of a plain edge; see there for
  * why a plain one would cut through intervening nodes.
