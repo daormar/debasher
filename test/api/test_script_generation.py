@@ -727,9 +727,11 @@ def _connect_to_the_family(program):
         ("output", lambda p: setattr(_family_option(p), "channel", "value_desc"), 'must use channel "none" or "fifo"'),
         ("output", lambda p: setattr(_family_option(p), "mirror", True), "can't be mirrored"),
         ("output", _connect_to_the_family, "can't be connected"),
-        # A connected input on a channel is refused by the rule of every
-        # connected input, before this one
+        ("output", lambda p: setattr(_family_option(p), "subpath", "${i}"), "has a subpath"),
+        # A connected input takes the channel of its connection, without a
+        # subpath, so only an input that is not connected keeps them
         ("input", lambda p: (setattr(_family_option(p), "channel", "fifo"), p.edges.clear()), 'must use channel "none"'),
+        ("input", lambda p: (setattr(_family_option(p), "subpath", "${i}"), p.edges.clear()), "has a subpath"),
         ("input", lambda p: p.edges.clear(), "must be connected"),
     ],
 )
@@ -943,3 +945,54 @@ def test_a_label_that_the_engine_takes_is_written(label):
     program.processes[1].options[0].label = label
     script = generate_script(program, skip_redundant_check=True)
     assert f'debasher::define_opt_from_proc_out "{label}" "counter" "-outf" optlist' in script
+
+
+# --- An input with several connections ---------------------------------------
+
+
+def _fed_program(first_channel, second_channel, second_directory="nums"):
+    """counter and doubler write -outf, on the channels given; reader reads
+    both through -in, as a program edited by hand may connect it."""
+    program = _connected_program("none", first_channel)
+    doubler = program.processes[0].model_copy(deep=True, update={"id": "d", "name": "doubler"})
+    doubler.options[0].channel = second_channel
+    doubler.options[0].value = second_directory if second_channel == "shared_dir" else "${process_outdir}/n"
+    edge = ProgramEdge(id="e2", sourceProcessId="d", sourceOptionId="out", targetProcessId="r", targetOptionId="in")
+    return program.model_copy(update={
+        "processes": [*program.processes, doubler],
+        "edges": [*program.edges, edge],
+        "sharedDirs": ["nums", "other"],
+    })
+
+
+@pytest.mark.parametrize("first_channel, second_channel, second_directory", [
+    ("none", "none", ""),
+    ("fifo", "none", ""),
+    # Two writers of a shared directory, one of which moved to another, or
+    # left it
+    ("shared_dir", "shared_dir", "other"),
+    ("shared_dir", "none", ""),
+])
+def test_an_input_with_several_connections_is_refused(first_channel, second_channel, second_directory):
+    # The engine could not tell which value the input takes
+    program = _fed_program(first_channel, second_channel, second_directory)
+    with pytest.raises(ValueError, match="is connected to 2 outputs .* Remove all its connections but one"):
+        generate_script(program, skip_redundant_check=True)
+
+
+def test_an_input_fed_by_writers_of_the_same_shared_directory_reads_it():
+    script = generate_script(_fed_program("shared_dir", "shared_dir"), skip_redundant_check=True)
+    assert 'debasher::define_opt_from_shared_dir "-in" "nums" optlist || return 1' in script
+
+
+def test_an_input_of_a_manual_process_may_have_several_connections():
+    # Its function is written as it is, and may read the input from one
+    # output or another; the edges only draw that
+    program = _fed_program("none", "none")
+    reader = program.processes[1]
+    reader.optionsHandler = OptionsHandler(
+        mode="manual",
+        manualCode='debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist || return 1',
+    )
+    script = generate_script(program, skip_redundant_check=True)
+    assert 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist' in script

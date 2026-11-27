@@ -261,7 +261,11 @@ input. Its editor sets:
   FIFO, replaces that channel. An input that reads a shared directory
   names the directory of the output, and follows it when the output
   names another, but keeps its own "Subdirectory (optional)", the
-  shared subdirectory that it reads (see :doc:`shared_subdir`);
+  shared subdirectory that it reads (see :doc:`shared_subdir`). An
+  input that several outputs feed takes their one directory: when one
+  of them comes to name another directory, or leaves the shared
+  directory, "Save" refuses the program until all of its connections
+  but one are removed;
 * its **value**, for a direct value, which is a Bash word such as
   ``10`` or ``${task_idx}``, written into the generated script as it is.
 
@@ -331,7 +335,8 @@ options (``-outf0``, ``-outf1``, ...) as its count source says, and it
 connects to an array or generator process, one option for each task.
 An input family reads each task of the process at the other end, even
 from an output on a shared directory: it does not name that directory,
-as a single input would.
+as a single input would, and takes no subdirectory (a save refuses a
+family that holds one).
 The count source, chosen in the editor of the option, is a command line
 option of the same process, or the number of tasks of the process at
 the other end of the connections of the family, an array or a
@@ -358,10 +363,13 @@ the bottom of a process, to the handle of an input, along the top of
 another process or of the same one. The canvas accepts a connection
 only when the engine would:
 
-* an input takes a single connection, and none at all if it is a flag,
-  a command line option or an option taken from the process
-  specifications (those have a hollow handle, tagged ``cmdline``,
-  ``shaping``, ``spec`` or ``flag``);
+* an input takes a single connection, but for an input on a shared
+  directory, which may read several outputs that all name the same
+  shared directory; it takes none at all if it is a flag, a command
+  line option or an option taken from the process specifications
+  (those have a hollow handle, tagged ``cmdline``, ``shaping``,
+  ``spec`` or ``flag``), and a flag, which carries no data, feeds no
+  input either;
 * a connection that is not from a FIFO makes the input wait for the
   output's process to finish, so a cycle made only of such connections
   is refused; a cycle through a FIFO is allowed, since both ends of a

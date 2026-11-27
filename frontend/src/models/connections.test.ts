@@ -125,6 +125,21 @@ describe("isValidEdge", () => {
     expect(isValidEdge(program, edgeOf("d", "d-outg", "c", "c-in"))).toBe(false);
   });
 
+  it("connects no flag, which carries no data, to an input", () => {
+    // Only a program edited by hand, or an edit refused to an agent, holds a
+    // flag that is an output
+    const program: Program = {
+      ...createEmptyProgram("p"),
+      processes: [
+        process("a", [option("a-outx", "-outx", { dataType: "None" }), option("a-outf", "-outf")]),
+        process("b", [option("b-in", "-in")]),
+      ],
+      edges: [],
+    };
+    expect(isValidEdge(program, edgeOf("a", "a-outx", "b", "b-in"))).toBe(false);
+    expect(isValidEdge(program, edgeOf("a", "a-outf", "b", "b-in"))).toBe(true);
+  });
+
   it("pairs a fanout family only with a process of several tasks, and never with another family", () => {
     const program: Program = {
       ...createEmptyProgram("p"),

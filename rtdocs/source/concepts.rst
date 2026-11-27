@@ -97,8 +97,10 @@ Connections and the dependency graph
 ------------------------------------
 
 A **connection** joins an input of one process to an output of
-another, or of the same one. An input takes a single connection, and
-it then carries whatever the output carries, on the output's channel.
+another, or of the same one. An input takes a single connection
+(or several from outputs that all name the same shared directory),
+and it then carries whatever the output carries, on the output's
+channel.
 The connections of a program are its **dependency graph**: there is
 no separate description of which process runs after which, since the
 graph follows from the options alone, and DeBasher draws it, checks it

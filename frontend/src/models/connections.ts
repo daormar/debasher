@@ -117,6 +117,7 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
  * the connection may be added: from an output to an input, of another
  * process or of the same one (a self-loop). An output may feed several
  * inputs. It is refused when:
+ * - the output is a flag, which carries no data;
  * - the input takes its value from elsewhere: a flag, a command line
  *   option, or one taken from the process specifications;
  * - in a resident program, it does not join a business output to an
@@ -151,6 +152,11 @@ export function isValidEdge(
   const targetOptionDef = targetProcess?.options.find(
     option => option.id === targetHandle
   );
+
+  // A flag carries no data, so it feeds no input
+  if (sourceOptionDef?.dataType === "None") {
+    return false;
+  }
 
   // Script generation writes these before it looks at any connection
   if (

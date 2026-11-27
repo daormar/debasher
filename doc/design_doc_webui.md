@@ -700,7 +700,7 @@ refusing to generate it:
 
 | Rule | Reason | Agent | Script generation |
 |--------------------|-----------------|---|--------|
-| A flag (an option of data type `None`) is an input | it carries no data | no | no |
+| A flag (an option of data type `None`) is an input | it carries no data | yes, and the canvas connects no flag to an input | no |
 | A flag takes only the option channel `none` | it carries no data | yes | no |
 | `mirror` only on a `fifo` output | it copies what the process writes into a FIFO | no | no: it ignores it elsewhere, and refuses it on a fanout family |
 | `value_desc` only on an output | the consumer of a value descriptor just connects to it | yes | yes |
@@ -815,6 +815,9 @@ the engine:
 
 - It goes from an output to an input. Both may belong to the same process,
   a self-loop, so that a process can feed itself.
+- It does not come from a flag, which carries no data. Only a program edited
+  by hand holds a flag that is an output, since the editor of an option and
+  the checks of the edits of an agent refuse one.
 - The input takes its value from nowhere else. It is not a flag, which takes
   no value, nor a command line option, nor an option taken from the process
   specifications: script generation writes all of these before it looks at
@@ -826,7 +829,9 @@ the engine:
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same directory,
   whose edges only document how the processes share it (see "Directory channels
-  and subpaths").
+  and subpaths"). Script generation refuses any other input with several
+  connections, such as one whose writers no longer name the same directory, or
+  one in a topology file edited by hand.
 - An input that a `shared_dir` output already feeds takes another writer only
   of the same directory, whatever their subpaths; an input not connected yet
   takes the directory of the output it reads. A `shared_dir` output that names
@@ -1098,8 +1103,8 @@ the two directories only matter to the web UI.
 ## Option definitions
 
 In `standard`, `array` and `generator` mode, script generation writes one
-definition for each option that is not a task shaping option (one per edge for
-a fan-in), taken from the first rule that applies:
+definition for each option that is not a task shaping option, taken from the
+first rule that applies:
 
 1. A flag: `define_flag`, or `define_cmdline_flag_if_given` if it is a
    command line option.
@@ -1114,7 +1119,7 @@ a fan-in), taken from the first rule that applies:
 6. A command line option: `define_cmdline_opt`, `define_cmdline_infile_opt`
    for a file, or `define_cmdline_indir_opt` for a directory, with the suffix
    `_if_given` when it is not mandatory.
-7. A connected option: `define_opt_from_proc_out` for each of its edges, or
+7. A connected option: `define_opt_from_proc_out` for its connection, or
    `define_opt_from_proc_task_out` with the task index when both ends run in
    `array` or `generator` mode.
 8. An input file or directory: `define_infile_opt` or `define_indir_opt`, which
@@ -1226,23 +1231,26 @@ would produce a wrong one: an option whose label the engine refuses (see
 option; an output taken from the process specifications; a command line option
 with an option channel other than `none`; an input with option channel
 `process_outdir`; a subpath on an option whose option channel is neither
-`shared_dir` nor `process_outdir`; a task shaping option that is not a mandatory
-command line input with a value, or that is a fanout family; a fanout family
-that is a flag, a command line option or taken from the process specifications,
-whose `countSourceOptionId` names no option of the process, or one that is not a
-command line option or is a task shaping option, that has no count source option
-and is not connected to exactly one process, in `array` or `generator` mode, at
-the other end of its connections, whose output is the target of a connection,
-mirrored or uses an option channel other than `none` or `fifo`, or whose input
-is not connected to a process in `array` or `generator` mode; a connection to a
-fanout family from a process in another mode; a process or a sequential process
-named as its program, whose `_document` method would be that of the module, or
-as its program followed by the suffix of a module method (`_document`,
-`_program`, `_shared_dirs`, `_program_type`), whose function would be that
-module method (the rule of a process name does not see it, since it depends on
-the name of the module); a sequential process in a resident program, or with the
-name of a process or of another sequential process (see "Generating and
-importing a sequential process"); an options handler in `manual` mode whose
+`shared_dir` nor `process_outdir`, a fanout family included; an input of a
+process not in `manual` mode with more than one connection, unless every one
+comes from an output that names the same shared directory, since the engine
+could not tell which value the input takes; a task shaping option that is not a
+mandatory command line input with a value, or that is a fanout family; a fanout
+family that is a flag, a command line option or taken from the process
+specifications, whose `countSourceOptionId` names no option of the process, or
+one that is not a command line option or is a task shaping option, that has no
+count source option and is not connected to exactly one process, in `array` or
+`generator` mode, at the other end of its connections, whose output is the
+target of a connection, mirrored or uses an option channel other than `none` or
+`fifo`, or whose input is not connected to a process in `array` or `generator`
+mode; a connection to a fanout family from a process in another mode; a process
+or a sequential process named as its program, whose `_document` method would be
+that of the module, or as its program followed by the suffix of a module method
+(`_document`, `_program`, `_shared_dirs`, `_program_type`), whose function would
+be that module method (the rule of a process name does not see it, since it
+depends on the name of the module); a sequential process in a resident program,
+or with the name of a process or of another sequential process (see "Generating
+and importing a sequential process"); an options handler in `manual` mode whose
 language is Python; Conda environments or Docker images given both as data and
 as the body of their method; and a path of a Python tasks file or skip file, the
 name or the YAML file of a Conda environment, or a Docker image that is empty or
@@ -1368,7 +1376,10 @@ With the processes read, import assembles the program:
   it was, so its target falls back to `manual` mode. Neither can a fanout family
   whose loop asks for the number of tasks of a process that is not the one at
   the other end of its connections, or that is not in `array` or `generator`
-  mode, so its process falls back to `manual` mode too.
+  mode, so its process falls back to `manual` mode too. An input of a process
+  in another mode that a module reads from several outputs, other than writers
+  of the same shared directory, is refused when the program is saved, until all
+  its connections but one are removed (see "What script generation refuses").
 - **Shared directories.** An option whose value names a shared directory,
   literally or through a variable that the engine resolves, becomes a
   `shared_dir` option when that directory is one the program can reach, and

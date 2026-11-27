@@ -33,7 +33,7 @@ export const nodeKind = z.enum(["FBPProcess", "ProgramLauncher", "DirectoryWatch
 
 export const optionFields = z.object({
   dataType: z.enum(["int", "float", "string", "file", "dir", "None"]).optional()
-    .describe('The type of the data that the option carries, the channel being how it gets there: with channel "none", the value itself ("file" or "dir" for an input path that has to exist, a regular file or a directory); through a FIFO, each line of it; through a value descriptor, the value it holds. A directory channel fixes it to "dir", and a connected input has that of the output it reads, which it follows. "None" for a flag, which takes no value and no channel.'),
+    .describe('The type of the data that the option carries, the channel being how it gets there: with channel "none", the value itself ("file" or "dir" for an input path that has to exist, a regular file or a directory); through a FIFO, each line of it; through a value descriptor, the value it holds. A directory channel fixes it to "dir", and a connected input has that of the output it reads, which it follows. "None" for a flag, which takes no value and no channel, and is always an input: its label cannot start with -out or --out, and it feeds no connection.'),
   channel: z.enum(["none", "value_desc", "fifo", "shared_dir", "process_outdir"]).optional()
     .describe("How the value is delivered: a plain value, an output whose value is a description, a FIFO, a shared directory, or, for an output, the output directory of the process. A connected input takes the channel that its connection gives it (\"none\", or \"shared_dir\" when it reads a shared directory): leave it out."),
   subpath: z.string().optional()

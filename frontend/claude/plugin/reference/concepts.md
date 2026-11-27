@@ -302,7 +302,8 @@ https://debasher.readthedocs.io/en/latest/design_patterns.html).
   of label that changes the direction drops the connections of the option.
 - **dataType**, the type of the data that the option carries: `int`,
   `float`, `string` (the default), `file`, `dir`, or `None` for a flag
-  (always an input, on channel `none`). An input of type `file` or `dir`,
+  (always an input, so its label does not start with `-out` or `--out`, on
+  channel `none`; it feeds no connection). An input of type `file` or `dir`,
   given on the command line or as a value, has to name an existing regular
   file or directory, and the engine makes its path absolute.
 - **channel**, how the data gets to the process: `none` (a value or a

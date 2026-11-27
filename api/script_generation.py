@@ -351,6 +351,47 @@ def _get_connected_input_channel(process, option, source_option) -> str:
     return "shared_dir" if source_option.channel == "shared_dir" and not is_fanout else "none"
 
 
+def _check_inputs_with_several_connections(program: Program) -> None:
+    """
+    Takes a program; returns nothing. Raises ValueError for an input with
+    more than one connection whose sources are not all outputs that name
+    the same shared directory: the engine could not tell which value the
+    input takes, and would refuse values that differ only when it runs.
+    """
+    options = {}
+    names = {}
+    manual_processes = set()
+    for process in program.processes:
+        if process.optionsHandler.mode == "manual":
+            manual_processes.add(process.id)
+        for option in process.options:
+            options[(process.id, option.id)] = option
+            names[(process.id, option.id)] = f'"{option.label}" of "{process.name}"'
+    sources_by_input = {}
+    for edge in program.edges:
+        source = (edge.sourceProcessId, edge.sourceOptionId)
+        target = (edge.targetProcessId, edge.targetOptionId)
+        # A manual process is written as its function is, which may read an
+        # input from one output or another; its edges only draw that
+        if edge.targetProcessId in manual_processes:
+            continue
+        if source in options and target in options:
+            sources_by_input.setdefault(target, []).append(source)
+    for target, sources in sources_by_input.items():
+        if len(sources) < 2:
+            continue
+        directories = {options[source].value for source in sources if options[source].channel == "shared_dir"}
+        all_shared_dir = all(options[source].channel == "shared_dir" for source in sources)
+        if all_shared_dir and len(directories) == 1:
+            continue
+        listed = ", ".join(names[source] for source in sources)
+        raise ValueError(
+            f"Option {names[target]} is connected to {len(sources)} outputs ({listed}): an input "
+            'takes one connection, except from "shared_dir" outputs that name the same directory. '
+            "Remove all its connections but one."
+        )
+
+
 def _normalize_connected_inputs(program: Program) -> Program:
     """
     Takes a program; returns a copy with every connected input on the
@@ -571,6 +612,13 @@ def _validate_fanout_option(process, option, process_modes, connections: Connect
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t itself be command-line.')
     if option.fromProcessSpec:
         raise ValueError(f'Fanout option "{option.label}" on "{process.name}" can\'t be sourced from process spec.')
+    # A family is on "none" or "fifo", which take no subpath; a family does
+    # not go through _check_option_sources, which refuses it elsewhere
+    if option.subpath:
+        raise ValueError(
+            f'Fanout option "{option.label}" on "{process.name}" has a subpath, which only '
+            'the channels "shared_dir" and "process_outdir" take. Leave the subpath of the family empty.'
+        )
     if option.direction == "output":
         # "fifo" is the one channel a fanout output can use besides
         # "none", a family of per-task named pipes (e.g.
@@ -777,9 +825,9 @@ def _write_cmdline_lines(option) -> list[str]:
 def _write_connection_lines(process, option, process_modes, connections: Connections) -> list[str]:
     """
     Takes a process, one of its options, the modes of the processes and the
-    connections of the option; returns the lines that define the option
-    from the outputs it reads: one define_opt_from_proc_out[_task_out] per
-    connection, or the read of a member of a fanout family in a scatter.
+    connection of the option; returns the line that defines the option from
+    the output it reads: a define_opt_from_proc_out[_task_out], or the read
+    of a member of a fanout family in a scatter.
     Raises ValueError for a scatter into a process of another mode.
     """
     conn_proc, conn_opt, _ = connections[0]
@@ -797,21 +845,15 @@ def _write_connection_lines(process, option, process_modes, connections: Connect
         base_conn_opt = _fanout_base_label(conn_opt)
         return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{TASK_IDX_VAR}}}" optlist || return 1']
 
-    # One line per connection. The canvas gives several only to an input on
-    # "shared_dir", which never comes here; a program saved against that
-    # rule gets a line for each, and the engine refuses values that differ
-    lines = []
-    for src_proc, src_opt, src_mode in connections:
-        # Two processes of several tasks each are read task by task
-        if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
-            lines.append(
-                f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{TASK_IDX_VAR}}}" "{src_opt}" optlist || return 1'
-            )
-        else:
-            lines.append(
-                f'debasher::define_opt_from_proc_out "{option.label}" "{src_proc}" "{src_opt}" optlist || return 1'
-            )
-    return lines
+    # One connection: an input with several reads a shared directory, and
+    # never comes here (see _check_inputs_with_several_connections)
+    _, _, conn_mode = connections[0]
+    # Two processes of several tasks each are read task by task
+    if process.optionsHandler.mode in _TASK_INDEXED_MODES and conn_mode in _TASK_INDEXED_MODES:
+        return [
+            f'debasher::define_opt_from_proc_task_out "{option.label}" "{conn_proc}" "${{{TASK_IDX_VAR}}}" "{conn_opt}" optlist || return 1'
+        ]
+    return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{conn_opt}" optlist || return 1']
 
 
 def _write_literal_lines(process, option) -> list[str]:
@@ -835,12 +877,12 @@ def _write_literal_lines(process, option) -> list[str]:
 
 def _option_definition_line(process, option, process_modes, connections_by_option):
     """
-    Returns the _define_opts/_generate_opts line(s) for `option`: a list,
-    since a connected, non-command-line, non-fanout option may have more
-    than one incoming edge (fan-in), each written as a line of its own (see
-    _write_connection_lines). The order of the checks below is the precedence of
-    the sources of a value: a flag, an option channel, the process
-    specifications, the command line, a connection, and a literal value.
+    Returns the _define_opts/_generate_opts lines for `option`: one, or
+    none for a task shaping option. The order of the checks below is the
+    precedence of the sources of a value: a flag, an option channel, the
+    process specifications, the command line, a connection, and a literal
+    value; a connected input already holds the channel of its connection
+    (see _normalize_connected_inputs).
     """
     _check_option_sources(process, option)
     # Only the options handler reads a task shaping option: no task
@@ -1335,6 +1377,7 @@ def _build_script(
     lines = [SCRIPT_HEADER, "", ""]
 
     process_modes = {p.name: p.optionsHandler.mode for p in program.processes}
+    _check_inputs_with_several_connections(program)
     program = _normalize_connected_inputs(program)
     connections_by_option = _connections_by_option(program)
     readers_by_option = _readers_by_option(program)

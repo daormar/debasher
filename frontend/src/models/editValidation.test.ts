@@ -66,6 +66,21 @@ describe("validateEdits", () => {
     ])).toEqual([]);
   });
 
+  it("tells an agent that a flag feeds no input, and how to change it", () => {
+    // Only a program edited by hand holds a flag that is an output
+    const withFlag = {
+      ...program(),
+      processes: [...program().processes, process("f", [createOption("fx", "-outx", { direction: "output", dataType: "None" })])],
+    };
+    expect(validateEdits(withFlag, [
+      { op: "addProcess", process: process("c", [createOption("ci", "-in")]) },
+      { op: "connect", edge: edge("e1", ["f", "fx"], ["c", "ci"]) },
+    ])).toEqual([
+      'Option "-outx" of process "f" is a flag, which carries no data and feeds no input: ' +
+      "give it another data type, or a label that does not start with -out or --out, before connecting it.",
+    ]);
+  });
+
   it("refuses a durability mode on a general program, and takes it on a resident one", () => {
     expect(validateEdits(program(), [{ op: "setProgramFields", changes: { durability: "non-durable" } }]))
       .toEqual(["Only a resident program has a durability mode."]);
@@ -136,11 +151,13 @@ describe("validateEdits", () => {
       { op: "addOption", processId: "id-a", option: createOption("w", "-outd", { direction: "output", channel: "process_outdir", subpath: "${task_idx}" }) },
       { op: "addOption", processId: "id-a", option: createOption("v", "-inv", { channel: "value_desc" }) },
       { op: "addOption", processId: "id-a", option: createOption("u", "-outv", { direction: "output", channel: "value_desc" }) },
+      { op: "addOption", processId: "id-a", option: createOption("t", "-outx", { direction: "output", dataType: "None" }) },
     ])).toEqual([
       'Option "-outn" of process "a" is an output, which cannot take its value from the process specifications.',
       'Option "-ind" of process "a" uses the channel "process_outdir", which only an output can use.',
       'Option "-outs" of process "a" has a subpath, which only the channels "shared_dir" and "process_outdir" take.',
       'Option "-inv" of process "a" uses the channel "value_desc", which only an output, labeled -out* or --out*, can use.',
+      'Option "-outx" of process "a" is a flag, which carries no data, and so is an input: its label cannot start with -out or --out.',
     ]);
   });
 

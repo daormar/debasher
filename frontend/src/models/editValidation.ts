@@ -146,6 +146,15 @@ function findEditProblem(program: Program, edit: EditOp): string | null {
       if (missing) {
         return missing;
       }
+      // A flag carries no data; only a program edited by hand holds one that
+      // is an output
+      const sourceOption = source.options.find(option => option.id === edge.sourceOptionId)!;
+      if (sourceOption.dataType === "None") {
+        return (
+          `Option "${sourceOption.label}" of process "${source.name}" is a flag, which carries no data and feeds no input: ` +
+          "give it another data type, or a label that does not start with -out or --out, before connecting it."
+        );
+      }
       // A resident program takes a connection only into an input on "none",
       // which the connection makes a business input
       const targetOption = target.options.find(option => option.id === edge.targetOptionId)!;
@@ -207,7 +216,7 @@ function findEditProblem(program: Program, edit: EditOp): string | null {
 // Takes a process and one of its options; returns why the combination of
 // the fields of the option makes no sense, or null. The editor of an option
 // does not offer these combinations; script generation refuses them too,
-// but for a flag on a channel and a subpath on a fanout family.
+// but for a flag on a channel and a flag that is an output.
 function findOptionFieldsProblem(process: ProgramProcess, option: ProgramOption): string | null {
   const where = `Option "${option.label}" of process "${process.name}"`;
   if (option.direction === "output" && option.fromProcessSpec) {
@@ -218,6 +227,9 @@ function findOptionFieldsProblem(process: ProgramProcess, option: ProgramOption)
   }
   if (option.channel === "value_desc" && !/^--?out/.test(option.label)) {
     return `${where} uses the channel "value_desc", which only an output, labeled -out* or --out*, can use.`;
+  }
+  if (option.dataType === "None" && option.direction === "output") {
+    return `${where} is a flag, which carries no data, and so is an input: its label cannot start with -out or --out.`;
   }
   if (option.dataType === "None" && option.channel !== "none") {
     return `${where} is a flag, which carries no data, and so no channel but "none".`;

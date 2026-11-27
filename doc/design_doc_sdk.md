@@ -505,8 +505,12 @@ process contract:
 - `connect(source, display="line")`, an input connected to an output of
   another process, given as the option (`generate["-outf"]`) or as the
   name of the process and the label of the option, as a module names them
-  in `define_opt_from_proc_out`; a list of sources is a fan-in, and
-  `display="label"` draws the connection as a label edge on the canvas.
+  in `define_opt_from_proc_out`; a list of sources, a fan-in, is written
+  only when every source is an output that names the same shared
+  directory, as script generation refuses any other input with several
+  connections (see "What script generation refuses" in
+  `doc/design_doc_webui.md`), and `display="label"` draws the connection
+  as a label edge on the canvas.
   The reading of the output of an array task by task
   (`define_opt_from_proc_task_out`) follows from the modes of the two
   processes, and is not given.
