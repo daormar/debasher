@@ -115,13 +115,13 @@ function dropInvalidEdges(source: Program): Program {
 }
 
 /**
- * The program brought in line with the rules of the model: the edges that
- * join no output to an input dropped, every connected input moved off a
- * channel that would hide its connection, the connection sentinels derived
- * again from the edges and the names, the data types that a channel or a
- * connection fixes set, and a missing durability mode or scheduler given
- * its default. It repairs a program saved against those rules, such as one
- * edited by hand.
+ * Takes a program; returns it brought in line with the rules of the model,
+ * or the same object when it already is: the edges that join no output to
+ * an input dropped, every connected input moved off a channel that would
+ * hide its connection, the connection sentinels derived again from the
+ * edges and the names, the data types that a channel or a connection fixes
+ * set, and a missing durability mode or scheduler given its default. It
+ * repairs a program saved against those rules, such as one edited by hand.
  */
 export function normalizeProgram(source: Program): Program {
 
@@ -150,12 +150,9 @@ export function normalizeProgram(source: Program): Program {
 }
 
 /**
- * Strips groupSource from every process and sequential process of the given
- * groups, which are then generated one by one. A process added with another
- * program ("Add program") is re-declared, unmodified, by add_debasher_program
- * from its source module, so an edit of its definition, or of an edge that
- * targets it, would be overwritten once generated: the caller frees its whole
- * group first.
+ * Takes a program and a set of groupIds; returns the program with the
+ * groupSource taken from every process and sequential process of those
+ * groups, which script generation then writes one by one.
  */
 export function dissolveGroups(source: Program, groupIds: Set<string>): Program {
 
@@ -182,11 +179,8 @@ export function dissolveGroups(source: Program, groupIds: Set<string>): Program 
 export type TouchedGroups = Map<string, string>;
 
 /**
- * The groups of the given processes: those that an edit of their
- * definition, or of an edge that targets one of them, dissolves. Moving a
- * process touches no group, nor does connecting an output of a grouped
- * process to a process outside the group, since that connection lives in
- * the target's own generated function.
+ * Takes a program and the ids of some of its processes; returns the groups
+ * of those processes, by groupId, each with the name of its program.
  */
 function groupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
 
@@ -203,7 +197,8 @@ function groupsOfProcesses(program: Program, processIds: Iterable<string>): Touc
 
 }
 
-// The groups of the edges' targets (see groupsOfProcesses).
+// Takes a program and the ids of some of its edges; returns the groups of
+// the targets of those edges (see groupsOfProcesses).
 function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
   const ids = new Set(edgeIds);
   return groupsOfProcesses(
@@ -213,9 +208,9 @@ function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): Touch
 }
 
 /**
- * The groups that replacing the sequential processes with the given ones
- * dissolves: those of a grouped sequential process that the replacement
- * changes or leaves out.
+ * Takes a program and the sequential processes that replace its own;
+ * returns the groups of the grouped sequential processes that the
+ * replacement changes or leaves out.
  */
 function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
 
@@ -335,9 +330,10 @@ function edgeTouchesOption(edge: ProgramEdge, processId: string, optionId: strin
 }
 
 /**
- * Adds the edge and gives its target option the value of a connected
- * input: the reference to its source, or, for a source on "shared_dir",
- * the channel and the directory of the source.
+ * Takes a program and a new edge; returns the program with the edge added
+ * and its target option given the value of a connected input: the
+ * reference to its source, or, for a source on "shared_dir", the channel
+ * and the directory of the source.
  */
 export function connect(program: Program, edge: ProgramEdge): Program {
 
@@ -405,13 +401,10 @@ export function setEdgeDisplay(program: Program, edgeIds: string[], display: Edg
 }
 
 /**
- * Why "Add program" cannot bring `loaded` into `program`, or null if it can.
- * Only a program of the same type is added, a program has at most one
- * Supervisor, and no process or sequential process of `loaded` may have the
- * name of one of `program` (a process and a sequential process share one set
- * of names, in the engine as here): the names can't be deduped by renaming,
- * since add_debasher_program only knows the source module's own original
- * names.
+ * Takes the current program and the one that "Add program" would bring in;
+ * returns why it cannot, or null if it can: a program of another type, a
+ * second Supervisor, or a process or sequential process whose name the
+ * current program already has, whatever the case.
  */
 export function mergeRefusal(program: Program, loaded: Program): string | null {
 
@@ -434,6 +427,9 @@ export function mergeRefusal(program: Program, loaded: Program): string | null {
     );
   }
 
+  // A process and a sequential process share one set of names, in the
+  // engine as here; a clash cannot be solved by renaming, since
+  // add_debasher_program knows only the names of the source module
   const existingNames = new Set(
     [...program.processes, ...program.seqProcesses].map(member => member.name.toLowerCase())
   );
@@ -469,9 +465,11 @@ export interface MergedGroup {
 }
 
 /**
- * The copies of the processes, sequential processes and edges of `loaded`
- * that "Add program" brings into `program` from the directory `sourceDir`,
- * with new ids from `newId` and their names kept (see mergeRefusal). In a
+ * Takes the current program, the program `loaded` from the directory
+ * `sourceDir` and a source of new ids; returns the copies of the
+ * processes, sequential processes and edges of `loaded` that "Add
+ * program" brings in, with new ids and their names kept (see
+ * mergeRefusal), and the directory to add to DEBASHER_MOD_DIR. In a
  * general program they form one group; a resident program takes them
  * process by process.
  */
@@ -542,8 +540,9 @@ export function prepareMerge(
 
 }
 
-// Adds what prepareMerge made, and its directory to DEBASHER_MOD_DIR unless
-// it is there already.
+// Takes a program and what prepareMerge made; returns the program with it
+// added, and its directory added to DEBASHER_MOD_DIR unless it is there
+// already.
 export function addGroup(program: Program, group: MergedGroup): Program {
 
   const modDirEntries = splitModDir(program.envVars.DEBASHER_MOD_DIR ?? "");
@@ -627,8 +626,9 @@ export function applyEdits(program: Program, edits: EditOp[]): Program {
 }
 
 /**
- * The groups that `edits` touch in `program`, which have to be dissolved
- * (see dissolveGroups) before the edits are applied.
+ * Takes a program and some edits of it; returns the groups that the edits
+ * touch, by groupId, each with the name of its program, which have to be
+ * dissolved (see dissolveGroups) before the edits are applied.
  */
 export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
 

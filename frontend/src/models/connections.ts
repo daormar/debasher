@@ -75,8 +75,9 @@ export function isFanoutPartnerMode(process: ProgramProcess | undefined): boolea
 }
 
 /**
- * Whether the process `to` can be reached from the process `from`, or is
- * `from` itself, through edges whose source option is not a fifo.
+ * Takes a program and the ids of two of its processes; returns whether
+ * `to` can be reached from `from`, or is `from` itself, through edges
+ * whose source option is not a fifo.
  */
 function reachesWithoutFifo(program: Program, from: string, to: string): boolean {
 
@@ -113,9 +114,10 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
 }
 
 /**
- * Whether the connection `endpoints` may be added to `program`: from an
- * output to an input, of another process or of the same one (a
- * self-loop). An output may feed several inputs. It is refused when:
+ * Takes a program and the two ends of a new connection; returns whether
+ * the connection may be added: from an output to an input, of another
+ * process or of the same one (a self-loop). An output may feed several
+ * inputs. It is refused when:
  * - the input takes its value from elsewhere: a flag, a command line
  *   option, or one taken from the process specifications;
  * - in a resident program, it does not join a business output to an

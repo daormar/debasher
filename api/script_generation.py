@@ -341,9 +341,9 @@ Connections = list[tuple[str, str, str]]
 
 def _check_connected_input_channels(program: Program) -> None:
     """
-    Refuses, with ValueError, an input that a connection reaches on an
-    option channel other than "none", or than "shared_dir" when it reads a
-    shared directory.
+    Takes a program; returns nothing, and raises ValueError for an input
+    that a connection reaches on an option channel other than "none", or
+    than "shared_dir" when it reads a shared directory.
     """
     options = {
         (process.id, option.id): (process, option)
@@ -700,8 +700,8 @@ def _flag_lines(option) -> list[str]:
 
 
 def _channel_lines(option) -> list[str]:
-    """The line of an option delivered through an option channel, whatever
-    its connections."""
+    """Takes an option on an option channel other than "none"; returns the
+    line that defines it from its channel, whatever its connections."""
     if option.channel == "value_desc":
         return [f'debasher::define_value_desc_opt "{option.label}" optlist || return 1']
     if option.channel == "fifo":
@@ -729,7 +729,8 @@ def _channel_lines(option) -> list[str]:
 
 
 def _subdir_flag(option) -> str:
-    """The --subdir flag of an option with a subpath, or nothing."""
+    """Takes an option; returns its --subdir flag, with a leading blank, or
+    the empty string when it has no subpath."""
     return f' --subdir "{option.subpath}"' if option.subpath else ""
 
 
@@ -757,9 +758,11 @@ def _cmdline_lines(option) -> list[str]:
 
 def _connection_lines(process, option, process_modes, connections: Connections) -> list[str]:
     """
-    The lines of an option connected to the output of a process: the
-    consumer side of a scatter, when the output is a fanout family, or else
-    one define_opt_from_proc_out[_task_out] call for each connection.
+    Takes a process, one of its options, the modes of the processes and the
+    connections of the option; returns the lines that define the option
+    from the outputs it reads: one define_opt_from_proc_out[_task_out] per
+    connection, or the read of a member of a fanout family in a scatter.
+    Raises ValueError for a scatter into a process of another mode.
     """
     conn_proc, conn_opt, _ = connections[0]
     # A scatter: each task reads the member of the fanout family of a
@@ -864,26 +867,15 @@ def _add_opts_definition_func(process, suffix, header_lines, process_modes, conn
 
 
 def _add_array_opts_func(process, process_modes, connections_by_option):
-    # array mode: the engine's per-process task numbering (see
-    # debasher::_save_opt_list_loop) already treats "call save_opt_list
-    # N times inside one _define_opts" as N tasks, the same mechanism
-    # debasher_array_example.sh uses by hand, so, unlike generator
-    # mode, no separate _generate_opts_size is needed. The array itself
-    # is built by the user's own arrayCode, embedded verbatim, under the
-    # fixed name "array"; the loop variable "task_idx", the same name
-    # generator mode gives its own task index (TASK_IDX_VAR), is then
-    # available to option values as "${array[$task_idx]}" or
-    # "${task_idx}" and to connections (see _option_definition_line). It
-    # is declared local, so that the loop never writes a variable of the
-    # same name in a function of the engine that calls _define_opts.
-    #
-    # Unlike "standard"/"generator", the header's own "local optlist="
-    # is dropped: every option is (re)defined inside the loop regardless
-    # of whether its value actually depends on task_idx (uniform, no
-    # task_idx-independent option gets hoisted out as a one-time "shared
-    # prefix"), so "optlist" itself is simply declared fresh, empty, at
-    # the top of each iteration instead of copied from an outer one.
+    """
+    Takes a process in array mode, the modes of the processes and the
+    connections of each option; returns the lines of its _define_opts,
+    which builds the array and defines the options of each task in a loop
+    over it. Raises ValueError as _option_definition_line does.
+    """
     lines = [f"{process.name}{PROCESS_METHOD_DEFINE_OPTS_SUFFIX}()", "{"]
+    # The header without its "local optlist=": each task declares its own
+    # list, empty, at the top of its turn of the loop
     lines.extend(_define_opts_func_header()[:-1])
     lines.append("")
     if process.optionsHandler.language == "python":
@@ -897,8 +889,13 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
         )
         lines.append("")
     elif process.optionsHandler.arrayCode:
+        # The user's code builds the array under the fixed name "array"
         lines.append(_indent_block(process.optionsHandler.arrayCode, INDENT))
         lines.append("")
+    # The engine takes each save_opt_list of one _define_opts for a task
+    # (debasher::_save_opt_list_loop), so no _generate_opts_size is needed.
+    # task_idx, the name that generator mode gives its index too, is local,
+    # so that the loop never writes a variable of a function of the engine
     lines.append(f"{INDENT}local {TASK_IDX_VAR}")
     lines.append(f'{INDENT}for {TASK_IDX_VAR} in "${{!array[@]}}"; do')
     lines.append(f'{INDENT * 2}local optlist=""')
@@ -915,14 +912,14 @@ def _add_array_opts_func(process, process_modes, connections_by_option):
 
 
 def _add_generate_opts_size_func(process):
-    # The user's own code, embedded verbatim (like arrayCode) rather than
-    # wrapped as a single echo'd expression, so it can be arbitrarily
-    # complex, the only contract is that it must echo the task count.
-    # The engine calls this with the same 4 positional args as
-    # _define_opts (see debasher::_define_opts_generator), so the same
-    # header is emitted ahead of it, minus "local optlist=", which this
-    # function has no use for (it only echoes a task count).
+    """
+    Takes a process in generator mode; returns the lines of its
+    _generate_opts_size, which prints its number of tasks.
+    """
     lines = [f"{process.name}{PROCESS_METHOD_GENERATE_OPTS_SIZE_SUFFIX}()", "{"]
+    # The engine gives it the arguments of _define_opts
+    # (debasher::_define_opts_generator), so it gets the same header, but
+    # for "local optlist=", which a count does not use
     lines.extend(_define_opts_func_header()[:-1])
     lines.append("")
     if process.optionsHandler.language == "python":
@@ -931,6 +928,7 @@ def _add_generate_opts_size_func(process):
             f"{INDENT}debasher::num_tasks_from_file {_func_file_word(process, tasks_file_path(process))} {_PY_TASKS_ARGS}"
         )
     elif process.optionsHandler.generatorSizeCode:
+        # The user's code as it is, which only has to print the count
         lines.append(_indent_block(process.optionsHandler.generatorSizeCode, INDENT))
     lines.append("}")
     return lines
@@ -959,6 +957,13 @@ def _func_file_word(process, path: str) -> str:
 
 
 def _add_opts_handler(process, process_modes, connections_by_option, readers_by_option):
+    """
+    Takes a process, the modes of the processes, the connections of each
+    option and the readers of each output; returns the lines of the
+    functions that define the options of its tasks, as its options handler
+    mode says. Raises ValueError for a manual process whose options
+    handler is in Python, and as _option_definition_line does.
+    """
     handler = process.optionsHandler
     if handler.mode == "standard":
         return _add_opts_definition_func(
@@ -1116,14 +1121,13 @@ def _add_additional_methods_funcs(process):
 
 def _intact_group_ids(program):
     """
-    groupIds whose full original membership (groupSource.groupSize) is
-    still present among program.processes and program.seqProcesses,
-    i.e. an "Add program" batch nothing has been edited or removed from
-    yet (see frontend/src/store/ProgramContext.tsx's
-    confirmDetachIfGrouped, which is what normally guarantees this
-    before generation ever runs; this is only a defensive re-check,
-    e.g. for a hand-edited program.json).
+    Takes a program; returns the set of the groupIds of its groups whose
+    members, processes and sequential processes, all still carry their
+    groupSource (as many as groupSize).
     """
+    # The editor dissolves a group before an edit that touches it; this
+    # checks again a program saved against that rule, such as one edited by
+    # hand
     group_sizes = {}
     member_counts = {}
     for member in [*program.processes, *program.seqProcesses]:
@@ -1141,9 +1145,9 @@ def _intact_group_ids(program):
 
 def _intact_group_program_names(program) -> list[str]:
     """
-    The name of the program of each intact group, in the order in which
-    the first member of each group comes, as _add_program_function adds
-    the groups.
+    Takes a program; returns the name of the program of each of its intact
+    groups, in the order in which the first member of each group comes, as
+    _add_program_function adds the groups.
     """
     intact_group_ids = _intact_group_ids(program)
     names = []
@@ -1158,16 +1162,21 @@ def _intact_group_program_names(program) -> list[str]:
 
 def _add_group_module_loads(program):
     """
-    A load_debasher_module line for the module of each intact group: the
-    engine runs the _program method of a module given to
-    add_debasher_program only when the module is loaded, and the program
-    finds it through DEBASHER_MOD_DIR, where "Add program" puts its
-    directory.
+    Takes a program; returns a load_debasher_module line for the module of
+    each of its intact groups.
     """
+    # add_debasher_program runs the _program method of a module only when it
+    # is loaded, which the engine finds through DEBASHER_MOD_DIR, where "Add
+    # program" puts its directory
     return [f'load_debasher_module "{name}"' for name in _intact_group_program_names(program)]
 
 
 def _add_program_function(program):
+    """
+    Takes a program; returns the lines of the _program method of its
+    module, which adds each process and sequential process, or a whole
+    intact group with one add_debasher_program.
+    """
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
     intact_group_ids = _intact_group_ids(program)
     emitted_group_ids = set()
