@@ -23,17 +23,16 @@ directories, and how a program is run and observed. It does not describe the
 layout of each dialog or the look of the canvas.
 
 **Scope: general and resident programs.** The engine runs two types of program,
-general and resident (see the Glossary), and the web UI knows both, resident
-programs only in part: a subsection of "Resident programs in the web UI" that is
-built says so. Every section before "Resident programs in the web UI" describes
-the design for general programs, and what it says holds for them. A resident
-program, whose design is in `doc/design_doc_resident.md`, follows rules of its
-own in several places: it is always run by the built-in scheduler, its processes
-are meant to live until they are stopped, and it is stopped, snapshotted and
-reset with tools of its own. The section on resident programs says, for each
-part of the design described before it, whether it applies to resident programs
-unchanged, changes, or is replaced, and nothing in the earlier sections should
-be read as holding for resident programs unless that section says so.
+general and resident (see the Glossary), and the web UI knows both. Every
+section before "Resident programs in the web UI" describes the design for
+general programs, and what it says holds for them. A resident program, whose
+design is in `doc/design_doc_resident.md`, follows rules of its own in several
+places: it is always run by the built-in scheduler, its processes are meant to
+live until they are stopped, and it is stopped, snapshotted and reset with tools
+of its own. The section on resident programs says, for each part of the design
+described before it, whether it applies to resident programs unchanged, changes,
+or is replaced, and nothing in the earlier sections should be read as holding
+for resident programs unless that section says so.
 
 The document is organized as follows. The Glossary defines the terms it uses.
 "Architecture" presents the three layers of the web UI and where its state
@@ -46,19 +45,18 @@ that replaces the program metadata, and "Execution and observation" how it runs
 a program and follows it. "Frontend state and the canvas" describes the
 frontend's own state and the Help menu of the editor, and "Sequential processes
 in the web UI" describes how a program keeps the sequential processes of its
-module. "Resident programs in the web UI" designs the extension to resident
-programs, and says which parts of it are built. "Business tests in the web UI"
-describes how the web UI runs the tests of a program and writes a first test for
-a process. "A prompt for the code of a process" describes how the code editors
-help to have an AI tool write the code of a process, of its options handler, of
-its additional methods or of a node. "Editing a program from an agent: the MCP
-server" describes a second client of the backend, for AI agents, "Claude Code on
-a program" how DeBasher starts Claude Code with that server, "Access to the
-backend: the token" how the backend obeys only those who hold its token, "Claude
-Code in the page" describes a terminal in the editor where the backend runs
-Claude Code, "Guarantees and non-goals" gathers the guarantees stated along the
-way, those of resident programs included, and "Future work" lists what is known
-to be missing.
+module. "Resident programs in the web UI" describes the extension to resident
+programs. "Business tests in the web UI" describes how the web UI runs the tests
+of a program and writes a first test for a process. "A prompt for the code of a
+process" describes how the code editors help to have an AI tool write the code
+of a process, of its options handler, of its additional methods or of a node.
+"Editing a program from an agent: the MCP server" describes a second client of
+the backend, for AI agents, "Claude Code on a program" how DeBasher starts
+Claude Code with that server, "Access to the backend: the token" how the backend
+obeys only those who hold its token, "Claude Code in the page" describes a
+terminal in the editor where the backend runs Claude Code, "Guarantees and
+non-goals" gathers the guarantees stated along the way, those of resident
+programs included, and "Future work" lists what is known to be missing.
 
 # Glossary
 
@@ -134,12 +132,11 @@ refer to it.
 - **subdivided shared directory**: as defined in the design of the engine.
 - **subdivided process output directory**: as defined in the design of the
   engine.
-- **subpath**: as defined in the design of the engine: the path, below the
-  directory that an option with option channel `shared_dir` or `process_outdir`
-  names, of the shared subdirectory or task subdirectory that the option gives
-  instead (`ProgramOption.subpath`), written by script generation with
-  `--subdir`; `ProgramOption.subpath` is empty when the option names the
-  directory itself (see "Directory channels and subpaths").
+- **subpath**: as defined in the design of the engine, the path of a shared
+  subdirectory or task subdirectory below its directory, such as `3` or
+  `sample1/bam`. In the web UI it is `ProgramOption.subpath` of an option on a
+  directory channel, empty when the option names the directory itself (see
+  "Directory channels and subpaths").
 - **value descriptor**: as defined in the design of the engine: the file,
   named by an output option with option channel `value_desc`, into which a
   task writes a value for the processes connected to it.
@@ -454,11 +451,15 @@ See "Claude Code in the page".
   `debasher_claude` in a pseudo-terminal, for the terminal panel of one tab,
   and that ends with the WebSocket that carries it; a backend runs at most one
   per program.
-- **terminal panel**: the panel at the bottom of the editor that shows the
-  terminal of a session in the page and takes its keys.
-- **pseudo-terminal**: a pair of devices of the operating system that a program
-  takes for its terminal, while another program, here the backend, reads what
-  it writes and gives it what is typed.
+- **terminal panel**: the panel at the bottom of the editor that shows a
+  session in the page: a terminal emulator draws what Claude Code writes and
+  sends what the user types to the backend, through the WebSocket of the
+  session. It is the side of the terminal that the user sees.
+- **pseudo-terminal**: a pair of connected devices of the operating system: a
+  program takes one end for its terminal, and another program, here the
+  backend, reads through the other end what that program writes and gives it
+  what is typed. In a session in the page, Claude Code holds the first end, the
+  side of the terminal that it sees.
 - **registry of sessions**: what the backend keeps in memory of the sessions in
   the page, one place per home directory, which a ticket holds until it is used
   or expires, and then its session until it ends.
@@ -528,21 +529,25 @@ files are the only truth they share, and the guards against a conflict read them
 (`/run` refuses to start when `debasher_status` reports a run in progress on
 that output directory).
 
-The sessions in the page are the one exception: the backend keeps the process of
-each session, and the tickets that open them, and gives a program one session at
-most, whatever tab asks for it. Restarting the backend ends them and loses the
-answer that Claude Code was writing in each, while the conversations of Claude
-Code, which it keeps on disk, stay (see "The session in the page").
+The sessions in the page (see the Glossary and "Claude Code in the page") are
+the one exception. Unlike the processes of a run, the process of a session is a
+child of the backend, and its terminal goes through the backend (one side of the
+pseudo-terminal, and the WebSocket of the session), so the backend keeps in
+memory the process of each session, and the tickets that open them, and gives a
+program one session at most, whatever tab asks for it. Restarting the backend
+ends them and loses the answer that Claude Code was writing in each, while the
+conversations of Claude Code, which it keeps on disk, stay (see "The session in
+the page").
 
 ## Where the state lives
 
 The lasting state lives in two places only. The store of each tab holds the
 program being edited and what the tab last read of its run. The disk holds the
-rest: the home directory keeps the program metadata, the generated script and
-the user files, and the output directory keeps what the engine writes during a
-run. The frontend keeps nothing in the local storage of the browser but the
-token (see "How a request carries the token"), so a program that has not been
-saved is lost when its tab is closed.
+rest: the home directory keeps the artifact, the local state, the generated
+script and the user files, and the output directory keeps what the engine writes
+during a run. The frontend keeps nothing in the local storage of the browser but
+the token (see "How a request carries the token"), so a program that has not
+been saved is lost when its tab is closed.
 
 A run lives in its output directory, not in the tab that launched it. Nothing
 that happens to a tab stops it, and a tab follows any run of its output
@@ -551,10 +556,10 @@ outlives the tab").
 
 # The program model
 
-The program model is what the frontend edits, what the backend receives in
-every request, what the program metadata stores, what script generation reads
-and what import produces. Its two definitions, Pydantic and TypeScript, have to
-change together, in the same change.
+The program model is what the frontend edits, what the backend receives in every
+request, what the artifact stores, what script generation reads and what import
+produces. Its two definitions, Pydantic and TypeScript, have to change together,
+in the same change.
 
 Every program, process, option and edge has an `id`, a UUID assigned when the
 element is created or imported. It is the element's identity inside the model
@@ -778,10 +783,11 @@ from them: the store recomputes it from the edges after every change to the
 program, so renaming a process or an option never leaves a sentinel that names
 the old one, and a program loaded with values out of step with its edges is
 repaired on load. Script generation reads only the edges, and emits one
-definition per edge. The sentinel is what the editor shows and the program
-metadata keeps, never what makes an option connected, so the backend never
-computes it: import, which builds the edges, leaves the value of a connected
-input empty, and the normalization of the store (`normalizeProgram`, see
+definition per edge. The sentinel is what the editor shows, never what makes an
+option connected, and the topology file does not keep it (it writes the
+connection as `from:` and an empty value), so the backend never computes it:
+import, which builds the edges, leaves the value of a connected input empty,
+and the normalization of the store (`normalizeProgram`, see
 "Screens and the store") derives the sentinel on every program the store loads.
 A `shared_dir` input is the exception: its value stays the name of its
 directory, and its edges only document on the canvas how the processes share it,
@@ -1244,11 +1250,11 @@ imported program is not saved: it opens in the editor, and the user saves it
 into a home directory.
 
 Import is how a module that the web UI did not produce enters it: a module
-written by hand, without the web UI, or a generated script that was changed
-by hand after the web UI wrote it. A program built and saved with the web UI
-is never imported: loading it, or adding it to another program with "Add
-program", reads its program metadata, which holds the whole program model,
-while import can only rebuild what the module says (see "What the round trip
+written by hand, without the web UI, or a generated script that was changed by
+hand after the web UI wrote it. A program built and saved with the web UI is
+never imported: loading it, or adding it to another program with "Add program",
+reads its artifact, from which loading rebuilds the whole program model, while
+import can only rebuild what the module says (see "What the round trip
 preserves").
 
 ## What the engine reports
@@ -1402,14 +1408,15 @@ its first function that belongs to no process or sequential process, unless it
 is a Bash function that an alias runs (see "Code that a loaded module already
 provides"); and the specifications the model does not hold.
 
-`test/api/test_round_trip.py` checks both directions. From the model to a
-module and back, it builds programs that cover every options handler mode,
-option channel and kind of connection, generates and imports them, and
-compares the result with the program, leaving out what lives only in the
-program metadata. From a module to the model and back, it imports every
-module of `data/programs/`, generates it and imports it again, and requires
-the same model both times, a process of another language taken as the module
-writes it: import is a fixed point of the round trip, so nothing is lost,
+`test/api/test_round_trip.py` checks both directions. From the model to a module
+and back, it builds programs that cover every options handler mode, option
+channel and kind of connection, generates and imports them, and compares the
+result with the program, leaving out what a module cannot carry: the ids, which
+import gives anew, and what lives only in the artifact, such as the positions,
+the groups and the execution options. From a module to the model and back, it
+imports every module of `data/programs/`, generates it and imports it again, and
+requires the same model both times, a process of another language taken as the
+module writes it: import is a fixed point of the round trip, so nothing is lost,
 added or changed by going through it once more.
 
 # Persistence and the program's directories
@@ -1630,8 +1637,6 @@ output directory, so changing it would leave the run out of reach of the web UI;
 the backend refuses to save the change (see "The home directory").
 
 # The artifact: the topology file and the process files
-
-*Built.*
 
 The program metadata, the saved form of before the artifact, fuses two
 things into one JSON file: the
@@ -2172,9 +2177,9 @@ in its output directory, and is followed or stopped by opening its program
 again. This is the only moment at which the web UI can say where the run lives.
 The backend keeps no record of it, and the home screen cannot list the runs in
 progress, since it does not know which output directories exist. A run is found
-again by loading its program from its home directory: its program metadata holds
-its output directory, and its run phase comes from the process statuses of that
-directory.
+again by loading its program from its home directory: its local state (or its
+program metadata, for a program still saved as one) holds its output directory,
+and its run phase comes from the process statuses of that directory.
 
 A request of the tab that is still pending when the tab goes away, to launch or
 to stop a run, goes on in the backend to its end. The tab loses the answer, and
@@ -2282,16 +2287,16 @@ that the ids an edit refers to exist and those it adds are free. Whether the
 engine accepts the name of a process is left to the backend, and what "Add
 program" brings is checked before its edit is built (`findMergeRefusal`).
 
-The store keeps no history, so there is no undo, but it keeps the program as
-it was last loaded or saved, and the program holds unsaved changes when it
-differs from it in anything but the digest and the home directory
-(`hasUnsavedChanges` in `models/externalChanges.ts`, which compares the two as
-the program metadata would hold them, whatever the order of the keys of an
-object). What a save keeps is the program it wrote, not the one the tab holds
-when the save is answered, since the user may have kept editing meanwhile.
-Leaving the editor with "Close", or closing or reloading the tab of the browser,
-asks first when the program holds unsaved changes or has a session of Claude
-Code in the page, which leaving the editor ends (see "The terminal panel").
+The store keeps no history, so there is no undo, but it keeps the program as it
+was last loaded or saved, and the program holds unsaved changes when it differs
+from it in anything but the digest and the home directory (`hasUnsavedChanges`
+in `models/externalChanges.ts`, which compares their program models, whatever
+the order of the keys of an object). What a save keeps is the program it wrote,
+not the one the tab holds when the save is answered, since the user may have
+kept editing meanwhile. Leaving the editor with "Close", or closing or reloading
+the tab of the browser, asks first when the program holds unsaved changes or has
+a session of Claude Code in the page, which leaving the editor ends (see "The
+terminal panel").
 
 ## From the store to the canvas
 
@@ -2560,11 +2565,10 @@ fails when such a call runs. A resident program has no sequential processes
 
 # Resident programs in the web UI
 
-*Designed, and being built: a subsection that is built says so under its
-title.* The extension of the web UI to resident programs. A resident program
-is not a run that starts and finishes: its processes stay alive, keep state,
-recover from crashes and go through rounds. The UI has to build such a
-program, launch it, observe it while it lives and act on it.
+The extension of the web UI to resident programs. A resident program is not a
+run that starts and finishes: its processes stay alive, keep state, recover from
+crashes and go through rounds. The UI has to build such a program, launch it,
+observe it while it lives and act on it.
 
 The sections before this one describe general programs only (see the
 Introduction). This section is where a resident program departs from them: for
@@ -2575,31 +2579,30 @@ own.
 
 ## The program model of a resident program
 
-*Built.*
-
 A resident program is edited with the same program model as a general one. The
 model gains a few fields, and some of what a general program may hold is not
 offered.
 
 **Program type.** `Program.programType` is `general` or `resident`, and
-`general` for program metadata saved without it. The user chooses it in a
-dialog when creating a program, and it never changes afterwards: the two types
-accept different processes and connections, and turning one into the other
-would leave in the program what the new type refuses. Script generation writes
-the module's `_program_type` function for a resident program, and import reads
-it.
+`general` when the topology file does not say `type: resident`, and for program
+metadata saved without it. The user chooses it in a dialog when creating a
+program, and it never changes afterwards: the two types accept different
+processes and connections, and turning one into the other would leave in the
+program what the new type refuses. Script generation writes the module's
+`_program_type` function for a resident program, and import reads it.
 
 **Durability mode.** `Program.durability` is `durable` or `non-durable`, the
 durability mode of a resident program (see "The non-durable mode" in
-`doc/design_doc_resident.md`), and `durable` for program metadata saved without
-it; a general program ignores it. The user chooses it in the dialog that
-creates a resident program, and changes it in "Set execution options", since
-the mode is a property of the program that a user may want to change once the
-program exists, unlike its type. Script generation writes it as the second
-argument of `program_type`, only when it is `non-durable`, so that a durable
-program is declared as it always was, and import reads it from the
-"## Durability" section that `debasher_doc_mod` prints. In `program.yaml` the
-field `durability` holds `non-durable`, and is left out otherwise.
+`doc/design_doc_resident.md`), and `durable` unless the topology file says
+`durability: non-durable`, and for program metadata saved without it; a general
+program ignores it. The user chooses it in the dialog that creates a resident
+program, and changes it in "Set execution options", since the mode is a property
+of the program that a user may want to change once the program exists, unlike
+its type. Script generation writes it as the second argument of `program_type`,
+only when it is `non-durable`, so that a durable program is declared as it
+always was, and import reads it from the "## Durability" section that
+`debasher_doc_mod` prints. In `program.yaml` the field `durability` holds
+`non-durable`, and is left out otherwise.
 
 **Node kinds.** Every process of a resident program is a node of one node kind
 (`ProgramProcess.nodeKind`), chosen when the process is added: `FBPProcess`, a
@@ -2808,8 +2811,6 @@ options, the preamble of the program and its environment variables.
 
 ## Script generation and import of a resident program
 
-*Built.*
-
 **The code of a node, generated.** Script generation writes the code of a node
 as the heredoc function of its process, `<process>_heredoc_py` (see "Layout of
 the generated module"), which holds, in this order:
@@ -2967,7 +2968,7 @@ the user that takes a label of the Supervisor wiring, uses the option channel
 `value_desc`, `shared_dir` or `process_outdir`, is mirrored or has the fifo tag
 `control`; and a `Supervisor` with options of its own, or in `array` or
 `generator` mode. The editor offers none of them, and script generation refuses
-them in program metadata written by hand or by another tool.
+them in an artifact written by hand or by another tool, such as the SDK.
 
 **A node of a module, reused.** In a general program the dialog that names a
 new process suggests the processes that the modules of the preamble define,
@@ -2992,11 +2993,9 @@ requires.
 
 ## The directories of a resident program
 
-*Built.*
-
 **The home directory** is the same as for a general program (see "The home
-directory"): the program metadata, the generated script and the user files,
-with the same guarantees.
+directory"): the artifact, the local state, the generated script and the user
+files, with the same guarantees.
 
 **The output directory** holds, besides what a general run leaves there, the
 program state: what each node keeps across runs, its checkpoints, its input log
@@ -3072,8 +3071,6 @@ and the program options: a change in a module that the preamble loads goes
 unseen.
 
 ## Running a resident program
-
-*Built.*
 
 A resident program is launched with `debasher_exec` and followed with
 `debasher_status`, as a general one, but a run of it never finishes on its own:
@@ -3273,17 +3270,16 @@ progress, and works as well on a program launched from the command line.
 
 Periodic snapshots are off by default, and the user turns them on with
 `executionOptions.snapshotEverySecs`, a field of the execution options of a
-resident program, saved in the program metadata. The dialog says what an empty
+resident program, saved in the topology file. The dialog says what an empty
 field means (no rounds but those of "Take snapshot", and input logs that grow
-until their size cap), and that the period has to be longer than a round
-takes, or each round replaces the one before it and none closes. With a
-period, `/run`, once `debasher_exec` has ended with 0, starts
-`debasher_snapshot_resident -d <output directory> --every <period>` detached,
-in a session of its own, with its output in the snapshot log, and answers
-without waiting for it. The tool ends by itself once no node of the program
-runs, whatever stopped the program, so nothing has to stop it and the backend
-keeps nothing of it. Every launch from the web UI starts it again, as a program
-that is resumed needs.
+until their size cap), and that the period has to be longer than a round takes,
+or each round replaces the one before it and none closes. With a period, `/run`,
+once `debasher_exec` has ended with 0, starts `debasher_snapshot_resident -d
+<output directory> --every <period>` detached, in a session of its own, with its
+output in the snapshot log, and answers without waiting for it. The tool ends by
+itself once no node of the program runs, whatever stopped the program, so
+nothing has to stop it and the backend keeps nothing of it. Every launch from
+the web UI starts it again, as a program that is resumed needs.
 
 - The period cannot change while the program lives, since changing it would
   mean finding the running tool, which leaves no PID on disk. A new period
@@ -3340,8 +3336,6 @@ it is closed, reloaded or leaves the editor is in "A run that outlives the tab",
 and what a resident program adds to it in "A program that outlives the tab".
 
 ## Observing and talking to a live program
-
-*Built.*
 
 A resident program is observed through the same process statuses as a general
 one, and through what each node keeps in its execdir: its checkpoints, its input
@@ -3579,8 +3573,6 @@ node, until the node fails; "Show node state" shows the backlog growing.
 
 ## A program that outlives the tab
 
-*Built.*
-
 A resident program is meant to live longer than any tab that follows it, and
 longer than the backend that launched it. The rules of "A run that outlives the
 tab" hold for it unchanged; this subsection says what a resident program adds to
@@ -3613,29 +3605,31 @@ for a general program, and two of them leave more than the answer behind:
   asking (see "Running a resident program");
 - a round of "Take snapshot" closes or not, which "Show node state" shows.
 
-**Opening a live program again.** A tab opens a live program by loading it
-from its home directory, like any program: its program metadata gives the
-output directory, the process statuses give the run phase `live`, and every
-action on a live program is offered, whoever launched it, another tab or the
-command line. What the tab does not have is the answer to a request of another
-tab; the run log of a launch that it did not make is still there to read. The
-period of the periodic snapshots comes from the program metadata, which a save
-cannot change while the program is `live`, so it is the period of the launch,
-unless the program was launched from the command line, with no periodic
-snapshots of the web UI; the dialog of the execution options therefore says
-that a period applies from the next launch from the web UI.
+**Opening a live program again.** A tab opens a live program by loading it from
+its home directory, like any program: its local state (or its program metadata,
+for a program still saved as one) gives the output directory, the process
+statuses give the run phase `live`, and every action on a live program is
+offered, whoever launched it, another tab or the command line. What the tab does
+not have is the answer to a request of another tab; the run log of a launch that
+it did not make is still there to read. The period of the periodic snapshots
+comes from the topology file, which a save cannot change while the program is
+`live`, so it is the period of the launch, unless the program was launched from
+the command line, with no periodic snapshots of the web UI; the dialog of the
+execution options therefore says that a period applies from the next launch from
+the web UI.
 
 A live program can be edited in the tab, but not saved (see "Running a
 resident program"). Its changes are saved once it has stopped, and the next
 launch compares them with the launch record.
 
 Two tabs on the same live program are not coordinated, as for a general program
-(see "Non-goals"). What the engine's files guard still holds: a second launch is
-refused while there is a run in progress. Relaunches are the exception: the
-relaunch lock keeps two tabs from relaunching the same task. Two orderly stops
-at the same time, or an orderly stop and "Restart node", are not coordinated by
-the web UI; a single orderly stop for each output directory is left to the
-engine (see "Future work" in `doc/design_doc_resident.md`).
+(see "Non-goals" in "Guarantees and non-goals"). What the engine's files guard
+still holds: a second launch is refused while there is a run in progress.
+Relaunches are the exception: the relaunch lock keeps two tabs from relaunching
+the same task. Two orderly stops at the same time, or an orderly stop and
+"Restart node", are not coordinated by the web UI; a single orderly stop for
+each output directory is left to the engine (see "Future work" in
+`doc/design_doc_resident.md`).
 
 **What is not guaranteed**, besides what "A run that outlives the tab" says:
 
@@ -3654,8 +3648,6 @@ engine (see "Future work" in `doc/design_doc_resident.md`).
   its Future work).
 
 ## The canvas of a resident program
-
-*Built.*
 
 The canvas of a resident program draws the same processes and connections as
 that of a general one (see "From the store to the canvas"), and shows besides
@@ -3815,13 +3807,13 @@ A program can carry business tests: tests of what each of its processes does
 with the values of its options, run on its own, outside any run (see "Business
 tests of a program" in `doc/design_doc_engine.md`). The home directory of a
 program of the web UI is a program directory for the engine, whatever its name,
-since the program metadata names the generated script, so its tests are user
-files under `test/` in the home directory, which the program files panel
-shows and edits. The web UI adds two things on top: it runs the tests
-of the program and shows their result, and it writes a test skeleton for a
-process, so that a test does not start from an empty file. The MCP server
-offers both to an agent, together with the management of user files, so that
-an agent that writes a process can also write its tests.
+since its topology file names the program, and with it the generated script. Its
+tests are therefore user files under `test/` in the home directory, which the
+program files panel shows and edits. The web UI adds two things on top: it runs
+the tests of the program and shows their result, and it writes a test skeleton
+for a process, so that a test does not start from an empty file. The MCP server
+offers both to an agent, together with the management of user files, so that an
+agent that writes a process can also write its tests.
 
 ## Running the tests
 
@@ -4794,13 +4786,15 @@ ruled with no other change:
   once the user chose to always allow it;
 - any other MCP tool, which edits the program or runs it, is left to Claude
   Code, which asks until the user allows it;
-- the tools of Claude Code that edit files are denied the program metadata
+- the tools of Claude Code that edit files are denied the local state
   (`Edit(**/.debasher/**)`, a rule that Claude Code applies to each of them),
-  which changes only through the MCP tools, keeping the rules of the editor
-  and the digest. A command of Bash is not covered by the rule, but Claude
-  Code asks before running one. Nothing denies editing the generated script,
-  which the next save writes again; the reference of the plugin tells Claude
-  Code to change the code of a process with `update_process` instead.
+  which only the backend writes (with the program metadata of an older save).
+  The artifact is not denied: an agent edits a process file or the topology file
+  as any file, and the editor sees the change through the digest (see "The doors
+  and the regeneration tool"). A command of Bash is not covered by the rule, but
+  Claude Code asks before running one. Nothing denies editing the generated
+  script, which the next save writes again; the reference of the plugin tells
+  Claude Code to change the code of a process with `update_process` instead.
 
 ## The plugin of DeBasher
 
@@ -5715,9 +5709,10 @@ programs too.
   the project, the design documents and the module documentation of the modules
   at hand), through a model of an AI service with a key that the user gives. Not
   designed. It needs a place for the key that fits a server whose only guard is
-  the token, never the program metadata; it sends the documentation, and maybe
-  the program, to a service outside the machine, which the user has to know; and
-  its answers are only as good as a documentation kept in step with the code.
+  the token, never the artifact or the local state; it sends the documentation,
+  and maybe the program, to a service outside the machine, which the user has to
+  know; and its answers are only as good as a documentation kept in step with
+  the code.
 - **The documentation installed with DeBasher.** Building the documentation
   of DeBasher into HTML when the package is made, installing it, and serving it
   from the backend, so that the Help menu links to the documentation of the
@@ -5737,9 +5732,6 @@ programs too.
 - **Restarting one task of a node.** "Restart node" on a single task of an
   `array` or `generator` process, which needs `debasher_stop` to stop one
   task.
-- **Building the web UI for resident programs.** Building what "Resident
-  programs in the web UI" designs, where a subsection does not say that it is
-  built.
 - **What the web UI waits for from the engine.** Several parts of the design
   of resident programs rely on engine work listed in the Future work of
   `doc/design_doc_resident.md`: what the `Supervisor` knows of each node,

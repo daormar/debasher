@@ -478,12 +478,13 @@ limits of a node, packet, node state, envelope) have the meaning that
 
 - **business test**: a test of the business logic of one process: what the
   process does with the values of its options, run on its own, outside any run.
-- **program directory**: a directory, of any name, that holds a program and
-  its tests: the program file is `<name>.sh` at its top, where `<name>` is the
-  name of the program that the program metadata of the web UI gives, or,
-  without that metadata, the only `*.sh` file at its top. The home directory of
-  a program of the web UI is one (see `doc/design_doc_webui.md`). Only a
-  program in a program directory has business tests.
+- **program directory**: a directory, of any name, that holds a program and its
+  tests: the program file is `<name>.sh` at its top, where `<name>` is the name
+  that the topology file of the web UI gives (or its program metadata, for a
+  program saved before the artifact), or, without a program saved by the web UI,
+  the only `*.sh` file at its top. The home directory of a program of the web UI
+  is one (see `doc/design_doc_webui.md`). Only a program in a program directory
+  has business tests.
 - **test directory**: `test` inside a program directory, which holds the test
   files of the program and the data that they read.
 - **process test**: a test, written in a bats file `*.bats` of the test
