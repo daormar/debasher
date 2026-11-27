@@ -118,6 +118,10 @@ refer to it.
   or a connection, `value_desc` for a value descriptor the engine synthesizes,
   `fifo` for a named pipe, `shared_dir` for a shared directory, `process_outdir`
   for the process output directory of the option's own process.
+- **directory channel**: either of the option channels `shared_dir` and
+  `process_outdir`, which give an option a directory that the engine manages,
+  or a subdirectory of it named by a subpath (see "Directory channels and
+  subpaths").
 - **literal value**: the value of an option with option channel `none` that is
   not connected, not a command line option and not taken from the process
   specifications: the Bash word that the user writes in `ProgramOption.value`,
@@ -135,7 +139,7 @@ refer to it.
   names, of the shared subdirectory or task subdirectory that the option gives
   instead (`ProgramOption.subpath`), written by script generation with
   `--subdir`; `ProgramOption.subpath` is empty when the option names the
-  directory itself (see "Directories and their subdirectories").
+  directory itself (see "Directory channels and subpaths").
 - **value descriptor**: as defined in the design of the engine: the file,
   named by an output option with option channel `value_desc`, into which a
   task writes a value for the processes connected to it.
@@ -782,7 +786,7 @@ input empty, and the normalization of the store (`normalizeProgram`, see
 A `shared_dir` input is the exception: its value stays the name of its
 directory, and its edges only document on the canvas how the processes share it,
 while the engine derives the dependencies on its own, from the paths (see
-"Directories and their subdirectories").
+"Directory channels and subpaths").
 
 The canvas accepts a new connection only when it keeps the program valid for
 the engine:
@@ -801,8 +805,8 @@ the engine:
 - An output may feed any number of inputs, but an input accepts only one
   connection, since the engine could not tell which value it should take. The
   exception is fan-in between `shared_dir` options that name the same directory,
-  whose edges only document how the processes share it (see "Directories and
-  their subdirectories").
+  whose edges only document how the processes share it (see "Directory channels
+  and subpaths").
 - A `shared_dir` option pairs with another `shared_dir` option only when both
   name the same directory, whatever their subpaths.
 - A fanout family pairs only with a process in `array` or `generator` mode,
@@ -825,7 +829,7 @@ processes instead of through them, and a self-loop around its own process. For
 two processes that answer each other through FIFOs, it instead moves the
 handles of the answering pair to the other side, so that the edge stays short.
 
-## Directories and their subdirectories
+## Directory channels and subpaths
 
 Two option channels give an option a directory that the engine manages:
 
@@ -5618,8 +5622,8 @@ programs too.
 - **Ordering a reader of a whole shared directory.** An input that reads the
   whole of a shared directory gets no dependency on the processes that write
   its shared subdirectories, and its process has to be ordered with explicit
-  dependencies, which replace all its inferred ones (see "Directories and their
-  subdirectories"). The edge that the canvas draws could order it, if the engine
+  dependencies, which replace all its inferred ones (see "Directory channels and
+  subpaths"). The edge that the canvas draws could order it, if the engine
   inferred a dependency of an input that holds a directory on the outputs that
   hold paths below it, or let a process add a dependency to its inferred ones
   (see "Dependencies by containment" in the future work of the design of the
