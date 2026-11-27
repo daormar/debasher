@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from .. import inherited_hooks, node_reference, paths
 from ..models import NodeCode, NodeKind, OptionsHandler, ProgramOption
-from ..process_names import process_name_problem
+from ..process_names import find_process_name_problem
 from ..program_import import read_preamble_processes
 from ..resident_import import preamble_node_kinds, reuse_node
 from ..markdown_parsing import (
@@ -26,7 +26,7 @@ def is_valid_process_name(name: str) -> bool:
     Whether the engine would take `name` as the name of a process, so
     that the editor refuses the names the engine itself would refuse.
     """
-    return process_name_problem(name) is None
+    return find_process_name_problem(name) is None
 
 
 class ValidateProcessNameRequest(BaseModel):

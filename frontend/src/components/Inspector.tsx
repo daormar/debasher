@@ -20,7 +20,7 @@ import AdditionalMethodsEditor from "./AdditionalMethodsEditor";
 import OptionEditor from "./OptionEditor";
 import OptionRow from "./OptionRow";
 import ConnectByNameDialog from "./ConnectByNameDialog";
-import { connectionCandidates } from "../models/connections";
+import { listConnectionCandidates } from "../models/connections";
 import { edgeEndText } from "../models/edge";
 import ComputationalSpecsEditor from "./ComputationalSpecsEditor";
 import AdditionalSpecsEditor from "./AdditionalSpecsEditor";
@@ -30,7 +30,7 @@ import ManualConfigEditor from "./ManualConfigEditor";
 import ProcessNameDialog from "./ProcessNameDialog";
 import NodeCodeEditor from "./NodeCodeEditor";
 import type { ProcessLanguage, OptionsHandlerMode } from "../models/process";
-import { optionLabelProblem, repeatedOptionLabels } from "../models/process";
+import { findOptionLabelProblem, listRepeatedOptionLabels } from "../models/process";
 import { computeFlippedOptionIds, optionRow } from "../models/optionLayout";
 
 
@@ -139,11 +139,11 @@ export default function Inspector() {
     ? ["standard", "array", "generator"]
     : ["standard", "array", "generator", "manual"];
 
-  const optionProblem = optionLabelProblem(selectedProcess, optionLabel, program.programType);
+  const optionProblem = findOptionLabelProblem(selectedProcess, optionLabel, program.programType);
 
   const canAddOption = optionProblem === null;
 
-  const repeatedLabels = repeatedOptionLabels(selectedProcess);
+  const repeatedLabels = listRepeatedOptionLabels(selectedProcess);
 
   function handleOptionDragEnd(event: DragEndEvent) {
 
@@ -454,7 +454,7 @@ export default function Inspector() {
                       }
                       onConnect={
                         option.direction === "input" &&
-                        connectionCandidates(program, selectedProcess.id, option.id).length > 0
+                        listConnectionCandidates(program, selectedProcess.id, option.id).length > 0
                           ? () => setConnectingOptionId(option.id)
                           : undefined
                       }
@@ -487,7 +487,7 @@ export default function Inspector() {
         return (
           <ConnectByNameDialog
             targetText={edgeEndText(selectedProcess.name, connectingOption.label)}
-            candidates={connectionCandidates(program, selectedProcess.id, connectingOption.id)}
+            candidates={listConnectionCandidates(program, selectedProcess.id, connectingOption.id)}
             onConnect={(candidate, display) =>
               connect({
                 id: crypto.randomUUID(),

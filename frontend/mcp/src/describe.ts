@@ -1,4 +1,4 @@
-import { fanoutCountProcesses } from "../../src/models/connections";
+import { findFanoutCountProcesses } from "../../src/models/connections";
 import { isLabelEdge } from "../../src/models/edge";
 import { isFanoutOption } from "../../src/models/option";
 import type { ProgramOption } from "../../src/models/option";
@@ -49,7 +49,7 @@ function countTrait(program: Program | undefined, process: ProgramProcess, optio
   if (process.optionsHandler.mode !== "standard" || !isFanoutOption(option.label)) {
     return null;
   }
-  const ends = program ? fanoutCountProcesses(program, process, option) : [];
+  const ends = program ? findFanoutCountProcesses(program, process, option) : [];
   return ends.length === 1
     ? `count from the tasks of ${ends[0].name}`
     : "count from the tasks of the process at the other end of its connections";

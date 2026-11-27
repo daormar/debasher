@@ -653,7 +653,7 @@ key of an option of a process: it merges two options with the same label into
 one, and fails at run time if they get different values.
 
 - The editor refuses a label that the process already has, and `validateEdits`
-  refuses it too (`optionLabelProblem` in `models/process.ts`).
+  refuses it too (`findOptionLabelProblem` in `models/process.ts`).
 - A program saved against the rule, for example one edited by hand, still
   loads: the canvas node and the inspector of each such process name the
   repeated labels, so that the user relabels or removes all but one.
@@ -2267,7 +2267,7 @@ functions, so that it obeys the same rules as the editor.
 Each operation of the store is expressed as one or more edits, plain data
 (`EditOp`) with everything they need, the ids of what they add included. A
 list of edits can be built in one place, shown, and applied in another as one
-change (`applyEdits`, which normalizes once at the end). `groupsTouchedBy`
+change (`applyEdits`, which normalizes once at the end). `findGroupsTouchedBy`
 tells which groups a list of edits touches, which have to be dissolved
 (`dissolveGroups`) before it is applied; the store asks the user about them
 first. `validateEdits` (`models/editValidation.ts`) checks a list of edits,
@@ -2278,7 +2278,7 @@ the sequential processes, the rules of "Connections" (`isValidEdge` in
 `models/connections.ts`, which the canvas applies while an edge is drawn), and
 that the ids an edit refers to exist and those it adds are free. Whether the
 engine accepts the name of a process is left to the backend, and what "Add
-program" brings is checked before its edit is built (`mergeRefusal`).
+program" brings is checked before its edit is built (`findMergeRefusal`).
 
 The store keeps no history, so there is no undo, but it keeps the program as
 it was last loaded or saved, and the program holds unsaved changes when it
@@ -2391,9 +2391,9 @@ has the entry that switches every edge of the output.
 can be made without drawing it across: the inspector offers, on each input that
 some output can be connected to, a dialog where the user types the output as
 `<process> <option>`, with the outputs it can be connected to offered as they
-type (`connectionCandidates`, which applies the rules of an edge drawn on the
-canvas, see "Connections", and leaves out the outputs already connected to the
-input). The new edge is a label edge unless the user asks for a line.
+type (`listConnectionCandidates`, which applies the rules of an edge drawn on
+the canvas, see "Connections", and leaves out the outputs already connected to
+the input). The new edge is a label edge unless the user asks for a line.
 
 ## Keeping the canvas in step with the store
 
@@ -4537,7 +4537,7 @@ with the actions that the store takes, and an answer in place of the dialogs
 3. Resolve the named edits into edits.
 4. Check them with `validateEdits`; a problem ends the call with the list of
    problems, and nothing is written.
-5. Find the groups that they touch with `groupsTouchedBy`. Where the store
+5. Find the groups that they touch with `findGroupsTouchedBy`. Where the store
    asks the user, the MCP tool refuses, naming the program each group came
    from, unless the call says `detach_groups`, in which case the groups are
    dissolved with the edits, as when the user agrees.

@@ -19,7 +19,7 @@ export type EdgeEndpoints = Omit<ProgramEdge, "id">;
 // output family. A family without a count source option counts the tasks
 // of that process, which has to be the only one and in "array" or
 // "generator" mode (see _fanout_count_process in api/script_generation.py).
-export function fanoutCountProcesses(
+export function findFanoutCountProcesses(
   program: Program,
   process: ProgramProcess,
   option: ProgramOption
@@ -38,13 +38,13 @@ export function fanoutCountProcesses(
 // What gives the number of options of a fanout family of `process`, for a
 // sentence "as many as ...": the value of its count source option, or the
 // number of tasks of the process at the other end of its connections (see
-// fanoutCountProcesses).
-export function fanoutCountText(program: Program, process: ProgramProcess, option: ProgramOption): string {
+// findFanoutCountProcesses).
+export function describeFanoutCount(program: Program, process: ProgramProcess, option: ProgramOption): string {
   const countSource = process.options.find(o => o.id === option.countSourceOptionId);
   if (countSource) {
     return `the value of \`${countSource.label}\``;
   }
-  const ends = fanoutCountProcesses(program, process, option);
+  const ends = findFanoutCountProcesses(program, process, option);
   return ends.length === 1
     ? `the tasks of \`${ends[0].name}\``
     : "the tasks of the process at the other end of its connections, an array or a generator";
@@ -266,7 +266,7 @@ export interface ConnectionCandidate {
  * isValidEdge), in the order of the processes and of their options. An
  * output already connected to the input is left out.
  */
-export function connectionCandidates(
+export function listConnectionCandidates(
   program: Program,
   targetProcessId: string,
   targetOptionId: string

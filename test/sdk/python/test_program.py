@@ -503,11 +503,11 @@ def test_a_fanout_family_that_script_generation_refuses_is_refused_with_its_mess
     "name", ["1st", "a-b", "a b", "a..b", "", "a_define_opts", "a_slurm_sigterm_handler", "a_outdir_basename", "hello_py", "a__NSSEP__b"]
 )
 def test_a_name_the_engine_would_refuse_is_refused_with_the_reason_of_the_api(name):
-    from api.process_names import process_name_problem
+    from api.process_names import find_process_name_problem
 
     with pytest.raises(DefinitionError) as refusal:
         Process(name)
-    assert str(refusal.value) == f'"{name}" cannot name a process: {process_name_problem(name)}'
+    assert str(refusal.value) == f'"{name}" cannot name a process: {find_process_name_problem(name)}'
 
 
 @pytest.mark.parametrize("name", ["org.mymodule.hello", "_x1"])
@@ -561,11 +561,11 @@ def test_an_option_is_listed_once(tmp_path):
 # of the rule is tested in test/api/test_process_names.py
 @pytest.mark.parametrize("label", ["n", "-1n", "-é", "---x", "-"])
 def test_a_label_the_engine_would_refuse_is_refused_with_the_reason_of_the_api(tmp_path, label):
-    from api.process_names import option_label_problem
+    from api.process_names import find_option_label_problem
 
     with pytest.raises(DefinitionError) as refusal:
         _bash_process(tmp_path, "work", options=[opt(label, "int")])
-    assert str(refusal.value) == f'Option "{label}" of process "work": {option_label_problem(label)}'
+    assert str(refusal.value) == f'Option "{label}" of process "work": {find_option_label_problem(label)}'
 
 
 def test_an_unknown_data_type_is_refused(tmp_path):

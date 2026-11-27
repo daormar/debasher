@@ -1,6 +1,6 @@
-import { fanoutCountText } from "./connections";
+import { describeFanoutCount } from "./connections";
 import type { ProgramOption } from "./option";
-import { fanoutBaseLabel, isFanoutOption } from "./option";
+import { getFanoutBaseLabel, isFanoutOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import type { NodeCode, NodeHookPart, NodeKind } from "./node";
@@ -195,8 +195,8 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
       if (classSends(process, option)) {
         notes.push(...classOptionNotes(process, option, false));
       } else if (fanoutFamily) {
-        const base = portName(fanoutBaseLabel(option.label));
-        notes.push(`A fanout family: the ports \`${base}0\`, \`${base}1\`, ..., as many as ${fanoutCountText(program, process, option)}; send on one with \`self.send_data(f"${base}{i}", payload)\`.`);
+        const base = portName(getFanoutBaseLabel(option.label));
+        notes.push(`A fanout family: the ports \`${base}0\`, \`${base}1\`, ..., as many as ${describeFanoutCount(program, process, option)}; send on one with \`self.send_data(f"${base}{i}", payload)\`.`);
         if (!option.countSourceOptionId) {
           notes.push(`The node does not receive that number: count the ports of \`self.OUTPUT_PORTS\` named \`${base}<i>\`.`);
         }

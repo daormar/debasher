@@ -17,7 +17,7 @@ import type {
   AdditionalMethods,
   ProcessInfo,
 } from "../models/process";
-import { createProcess, optionFromInfo } from "../models/process";
+import { createProcess, createOptionFromInfo } from "../models/process";
 import type { ProgramOption } from "../models/option";
 import { createOption } from "../models/option";
 import * as edits from "../models/programEdits";
@@ -165,7 +165,7 @@ interface ProgramContextType {
   // "Add program": brings the processes, sequential processes and edges of
   // `loaded`, read from `sourceDir`, into the current program (see
   // edits.prepareMerge), or tells the user with window.alert why it can't
-  // (see edits.mergeRefusal).
+  // (see edits.findMergeRefusal).
   mergeProgram: (loaded: Program, sourceDir: string) => void;
 
   setName: (
@@ -518,12 +518,12 @@ export function ProgramProvider({
   // process add_debasher_program will re-declare, unmodified, from its
   // source module, so edits that would be overwritten by that
   // re-declaration first ask the user, once for all the groups they
-  // touch (see edits.groupsTouchedBy), and are then applied together with
+  // touch (see edits.findGroupsTouchedBy), and are then applied together with
   // the dissolution of those groups or, if the user declines, not at all.
   // Returns whether the edits were applied.
   function edit(...ops: edits.EditOp[]): boolean {
 
-    const groups = edits.groupsTouchedBy(programRef.current, ops);
+    const groups = edits.findGroupsTouchedBy(programRef.current, ops);
 
     if (groups.size > 0) {
       const programNames = [...new Set(groups.values())].join('", "');
@@ -554,7 +554,7 @@ export function ProgramProvider({
 
   function mergeProgram(loaded: Program, sourceDir: string) {
 
-    const refusal = edits.mergeRefusal(programRef.current, loaded);
+    const refusal = edits.findMergeRefusal(programRef.current, loaded);
 
     if (refusal) {
       window.alert(refusal);
@@ -660,7 +660,7 @@ export function ProgramProvider({
       name,
       ...(info && {
         description: info.description,
-        options: info.options.map(option => optionFromInfo(option, newId())),
+        options: info.options.map(option => createOptionFromInfo(option, newId())),
         language: info.language,
         code: info.code,
       }),

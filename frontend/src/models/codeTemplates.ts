@@ -1,6 +1,6 @@
 import type { ProcessLanguage, ProgramProcess } from "./process";
 import type { OptionDataType, ProgramOption } from "./option";
-import { fanoutBaseLabel, isFanoutOption } from "./option";
+import { getFanoutBaseLabel, isFanoutOption } from "./option";
 import type { Program } from "./program";
 import { receivesPath } from "./dataTypes";
 
@@ -94,7 +94,7 @@ interface FanoutRead {
 function fanoutReads(process: ProgramProcess): FanoutRead[] {
   return fanoutOptionsOf(process).map(option => {
     const countSource = process.options.find(o => o.id === option.countSourceOptionId);
-    const baseLabel = fanoutBaseLabel(option.label);
+    const baseLabel = getFanoutBaseLabel(option.label);
     return {
       option,
       baseLabel,

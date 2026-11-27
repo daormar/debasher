@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { connectionCandidates } from "./connections";
+import { listConnectionCandidates } from "./connections";
 import type { ProgramEdge } from "./edge";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
@@ -51,10 +51,10 @@ function programWith(edges: ProgramEdge[] = []): Program {
   };
 }
 
-describe("connectionCandidates", () => {
+describe("listConnectionCandidates", () => {
 
   it("lists the outputs an input can be connected to, named by process and option", () => {
-    expect(connectionCandidates(programWith(), "b", "b-in")).toEqual([
+    expect(listConnectionCandidates(programWith(), "b", "b-in")).toEqual([
       { sourceProcessId: "a", sourceOptionId: "a-outf", text: "a -outf" },
       { sourceProcessId: "a", sourceOptionId: "a-outq", text: "a -outq" },
     ]);
@@ -72,17 +72,17 @@ describe("connectionCandidates", () => {
       ],
       edges: [],
     };
-    expect(connectionCandidates(program, "merge", "merge-ind")).toEqual([
+    expect(listConnectionCandidates(program, "merge", "merge-ind")).toEqual([
       { sourceProcessId: "split", sourceOptionId: "split-outd", text: "split -outd" },
     ]);
   });
 
   it("follows the rules of an edge drawn on the canvas", () => {
-    expect(connectionCandidates(programWith(), "b", "b-flag")).toEqual([]);
+    expect(listConnectionCandidates(programWith(), "b", "b-flag")).toEqual([]);
     const connected = programWith([
       { id: "e1", sourceProcessId: "a", sourceOptionId: "a-outf", targetProcessId: "b", targetOptionId: "b-in" },
     ]);
-    expect(connectionCandidates(connected, "b", "b-in")).toEqual([]);
+    expect(listConnectionCandidates(connected, "b", "b-in")).toEqual([]);
   });
 
 });

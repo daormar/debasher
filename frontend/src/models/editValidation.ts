@@ -1,10 +1,10 @@
 import { isValidEdge } from "./connections";
-import { connectedChannelProblem, connectedInputChannelProblem, dataTypeProblem } from "./dataTypes";
+import { findConnectedChannelProblem, findConnectedInputChannelProblem, findDataTypeProblem } from "./dataTypes";
 import { hasSupervisor } from "./node";
 import type { ProgramOption } from "./option";
 import { DIRECTORY_CHANNELS } from "./option";
 import type { ProgramProcess } from "./process";
-import { optionLabelProblem, processNameProblem } from "./process";
+import { findOptionLabelProblem, findProcessNameProblem } from "./process";
 import type { Program } from "./program";
 import type { EditOp, ProcessChanges } from "./programEdits";
 import { applyEdit } from "./programEdits";
@@ -27,7 +27,7 @@ export function validateEdits(program: Program, edits: EditOp[]): string[] {
   let current = program;
 
   for (const edit of edits) {
-    const problem = editProblem(current, edit);
+    const problem = findEditProblem(current, edit);
     if (problem) {
       problems.push(problem);
     } else {
@@ -39,7 +39,7 @@ export function validateEdits(program: Program, edits: EditOp[]): string[] {
 
 }
 
-function editProblem(program: Program, edit: EditOp): string | null {
+function findEditProblem(program: Program, edit: EditOp): string | null {
 
   const processById = (id: string) => program.processes.find(process => process.id === id);
 
@@ -68,7 +68,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
       ) {
         return "This program already has a Supervisor: a program has at most one.";
       }
-      return processNameProblem(takenNames(), edit.process.name, program.programType);
+      return findProcessNameProblem(takenNames(), edit.process.name, program.programType);
     }
 
     case "removeProcess":
@@ -82,8 +82,8 @@ function editProblem(program: Program, edit: EditOp): string | null {
       return (
         (edit.changes.name === undefined
           ? null
-          : processNameProblem(takenNames(edit.processId), edit.changes.name, program.programType)) ??
-        handlerAndMethodsProblem(processById(edit.processId)!, edit.changes)
+          : findProcessNameProblem(takenNames(edit.processId), edit.changes.name, program.programType)) ??
+        findHandlerAndMethodsProblem(processById(edit.processId)!, edit.changes)
       );
     }
 
@@ -96,8 +96,8 @@ function editProblem(program: Program, edit: EditOp): string | null {
         return `Process "${process.name}" already has an option with id "${edit.option.id}".`;
       }
       return (
-        optionLabelProblem(process, edit.option.label, program.programType) ??
-        optionFieldsProblem(process, edit.option)
+        findOptionLabelProblem(process, edit.option.label, program.programType) ??
+        findOptionFieldsProblem(process, edit.option)
       );
     }
 
@@ -111,18 +111,18 @@ function editProblem(program: Program, edit: EditOp): string | null {
         missingOption(process, edit.optionId) ??
         (edit.changes.label === undefined
           ? null
-          : optionLabelProblem(process, edit.changes.label, program.programType, edit.optionId)) ??
-        optionFieldsProblem(process, { ...option!, ...edit.changes }) ??
+          : findOptionLabelProblem(process, edit.changes.label, program.programType, edit.optionId)) ??
+        findOptionFieldsProblem(process, { ...option!, ...edit.changes }) ??
         // A data type that the edit names, and that the option channel or
         // the connection of the option fixes to another; otherwise the
         // data type follows them (see normalizeDataTypes)
         (edit.changes.dataType === undefined
           ? null
-          : dataTypeProblem(program, process, { ...option!, ...edit.changes })) ??
+          : findDataTypeProblem(program, process, { ...option!, ...edit.changes })) ??
         // A channel that would hide the connection of a connected input
         (edit.changes.channel === undefined
           ? null
-          : connectedChannelProblem(program, process, { ...option!, ...edit.changes }))
+          : findConnectedChannelProblem(program, process, { ...option!, ...edit.changes }))
       );
     }
 
@@ -149,7 +149,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
       const targetOption = target.options.find(option => option.id === edge.targetOptionId)!;
       const channelProblem =
         sourceOption.direction === "output" && targetOption.direction === "input"
-          ? connectedInputChannelProblem(target, targetOption, source, sourceOption)
+          ? findConnectedInputChannelProblem(target, targetOption, source, sourceOption)
           : null;
       if (channelProblem) {
         return channelProblem;
@@ -180,7 +180,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
       return seqProcessesProblem(edit.seqProcesses, program.processes.map(process => process.name));
 
     // What "Add program" brings is checked before the edit is built (see
-    // mergeRefusal).
+    // findMergeRefusal).
     case "addGroup":
       return null;
 
@@ -205,7 +205,7 @@ function editProblem(program: Program, edit: EditOp): string | null {
 
 // The combinations of the fields of an option that make no sense, which the
 // editor of an option does not offer and script generation refuses.
-function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): string | null {
+function findOptionFieldsProblem(process: ProgramProcess, option: ProgramOption): string | null {
   const where = `Option "${option.label}" of process "${process.name}"`;
   if (option.direction === "output" && option.fromProcessSpec) {
     return `${where} is an output, which cannot take its value from the process specifications.`;
@@ -230,7 +230,7 @@ function optionFieldsProblem(process: ProgramProcess, option: ProgramOption): st
 // whose code is a Bash function, and Conda environments or Docker images
 // given both as data and as the body of their method. Each says what to
 // change.
-function handlerAndMethodsProblem(process: ProgramProcess, changes: ProcessChanges): string | null {
+function findHandlerAndMethodsProblem(process: ProgramProcess, changes: ProcessChanges): string | null {
 
   const handler = changes.optionsHandler;
   if (handler && handler.mode === "manual" && handler.language === "python") {

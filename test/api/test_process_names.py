@@ -1,11 +1,11 @@
 import pytest
 
-from api.process_names import option_label_problem, process_name_problem
+from api.process_names import find_option_label_problem, find_process_name_problem
 
 
 @pytest.mark.parametrize("name", ["hello", "org.mymodule.hello", "_x1"])
 def test_a_name_the_engine_accepts_has_no_problem(name):
-    assert process_name_problem(name) is None
+    assert find_process_name_problem(name) is None
 
 
 # A name that ends with the suffix of a method of a process (the suffix
@@ -31,7 +31,7 @@ def test_a_name_the_engine_accepts_has_no_problem(name):
     ],
 )
 def test_a_name_the_engine_refuses_has_its_reason(name, reason):
-    assert reason in process_name_problem(name)
+    assert reason in find_process_name_problem(name)
 
 
 def test_the_editor_checks_a_name_with_the_same_rule():
@@ -47,10 +47,10 @@ def test_the_editor_checks_a_name_with_the_same_rule():
 
 @pytest.mark.parametrize("label", ["-a", "--log-level", "-_x", "-outf", "--out-dir", "-x1"])
 def test_a_label_the_engine_accepts_has_no_problem(label):
-    assert option_label_problem(label) is None
+    assert find_option_label_problem(label) is None
 
 
 # The engine takes "-" or "--" followed by an ASCII letter or an underscore
 @pytest.mark.parametrize("label", ["", "a", "-", "--", "---x", "-1n", "-é", " -a"])
 def test_a_label_the_engine_refuses_has_its_reason(label):
-    assert "an ASCII letter or an underscore" in option_label_problem(label)
+    assert "an ASCII letter or an underscore" in find_option_label_problem(label)

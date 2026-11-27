@@ -11,8 +11,8 @@ import {
   applyEdits,
   connect,
   disconnect,
-  groupsTouchedBy,
-  mergeRefusal,
+  findGroupsTouchedBy,
+  findMergeRefusal,
   normalizeProgram,
   prepareMerge,
   removeOption,
@@ -179,8 +179,8 @@ describe("Add program", () => {
 
   it("refuses a name that the program has already, whatever its case", () => {
     const loaded = { ...other(), processes: [process("A", [])] };
-    expect(mergeRefusal(program(), loaded)).toMatch(/named "A"/);
-    expect(mergeRefusal(program(), other())).toBeNull();
+    expect(findMergeRefusal(program(), loaded)).toMatch(/named "A"/);
+    expect(findMergeRefusal(program(), other())).toBeNull();
   });
 
   it("brings in copies with new ids, as one group, to the right of the canvas", () => {
@@ -239,7 +239,7 @@ describe("edits as data", () => {
     const groupSource = { programName: "other", groupId: "g1", groupSize: 1, sourceDir: "/src" };
     const grouped = { ...program(), edges: [ab] };
     grouped.processes = grouped.processes.map(p => p.name === "b" ? { ...p, groupSource } : p);
-    const touched = (ops: Parameters<typeof groupsTouchedBy>[1]) => [...groupsTouchedBy(grouped, ops).keys()];
+    const touched = (ops: Parameters<typeof findGroupsTouchedBy>[1]) => [...findGroupsTouchedBy(grouped, ops).keys()];
 
     expect(touched([{ op: "moveProcess", processId: "id-b", position: { x: 0, y: 0 } }])).toEqual([]);
     expect(touched([{ op: "updateProcess", processId: "id-a", changes: { code: "x" } }])).toEqual([]);

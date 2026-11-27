@@ -1,7 +1,7 @@
-import { fanoutCountText } from "./connections";
-import { deliveryChannel, receivesPath } from "./dataTypes";
+import { describeFanoutCount } from "./connections";
+import { getDeliveryChannel, receivesPath } from "./dataTypes";
 import type { ProgramOption } from "./option";
-import { fanoutBaseLabel, isFanoutOption } from "./option";
+import { getFanoutBaseLabel, isFanoutOption } from "./option";
 import type { ProcessLanguage, ProgramProcess } from "./process";
 import type { Program } from "./program";
 import type { SeqProcess } from "./seqProcess";
@@ -145,7 +145,7 @@ function optionKind(program: Program, process: ProgramProcess, option: ProgramOp
   if (!receivesPath(program, process, option)) {
     return `${option.direction}, ${option.dataType}`;
   }
-  switch (deliveryChannel(program, process.id, option)) {
+  switch (getDeliveryChannel(program, process.id, option)) {
     case "fifo":
       return `${option.direction}, the path of a FIFO, each line a ${option.dataType}`;
     case "value_desc":
@@ -180,8 +180,8 @@ function optionLines(program: Program, process: ProgramProcess, option: ProgramO
 
   const fanoutFamily = process.optionsHandler.mode === "standard" && isFanoutOption(option.label);
   if (fanoutFamily) {
-    const base = fanoutBaseLabel(option.label);
-    notes.push(`A fanout family: the options \`${base}0\`, \`${base}1\`, ..., as many as ${fanoutCountText(program, process, option)}.`);
+    const base = getFanoutBaseLabel(option.label);
+    notes.push(`A fanout family: the options \`${base}0\`, \`${base}1\`, ..., as many as ${describeFanoutCount(program, process, option)}.`);
     if (!option.countSourceOptionId) {
       notes.push("The task does not receive that number: count the options of the family among the arguments.");
     }

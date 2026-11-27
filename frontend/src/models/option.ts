@@ -57,7 +57,7 @@ export interface ProgramOption {
   // value supplies the runtime count for this fanout family — e.g.
   // "-outf-ith"'s countSourceOptionId points at that process's own "-w".
   // Unset, the family counts the tasks of the generator at the other end
-  // of its connections (see fanoutCountProcesses).
+  // of its connections (see findFanoutCountProcesses).
   countSourceOptionId?: string;
   // A task shaping option: a mandatory command line option that only the
   // options handler of the process reads (the code that builds the array,
@@ -127,7 +127,7 @@ export function isValidOptionLabel(label: string): boolean {
 // ordinary option.
 const FANOUT_SUFFIX = "-ith";
 
-export function fanoutBaseLabel(label: string): string {
+export function getFanoutBaseLabel(label: string): string {
   return label.slice(0, -FANOUT_SUFFIX.length);
 }
 
@@ -136,7 +136,7 @@ export function isFanoutOption(label: string): boolean {
     return false;
   }
   // Excludes the degenerate bare "-ith"/"--ith".
-  return fanoutBaseLabel(label).replace(/^-+/, "").length > 0;
+  return getFanoutBaseLabel(label).replace(/^-+/, "").length > 0;
 }
 
 // A fanout/fanin option family too large to list inline, so
@@ -179,7 +179,7 @@ export function getCommandLineOptions(
 // handle of such an option with it.
 export type OptionValueSource = "shaping" | "cmdline" | "spec" | "flag";
 
-export function optionValueSource(option: ProgramOption): OptionValueSource | null {
+export function getOptionValueSource(option: ProgramOption): OptionValueSource | null {
   if (option.taskShaping) {
     return "shaping";
   }

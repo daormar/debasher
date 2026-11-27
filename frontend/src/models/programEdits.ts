@@ -182,7 +182,7 @@ export type TouchedGroups = Map<string, string>;
  * Takes a program and the ids of some of its processes; returns the groups
  * of those processes, by groupId, each with the name of its program.
  */
-function groupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
+function findGroupsOfProcesses(program: Program, processIds: Iterable<string>): TouchedGroups {
 
   const ids = new Set(processIds);
   const groups: TouchedGroups = new Map();
@@ -198,10 +198,10 @@ function groupsOfProcesses(program: Program, processIds: Iterable<string>): Touc
 }
 
 // Takes a program and the ids of some of its edges; returns the groups of
-// the targets of those edges (see groupsOfProcesses).
-function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
+// the targets of those edges (see findGroupsOfProcesses).
+function findGroupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): TouchedGroups {
   const ids = new Set(edgeIds);
-  return groupsOfProcesses(
+  return findGroupsOfProcesses(
     program,
     program.edges.filter(edge => ids.has(edge.id)).map(edge => edge.targetProcessId)
   );
@@ -212,7 +212,7 @@ function groupsOfEdgeTargets(program: Program, edgeIds: Iterable<string>): Touch
  * returns the groups of the grouped sequential processes that the
  * replacement changes or leaves out.
  */
-function groupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
+function findGroupsOfChangedSeqProcesses(program: Program, seqProcesses: SeqProcess[]): TouchedGroups {
 
   const newById = new Map(seqProcesses.map(seqProcess => [seqProcess.id, seqProcess]));
   const groups: TouchedGroups = new Map();
@@ -260,7 +260,7 @@ export function removeProcess(program: Program, processId: string): Program {
   };
 }
 
-function mapProcess(
+function applyToProcess(
   program: Program,
   processId: string,
   edit: (process: ProgramProcess) => ProgramProcess
@@ -276,11 +276,11 @@ function mapProcess(
 export type ProcessChanges = Partial<Omit<ProgramProcess, "id">>;
 
 export function updateProcess(program: Program, processId: string, changes: ProcessChanges): Program {
-  return mapProcess(program, processId, process => ({ ...process, ...changes }));
+  return applyToProcess(program, processId, process => ({ ...process, ...changes }));
 }
 
 export function addOption(program: Program, processId: string, option: ProgramOption): Program {
-  return mapProcess(program, processId, process => ({
+  return applyToProcess(program, processId, process => ({
     ...process,
     options: [...process.options, option],
   }));
@@ -294,7 +294,7 @@ export function updateOption(
   optionId: string,
   changes: OptionChanges
 ): Program {
-  return mapProcess(program, processId, process => ({
+  return applyToProcess(program, processId, process => ({
     ...process,
     options: process.options.map(option =>
       option.id === optionId ? { ...option, ...changes } : option
@@ -309,7 +309,7 @@ export function updateOption(
 // option, and then counts the tasks of the process at the other end of its
 // connections, rather than keep the id of an option that no longer exists.
 export function removeOption(program: Program, processId: string, optionId: string): Program {
-  const removed = mapProcess(program, processId, process => ({
+  const removed = applyToProcess(program, processId, process => ({
     ...process,
     options: process.options
       .filter(option => option.id !== optionId)
@@ -319,12 +319,12 @@ export function removeOption(program: Program, processId: string, optionId: stri
   }));
   return {
     ...removed,
-    edges: removed.edges.filter(edge => !edgeTouchesOption(edge, processId, optionId)),
+    edges: removed.edges.filter(edge => !doesEdgeTouchOption(edge, processId, optionId)),
   };
 }
 
 // Whether the edge leaves or reaches the option of the process.
-function edgeTouchesOption(edge: ProgramEdge, processId: string, optionId: string): boolean {
+function doesEdgeTouchOption(edge: ProgramEdge, processId: string, optionId: string): boolean {
   return (edge.sourceProcessId === processId && edge.sourceOptionId === optionId) ||
     (edge.targetProcessId === processId && edge.targetOptionId === optionId);
 }
@@ -406,7 +406,7 @@ export function setEdgeDisplay(program: Program, edgeIds: string[], display: Edg
  * second Supervisor, or a process or sequential process whose name the
  * current program already has, whatever the case.
  */
-export function mergeRefusal(program: Program, loaded: Program): string | null {
+export function findMergeRefusal(program: Program, loaded: Program): string | null {
 
   if (loaded.programType !== program.programType) {
     return (
@@ -469,7 +469,7 @@ export interface MergedGroup {
  * `sourceDir` and a source of new ids; returns the copies of the
  * processes, sequential processes and edges of `loaded` that "Add
  * program" brings in, with new ids and their names kept (see
- * mergeRefusal), and the directory to add to DEBASHER_MOD_DIR. In a
+ * findMergeRefusal), and the directory to add to DEBASHER_MOD_DIR. In a
  * general program they form one group; a resident program takes them
  * process by process.
  */
@@ -620,7 +620,7 @@ export function applyEdit(program: Program, edit: EditOp): Program {
 }
 
 // Applies the edits one after another, then normalizeProgram once. This
-// does not dissolve the groups they touch (see groupsTouchedBy).
+// does not dissolve the groups they touch (see findGroupsTouchedBy).
 export function applyEdits(program: Program, edits: EditOp[]): Program {
   return normalizeProgram(edits.reduce((edited, edit) => applyEdit(edited, edit), program));
 }
@@ -630,7 +630,7 @@ export function applyEdits(program: Program, edits: EditOp[]): Program {
  * touch, by groupId, each with the name of its program, which have to be
  * dissolved (see dissolveGroups) before the edits are applied.
  */
-export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
+export function findGroupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroups {
 
   const groups: TouchedGroups = new Map();
 
@@ -644,7 +644,7 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
       switch (edit.op) {
         case "removeProcess":
           // Its edges go with it, and with each the reference of its target
-          return groupsOfProcesses(program, [
+          return findGroupsOfProcesses(program, [
             edit.processId,
             ...program.edges
               .filter(edge => edge.sourceProcessId === edit.processId)
@@ -653,23 +653,23 @@ export function groupsTouchedBy(program: Program, edits: EditOp[]): TouchedGroup
         case "updateProcess":
         case "addOption":
         case "updateOption":
-          return groupsOfProcesses(program, [edit.processId]);
+          return findGroupsOfProcesses(program, [edit.processId]);
         case "removeOption":
           // The edges that leave or reach the option go with it, and with
-          // each the reference of its target (see groupsOfEdgeTargets)
-          return groupsOfProcesses(program, [
+          // each the reference of its target (see findGroupsOfEdgeTargets)
+          return findGroupsOfProcesses(program, [
             edit.processId,
             ...program.edges
-              .filter(edge => edgeTouchesOption(edge, edit.processId, edit.optionId))
+              .filter(edge => doesEdgeTouchOption(edge, edit.processId, edit.optionId))
               .map(edge => edge.targetProcessId),
           ]);
         case "connect":
-          return groupsOfProcesses(program, [edit.edge.targetProcessId]);
+          return findGroupsOfProcesses(program, [edit.edge.targetProcessId]);
         case "disconnect":
-          return groupsOfEdgeTargets(program, [edit.edgeId]);
+          return findGroupsOfEdgeTargets(program, [edit.edgeId]);
         case "setSeqProcesses":
           // Those of the sequential processes that it changes or leaves out
-          return groupsOfChangedSeqProcesses(program, edit.seqProcesses);
+          return findGroupsOfChangedSeqProcesses(program, edit.seqProcesses);
         // Moving a process, how edges are drawn, the program's own fields
         // and an addition touch no group
         case "setProgramFields":

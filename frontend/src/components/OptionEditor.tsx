@@ -8,9 +8,9 @@ import type {
 } from "../models/option";
 import type { ProgramType } from "../models/program";
 import type { ProgramProcess } from "../models/process";
-import { optionLabelProblem } from "../models/process";
-import { channelDataType, ownDataType } from "../models/dataTypes";
-import { fanoutCountProcesses } from "../models/connections";
+import { findOptionLabelProblem } from "../models/process";
+import { getChannelDataType, getOwnDataType } from "../models/dataTypes";
+import { findFanoutCountProcesses } from "../models/connections";
 import {
   DIRECTORY_CHANNELS,
   getOptionDirection,
@@ -147,9 +147,9 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   const direction = getOptionDirection(label);
 
-  // Shown once something is typed (see optionLabelProblem).
+  // Shown once something is typed (see findOptionLabelProblem).
   const labelProblem = ownerProcess
-    ? optionLabelProblem(ownerProcess, label, programType, option.id)
+    ? findOptionLabelProblem(ownerProcess, label, programType, option.id)
     : null;
 
   // Reactive to the label as it's being typed, so the "Count source"
@@ -164,10 +164,10 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   // Without a count source option, the family counts the tasks of the
   // process at the other end of its connections, an array or a generator
-  // (see fanoutCountProcesses). The engine answers about an array not
+  // (see findFanoutCountProcesses). The engine answers about an array not
   // defined yet by running its whole option definition again, so a
   // generator is cheaper to count
-  const countProcesses = ownerProcess ? fanoutCountProcesses(program, ownerProcess, option) : [];
+  const countProcesses = ownerProcess ? findFanoutCountProcesses(program, ownerProcess, option) : [];
   const countProcessNote = (process: ProgramProcess): string =>
     process.optionsHandler.mode === "generator" ? ""
       : process.optionsHandler.mode === "array" ? " (an array: a generator is cheaper to count)"
@@ -267,13 +267,13 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
     useState(option.taskShaping ?? false);
 
   // The data type that the option channel or the connection fixes (see
-  // fixedDataType), shown instead of a choice: a directory channel names a
+  // getFixedDataType), shown instead of a choice: a directory channel names a
   // directory, and a connected input carries what the output it reads
   // carries. A command line option has the channel "none", whatever the
   // disabled channel selector still holds.
   const lockedDataType: OptionDataType | null =
-    channelDataType(commandLine ? "none" : channel) ??
-    (connectedSourceOption ? ownDataType(connectedSourceOption.sourceOption) : null);
+    getChannelDataType(commandLine ? "none" : channel) ??
+    (connectedSourceOption ? getOwnDataType(connectedSourceOption.sourceOption) : null);
 
   // A task shaping option is a mandatory command line input with a value,
   // and not a fanout family, which script_generation.py refuses otherwise
@@ -467,7 +467,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
             }}
           >
             {lockedDataType}{" "}
-            {connectedSourceOption && !channelDataType(commandLine ? "none" : channel)
+            {connectedSourceOption && !getChannelDataType(commandLine ? "none" : channel)
               ? "(from connection)"
               : "(directory channel)"}
           </div>

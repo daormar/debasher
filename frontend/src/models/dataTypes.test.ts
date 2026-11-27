@@ -6,7 +6,7 @@ import { createOption } from "./option";
 import type { ProgramProcess } from "./process";
 import type { Program } from "./program";
 import { isValidEdge } from "./connections";
-import { fixedDataType, normalizeDataTypes, receivesPath } from "./dataTypes";
+import { getFixedDataType, normalizeDataTypes, receivesPath } from "./dataTypes";
 import { normalizeProgram } from "./programEdits";
 import { applyEdits } from "./programEdits";
 import { validateEdits } from "./editValidation";
@@ -65,11 +65,11 @@ describe("data types", () => {
 
   it("fixes the data type of a directory channel and of a connected input, and leaves the others free", () => {
     const p = program();
-    expect(fixedDataType(p, "id-adder", optionOf(p, "adder", "sums"))).toBe("dir");
-    expect(fixedDataType(p, "id-adder", optionOf(p, "adder", "outd"))).toBe("dir");
-    expect(fixedDataType(p, "id-adder", optionOf(p, "adder", "inf"))).toBe("int");
-    expect(fixedDataType(p, "id-adder", optionOf(p, "adder", "n"))).toBeNull();
-    expect(fixedDataType(p, "id-counter", optionOf(p, "counter", "outf"))).toBeNull();
+    expect(getFixedDataType(p, "id-adder", optionOf(p, "adder", "sums"))).toBe("dir");
+    expect(getFixedDataType(p, "id-adder", optionOf(p, "adder", "outd"))).toBe("dir");
+    expect(getFixedDataType(p, "id-adder", optionOf(p, "adder", "inf"))).toBe("int");
+    expect(getFixedDataType(p, "id-adder", optionOf(p, "adder", "n"))).toBeNull();
+    expect(getFixedDataType(p, "id-counter", optionOf(p, "counter", "outf"))).toBeNull();
   });
 
   it("brings a program in line with the fixed data types, and leaves alone one that already is", () => {

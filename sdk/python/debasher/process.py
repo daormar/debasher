@@ -28,7 +28,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Union
 
-from api.process_names import option_label_problem, process_name_problem
+from api.process_names import find_option_label_problem, find_process_name_problem
 from api.topology import LANGUAGE_BY_EXTENSION
 
 from .errors import DefinitionError
@@ -39,7 +39,7 @@ DATA_TYPES = ("int", "float", "string", "file", "dir")
 def check_process_name(name: str) -> None:
     """Refuses a name that the engine would refuse, with the rule that the
     editor checks too."""
-    problem = process_name_problem(name)
+    problem = find_process_name_problem(name)
     if problem is not None:
         raise DefinitionError(f'"{name}" cannot name a process: {problem}')
 
@@ -420,7 +420,7 @@ class Process:
         return tuple(received)
 
     def _check_label(self, label: str) -> None:
-        problem = option_label_problem(label)
+        problem = find_option_label_problem(label)
         if problem is not None:
             raise DefinitionError(f'Option "{label}" of process "{self.name}": {problem}')
 

@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { ProgramOption } from "../models/option";
-import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import { getFanoutBaseLabel, isFanoutOption } from "../models/option";
 
 
 interface OptionRowProps {
@@ -67,7 +67,7 @@ export default function OptionRow({
         <span>
           {isFanoutMode && isFanoutOption(option.label) ? (
             <>
-              {fanoutBaseLabel(option.label)}
+              {getFanoutBaseLabel(option.label)}
               <span style={{ color: "#c0392b" }}>-ith</span>
             </>
           ) : (

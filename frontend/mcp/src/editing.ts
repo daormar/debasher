@@ -4,7 +4,7 @@ import type { NodeInfo } from "../../src/models/node";
 import type { ProcessInfo } from "../../src/models/process";
 import type { Program } from "../../src/models/program";
 import type { EditOp } from "../../src/models/programEdits";
-import { applyEdit, applyEdits, dissolveGroups, groupsTouchedBy, normalizeProgram } from "../../src/models/programEdits";
+import { applyEdit, applyEdits, dissolveGroups, findGroupsTouchedBy, normalizeProgram } from "../../src/models/programEdits";
 import { nextFreePosition } from "../../src/models/programLayout";
 import type { NamedEdit } from "../../src/models/programRefs";
 import { resolveNamedEdits } from "../../src/models/programRefs";
@@ -166,7 +166,7 @@ export async function editProgram(
 
   const edits = placeAddedProcesses(program, enriched, resolution.edits);
 
-  const groups = groupsTouchedBy(program, edits);
+  const groups = findGroupsTouchedBy(program, edits);
   if (groups.size > 0 && !detachGroups) {
     throw new Refusal(
       `Nothing was changed. The edits change processes added with program ${groupList(groups)} ` +

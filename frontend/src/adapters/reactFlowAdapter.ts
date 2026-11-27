@@ -10,7 +10,7 @@ import type { ProgramEdge } from "../models/edge";
 import { edgeEndText, isLabelEdge } from "../models/edge";
 import type { Position } from "../models/position";
 import type { ProgramOption } from "../models/option";
-import { optionValueSource } from "../models/option";
+import { getOptionValueSource } from "../models/option";
 import { isFanoutEndpoint, isFanoutPartnerMode, isValidEdge } from "../models/connections";
 import { computeFlippedOptionIds } from "../models/optionLayout";
 import {
@@ -182,7 +182,7 @@ export function supervisorWiring(
  * The structural key of a program: for each process, its id, name and
  * options handler mode, and the id, label and direction of each option and,
  * for an input, where its value comes from when no connection can give it
- * (see optionValueSource), which its hollow handle and tag show.
+ * (see getOptionValueSource), which its hollow handle and tag show.
  * It changes whenever a process is added, removed or renamed, its options
  * handler mode is switched, or an option is added, removed or edited, and
  * never when a process is moved. The canvas refreshes its list of canvas
@@ -198,7 +198,7 @@ export function supervisorWiring(
 // Where the value of an input of a general program comes from when no
 // connection can give it: what its hollow handle and its tag show.
 function generalOptionKey(option: ProgramOption): string {
-  return option.direction === "input" ? optionValueSource(option) ?? "" : "";
+  return option.direction === "input" ? getOptionValueSource(option) ?? "" : "";
 }
 
 // The sort of an option of a node and, for a configuration option, where its

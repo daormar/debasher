@@ -11,11 +11,11 @@ import type {
 import type { ProgramProcessData, WiringHandle } from "../adapters/reactFlowAdapter";
 import type { ProgramOption } from "../models/option";
 import type { ProgramProcess } from "../models/process";
-import { repeatedOptionLabels } from "../models/process";
+import { listRepeatedOptionLabels } from "../models/process";
 import { configurationSource, noHoldFifosOption, nodeOptionRole, observesOutside } from "../models/node";
 import { WIRING_EDGE_COLOR } from "../adapters/reactFlowAdapter";
 import { optionRow } from "../models/optionLayout";
-import { fanoutBaseLabel, isFanoutOption, optionValueSource } from "../models/option";
+import { getFanoutBaseLabel, isFanoutOption, getOptionValueSource } from "../models/option";
 import { processNodeBackground, residentProcessStatus } from "../models/processStatus";
 import {
   HEAD_BAND_COLOR,
@@ -48,7 +48,7 @@ function OptionLabel({ label, isFanout }: { label: string; isFanout: boolean }) 
 
   return (
     <>
-      {fanoutBaseLabel(label)}
+      {getFanoutBaseLabel(label)}
       <span style={{ color: "#c0392b" }}>-ith</span>
     </>
   );
@@ -350,7 +350,7 @@ export default function ProcessNode({
     if (isResident) {
       return nodeOptionRole(option) === "configuration" ? configurationSource(option) : undefined;
     }
-    return option.direction === "input" ? optionValueSource(option) ?? undefined : undefined;
+    return option.direction === "input" ? getOptionValueSource(option) ?? undefined : undefined;
   }
 
   // In a resident program only a business output and an input that a
@@ -375,7 +375,7 @@ export default function ProcessNode({
   // A resident program has no groups.
   const groupSource = isResident ? undefined : process.groupSource;
 
-  const repeatedLabels = repeatedOptionLabels(process);
+  const repeatedLabels = listRepeatedOptionLabels(process);
 
   const groupBorderColor = groupSource ? groupColor(groupSource.groupId) : null;
 

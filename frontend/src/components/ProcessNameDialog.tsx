@@ -8,7 +8,7 @@ import {
   validateProcessName,
 } from "../api/processApi";
 import type { ProcessInfo } from "../models/process";
-import { processNameProblem } from "../models/process";
+import { findProcessNameProblem } from "../models/process";
 import type { ProgramType } from "../models/program";
 import type { NodeInfo, NodeKind, SuggestedNode } from "../models/node";
 import { NODE_KINDS } from "../models/node";
@@ -18,7 +18,7 @@ interface Props {
   confirmLabel: string;
   initialName?: string;
   // The names of the other processes and of the sequential processes,
-  // which share one set of names (see processNameProblem).
+  // which share one set of names (see findProcessNameProblem).
   existingNames: string[];
   preamble: string;
   envVars: Record<string, string>;
@@ -129,7 +129,7 @@ export default function ProcessNameDialog({
 
     const trimmedName = name.trim();
 
-    const nameProblem = processNameProblem(existingNames, trimmedName, programType);
+    const nameProblem = findProcessNameProblem(existingNames, trimmedName, programType);
 
     if (nameProblem) {
       setError(nameProblem);

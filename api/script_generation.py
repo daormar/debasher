@@ -435,7 +435,7 @@ def _readers_by_option(program: Program) -> dict[tuple[str, str], Readers]:
 # a source in one of these modes can be trusted to actually have a task
 # N to connect to; a standard source has only task 0, and a manual
 # source's task shape is unknown, so both default to task 0 instead (see
-# _connection_lines below).
+# _write_connection_lines below).
 _TASK_INDEXED_MODES = {"generator", "array"}
 
 # The non-"-ith" side of a fanout/fanin pairing: whatever "array"-mode
@@ -450,7 +450,7 @@ _FANOUT_PARTNER_MODES = {"array", "generator"}
 # for a dynamic-count family of options on a "standard"-mode process: a
 # label ending in "-ith" (e.g. "-outf-ith" standing for "-outf0", "-outf1",
 # ...), mirrored from frontend/src/models/option.ts's isFanoutOption/
-# fanoutBaseLabel. Only meaningful on a "standard"-mode process, the
+# getFanoutBaseLabel. Only meaningful on a "standard"-mode process, the
 # same label on array/generator/manual is just an ordinary option.
 _FANOUT_SUFFIX = "-ith"
 
@@ -693,13 +693,13 @@ def _check_option_sources(process, option) -> None:
         )
 
 
-def _flag_lines(option) -> list[str]:
+def _write_flag_lines(option) -> list[str]:
     if option.commandLine:
         return [f'debasher::define_cmdline_flag_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
     return [f'debasher::define_flag "{option.label}" optlist || return 1']
 
 
-def _channel_lines(option) -> list[str]:
+def _write_channel_lines(option) -> list[str]:
     """Takes an option on an option channel other than "none"; returns the
     line that defines it from its channel, whatever its connections."""
     if option.channel == "value_desc":
@@ -722,19 +722,19 @@ def _channel_lines(option) -> list[str]:
     # an output and an input holding the same path. A subpath is a Bash
     # word, written as it is, like a literal value.
     if option.channel == "shared_dir":
-        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist{_subdir_flag(option)} || return 1']
+        return [f'debasher::define_opt_from_shared_dir "{option.label}" "{option.value}" optlist{_get_subdir_flag(option)} || return 1']
     # "process_outdir": the process output directory of the option's own
     # process, or a task subdirectory of it
-    return [f'debasher::define_opt_from_process_outdir "{option.label}" optlist{_subdir_flag(option)} || return 1']
+    return [f'debasher::define_opt_from_process_outdir "{option.label}" optlist{_get_subdir_flag(option)} || return 1']
 
 
-def _subdir_flag(option) -> str:
+def _get_subdir_flag(option) -> str:
     """Takes an option; returns its --subdir flag, with a leading blank, or
     the empty string when it has no subpath."""
     return f' --subdir "{option.subpath}"' if option.subpath else ""
 
 
-def _procspec_lines(option) -> list[str]:
+def _write_procspec_lines(option) -> list[str]:
     # Not a channel (see ProgramOption.fromProcessSpec's own docstring): a
     # process-spec-sourced option's value comes from exactly one
     # define_procspec_opt call.
@@ -749,14 +749,14 @@ _CMDLINE_PATH_FUNCS = {"file": "define_cmdline_infile_opt", "dir": "define_cmdli
 _LITERAL_PATH_FUNCS = {"file": "define_infile_opt", "dir": "define_indir_opt"}
 
 
-def _cmdline_lines(option) -> list[str]:
+def _write_cmdline_lines(option) -> list[str]:
     base = _CMDLINE_PATH_FUNCS.get(option.dataType, "define_cmdline_opt")
     if option.mandatory:
         return [f'debasher::{base} "${{cmdline}}" "{option.label}" optlist || return 1']
     return [f'debasher::{base}_if_given "${{cmdline}}" "{option.label}" optlist || return 1']
 
 
-def _connection_lines(process, option, process_modes, connections: Connections) -> list[str]:
+def _write_connection_lines(process, option, process_modes, connections: Connections) -> list[str]:
     """
     Takes a process, one of its options, the modes of the processes and the
     connections of the option; returns the lines that define the option
@@ -796,7 +796,7 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
     return lines
 
 
-def _literal_lines(process, option) -> list[str]:
+def _write_literal_lines(process, option) -> list[str]:
     if option.dataType in _LITERAL_PATH_FUNCS and option.direction == "input":
         # Resolved relative to the .sh defining the process (see
         # debasher::define_infile_opt in engine/debasher_lib_opts.sh); lets
@@ -820,7 +820,7 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     Returns the _define_opts/_generate_opts line(s) for `option`: a list,
     since a connected, non-command-line, non-fanout option may have more
     than one incoming edge (fan-in), each written as a line of its own (see
-    _connection_lines). The order of the checks below is the precedence of
+    _write_connection_lines). The order of the checks below is the precedence of
     the sources of a value: a flag, an option channel, the process
     specifications, the command line, a connection, and a literal value.
     """
@@ -830,17 +830,17 @@ def _option_definition_line(process, option, process_modes, connections_by_optio
     if option.taskShaping:
         return []
     if option.dataType == "None":
-        return _flag_lines(option)
+        return _write_flag_lines(option)
     if option.channel != "none":
-        return _channel_lines(option)
+        return _write_channel_lines(option)
     if option.fromProcessSpec:
-        return _procspec_lines(option)
+        return _write_procspec_lines(option)
     if option.commandLine:
-        return _cmdline_lines(option)
+        return _write_cmdline_lines(option)
     connections = connections_by_option.get((process.id, option.id))
     if connections:
-        return _connection_lines(process, option, process_modes, connections)
-    return _literal_lines(process, option)
+        return _write_connection_lines(process, option, process_modes, connections)
+    return _write_literal_lines(process, option)
 
 
 def _add_opts_definition_func(process, suffix, header_lines, process_modes, connections_by_option, readers_by_option):
@@ -1119,7 +1119,7 @@ def _add_additional_methods_funcs(process):
     return lines
 
 
-def _intact_group_ids(program):
+def _get_intact_group_ids(program):
     """
     Takes a program; returns the set of the groupIds of its groups whose
     members, processes and sequential processes, all still carry their
@@ -1143,13 +1143,13 @@ def _intact_group_ids(program):
     }
 
 
-def _intact_group_program_names(program) -> list[str]:
+def _get_intact_group_program_names(program) -> list[str]:
     """
     Takes a program; returns the name of the program of each of its intact
     groups, in the order in which the first member of each group comes, as
     _add_program_function adds the groups.
     """
-    intact_group_ids = _intact_group_ids(program)
+    intact_group_ids = _get_intact_group_ids(program)
     names = []
     seen_group_ids = set()
     for member in [*program.processes, *program.seqProcesses]:
@@ -1168,7 +1168,7 @@ def _add_group_module_loads(program):
     # add_debasher_program runs the _program method of a module only when it
     # is loaded, which the engine finds through DEBASHER_MOD_DIR, where "Add
     # program" puts its directory
-    return [f'load_debasher_module "{name}"' for name in _intact_group_program_names(program)]
+    return [f'load_debasher_module "{name}"' for name in _get_intact_group_program_names(program)]
 
 
 def _add_program_function(program):
@@ -1178,7 +1178,7 @@ def _add_program_function(program):
     intact group with one add_debasher_program.
     """
     lines = [f"{program.name}{MODULE_PROGRAM_SUFFIX}()", "{"]
-    intact_group_ids = _intact_group_ids(program)
+    intact_group_ids = _get_intact_group_ids(program)
     emitted_group_ids = set()
     # The processes, then the sequential processes: a member of an intact
     # group, of either kind, is added by its group's add_debasher_program,

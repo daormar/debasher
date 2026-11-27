@@ -279,7 +279,7 @@ export interface ProcessInfo {
 }
 
 // A new option from what the library brings for it.
-export function optionFromInfo(info: ProcessInfoOption, id: string): ProgramOption {
+export function createOptionFromInfo(info: ProcessInfoOption, id: string): ProgramOption {
   return createOption(id, info.label, {
     dataType: info.dataType,
     description: info.description,
@@ -340,7 +340,7 @@ export function createProcess(
     name,
     description: info?.description ?? "",
     position: { x: 100, y: 100 },
-    options: info ? info.options.map(option => optionFromInfo(option, newId())) : [],
+    options: info ? info.options.map(option => createOptionFromInfo(option, newId())) : [],
     optionsHandler: { mode: "standard" },
     language: info?.language ?? "bash",
     code: info?.code ?? "",
@@ -359,7 +359,7 @@ export function createProcess(
  * engine. Whether the engine accepts the name at all is a question for the
  * backend (see processApi's validateProcessName).
  */
-export function processNameProblem(
+export function findProcessNameProblem(
   takenNames: string[],
   name: string,
   programType: ProgramType
@@ -389,7 +389,7 @@ export function processNameProblem(
  * two options with the same label. `exceptOptionId` is the option being
  * relabeled, whose own label does not count.
  */
-export function optionLabelProblem(
+export function findOptionLabelProblem(
   process: ProgramProcess,
   label: string,
   programType: ProgramType,
@@ -416,8 +416,8 @@ export function optionLabelProblem(
 
 // The labels that more than one option of the process has, which only a
 // program whose metadata breaks the rule, such as one edited by hand, can
-// hold (see optionLabelProblem).
-export function repeatedOptionLabels(process: ProgramProcess): string[] {
+// hold (see findOptionLabelProblem).
+export function listRepeatedOptionLabels(process: ProgramProcess): string[] {
   const seen = new Set<string>();
   const repeated = new Set<string>();
   for (const option of process.options) {

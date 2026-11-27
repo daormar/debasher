@@ -17,8 +17,8 @@ import {
 import type { ProgramProcessData } from "../adapters/reactFlowAdapter";
 import type { ProgramProcess } from "../models/process";
 import type { ProgramOption, FanoutFamily, OptionChannel } from "../models/option";
-import { deliveryChannel } from "../models/dataTypes";
-import { fanoutBaseLabel, isFanoutOption } from "../models/option";
+import { getDeliveryChannel } from "../models/dataTypes";
+import { getFanoutBaseLabel, isFanoutOption } from "../models/option";
 import { showsGeneralIndicator } from "../models/generalRun";
 import { hasSupervisor } from "../models/node";
 import { offersShowBatchRuns, offersShowNodeState, wasLaunched } from "../models/nodeState";
@@ -180,7 +180,7 @@ function expandFanoutOptions(
       ? byId.get(option.countSourceOptionId)
       : undefined;
 
-    const base = fanoutBaseLabel(option.label);
+    const base = getFanoutBaseLabel(option.label);
 
     // Without a count source option, the family counts the tasks of
     // another process, a number that the task does not receive: the
@@ -595,7 +595,7 @@ export default function ProgramCanvas() {
     // ones: a connected input reads a FIFO or a value descriptor through
     // channel "none".
     const deliveryChannels = new Map(
-      candidates.map(option => [option.id, deliveryChannel(program, process.id, option)])
+      candidates.map(option => [option.id, getDeliveryChannel(program, process.id, option)])
     );
 
     // isFanoutOption/countSourceOptionId are only meaningful on a

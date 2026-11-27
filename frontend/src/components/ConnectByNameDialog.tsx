@@ -6,7 +6,7 @@ import type { EdgeDisplay } from "../models/edge";
 interface Props {
   // "<process> <option>" of the input being connected.
   targetText: string;
-  // The outputs it can be connected to (see connectionCandidates).
+  // The outputs it can be connected to (see listConnectionCandidates).
   candidates: ConnectionCandidate[];
   onConnect: (candidate: ConnectionCandidate, display: EdgeDisplay) => void;
   onClose: () => void;

@@ -1,6 +1,6 @@
 import type { ComputationalSpecs, OptionsHandler, ProgramProcess } from "./process";
 import type { OptionValueSource, ProgramOption } from "./option";
-import { createOption, getCommandLineOptions, optionValueSource } from "./option";
+import { createOption, getCommandLineOptions, getOptionValueSource } from "./option";
 import type { Program } from "./program";
 
 // The node kinds of a resident program: the classes of the engine's runtime
@@ -337,11 +337,11 @@ export function observesOutside(process: ProgramProcess): boolean {
 
 /**
  * Where the value of a configuration option of a node comes from, as the
- * canvas tags its hollow handle: see optionValueSource, and "fixed" for an
+ * canvas tags its hollow handle: see getOptionValueSource, and "fixed" for an
  * output with option channel "none", whose value the module gives.
  */
 export function configurationSource(option: ProgramOption): OptionValueSource | "fixed" {
-  return optionValueSource(option) ?? "fixed";
+  return getOptionValueSource(option) ?? "fixed";
 }
 
 // The flag of the Supervisor, a command line option, with which a run tells

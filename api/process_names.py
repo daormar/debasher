@@ -35,7 +35,7 @@ def _reserved_name_endings() -> list[str]:
     return [s for s in RESERVED_PROCESS_METHOD_SUFFIXES if s] + [f"_{s}" for s in RESERVED_HEREDOC_SUFFIXES]
 
 
-def process_name_problem(name: str) -> str | None:
+def find_process_name_problem(name: str) -> str | None:
     """
     Why the engine would refuse `name` as the name of a process, or None
     when it would take it: the function of a process "a_post" would be
@@ -55,7 +55,7 @@ def process_name_problem(name: str) -> str | None:
     return None
 
 
-def option_label_problem(label: str) -> str | None:
+def find_option_label_problem(label: str) -> str | None:
     """
     Why the engine would refuse `label` as the label of an option, or None
     when it would take it. The reason is a clause that follows a message

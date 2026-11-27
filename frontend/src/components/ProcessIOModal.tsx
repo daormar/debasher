@@ -20,7 +20,7 @@ interface Props {
   // their own row instead, which shows one index at a time.
   families: FanoutFamily[];
   // The option channel through which the data of each option gets to the
-  // process (see deliveryChannel), by option id, as ProgramCanvas's
+  // process (see getDeliveryChannel), by option id, as ProgramCanvas's
   // fetchProcessIO found it: a connected input's own channel is "none",
   // whatever the channel of the output it reads.
   deliveryChannels: Map<string, OptionChannel>;

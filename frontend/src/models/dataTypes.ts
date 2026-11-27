@@ -15,7 +15,7 @@ import type { Program } from "./program";
 
 // The data type that an option channel fixes, or null when the data type
 // is free: the directory channels name a directory, whatever is in it.
-export function channelDataType(channel: OptionChannel): OptionDataType | null {
+export function getChannelDataType(channel: OptionChannel): OptionDataType | null {
   return channel === "shared_dir" || channel === "process_outdir" ? "dir" : null;
 }
 
@@ -31,7 +31,7 @@ export function isConnectedInputChannel(channel: OptionChannel, sourceChannel: O
 
 // Why `option` of `process`, an input on the channel it has, cannot read
 // `sourceOption` of `sourceProcess`, or null.
-export function connectedInputChannelProblem(
+export function findConnectedInputChannelProblem(
   process: ProgramProcess,
   option: ProgramOption,
   sourceProcess: ProgramProcess,
@@ -51,17 +51,17 @@ export function connectedInputChannelProblem(
 
 // The incoming edge of an input, if it is connected. Only inputs on a
 // shared directory take several, all of which name the same directory.
-function incomingEdge(program: Program, processId: string, optionId: string) {
+function findIncomingEdge(program: Program, processId: string, optionId: string) {
   return program.edges.find(edge => edge.targetProcessId === processId && edge.targetOptionId === optionId);
 }
 
 // The output that a connected input reads, and its process, or null.
-export function connectedSource(
+export function findConnectedSource(
   program: Program,
   processId: string,
   optionId: string
 ): { process: ProgramProcess; option: ProgramOption } | null {
-  const edge = incomingEdge(program, processId, optionId);
+  const edge = findIncomingEdge(program, processId, optionId);
   const process = edge && program.processes.find(candidate => candidate.id === edge.sourceProcessId);
   const option = process?.options.find(candidate => candidate.id === edge!.sourceOptionId);
   return process && option ? { process, option } : null;
@@ -69,30 +69,30 @@ export function connectedSource(
 
 // The data type of an option that nothing but its own fields decide, as
 // that of an output, which no connection fixes.
-export function ownDataType(option: ProgramOption): OptionDataType {
-  return channelDataType(option.channel) ?? option.dataType;
+export function getOwnDataType(option: ProgramOption): OptionDataType {
+  return getChannelDataType(option.channel) ?? option.dataType;
 }
 
 // The data type that the option channel or the connection of an option
 // fixes, or null when the user chooses it.
-export function fixedDataType(program: Program, processId: string, option: ProgramOption): OptionDataType | null {
-  const fromChannel = channelDataType(option.channel);
+export function getFixedDataType(program: Program, processId: string, option: ProgramOption): OptionDataType | null {
+  const fromChannel = getChannelDataType(option.channel);
   if (fromChannel) {
     return fromChannel;
   }
-  const source = connectedSource(program, processId, option.id);
-  return source ? ownDataType(source.option) : null;
+  const source = findConnectedSource(program, processId, option.id);
+  return source ? getOwnDataType(source.option) : null;
 }
 
 // The option channel through which the data of an option gets to its
 // process: its own, or, for a connected input, that of the output it
 // reads, since a connected input's own channel is "none" (or
 // "shared_dir").
-export function deliveryChannel(program: Program, processId: string, option: ProgramOption): OptionChannel {
+export function getDeliveryChannel(program: Program, processId: string, option: ProgramOption): OptionChannel {
   if (option.channel !== "none") {
     return option.channel;
   }
-  return connectedSource(program, processId, option.id)?.option.channel ?? "none";
+  return findConnectedSource(program, processId, option.id)?.option.channel ?? "none";
 }
 
 // Whether the process receives a path rather than the data itself: through
@@ -100,7 +100,7 @@ export function deliveryChannel(program: Program, processId: string, option: Pro
 // exception for a value descriptor that it reads, whose value
 // read_opt_value_from_func_args gives instead of the path.
 export function receivesPath(program: Program, process: ProgramProcess, option: ProgramOption): boolean {
-  const channel = deliveryChannel(program, process.id, option);
+  const channel = getDeliveryChannel(program, process.id, option);
   if (channel === "none") {
     return false;
   }
@@ -115,7 +115,7 @@ export function normalizeDataTypes(program: Program): Program {
   const processes = program.processes.map(process => {
     let processChanged = false;
     const options = process.options.map(option => {
-      const fixed = fixedDataType(program, process.id, option);
+      const fixed = getFixedDataType(program, process.id, option);
       if (fixed === null || fixed === option.dataType) {
         return option;
       }
@@ -141,7 +141,7 @@ export function normalizeConnectedInputChannels(program: Program): Program {
   const processes = program.processes.map(process => {
     let processChanged = false;
     const options = process.options.map(option => {
-      const source = connectedSource(program, process.id, option.id);
+      const source = findConnectedSource(program, process.id, option.id);
       if (!source || isConnectedInputChannel(option.channel, source.option.channel)) {
         return option;
       }
@@ -160,22 +160,22 @@ export function normalizeConnectedInputChannels(program: Program): Program {
 
 // Why a connected input cannot be on the channel it has, or null: that
 // channel would hide its connection (see isConnectedInputChannel).
-export function connectedChannelProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
-  const source = connectedSource(program, process.id, option.id);
-  return source ? connectedInputChannelProblem(process, option, source.process, source.option) : null;
+export function findConnectedChannelProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
+  const source = findConnectedSource(program, process.id, option.id);
+  return source ? findConnectedInputChannelProblem(process, option, source.process, source.option) : null;
 }
 
 // Why the data type of an option cannot be the one it has, or null: the
 // one that its option channel or its connection fixes is another.
-export function dataTypeProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
-  const fixed = fixedDataType(program, process.id, option);
+export function findDataTypeProblem(program: Program, process: ProgramProcess, option: ProgramOption): string | null {
+  const fixed = getFixedDataType(program, process.id, option);
   if (fixed === null || fixed === option.dataType) {
     return null;
   }
   const where = `Option "${option.label}" of process "${process.name}"`;
-  if (channelDataType(option.channel)) {
+  if (getChannelDataType(option.channel)) {
     return `${where} uses the channel "${option.channel}", which names a directory: its data type is "dir", not "${option.dataType}".`;
   }
-  const source = connectedSource(program, process.id, option.id)!;
+  const source = findConnectedSource(program, process.id, option.id)!;
   return `${where} reads "${source.option.label}" of process "${source.process.name}", whose data type is "${fixed}": it carries the same data, so its data type is "${fixed}", not "${option.dataType}".`;
 }
