@@ -61,6 +61,13 @@ def test_no_start_time_is_told_without_ps(monkeypatch, tmp_path):
     assert serve.process_start_time(os.getpid()) == ""
 
 
+def test_the_backend_listens_only_on_the_local_machine_unless_told_otherwise():
+    # It speaks plain HTTP and runs every tool as its user: a default that
+    # listened on every interface would expose it to the network
+    assert serve.parse_args([]).host == "127.0.0.1"
+    assert serve.parse_args(["--host", "0.0.0.0"]).host == "0.0.0.0"
+
+
 def test_the_token_url_names_a_host_that_a_browser_opens():
     assert serve.token_url("127.0.0.1", 8000, "t") == "http://127.0.0.1:8000/#token=t"
     assert serve.token_url("0.0.0.0", 8000, "t") == "http://localhost:8000/#token=t"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { listConnectionCandidates } from "./connections";
+import { isValidEdge, listConnectionCandidates } from "./connections";
 import type { ProgramEdge } from "./edge";
 import type { ProgramOption } from "./option";
 import type { ProgramProcess } from "./process";
@@ -38,6 +38,14 @@ function process(name: string, options: ProgramOption[]): ProgramProcess {
     additionalSpecs: { force: false },
     additionalMethods: {},
   };
+}
+
+function processIn(mode: "standard" | "array", name: string, options: ProgramOption[]): ProgramProcess {
+  return { ...process(name, options), optionsHandler: { mode } };
+}
+
+function edgeOf(source: string, sourceOption: string, target: string, targetOption: string) {
+  return { sourceProcessId: source, sourceOptionId: sourceOption, targetProcessId: target, targetOptionId: targetOption };
 }
 
 function programWith(edges: ProgramEdge[] = []): Program {
@@ -83,6 +91,50 @@ describe("listConnectionCandidates", () => {
       { id: "e1", sourceProcessId: "a", sourceOptionId: "a-outf", targetProcessId: "b", targetOptionId: "b-in" },
     ]);
     expect(listConnectionCandidates(connected, "b", "b-in")).toEqual([]);
+  });
+
+});
+
+describe("isValidEdge", () => {
+
+  it("connects an input on a shared directory to several outputs that name the same directory", () => {
+    const program: Program = {
+      ...createEmptyProgram("p"),
+      processes: [
+        process("a", [option("a-outd", "-outd", { channel: "shared_dir", value: "data" })]),
+        process("b", [option("b-outd", "-outd", { channel: "shared_dir", value: "data" })]),
+        process("c", [
+          option("c-ind", "-ind", { channel: "shared_dir", value: "data" }),
+          option("c-in", "-in"),
+        ]),
+        process("d", [option("d-outf", "-outf"), option("d-outg", "-outg")]),
+      ],
+      edges: [
+        { id: "e1", ...edgeOf("a", "a-outd", "c", "c-ind") },
+        { id: "e2", ...edgeOf("d", "d-outf", "c", "c-in") },
+      ],
+    };
+    expect(isValidEdge(program, edgeOf("b", "b-outd", "c", "c-ind"))).toBe(true);
+    // Any other input takes one connection
+    expect(isValidEdge(program, edgeOf("d", "d-outg", "c", "c-in"))).toBe(false);
+  });
+
+  it("pairs a fanout family only with a process of several tasks, and never with another family", () => {
+    const program: Program = {
+      ...createEmptyProgram("p"),
+      processes: [
+        processIn("standard", "scatter", [option("scatter-outf", "-outf-ith")]),
+        processIn("array", "work", [option("work-in", "-in"), option("work-outf", "-outf")]),
+        processIn("standard", "plain", [option("plain-in", "-in"), option("plain-outf", "-outf")]),
+        processIn("standard", "gather", [option("gather-in", "-in-ith")]),
+      ],
+      edges: [],
+    };
+    expect(isValidEdge(program, edgeOf("scatter", "scatter-outf", "work", "work-in"))).toBe(true);
+    expect(isValidEdge(program, edgeOf("work", "work-outf", "gather", "gather-in"))).toBe(true);
+    expect(isValidEdge(program, edgeOf("scatter", "scatter-outf", "plain", "plain-in"))).toBe(false);
+    expect(isValidEdge(program, edgeOf("plain", "plain-outf", "gather", "gather-in"))).toBe(false);
+    expect(isValidEdge(program, edgeOf("scatter", "scatter-outf", "gather", "gather-in"))).toBe(false);
   });
 
 });

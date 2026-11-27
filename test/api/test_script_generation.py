@@ -570,6 +570,25 @@ def test_a_connected_input_reads_its_connection():
     assert 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist' in script
 
 
+@pytest.mark.parametrize("reader_mode, counter_mode, call", [
+    ("array", "array", 'debasher::define_opt_from_proc_task_out "-in" "counter" "${task_idx}" "-outf" optlist'),
+    ("generator", "array", 'debasher::define_opt_from_proc_task_out "-in" "counter" "${task_idx}" "-outf" optlist'),
+    ("array", "generator", 'debasher::define_opt_from_proc_task_out "-in" "counter" "${task_idx}" "-outf" optlist'),
+    ("array", "standard", 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist'),
+    ("standard", "array", 'debasher::define_opt_from_proc_out "-in" "counter" "-outf" optlist'),
+])
+def test_a_reader_of_several_tasks_reads_a_source_of_several_tasks_task_by_task(reader_mode, counter_mode, call):
+    # Any other reader reads the source as a whole
+    program = _connected_program("none")
+    reader = program.processes[1]
+    reader.optionsHandler = OptionsHandler(mode=reader_mode)
+    lines = _option_definition_line(
+        reader, reader.options[0], {"counter": counter_mode, "reader": reader_mode},
+        {("r", "in"): [("counter", "-outf", counter_mode)]},
+    )
+    assert lines == [f"{call} || return 1"]
+
+
 @pytest.mark.parametrize("target_channel, source_channel", [("fifo", "fifo"), ("shared_dir", "fifo")])
 def test_a_connected_input_on_a_channel_that_would_hide_its_connection_is_refused(target_channel, source_channel):
     # The input would take its value from its own channel, and the

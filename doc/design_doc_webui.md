@@ -559,7 +559,10 @@ outlives the tab").
 The program model is what the frontend edits, what the backend receives in every
 request, what the artifact stores, what script generation reads and what import
 produces. Its two definitions, Pydantic and TypeScript, have to change together,
-in the same change.
+in the same change: a field on one side only is dropped by Pydantic, or never
+sent by the frontend, with no error. `test/api/test_model_definitions.py` checks
+that each Pydantic model of `api/models.py` has a TypeScript type of the same
+name under `frontend/src/models/`, with the same fields.
 
 Every program, process, option and edge has an `id`, a UUID assigned when the
 element is created or imported. It is the element's identity inside the model
@@ -771,7 +774,7 @@ input can arise:
 |---|---|
 | The canvas | refuses a connection into an input on another channel, in a general program as in a resident one |
 | The checks of the edits that an agent makes | refuse such a connection (the refusal says how the input is declared), and an `updateOption` that moves a connected input to such a channel |
-| `normalizeProgram` | moves a connected input on another channel to `none`, when a program is loaded and after every edit: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
+| `normalizeProgram` | moves a connected input on another channel to `none`, without the fifo tag, the mirror and the subpath that only the channel it leaves takes, when a program is loaded and after every edit: it repairs a program saved against the rule, and makes an input follow its output when the output leaves `shared_dir` |
 | Script generation | refuses such an input in a program that did not go through that normalization |
 
 ## Connections

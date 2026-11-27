@@ -193,7 +193,8 @@ describe("the channel of a connected input", () => {
       ...p,
       processes: p.processes.map(candidate => candidate.name !== "reader" ? candidate : {
         ...candidate,
-        options: candidate.options.map(option => ({ ...option, fifoTag: "external" as const, mirror: true })),
+        // A subpath too, which script generation refuses on the channel "none"
+        options: candidate.options.map(option => ({ ...option, fifoTag: "external" as const, mirror: true, subpath: "sub" })),
       }),
       edges: [
         ...p.edges,
@@ -208,6 +209,7 @@ describe("the channel of a connected input", () => {
       expect(option.value).toBe("[counter;-outf]");
       expect(option.fifoTag).toBeUndefined();
       expect(option.mirror).toBe(false);
+      expect(option.subpath).toBeUndefined();
     }
     expect(normalizeProgram(normalized)).toEqual(normalized);
   });
