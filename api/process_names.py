@@ -3,9 +3,9 @@ The rules of the engine for the name of a process
 (debasher::_is_valid_processname in engine/debasher_lib_programs.sh) and
 for the label of an option (debasher::_optname_is_correct in
 engine/debasher_lib_opts.sh), in one place for the doors that check them:
-the router of the editor (routers/processes.py), for the name, and the
-Python SDK, for both, which does not import the routers since they need
-FastAPI.
+the router of the editor (routers/processes.py), for the name, script
+generation, for the label, and the Python SDK, for both, which does not
+import the routers since they need FastAPI.
 """
 
 import re
@@ -61,6 +61,9 @@ def find_option_label_problem(label: str) -> str | None:
     when it would take it. The reason is a clause that follows a message
     that names the option.
     """
+    # The engine would keep the spaces as part of the label
+    if label != label.strip():
+        return "a label has no spaces around it."
     if not _OPTION_LABEL_RE.match(label):
         return 'a label is "-" or "--" followed by an ASCII letter or an underscore.'
     return None

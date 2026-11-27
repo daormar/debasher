@@ -229,9 +229,11 @@ Selecting a process on the canvas shows it in the Inspector, where its
 name, description, options, code and specifications are edited. The
 Delete key removes the selected process or connection.
 
-An option is added by its label, which starts with a dash: a label
-that starts with ``-out`` or ``--out`` makes an output, and any other
-an input, as the engine requires. Its editor sets:
+An option is added by its label, ``-`` or ``--`` followed by an
+ASCII letter or an underscore, as the engine requires (the editor, the
+edits of an agent and a save or a run refuse any other): a label that
+starts with ``-out`` or ``--out`` makes an output, and any other an
+input. Its editor sets:
 
 * its **data type**, the type of the data that the option carries
   (int, float, string, file or dir, or "None (flag)" for an input that

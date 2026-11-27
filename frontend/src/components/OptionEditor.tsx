@@ -147,9 +147,10 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
   const direction = getOptionDirection(label);
 
-  // Shown once something is typed (see findOptionLabelProblem).
+  // Shown once something is typed (see findOptionLabelProblem). The
+  // spaces around what is typed are dropped on save
   const labelProblem = ownerProcess
-    ? findOptionLabelProblem(ownerProcess, label, programType, option.id)
+    ? findOptionLabelProblem(ownerProcess, label.trim(), programType, option.id)
     : null;
 
   // Reactive to the label as it's being typed, so the "Count source"
@@ -317,8 +318,8 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
       isFlag || savedCommandLine ? "none" : isSharedDir ? "shared_dir" : connectedSourceLabel ? "none" : channel;
 
     updateOption(processId, option.id, {
-      label,
-      direction: getOptionDirection(label),
+      label: label.trim(),
+      direction: getOptionDirection(label.trim()),
       dataType: lockedDataType ?? dataType,
       channel: savedChannel,
       mirror: !isResident && !isFlag && !savedCommandLine && isFifo && direction === "output" && !connectedSourceLabel && mirror,
@@ -936,7 +937,7 @@ export default function OptionEditor({ processId, option, manualMode, programTyp
 
           <button
             onClick={handleSave}
-            disabled={!isValidOptionLabel(label) || labelProblem !== null}
+            disabled={!isValidOptionLabel(label.trim()) || labelProblem !== null}
           >
             Save
           </button>

@@ -115,8 +115,12 @@ export function createOption(
   };
 }
 
+// Takes a label; returns whether the engine takes it as the label of an
+// option: "-" or "--" followed by an ASCII letter or an underscore
+// (debasher::_str_is_option, and find_option_label_problem in
+// api/process_names.py).
 export function isValidOptionLabel(label: string): boolean {
-  return label.trim().startsWith("-");
+  return /^--?[A-Za-z_]/.test(label);
 }
 
 // debasher's own convention (see data/programs/debasher_dynamic_fanout.sh)

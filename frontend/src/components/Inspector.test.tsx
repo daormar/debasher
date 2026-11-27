@@ -44,4 +44,19 @@ describe("Inspector", () => {
     expect(saved().optionsHandler.language).toBe("bash");
   });
 
+  it("adds an option with the label typed, without the spaces around it", async () => {
+    render(
+      <ProgramProvider initialProgram={{ ...createEmptyProgram("p"), processes: [createProcess("w", "work", {}, () => "o")] }}>
+        <Inspector />
+        <SelectedProcess />
+      </ProgramProvider>
+    );
+
+    // The engine would keep the spaces as part of the label
+    fireEvent.change(await screen.findByPlaceholderText("Option label"), { target: { value: " -in " } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(saved().options.map(option => option.label)).toEqual(["-in"]);
+  });
+
 });

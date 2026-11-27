@@ -29,6 +29,7 @@ from .debasher_constants import (
 from .doc_mod import parse_all_envvars_markdown, run_doc_mod, run_get_proc_info
 from .markdown_parsing import parse_proc_info_markdown
 from .models import ComputationalSpecs, AdditionalSpecs, Program, SeqAdditionalSpecs, SeqComputationalSpecs
+from .process_names import find_option_label_problem
 from .resident_generation import resident_program_for_generation
 from .topology import code_file_path, method_file_path, tasks_file_path, write_code_files
 
@@ -1205,6 +1206,17 @@ def _add_program_function(program):
     return lines
 
 
+def _check_option_labels(program: Program) -> None:
+    """Takes a program; returns nothing. Raises ValueError for an option
+    whose label the engine refuses, which would fail the run when the
+    engine defines the options of the process."""
+    for process in program.processes:
+        for option in process.options:
+            problem = find_option_label_problem(option.label)
+            if problem:
+                raise ValueError(f'Option "{option.label}" on "{process.name}": {problem}')
+
+
 def _check_seq_processes(program: Program) -> None:
     """
     Refuses a program whose sequential processes the engine would refuse:
@@ -1671,6 +1683,7 @@ def generate_script(program: Program, skip_redundant_check: bool = False) -> str
     """
     _check_seq_processes(program)
     _check_module_method_names(program)
+    _check_option_labels(program)
     if program.programType == "resident":
         # The code of every node is assembled from its parts, never taken
         # from a module that the preamble loads, so there is nothing

@@ -99,15 +99,17 @@ describe("validateEdits", () => {
     ])).toHaveLength(1);
   });
 
-  it("refuses an option label that does not start with a hyphen, and missing references", () => {
+  it("refuses an option label that the engine refuses, and missing references", () => {
     expect(validateEdits(program(), [
       { op: "addOption", processId: "id-a", option: createOption("x", "bad") },
+      { op: "addOption", processId: "id-a", option: createOption("y", "-1n") },
       { op: "removeOption", processId: "id-a", optionId: "nope" },
       { op: "disconnect", edgeId: "nope" },
       { op: "moveProcess", processId: "nope", position: { x: 0, y: 0 } },
       { op: "setEdgeDisplay", edgeIds: ["nope2"], display: "label" },
     ])).toEqual([
-      '"bad" is not an option label: it has to start with "-".',
+      '"bad" is not an option label: a label is "-" or "--" followed by an ASCII letter or an underscore.',
+      '"-1n" is not an option label: a label is "-" or "--" followed by an ASCII letter or an underscore.',
       'Process "a" has no option with id "nope".',
       'There is no edge with id "nope".',
       'There is no process with id "nope".',

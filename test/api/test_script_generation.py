@@ -893,3 +893,32 @@ def test_a_refusal_says_what_to_change():
     manual = _bash_process(optionsHandler=OptionsHandler(mode="manual", manualCode=":", language="python"))
     with pytest.raises(ValueError, match="set optionsHandler.language to bash, or use the array or generator mode"):
         generate_script(_seq_program([], [manual]), skip_redundant_check=True)
+
+
+# --- The label of an option -------------------------------------------------
+
+
+@pytest.mark.parametrize("label", ["in", "-1n", "---x", "- x", "-é"])
+def test_a_label_that_the_engine_refuses_is_refused(label):
+    # The engine takes "-" or "--" followed by an ASCII letter or an
+    # underscore, and would fail the run when it loads the module
+    program = _connected_program("none")
+    program.processes[1].options[0].label = label
+    with pytest.raises(ValueError, match="followed by an ASCII letter or an underscore"):
+        generate_script(program, skip_redundant_check=True)
+
+
+@pytest.mark.parametrize("label", [" -in", "-in "])
+def test_a_label_with_spaces_around_it_is_refused(label):
+    program = _connected_program("none")
+    program.processes[1].options[0].label = label
+    with pytest.raises(ValueError, match="no spaces around it"):
+        generate_script(program, skip_redundant_check=True)
+
+
+@pytest.mark.parametrize("label", ["-in", "--in", "-_in"])
+def test_a_label_that_the_engine_takes_is_written(label):
+    program = _connected_program("none")
+    program.processes[1].options[0].label = label
+    script = generate_script(program, skip_redundant_check=True)
+    assert f'debasher::define_opt_from_proc_out "{label}" "counter" "-outf" optlist' in script

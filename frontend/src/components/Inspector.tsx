@@ -139,7 +139,8 @@ export default function Inspector() {
     ? ["standard", "array", "generator"]
     : ["standard", "array", "generator", "manual"];
 
-  const optionProblem = findOptionLabelProblem(selectedProcess, optionLabel, program.programType);
+  // The spaces around what is typed are dropped when the option is added
+  const optionProblem = findOptionLabelProblem(selectedProcess, optionLabel.trim(), program.programType);
 
   const canAddOption = optionProblem === null;
 
@@ -561,7 +562,7 @@ export default function Inspector() {
 
           addOption(
             selectedProcess.id,
-            optionLabel
+            optionLabel.trim()
           );
 
           setOptionLabel("");

@@ -51,6 +51,12 @@ def test_a_label_the_engine_accepts_has_no_problem(label):
 
 
 # The engine takes "-" or "--" followed by an ASCII letter or an underscore
-@pytest.mark.parametrize("label", ["", "a", "-", "--", "---x", "-1n", "-é", " -a"])
+@pytest.mark.parametrize("label", ["", "a", "-", "--", "---x", "-1n", "-é"])
 def test_a_label_the_engine_refuses_has_its_reason(label):
     assert "an ASCII letter or an underscore" in find_option_label_problem(label)
+
+
+# The engine would keep them as part of the label
+@pytest.mark.parametrize("label", [" -a", "-a ", "\t-a"])
+def test_a_label_with_spaces_around_it_has_its_reason(label):
+    assert "no spaces around it" in find_option_label_problem(label)

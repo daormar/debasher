@@ -382,9 +382,9 @@ export function findProcessNameProblem(
 }
 
 /**
- * Why `label` cannot label an option of `process`, or null if it can: it has
- * to start with "-", it may not be a label of the Supervisor wiring in a
- * resident program, and no other option of the process may have it, since
+ * Why `label` cannot label an option of `process`, or null if it can: it
+ * has no spaces around it, the engine takes it (see isValidOptionLabel), it is not a label of the Supervisor wiring
+ * in a resident program, and no other option of the process has it, since
  * the engine treats a label as the key of an option of a process and merges
  * two options with the same label. `exceptOptionId` is the option being
  * relabeled, whose own label does not count.
@@ -398,8 +398,12 @@ export function findOptionLabelProblem(
 
   const trimmed = label.trim();
 
+  if (label !== trimmed) {
+    return `"${label}" has spaces around it, which an option label cannot have.`;
+  }
+
   if (!isValidOptionLabel(trimmed)) {
-    return `"${trimmed}" is not an option label: it has to start with "-".`;
+    return `"${trimmed}" is not an option label: a label is "-" or "--" followed by an ASCII letter or an underscore.`;
   }
 
   if (programType === "resident" && isReservedNodeOptionLabel(trimmed)) {

@@ -655,10 +655,19 @@ The direction of an option always follows from its label, by the engine's
 convention: output if the label starts with `-out` or `--out`, input
 otherwise.
 
-**Labels.** The labels of the options of a process are distinct, compared
-without the spaces around them, case included. The engine treats a label as the
-key of an option of a process: it merges two options with the same label into
-one, and fails at run time if they get different values.
+**Labels.** A label is `-` or `--` followed by an ASCII letter or an
+underscore, with no spaces around it: the rule of the engine, which fails the
+run on any other label when it defines the options of the process. The editor
+drops the spaces around what the user types, and the editor and `validateEdits`
+refuse any other label (`findOptionLabelProblem` in `models/process.ts`, with
+`isValidOptionLabel` in `models/option.ts`); script generation refuses a program
+that holds one, such as one edited by hand (`find_option_label_problem` in
+`api/process_names.py`, which the SDK shares).
+
+The labels of the options of a process are distinct, compared without the spaces
+around them, case included. The engine treats a label as the key of an option of
+a process: it merges two options with the same label into one, and fails at run
+time if they get different values.
 
 - The editor refuses a label that the process already has, and `validateEdits`
   refuses it too (`findOptionLabelProblem` in `models/process.ts`).
@@ -704,7 +713,8 @@ refusing to generate it:
 
 Script generation checks the options whose definitions it writes: in `manual`
 mode it writes the user's function as it is, and checks only the task shaping
-options.
+options, besides the label of every option, which it checks in every mode (see
+the paragraph on labels above).
 
 ## Data type and option channel
 
@@ -1202,7 +1212,8 @@ normally does not define the function it runs, and so is not written.
 ## What script generation refuses
 
 Script generation raises an error, and writes no module, for a program that
-would produce a wrong one: an option both `fromProcessSpec` and a command line
+would produce a wrong one: an option whose label the engine refuses (see
+"Processes and options"); an option both `fromProcessSpec` and a command line
 option; an output taken from the process specifications; a command line option
 with an option channel other than `none`; an input with option channel
 `process_outdir`; a subpath on an option whose option channel is neither

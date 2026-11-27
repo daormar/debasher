@@ -439,7 +439,7 @@ const editingTools = [
 
   editTool(
     "add_option",
-    "Adds an option to a process. Its direction follows from its label: output when it starts with -out or --out.",
+    "Adds an option to a process. Its label is - or -- followed by an ASCII letter or _, unique in the process; its direction follows from it: output when it starts with -out or --out.",
     { process: schemas.processName, label: schemas.optionLabel, fields: schemas.optionFields.optional() },
     ({ process, label, fields }) => [{ op: "addOption", process, label, fields }]
   ),
