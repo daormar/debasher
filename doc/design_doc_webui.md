@@ -583,85 +583,116 @@ A program carries, besides its processes and edges:
 
 ## Processes and options
 
-A process has a `name`, which is the engine's name for it and follows the
-engine's rules (the backend checks it against the same pattern, reserved
-suffixes and reserved marker as the engine), a `description`, a `position` on
-the canvas, its `options`, its `optionsHandler`, its specifications
-(`computationalSpecs` and `additionalSpecs`) and its code. The code has three
-parts: `language` and `code`, the process's own work (a Bash function, or the
-source for another interpreter, which the engine wraps in a function);
-`additionalMethods`, the bodies of the other methods a process may define
-(`_post`, `_skip`, `_conda_envs`, ...); and the option methods, which script
-generation derives from the options and the options handler. The body of the
-skip method is Bash or Python, as `additionalMethods.skipLanguage` says: in
-Python, it is the text of the skip file, which the module calls. The Conda
-environments and the Docker images of a process are given either as the bodies
-of `_conda_envs` and `_docker_imgs` or as data, `additionalMethods.condaEnvs` (a
-name and a YAML file each) and `additionalMethods.dockerImgs`, from which script
-generation writes one `define_conda_env` or `pull_docker_img` per entry.
+**The fields of a process.** A process has:
 
-The editor of an additional method follows the same split. That of `skip` has a
-language selector, Bash or Python, which starts a skip file from a `skip(task)`
-that runs every task. Those of `conda_envs` and `docker_imgs` offer the data, a
-row per environment (a name and a YAML file) or per image, or the Bash body, the
-data by default, or the body when the process has one; saving the one empties
-the other, so a process never holds both, and a row with an empty field cannot
-be saved. The editor keeps a draft per language, or the data beside the body,
-until Save, so switching back and forth loses nothing.
+- A `name`, which is the engine's name for it and follows the engine's rules.
+  When the editor or an agent names a process, the backend checks the name
+  against the same pattern, reserved suffixes and reserved marker as the
+  engine.
+- A `description` and a `position` on the canvas.
+- Its `options` and its `optionsHandler`.
+- Its specifications, `computationalSpecs` and `additionalSpecs`.
+- Its code.
 
-An option has a `label`, a `direction`, a `dataType`, an option channel, a
-`description`, a `value` and a `subpath`, and five flags: `commandLine` and
-`mandatory`, `taskShaping` (a task shaping option), `fromProcessSpec` (its value
-is an attribute of the process's own specifications, such as `cpus`) and
-`mirror` (a copy of what the process writes into a FIFO is kept in a log that
-the web UI can show without taking data from the reader). An option's direction
-always follows from its label, by the engine's convention: output if the label
-starts with `-out` or `--out`, input otherwise.
+**Its code.** The code has three parts:
 
-The labels of the options of a process are distinct, compared without the spaces
-around them, case included. The engine treats a label as the key of an option of
-a process: it merges two options with the same label into one, and fails at run
-time if they get different values. The editor refuses a label that the process
-already has, and `validateEdits` refuses it too (`optionLabelProblem` in
-`models/process.ts`). A program whose metadata breaks the rule, for example one
-edited by hand, still loads: the canvas node and the inspector of each such
-process name the repeated labels, so that the user relabels or removes all but
-one.
+- `language` and `code`, the process's own work: a Bash function, or the source
+  for another interpreter, which the engine wraps in a function.
+- `additionalMethods`, the bodies of the other methods a process may define
+  (`_post`, `_skip`, `_conda_envs`, ...).
+- The option methods, which script generation derives from the options and the
+  options handler.
 
-What `value` holds depends on the other fields, and is, except for a connected
-input, what the generated script has to write, not what the process will
-receive at run time:
+Three additional methods take more than a Bash body:
 
-- a literal value, for an option with option channel `none` that is neither
-  connected nor a command line option;
-- a connection sentinel, for a connected input, which script generation does
-  not read (see "Connections");
-- the FIFO's name, for option channel `fifo`;
-- the shared directory's name, never a path, for option channel `shared_dir`,
-  whose subpath, if any, is in `subpath`;
-- nothing, for option channel `process_outdir`, whose subpath, if any, is in
-  `subpath`;
-- the attribute's name, such as `cpus`, when `fromProcessSpec` is set;
-- nothing that script generation uses, for a command line option, whose value
-  comes from the program options at run time.
+- **Skip.** Its body is Bash or Python, as `additionalMethods.skipLanguage`
+  says. In Python, it is the text of the skip file, which the module calls.
+- **Conda environments and Docker images.** They are given either as the bodies
+  of `_conda_envs` and `_docker_imgs`, or as data: `additionalMethods.condaEnvs`
+  (a name and a YAML file each) and `additionalMethods.dockerImgs`. From the
+  data, script generation writes one `define_conda_env` or `pull_docker_img` per
+  entry.
 
-A few combinations make no sense, and the model keeps them out. A flag is always
-an input, and, since it carries no data, only takes the option channel `none`.
-`mirror` only applies to a `fifo` output. `value_desc` and `process_outdir` only
-apply to an output: the consumer of a value descriptor, or of a process output
-directory, just connects to it. A `subpath` only applies to `shared_dir` and
-`process_outdir`. `fromProcessSpec` only applies to an input, since an output
-names what the process produces, and `fromProcessSpec` and `commandLine` exclude
-each other, and a command line option has option channel `none`, since its value
-comes only from the command line. A task shaping option is a mandatory command
-line input with a value, and not a fanout family. A fanout family only exists on
-a `standard` process, and its count source is a command line option of the same
-process, named in `countSourceOptionId`, or, without one, the number of tasks of
-the process at the other end of its connections. The editor offers only the
-valid combinations, the checks of the edits that an agent makes refuse the ones
-that concern an output, a flag or a directory channel (see "Edits from an
-agent"), and script generation checks again those whose violation would produce
-a wrong module, refusing to generate it.
+The editor of an additional method follows the same split:
+
+- That of `skip` has a language selector, Bash or Python, which in Python starts
+  a skip file from a `skip(task)` that runs every task.
+- Those of `conda_envs` and `docker_imgs` offer the data, a row per environment
+  (a name and a YAML file) or per image, or the Bash body: the data by default,
+  or the body when the process has one. Saving the one empties the other, so a
+  process never holds both, and a row with an empty field cannot be saved.
+
+Each editor keeps a draft per language, or the data beside the body, until Save,
+so switching back and forth loses nothing.
+
+**The fields of an option.** An option has a `label`, a `direction`, a
+`dataType`, an option channel, a `description`, a `value` and a `subpath`,
+besides the field of a fanout family, `countSourceOptionId` (see "Option
+definitions"), and the fifo tag of a resident program, `fifoTag` (see "The
+program model of a resident program"). It also has five boolean fields:
+
+| Field | The option is |
+|---|---|
+| `commandLine` | a command line option |
+| `mandatory` | a command line option that the command line has to give |
+| `taskShaping` | a task shaping option |
+| `fromProcessSpec` | one whose value is an attribute of the process's own specifications, such as `cpus` |
+| `mirror` | a FIFO output whose lines the process writes are also copied to its mirror log, which the web UI can show without taking data from the reader |
+
+The direction of an option always follows from its label, by the engine's
+convention: output if the label starts with `-out` or `--out`, input
+otherwise.
+
+**Labels.** The labels of the options of a process are distinct, compared
+without the spaces around them, case included. The engine treats a label as the
+key of an option of a process: it merges two options with the same label into
+one, and fails at run time if they get different values.
+
+- The editor refuses a label that the process already has, and `validateEdits`
+  refuses it too (`optionLabelProblem` in `models/process.ts`).
+- A program saved against the rule, for example one edited by hand, still
+  loads: the canvas node and the inspector of each such process name the
+  repeated labels, so that the user relabels or removes all but one.
+
+**What `value` holds.** It depends on the other fields. Except for a connected
+input that is not on `shared_dir`, it is what the generated script has to
+write, not what the process will receive at run time:
+
+| Option | `value` holds |
+|---|---|
+| on option channel `none`, neither connected nor a command line option | a literal value |
+| a flag | nothing |
+| a connected input, but one on `shared_dir` | a connection sentinel, which script generation does not read (see "Connections") |
+| on option channel `fifo` | the FIFO's name |
+| on option channel `value_desc` | nothing: the engine gives the path of the value descriptor |
+| on option channel `shared_dir` | the shared directory's name, never a path; its subpath, if any, is in `subpath` |
+| on option channel `process_outdir` | nothing; its subpath, if any, is in `subpath` |
+| with `fromProcessSpec` set | the attribute's name, such as `cpus` |
+| a command line option | nothing that script generation uses: its value comes from the program options at run time |
+
+**Combinations that make no sense.** The model keeps them out. The editor of an
+option offers only the valid combinations. The checks of the edits that an
+agent makes (see "Edits from an agent") refuse some of them, and script
+generation checks again those whose violation would produce a wrong module,
+refusing to generate it:
+
+| Rule | Reason | Agent | Script generation |
+|--------------------|-----------------|---|--------|
+| A flag (an option of data type `None`) is an input | it carries no data | no | no |
+| A flag takes only the option channel `none` | it carries no data | yes | no |
+| `mirror` only on a `fifo` output | it copies what the process writes into a FIFO | no | no: it ignores it elsewhere, and refuses it on a fanout family |
+| `value_desc` only on an output | the consumer of a value descriptor just connects to it | yes | yes |
+| `process_outdir` only on an output | the consumer of a process output directory just connects to it | yes | yes |
+| `subpath` only with `shared_dir` or `process_outdir` | it names a directory below that directory | yes | yes |
+| `fromProcessSpec` only on an input | an output names what the process produces | yes | yes |
+| `fromProcessSpec` and `commandLine` exclude each other | the value would come from two places | no | yes |
+| A command line option takes only the option channel `none` | its value comes only from the command line | no | yes |
+| A task shaping option is a mandatory command line input with a value, and not a fanout family | only the options handler of its process reads it | no | yes |
+| A fanout family exists only on a `standard` process, and its count source is a command line option of the same process that is not a task shaping option, named in `countSourceOptionId`, or, without one, the number of tasks of the process at the other end of its connections | on a process of another mode, a label that ends in `-ith` is an ordinary option; a task shaping option reaches no task | in part: a connection to a process in another mode, or to another family | yes |
+
+Script generation checks the options whose definitions it writes: in `manual`
+mode it writes the user's function as it is, and checks only the task shaping
+options.
 
 ## Data type and option channel
 
