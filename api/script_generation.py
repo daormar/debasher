@@ -762,17 +762,10 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
     one define_opt_from_proc_out[_task_out] call for each connection.
     """
     conn_proc, conn_opt, _ = connections[0]
+    # A scatter: each task reads the member of the fanout family of a
+    # "standard" process that its index names. The source saves the whole
+    # family in one option list, so define_opt_from_proc_out, not _task_out
     if _is_fanout_label(conn_opt) and process_modes.get(conn_proc) == "standard":
-        # Consumer side of a scatter connection: conn_opt is a fanout
-        # family declared on a "standard" process (e.g. "-outf-ith"), so it
-        # isn't a real option name by itself, the member this option
-        # actually reads is picked by this (_FANOUT_PARTNER_MODES, i.e.
-        # "array"- or "generator"-mode) process's own per-task loop
-        # variable. One save_opt_list call on the source side (unlike
-        # _TASK_INDEXED_MODES, which addresses N repeated calls of the SAME
-        # name), hence plain define_opt_from_proc_out rather than
-        # _task_out. Fanout options stay single-connection, so this is
-        # never fan-in.
         if process.optionsHandler.mode not in _FANOUT_PARTNER_MODES:
             raise ValueError(
                 f'Option "{option.label}" on "{process.name}" is connected to fanout '
@@ -783,12 +776,12 @@ def _connection_lines(process, option, process_modes, connections: Connections) 
         base_conn_opt = _fanout_base_label(conn_opt)
         return [f'debasher::define_opt_from_proc_out "{option.label}" "{conn_proc}" "{base_conn_opt}${{{TASK_IDX_VAR}}}" optlist || return 1']
 
-    # Plain connection: one define_opt_from_proc_out[_task_out] per edge
-    # into this option, usually just one, but a non-command-line input may
-    # gather from several (fan-in; see isValidEdge in the frontend).
-
+    # One line per connection. The canvas gives several only to an input on
+    # "shared_dir", which never comes here; a program saved against that
+    # rule gets a line for each, and the engine refuses values that differ
     lines = []
     for src_proc, src_opt, src_mode in connections:
+        # Two processes of several tasks each are read task by task
         if process.optionsHandler.mode in _TASK_INDEXED_MODES and src_mode in _TASK_INDEXED_MODES:
             lines.append(
                 f'debasher::define_opt_from_proc_task_out "{option.label}" "{src_proc}" "${{{TASK_IDX_VAR}}}" "{src_opt}" optlist || return 1'
