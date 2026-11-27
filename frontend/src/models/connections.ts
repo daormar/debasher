@@ -112,145 +112,135 @@ function reachesWithoutFifo(program: Program, from: string, to: string): boolean
 
 }
 
+// One end of a connection, its process and its option resolved.
+interface ConnectionEnd {
+  process: ProgramProcess;
+  option: ProgramOption;
+}
+
+// Takes a program and the ids of a process and of one of its options;
+// returns them resolved, or null when either is missing.
+function findConnectionEnd(program: Program, processId: string, optionId: string): ConnectionEnd | null {
+  const process = program.processes.find(candidate => candidate.id === processId);
+  const option = process?.options.find(candidate => candidate.id === optionId);
+  return process && option ? { process, option } : null;
+}
+
+// Takes a program and an input; returns whether an edge already reaches it.
+function isConnected(program: Program, target: ConnectionEnd): boolean {
+  return program.edges.some(
+    edge => edge.targetProcessId === target.process.id && edge.targetOptionId === target.option.id
+  );
+}
+
+// Takes the input of a connection; returns whether its value comes from
+// elsewhere: a flag, a command line option or the process specifications,
+// which script generation writes before it looks at any connection.
+function takesValueElsewhere(target: ConnectionEnd): boolean {
+  const { option } = target;
+  return option.dataType === "None" || option.commandLine || option.fromProcessSpec;
+}
+
+// Takes a program and the two ends of a connection; returns whether it is
+// a resident program and the connection does not join a business output
+// to an input that it makes a business input: every channel between its
+// nodes is a FIFO, an external input takes none, and the Supervisor wiring
+// is never drawn by hand.
+function breaksResidentPairing(program: Program, source: ConnectionEnd, target: ConnectionEnd): boolean {
+  return (
+    program.programType === "resident" &&
+    !(isBusinessOutput(source.option) && isBusinessInputCandidate(target.option))
+  );
+}
+
+// Takes the two ends of a connection; returns whether it breaks the
+// pairing of a fanout family (see isFanoutOption): a family pairs only with
+// a process in "array" or "generator" mode (script_generation.py's
+// _FANOUT_PARTNER_MODES), and never with another family.
+function breaksFanoutPairing(source: ConnectionEnd, target: ConnectionEnd): boolean {
+  const sourceIsFanout = isFanoutEndpoint(source.process, source.option);
+  const targetIsFanout = isFanoutEndpoint(target.process, target.option);
+  if (sourceIsFanout && (!isFanoutPartnerMode(target.process) || targetIsFanout)) {
+    return true;
+  }
+  return targetIsFanout && (!isFanoutPartnerMode(source.process) || sourceIsFanout);
+}
+
+// Takes a program and the two ends of a connection; returns whether it
+// would be a second connection into an input that takes one. Only
+// "shared_dir" options take several, the one case where the engine sees
+// every source resolve to the same value (debasher::_dedup_resolved_opts);
+// a fanout family keeps its own single pairing.
+function isRefusedFanIn(program: Program, source: ConnectionEnd, target: ConnectionEnd): boolean {
+  const allowsSeveral =
+    source.option.channel === "shared_dir" &&
+    target.option.channel === "shared_dir" &&
+    !isFanoutEndpoint(target.process, target.option);
+  return isConnected(program, target) && !allowsSeveral;
+}
+
+// Takes a program and the two ends of a connection; returns whether it
+// comes from a "shared_dir" output that names no directory, or adds a
+// writer of another directory to an input that a "shared_dir" output
+// already feeds: the input names the first writer's directory, and the
+// second would resolve to another path, which
+// debasher::_dedup_resolved_opts rejects at run time. An input not
+// connected yet takes the directory of the output (see
+// getConnectedInputChannel).
+function breaksSharedDirectory(program: Program, source: ConnectionEnd, target: ConnectionEnd): boolean {
+  if (source.option.channel !== "shared_dir") {
+    return false;
+  }
+  if (!source.option.value) {
+    return true;
+  }
+  return (
+    target.option.channel === "shared_dir" &&
+    isConnected(program, target) &&
+    source.option.value !== target.option.value
+  );
+}
+
+// Takes a program and the two ends of a connection; returns whether it is
+// not from a fifo and closes a cycle of connections none of which is from
+// a fifo. Such a connection makes its target wait for its source to
+// finish (an afterok dependency), one from a fifo makes none
+// (debasher::_get_procdeps_for_process_task), and the engine refuses a
+// cycle of dependencies. It lets a self-loop pass, dropping the dependency
+// of a process on itself, but such a process would only read the file it
+// writes, so it is refused too.
+function closesCycleWithoutFifo(program: Program, source: ConnectionEnd, target: ConnectionEnd): boolean {
+  return source.option.channel !== "fifo" && reachesWithoutFifo(program, target.process.id, source.process.id);
+}
+
 /**
  * Takes a program and the two ends of a new connection; returns whether
- * the connection may be added: from an output to an input, of another
- * process or of the same one (a self-loop). An output may feed several
- * inputs. It is refused when:
- * - the output is a flag, which carries no data;
- * - the input takes its value from elsewhere: a flag, a command line
- *   option, or one taken from the process specifications;
- * - in a resident program, it does not join a business output to an
- *   input that it can make a business input;
- * - it breaks the pairing of a fanout family;
- * - the input is already connected, unless both ends are on "shared_dir";
- * - it adds a writer of another directory to an input that a "shared_dir"
- *   output already feeds, or comes from a "shared_dir" output that names no
- *   directory;
- * - it is not from a fifo and closes a cycle of connections none of which
- *   is from a fifo (see reachesWithoutFifo).
+ * the connection may be added: from an output that is not a flag, which
+ * carries no data, to an input, of another process or of the same one (a
+ * self-loop), with none of the rules below broken. An output may feed
+ * several inputs.
  */
 export function isValidEdge(
   program: Program,
   endpoints: EdgeEndpoints
 ): boolean {
 
-  const {
-    sourceProcessId: source,
-    sourceOptionId: sourceHandle,
-    targetProcessId: target,
-    targetOptionId: targetHandle,
-  } = endpoints;
-
-  const sourceProcess = program.processes.find(process => process.id === source);
-  const targetProcess = program.processes.find(process => process.id === target);
-
-  const sourceOptionDef = sourceProcess?.options.find(
-    option => option.id === sourceHandle
-  );
-
-  const targetOptionDef = targetProcess?.options.find(
-    option => option.id === targetHandle
-  );
-
-  // A flag carries no data, so it feeds no input
-  if (sourceOptionDef?.dataType === "None") {
-    return false;
-  }
-
-  // Script generation writes these before it looks at any connection
-  if (
-    targetOptionDef?.dataType === "None" ||
-    targetOptionDef?.commandLine ||
-    targetOptionDef?.fromProcessSpec
-  ) {
-    return false;
-  }
-
-  // A resident program accepts a connection only from a business output to
-  // an input that it makes a business input, of another node or of the
-  // same one: every channel between its nodes is a FIFO. An external input
-  // takes none, and the Supervisor wiring is never drawn by hand.
-  if (
-    program.programType === "resident" &&
-    !(
-      sourceOptionDef &&
-      targetOptionDef &&
-      isBusinessOutput(sourceOptionDef) &&
-      isBusinessInputCandidate(targetOptionDef)
-    )
-  ) {
-    return false;
-  }
-
-  // A fanout family option (see isFanoutOption) on a "standard" process
-  // may only pair with an "array"- or "generator"-mode process on the
-  // other end (mirrors script_generation.py's _FANOUT_PARTNER_MODES),
-  // and fanout options can't chain directly into one another.
-  const sourceIsFanout = isFanoutEndpoint(sourceProcess, sourceOptionDef);
-  const targetIsFanout = isFanoutEndpoint(targetProcess, targetOptionDef);
-
-  if (sourceIsFanout && (!isFanoutPartnerMode(targetProcess) || targetIsFanout)) {
-    return false;
-  }
-  if (targetIsFanout && (!isFanoutPartnerMode(sourceProcess) || sourceIsFanout)) {
-    return false;
-  }
-
-  const sourceIsSharedDir = sourceOptionDef?.channel === "shared_dir";
-  const targetIsSharedDir = targetOptionDef?.channel === "shared_dir";
-
-  // Several connections into one input only between "shared_dir" options
-  // of the same directory, the one case where the engine sees every source
-  // resolve to the same value (debasher::_dedup_resolved_opts); a fanout
-  // family keeps its own single pairing
-  const targetAllowsMultipleConnections =
-    targetIsSharedDir && sourceIsSharedDir && !targetIsFanout;
-
-  const targetAlreadyConnected = program.edges.some(
-    edge =>
-      edge.targetProcessId === target &&
-      edge.targetOptionId === targetHandle
-  );
-
-  if (targetAlreadyConnected && !targetAllowsMultipleConnections) {
-    return false;
-  }
-
-  // A "shared_dir" output that names no directory gives the input none.
-  // An input that another writer already feeds names that writer's
-  // directory, and a second writer of another one would resolve to a
-  // different absolute path, which debasher::_dedup_resolved_opts rejects
-  // at run time; an input not connected yet takes the directory of the
-  // output (see getConnectedInputChannel)
-  if (sourceIsSharedDir && !sourceOptionDef!.value) {
-    return false;
-  }
-  if (
-    sourceIsSharedDir &&
-    targetIsSharedDir &&
-    targetAlreadyConnected &&
-    sourceOptionDef!.value !== targetOptionDef!.value
-  ) {
-    return false;
-  }
-
-  // A connection that is not from a fifo makes its target wait for its
-  // source to finish (an afterok dependency), while one from a fifo makes
-  // none (debasher::_get_procdeps_for_process_task). The engine refuses a
-  // cycle of dependencies; it lets a self-loop pass, dropping the dependency
-  // of a process on itself, but such a process would only read the file it
-  // writes, so it is refused too
-  if (
-    sourceOptionDef?.channel !== "fifo" &&
-    reachesWithoutFifo(program, target, source)
-  ) {
+  const source = findConnectionEnd(program, endpoints.sourceProcessId, endpoints.sourceOptionId);
+  const target = findConnectionEnd(program, endpoints.targetProcessId, endpoints.targetOptionId);
+  if (!source || !target) {
     return false;
   }
 
   return (
-    sourceOptionDef?.direction === "output" &&
-    targetOptionDef?.direction === "input"
+    source.option.direction === "output" &&
+    target.option.direction === "input" &&
+    source.option.dataType !== "None" &&
+    !takesValueElsewhere(target) &&
+    !breaksResidentPairing(program, source, target) &&
+    !breaksFanoutPairing(source, target) &&
+    !isRefusedFanIn(program, source, target) &&
+    !breaksSharedDirectory(program, source, target) &&
+    !closesCycleWithoutFifo(program, source, target)
   );
 
 }

@@ -2,11 +2,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import ArrayConfigEditor from "./ArrayConfigEditor";
+import GeneratorConfigEditor from "./GeneratorConfigEditor";
 import MethodBodyEditor from "./MethodBodyEditor";
 import { ProgramProvider, useProgram } from "../store/ProgramContext";
 import { createEmptyProgram } from "../storage/programStorage";
 import { createProcess, type ProgramProcess } from "../models/process";
-import { ARRAY_TASKS_PY_TEMPLATE, SKIP_PY_TEMPLATE } from "../models/codeTemplates";
+import { ARRAY_TASKS_PY_TEMPLATE, GENERATOR_TASKS_PY_TEMPLATE, SKIP_PY_TEMPLATE } from "../models/codeTemplates";
 
 afterEach(cleanup);
 
@@ -103,6 +104,20 @@ describe("ArrayConfigEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(saved().optionsHandler).toEqual({ mode: "array", arrayCode: ARRAY_TASKS_PY_TEMPLATE, language: "python" });
+  });
+
+});
+
+describe("GeneratorConfigEditor", () => {
+
+  it("saves a tasks file in Python with its language, as the code of the number of tasks", () => {
+    const process = work({ optionsHandler: { mode: "generator", generatorSizeCode: "echo 2" } });
+    renderEditor(process, <GeneratorConfigEditor process={process} onClose={() => {}} />);
+
+    fireEvent.change(screen.getByLabelText("Language"), { target: { value: "python" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(saved().optionsHandler).toEqual({ mode: "generator", generatorSizeCode: GENERATOR_TASKS_PY_TEMPLATE, language: "python" });
   });
 
 });
